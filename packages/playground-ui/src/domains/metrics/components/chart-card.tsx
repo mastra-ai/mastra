@@ -1,4 +1,3 @@
-import { Maximize2Icon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import { MetricsCard } from '@/ds/components/MetricsCard';
@@ -8,6 +7,8 @@ import type {
   MetricsCardTotalPart,
 } from '@/ds/components/MetricsCard';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import type { LinkComponentProps } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +44,12 @@ export type ChartCardProps<V extends string = string> = {
   /** A grip left of the title that drags the card, e.g. while a dashboard is being arranged. Ignored on `hero` cards. */
   dragHandle?: MetricsCardDragHandleProps;
   /**
+   * Makes a plain title editable in place: it reads as the title until hovered or focused. Enter or
+   * blur commits the trimmed title, when it changed; Escape reverts. The caller stores it and passes
+   * it back as `title`. Ignored with `titleMenu` or `href`, and on `hero` cards.
+   */
+  onTitleChange?: (title: string) => void;
+  /**
    * The card's headline number: under the title, or the large value on `hero` cards. A card
    * charting a few different things can pass one total each, marked with its series' color.
    */
@@ -51,10 +58,11 @@ export type ChartCardProps<V extends string = string> = {
   change?: string;
   /** A skeleton in place of `total`. */
   isLoading?: boolean;
-  /** Top-bar buttons, e.g. "View in traces": revealed on hover, except on `hero` cards. */
+  /**
+   * Top-bar buttons, e.g. "View in traces": `MetricsCard.Action`s, each deciding whether it waits
+   * for the card's hover (e.g. `onCardHover`) or stays in view, e.g. a pinned widget's unpin button.
+   */
   actions?: ReactNode;
-  /** Top-bar buttons always shown, after `actions`: ones that show a state, e.g. a pinned widget's unpin button. */
-  persistentActions?: ReactNode;
   /**
    * Legend and controls above the body; they stay in every state. Pass `false` or `null` while
    * there's nothing to show yet, and the row keeps its height.
@@ -83,11 +91,11 @@ export function ChartCard<V extends string = string>({
   LinkComponent,
   titleMenu,
   dragHandle,
+  onTitleChange,
   total,
   change,
   isLoading = false,
   actions,
-  persistentActions,
   toolbar,
   isUpdating = false,
   bodyHeight = 'fixed',
@@ -123,20 +131,17 @@ export function ChartCard<V extends string = string>({
             {titleMenu ? (
               // A card with views keeps its title dropdown, in the label's size and tone.
               <MetricsCard.TitleMenu title={title} {...titleMenu} className="text-body-sm text-muted-foreground" />
+            ) : onTitleChange ? (
+              <ChartCardTitleInput title={title} onTitleChange={onTitleChange} />
             ) : (
               <h3 className="text-body-sm font-medium text-muted-foreground">{title}</h3>
             )}
           </div>
           {/* Pulled up and right by the same 8px, so the expand icon sits as far from the card's
-              top as from its right edge. Actions show on hover, persistent actions and the expand
-              link always. */}
+              top as from its right edge. Each action decides whether it waits for hover; the expand
+              link always shows. */}
           <div className="-my-1 -mr-2 flex items-center gap-1 justify-self-end">
-            {actions && (
-              <MetricsCard.Actions reveal="hover" className="my-0">
-                {actions}
-              </MetricsCard.Actions>
-            )}
-            {persistentActions}
+            {actions && <MetricsCard.Actions className="my-0">{actions}</MetricsCard.Actions>}
             {href ? (
               <Button
                 variant="ghost"
@@ -145,7 +150,7 @@ export function ChartCard<V extends string = string>({
                 aria-label={`Expand ${title}`}
                 render={<Anchor href={href} />}
               >
-                <Maximize2Icon />
+                <IconExpand45 />
               </Button>
             ) : null}
           </div>
@@ -201,28 +206,10 @@ export function ChartCard<V extends string = string>({
             LinkComponent={LinkComponent}
             titleMenu={titleMenu}
             dragHandle={dragHandle}
+            onTitleChange={onTitleChange}
           />
         )}
-        {persistentActions ? (
-          // One group, so the buttons keep their spacing; only `actions` wait for hover.
-          <MetricsCard.Actions className={cn(hero && 'my-0 self-center')}>
-            {actions &&
-              (hero ? (
-                actions
-              ) : (
-                <MetricsCard.Actions reveal="hover" className="my-0">
-                  {actions}
-                </MetricsCard.Actions>
-              ))}
-            {persistentActions}
-          </MetricsCard.Actions>
-        ) : (
-          actions && (
-            <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
-              {actions}
-            </MetricsCard.Actions>
-          )
-        )}
+        {actions && <MetricsCard.Actions className={cn(hero && 'my-0 self-center')}>{actions}</MetricsCard.Actions>}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
         {/* A card with a toolbar keeps its row while the toolbar is empty (`false` or `null` while
@@ -256,7 +243,7 @@ function bodyClass(variant: ChartCardProps['variant'], bodyHeight: ChartCardProp
 function ChartCardHeading<V extends string>({
   dragHandle,
   ...title
-}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu' | 'dragHandle'>) {
+}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu' | 'dragHandle' | 'onTitleChange'>) {
   if (!dragHandle) return <ChartCardTitle {...title} />;
   // One wrapper, so the top bar stretches it as its first child rather than the handle.
   return (
@@ -267,13 +254,14 @@ function ChartCardHeading<V extends string>({
   );
 }
 
-/** The title: a view menu, a link to a fuller view, or plain. */
+/** The title: a view menu, a link to a fuller view, editable, or plain. */
 function ChartCardTitle<V extends string>({
   title,
   href,
   LinkComponent,
   titleMenu,
-}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu'>) {
+  onTitleChange,
+}: Pick<ChartCardProps<V>, 'title' | 'href' | 'LinkComponent' | 'titleMenu' | 'onTitleChange'>) {
   if (titleMenu) return <MetricsCard.TitleMenu title={title} {...titleMenu} />;
   if (href) {
     return (
@@ -284,7 +272,45 @@ function ChartCardTitle<V extends string>({
       </h3>
     );
   }
+  if (onTitleChange) return <ChartCardTitleInput title={title} onTitleChange={onTitleChange} />;
   return <MetricsCard.Title>{title}</MetricsCard.Title>;
+}
+
+/**
+ * The title as an input that looks like it until hovered or focused. Uncontrolled, so blur is the one
+ * exit: Enter blurs, Escape restores the title first, blur commits. Keyed on `title`, so a title the
+ * caller changes replaces what's typed.
+ */
+function ChartCardTitleInput({ title, onTitleChange }: { title: string; onTitleChange: (title: string) => void }) {
+  return (
+    <h3 className="flex min-w-0">
+      <input
+        key={title}
+        aria-label="Widget title"
+        defaultValue={title}
+        {...passwordManagerOptOutProps}
+        onBlur={event => {
+          const next = event.currentTarget.value.trim();
+          event.currentTarget.value = next;
+          if (next !== title) onTitleChange(next);
+        }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') event.currentTarget.value = title;
+          if (event.key === 'Enter' || event.key === 'Escape') {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+        }}
+        className={cn(
+          // The link's box, so the text sits where a plain title's does.
+          '-mx-1.5 -my-0.5 field-sizing-content min-w-12 truncate rounded-md bg-transparent px-1.5 py-0.5',
+          'text-body zoom-safe-text font-medium text-foreground',
+          // An outline takes no room, so showing it moves nothing.
+          'outline-1 -outline-offset-1 outline-transparent outline-dashed hover:outline-border-strong focus:outline-border-focus',
+        )}
+      />
+    </h3>
+  );
 }
 
 /** The title as a link to a fuller view, with an expand icon after it; hover fills its own box, not the row. */
@@ -302,12 +328,12 @@ function ChartCardTitleLink({
     <Anchor
       href={href}
       className={cn(
-        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body font-medium text-foreground hover:bg-fill-subtle',
+        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-subheading text-foreground hover:bg-fill-subtle',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid',
       )}
     >
       {children}
-      <Maximize2Icon aria-hidden className="size-3.5 text-muted-foreground" />
+      <IconExpand45 aria-hidden className="size-3.5 text-muted-foreground" />
     </Anchor>
   );
 }

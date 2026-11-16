@@ -114,7 +114,7 @@ function rebaseValue(
 /**
  * Removes the state a nested run started from out of a step result that is leaving the process.
  *
- * A parent that parks on a nested run records that state in `suspendPayload.__workflow_meta.startState`
+ * A storage v1 parent that parks on a nested run records that state in `suspendPayload.__workflow_meta.startState`
  * so a crashed parent can rebase the run's changes when it re-drives the step. Callers never need it:
  * results keep the rest of the metadata (run id, path, `.foreach()` iteration ids) but not workflow
  * state, which they only see through `includeState`.

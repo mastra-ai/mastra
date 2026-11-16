@@ -6,6 +6,11 @@ import { cn } from '@/lib/utils';
 export type ChartAreaProps = {
   /** No data in the range: the chart keeps its footprint and dates, under a "No data" message. */
   isEmpty?: boolean;
+  /**
+   * Only for a reason other than an empty range, e.g. a preview that can't run yet. An empty range
+   * keeps the shared "No data in this range", so every empty chart reads the same.
+   */
+  emptyMessage?: string;
   children: ReactNode;
 };
 
@@ -14,7 +19,7 @@ export type ChartAreaProps = {
  * its footprint but is hidden (its dates stay), under three rulers and one message; the card's
  * title already says what's missing.
  */
-export function ChartArea({ isEmpty = false, children }: ChartAreaProps) {
+export function ChartArea({ isEmpty = false, emptyMessage = 'No data in this range', children }: ChartAreaProps) {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" data-chart-empty={isEmpty || undefined}>
       <div
@@ -23,7 +28,7 @@ export function ChartArea({ isEmpty = false, children }: ChartAreaProps) {
         {/* Without the y-axis, the first and last dates sit at the card's edges. */}
         <ChartHideYAxis.Provider value={isEmpty}>{children}</ChartHideYAxis.Provider>
       </div>
-      {isEmpty && <ChartEmpty />}
+      {isEmpty && <ChartEmpty message={emptyMessage} />}
     </div>
   );
 }
@@ -42,7 +47,7 @@ function Ruler({ className }: { className?: string }) {
 }
 
 /** Full-width rulers at the plot's top, middle and bottom, with the message on the middle one. */
-function ChartEmpty() {
+function ChartEmpty({ message }: { message: string }) {
   return (
     <div
       className="absolute inset-0 flex flex-col justify-between"
@@ -54,8 +59,8 @@ function ChartEmpty() {
       <Ruler />
       <div className="flex items-center gap-3">
         <Ruler className="flex-1" />
-        <Txt as="span" variant="body-sm" tone="muted" className="font-[450]">
-          No data in this range
+        <Txt as="span" variant="body-sm" tone="muted" className="max-w-[70%] text-center font-[450] text-balance">
+          {message}
         </Txt>
         <Ruler className="flex-1" />
       </div>

@@ -9,6 +9,15 @@
 }
 
 /*
+ * Off screen, the browser skips the plot's layout, so the box's ResizeObserver doesn't fire and the
+ * chart isn't drawn or redrawn until it scrolls into view: a resize only redraws the visible charts.
+ * It sits on the box's parent: an element with it is still laid out, only its descendants are skipped.
+ */
+.chart-plot {
+  content-visibility: auto;
+}
+
+/*
  * A size container is its own stacking context, so the tooltip's z-index only counts inside its
  * chart and a chart later on the page paints over it. Lift the chart being pointed at instead.
  */

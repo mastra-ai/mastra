@@ -3,13 +3,68 @@ title: "Discord | Channels"
 description: "Connect a Mastra agent to Discord interactions and bot messages by installing the adapter, configuring the agent, and exposing a webhook route."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
 ---
+
+import DiscordConnectTools from "@site/src/components/connect/generated/discord.mdx";
 
 # Discord
 
-Discord channels let a Mastra agent receive Discord interactions and bot messages. Mastra handles the agent wiring and webhook route; the Chat SDK Discord adapter docs cover Discord application setup, bot permissions, and Gateway behavior.
+Use Discord with Mastra in two ways:
 
-## Install the adapter
+- **Agent tools** let an agent act in Discord servers, for example to send messages or manage channels.
+- **Agent chat** lets people talk to your agent in Discord through bot messages and interactions such as slash commands and buttons.
+
+[Mastra Connect](/docs/mastra-platform/connect) sets up both from one Discord bot and keeps its token on the Mastra platform. For agent chat, you can also manage the bot credentials yourself.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+One `discord` connection provides both agent tools and agent chat. It uses a **bot token**, not a user OAuth token.
+
+### Create a Discord bot
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application.
+1. Open **Bot**, add a bot, then select **Reset Token** and copy the bot token.
+1. For agent chat, enable **Message Content Intent** under **Privileged Gateway Intents**.
+
+When `mastra connect add discord` asks for a credential, enter the bot token.
+
+<DiscordConnectTools />
+
+### Agent chat
+
+Your server needs a public URL that Discord can reach for webhook delivery and OAuth callbacks. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
+
+1. If you haven't added the connection yet, run `mastra connect add discord` and enter the bot token.
+
+1. Pass [`channels()`](/reference/connect/channels) to the `Mastra` constructor. It registers the Discord channel provider and its routes:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { channels } from '@mastra/connect'
+   import { assistant } from './agents/assistant'
+
+   export const mastra = new Mastra({
+     agents: { assistant },
+     channels: await channels({ providers: ['discord'] }),
+   })
+   ```
+
+   To register other channels too, add their provider IDs to `providers`.
+
+1. Start your Mastra application.
+
+1. In Studio, connect the Discord channel to an agent. If the bot isn't already in a server, open the generated authorization URL, choose the server, and approve the requested permissions.
+
+Discord uses the Gateway for messages and the HTTP interactions route for slash commands and buttons. See [Discord permissions](/reference/connect/channels#discord-permissions) for the scopes and permissions requested by the bot invite.
+
+## Self-managed setup
+
+Use the Chat SDK Discord adapter with your own Discord application and credentials.
+
+### Install the adapter
 
 Install the Discord adapter from the Chat SDK:
 
@@ -17,7 +72,7 @@ Install the Discord adapter from the Chat SDK:
 npm install @chat-adapter/discord
 ```
 
-## Agent configuration
+### Agent configuration
 
 Add `createDiscordAdapter()` to the agent's `channels.adapters` object:
 
@@ -49,7 +104,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Adapter setup
+### Adapter setup
 
 Follow the [Chat SDK Discord adapter docs](https://chat-sdk.dev/adapters/official/discord) for Discord-specific setup, including application creation, bot tokens, interaction endpoints, permissions, and Gateway behavior.
 
@@ -61,7 +116,7 @@ DISCORD_PUBLIC_KEY=your-discord-application-public-key
 DISCORD_APPLICATION_ID=your-discord-application-id
 ```
 
-## Webhook URL
+### Webhook URL
 
 Mastra generates the Discord webhook route from the agent ID and adapter key:
 
@@ -75,7 +130,7 @@ Use your public Mastra server URL as the base URL:
 https://your-app.example.com/api/agents/discord-agent/channels/discord/webhook
 ```
 
-Use this URL anywhere the Discord adapter docs ask for the interactions endpoint or webhook URL. Discord regular message events may require Gateway setup outside the generated webhook route; follow the Chat SDK adapter docs for that path.
+Use this URL anywhere the Discord adapter docs ask for the interactions endpoint or webhook URL. Discord regular message events may require Gateway setup outside the generated webhook route. Follow the Chat SDK adapter docs for that path.
 
 ## Related
 

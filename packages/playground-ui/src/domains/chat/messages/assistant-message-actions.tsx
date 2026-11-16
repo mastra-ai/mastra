@@ -1,7 +1,8 @@
-import { AudioLinesIcon, StopCircleIcon } from 'lucide-react';
 import { ProviderLogo } from '@/domains/llm';
 import { Button } from '@/ds/components/Button';
 import { MessageCopyButton, MessageMetadata } from '@/ds/components/Message';
+import { IconStopCircle } from '@/ds/icons/central/IconStopCircle';
+import { IconVoiceHigh } from '@/ds/icons/central/IconVoiceHigh';
 
 export function AssistantMessageActions({
   text,
@@ -29,7 +30,7 @@ export function AssistantMessageActions({
       {(onReadAloud || onStopSpeaking) &&
         (isSpeaking ? (
           <Button variant="ghost" size="icon-sm" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
-            <StopCircleIcon />
+            <IconStopCircle />
           </Button>
         ) : (
           <Button
@@ -39,7 +40,7 @@ export function AssistantMessageActions({
             aria-label="Read aloud"
             onClick={() => onReadAloud?.(text)}
           >
-            <AudioLinesIcon />
+            <IconVoiceHigh />
           </Button>
         ))}
       <MessageCopyButton text={text} />

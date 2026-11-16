@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { pathToFileURL } from 'url'
+import { isDirectRun } from './is-direct-run'
 import { extractSidebarDocIds, type SidebarItem } from './sidebar-doc-ids'
 
 /**
@@ -11,14 +12,14 @@ import { extractSidebarDocIds, type SidebarItem } from './sidebar-doc-ids'
  *   pnpm validate:sidebar-docs
  */
 
-interface SectionConfig {
+export interface SectionConfig {
   name: string
   contentDir: string
   sidebarPath: string
   sidebarKey: string
 }
 
-const SECTIONS: SectionConfig[] = [
+export const SECTIONS: SectionConfig[] = [
   {
     name: 'docs',
     contentDir: 'src/content/en/docs',
@@ -74,12 +75,12 @@ function shouldIgnore(filePath: string): boolean {
   return IGNORED_PATTERNS.some(pattern => pattern.test(filePath))
 }
 
-interface ValidationResult {
+export interface ValidationResult {
   section: string
   ghostPages: string[]
 }
 
-async function validateSection(section: SectionConfig, rootDir: string): Promise<ValidationResult> {
+export async function validateSection(section: SectionConfig, rootDir: string): Promise<ValidationResult> {
   const sidebarFullPath = path.join(rootDir, section.sidebarPath)
   const contentFullDir = path.join(rootDir, section.contentDir)
 
@@ -142,7 +143,9 @@ async function main(): Promise<void> {
   process.exit(1)
 }
 
-main().catch(error => {
-  console.error('Unhandled error:', error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+if (isDirectRun(import.meta.url)) {
+  main().catch(error => {
+    console.error('Unhandled error:', error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

@@ -1,4 +1,5 @@
 export * from './base';
+export * from './text-search';
 export * from './discovery';
 export * from './feedback';
 export * from './inmemory';
@@ -45,6 +46,7 @@ export {
   traceSelectionSchema,
   threadPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryRootSourceSchema,
   queryThreadsInputSchema,
   traceQueryTraceSchema,
   traceQueryTraceResponseSchema,

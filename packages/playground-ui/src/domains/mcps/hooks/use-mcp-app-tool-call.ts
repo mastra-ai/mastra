@@ -1,5 +1,6 @@
 import type { McpServerToolListResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -28,7 +29,11 @@ export function useMcpAppToolCall(serverId: string) {
       });
       const tool = tools.find(candidate => candidate.name === toolName);
       if (!tool || !isAppCallable(tool)) {
-        throw new Error(`Tool "${toolName}" isn't available to apps on MCP server "${serverId}"`);
+        // Invalid params is the code MCP servers answer an unknown tool with, so apps can tell it apart.
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Tool "${toolName}" isn't available to apps on MCP server "${serverId}"`,
+        );
       }
       const response = await client.getMcpServerTool(serverId, toolName).execute({ data: args });
       return 'result' in response ? response.result : response;

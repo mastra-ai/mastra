@@ -301,6 +301,10 @@ export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
       return nonBlank.length > 0 ? nonBlank : undefined;
     }, z.array(z.string()).optional())
     .describe('Only return results that have all of these tags'),
+  status: z
+    .enum(['needs-review', 'reviewed', 'complete'])
+    .optional()
+    .describe('Only return results with this review status'),
   orderBy: createOrderByQuerySchema(['startedAt', 'createdAt']),
 });
 

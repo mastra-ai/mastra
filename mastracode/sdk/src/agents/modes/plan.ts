@@ -10,7 +10,7 @@ export function createPlanMode(submitPlanAvailable = true): AgentControllerMode 
     id: 'plan',
     name: 'Plan',
     transitionsTo: 'build',
-    defaultModelId: 'openai/gpt-5.5',
+    defaultModelId: 'openai/gpt-5.6-sol',
     description:
       "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
     instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.

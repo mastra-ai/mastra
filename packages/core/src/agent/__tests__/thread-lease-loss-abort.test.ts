@@ -38,6 +38,12 @@ import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
 import { isRetakeLeaseOwner } from '../thread-stream-runtime';
 
+// 'sends no retry when the lease is lost while a failed request waits to be retried'
+// takes the lease during the retry backoff, so it needs the real backoff rather
+// than the instant one from @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
+
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
 const LEASE_KEY = [RESOURCE, THREAD].join('\u0000');
@@ -132,7 +138,7 @@ class NoLeasePubSub extends EventEmitterPubSub {
   }
 }
 
-describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
+function threadLeaseLoss(engine: EngineVariant) {
   let llm: LLMock;
 
   beforeAll(async () => {
@@ -354,6 +360,52 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     // The whole response arrived, the lost run never took the thread back, and it stopped without another step.
     expect(streamed).toBe(answer);
     expect(successorKept).toBe(true);
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+    expect(
+      llm.getRequests().filter(request => JSON.stringify(request.body?.messages ?? []).includes(prompt)),
+    ).toHaveLength(1);
+  }, 20_000);
+
+  it('lets a response already streaming finish when a total timeout also derives the run signal', async () => {
+    const thread = 'lease-lost-total-timeout-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    const prompt = 'total timeout run';
+    const answer = Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ');
+    llm.on({ userMessage: prompt, sequenceIndex: 0 }, { content: answer }, { streamingProfile: { tps: 30 } });
+    llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'must not be asked for' });
+
+    const shared = new SharedLeases();
+    const agent = replica(shared, new MockMemory());
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    let streamed = '';
+    const aborts: unknown[] = [];
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'text-delta') streamed += chunk.payload?.text ?? '';
+        if (chunk?.type === 'abort') {
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, prompt, {
+      maxSteps: 4,
+      memory: { thread, resource: RESOURCE },
+      // A total timeout replaces the run's abort signal with one derived from it, below the publisher's. Steps have
+      // to keep reporting under the run's own object, or a lease loss reads the run as idle and kills the response.
+      modelSettings: { timeout: { totalMs: 60_000 } },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(streamed.length).toBeGreaterThan(0), { timeout: 5_000 });
+
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    await done;
+    await watching;
+    subscription.unsubscribe();
+
+    expect(streamed).toBe(answer);
     expect(await output.finishReason).toBe('aborted');
     expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
     expect(
@@ -3122,4 +3174,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(modelCalls()).toBe(callsAtAbort);
     expect(shared.owner(key)).toBe('successor-run');
   }, 20_000);
-});
+}
+
+// 'fs' only changes how the agent is assembled and then runs on the normal engine (see EngineVariant),
+// so here it would repeat every 'normal' lease run; the other scenario files cover fs assembly.
+describeForAllEngines('thread lease loss', threadLeaseLoss, { skip: ['fs'] });

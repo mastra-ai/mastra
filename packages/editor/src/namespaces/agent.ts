@@ -1233,10 +1233,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     const skillsFormat = storedAgent.skillsFormat;
 
-    // Durable opt-in is persisted as a serializable subset (boolean or
-    // { maxSteps, cleanupTimeoutMs }). `cache`/`pubsub` are inherited from the
-    // Mastra instance by `createDurableAgent`, which `addAgent` invokes below
-    // whenever `agent.durable` is truthy.
+    // Stored durable options configure resumable streams on the plain Agent.
+    // Runtime cache and pubsub are inherited from Mastra when the stream bus is used.
     const durable = storedAgent.durable;
 
     // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
@@ -1271,8 +1269,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
     if (!this.getCodeDefinedAgent(storedAgent.id)) {
-      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
-      this._registeredStoredAgentIds.add(storedAgent.id);
+      // A concurrent or versioned load of an already registered stored agent skips addAgent, which would leave
+      // `source` at its 'code' default. Callers rely on `source` to apply stored-agent visibility, so set it here.
+      agent.source = 'stored';
+      if (this.mastra?.listAgents()[storedAgent.id]?.source !== 'stored') {
+        this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+        this._registeredStoredAgentIds.add(storedAgent.id);
+      }
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
@@ -1361,11 +1364,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // Dynamic code instructions: resolve the original at request time (same
     // pattern as the tools merge above) and re-attach whatever envelope it produced.
     const getOriginal = agent.getInstructions.bind(agent);
-    return async ({ requestContext, mastra }) => {
-      const text = typeof stored === 'string' ? stored : await stored({ requestContext, mastra });
+    return async args => {
+      const text = typeof stored === 'string' ? stored : await stored(args);
       let original: unknown;
       try {
-        original = await getOriginal({ requestContext });
+        original = await getOriginal({ requestContext: args.requestContext });
       } catch {
         // Dynamic instructions may require context this request can't provide;
         // fall back to the stored text rather than failing the run.

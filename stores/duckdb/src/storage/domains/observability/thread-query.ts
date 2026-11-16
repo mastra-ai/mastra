@@ -7,8 +7,8 @@ import type {
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
 import { timeToFirstTokenSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
-import { missingPreviewSql, readPreview } from './preview-compat';
+import { payloadColumnSql, timeRangeOf } from './helpers';
+import { needsPreview, readPreview } from './preview-compat';
 import { compileThreadQueryPredicate } from './trace-query';
 
 const contextFields = [
@@ -187,6 +187,38 @@ type Selected = Omit<ThreadQueryRow, 'startedAt' | 'endedAt'> & {
   lastResourceId: string | null;
 };
 
+type RootRowKey = {
+  organizationId: string | null;
+  resourceId: string | null;
+  traceId: string;
+  spanId: string;
+  cursorId: number;
+  endedAt: Date;
+};
+
+/**
+ * A chat's first and last traces can be months apart, so the range alone can cover the whole table.
+ * The IN list lets DuckDB also skip the row groups between them.
+ */
+function rootRowsFilter(roots: RootRowKey[]) {
+  const endedAts = roots.map(root => root.endedAt);
+  const values: unknown[] = [...timeRangeOf(endedAts), ...endedAts];
+  const keys = roots.map(
+    root =>
+      `(${Object.entries(root)
+        .map(([field, value]) => {
+          values.push(value);
+          const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
+          return `${field} ${operator} ?`;
+        })
+        .join(' AND ')})`,
+  );
+  return {
+    sql: `endedAt BETWEEN ? AND ? AND endedAt IN (${endedAts.map(() => '?').join(', ')}) AND (${keys.join(' OR ')})`,
+    values,
+  };
+}
+
 export async function queryThreadRows(
   db: DuckDBConnection,
   plan: TrustedThreadRowsQueryPlan,
@@ -217,38 +249,51 @@ export async function queryThreadRows(
   const selected = await run<Selected>(compiled.sql, compiled.values);
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };
-  const values: unknown[] = [];
-  const keys = page.flatMap(row =>
-    (['first', 'last'] as const).map(which => {
-      const entries = {
-        organizationId: row.organizationId,
-        resourceId: which === 'first' ? row.resourceId : row.lastResourceId,
-        traceId: row[`${which}TraceId`],
-        spanId: row[`${which}SpanId`],
-        cursorId: row[`${which}CursorId`],
-        endedAt: row[`${which}EndedAt`],
-      };
-      return `(${Object.entries(entries)
-        .map(([field, value]) => {
-          values.push(value);
-          const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
-          return `${field} ${operator} ?`;
-        })
-        .join(' AND ')})`;
-    }),
+  const roots: RootRowKey[] = page.flatMap(row =>
+    (['first', 'last'] as const).map(which => ({
+      organizationId: row.organizationId,
+      resourceId: which === 'first' ? row.resourceId : row.lastResourceId,
+      traceId: row[`${which}TraceId`],
+      spanId: row[`${which}SpanId`],
+      cursorId: row[`${which}CursorId`],
+      endedAt: row[`${which}EndedAt`],
+    })),
   );
-  const payloads = await run<Record<string, unknown>>(
+  const pageFilter = rootRowsFilter(roots);
+  const rootRows = await run<Record<string, unknown>>(
     `SELECT organizationId, traceId, cursorId,
     ${contextFields.map(field => (field === 'executionSource' ? 'source AS executionSource' : field)).join(', ')},
     CASE WHEN spanType = 'agent_run' THEN timeToFirstChunkMs END AS timeToFirstChunkMs,
     CASE WHEN spanType = 'agent_run' THEN timeToFirstTokenMs END AS timeToFirstTokenMs,
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
-    ${(['input', 'output', 'error'] as const).map(field => `${field}Preview, CASE WHEN ${missingPreviewSql(`${field}Preview`)} THEN CAST(${field === 'error' ? field : payloadColumnSql(field)} AS VARCHAR) END AS ${field}`).join(', ')}
-    FROM span_events WHERE ${keys.join(' OR ')}`,
-    values,
+    inputPreview, outputPreview, errorPreview
+    FROM span_events
+    WHERE ${pageFilter.sql}`,
+    pageFilter.values,
   );
   const key = (org: unknown, trace: unknown, version: unknown) => JSON.stringify([org, trace, String(version)]);
-  const byRoot = new Map(payloads.map(row => [key(row.organizationId, row.traceId, row.cursorId), row]));
+  const byRoot = new Map(rootRows.map(row => [key(row.organizationId, row.traceId, row.cursorId), row]));
+  // DuckDB reads every column a query names, even inside a CASE that discards it, so payloads get
+  // their own query.
+  const rootsWithoutPreview = roots.filter(root => {
+    const row = byRoot.get(key(root.organizationId, root.traceId, root.cursorId));
+    return row && [row.inputPreview, row.outputPreview, row.errorPreview].some(needsPreview);
+  });
+  if (rootsWithoutPreview.length) {
+    const payloadFilter = rootRowsFilter(rootsWithoutPreview);
+    const payloads = await run<Record<string, unknown>>(
+      `SELECT organizationId, traceId, cursorId,
+      CAST(${payloadColumnSql('input')} AS VARCHAR) AS input,
+      CAST(${payloadColumnSql('output')} AS VARCHAR) AS output,
+      CAST(error AS VARCHAR) AS error
+      FROM span_events
+      WHERE ${payloadFilter.sql}`,
+      payloadFilter.values,
+    );
+    for (const payload of payloads) {
+      Object.assign(byRoot.get(key(payload.organizationId, payload.traceId, payload.cursorId))!, payload);
+    }
+  }
   const threads = page.flatMap(row => {
     const first = byRoot.get(key(row.organizationId, row.firstTraceId, row.firstCursorId));
     const last = byRoot.get(key(row.organizationId, row.lastTraceId, row.lastCursorId));

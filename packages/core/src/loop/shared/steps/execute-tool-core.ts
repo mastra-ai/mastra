@@ -69,77 +69,96 @@ export async function executeToolCall(deps: {
    * `executeToolCall` instead of being classified as a tool outcome.
    */
   assertNotBailedOut?: (error?: unknown) => void;
+  /**
+   * Called once the tool body itself has settled, or right away if it never started. Cancellation can return
+   * before that (the tool ignored the abort past its grace), so step accounting that must span the tool's real
+   * execution settles here instead of when this function returns.
+   */
+  onToolSettled?: () => void;
   logger?: IMastraLogger;
 }): Promise<ExecuteToolOutcome> {
   const { tool, toolCallId, toolName, abortSignal, logger } = deps;
   const aborted = Symbol('tool execution aborted');
   let executionError: unknown;
+  let execution: Promise<unknown> | undefined;
 
   try {
-    const release = deps.acquireExecution?.();
-    const settleSignal = deps.settleSignal ?? abortSignal;
-    let onAbort: (() => void) | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let rawResult: unknown;
+    return await runTool();
+  } finally {
+    if (deps.onToolSettled) {
+      if (execution) void execution.then(deps.onToolSettled, deps.onToolSettled);
+      else deps.onToolSettled();
+    }
+  }
+
+  async function runTool(): Promise<ExecuteToolOutcome> {
     try {
-      rawResult = settleSignal
-        ? await new Promise<unknown>((resolve, reject) => {
-            onAbort = () => {
-              if (deps.settleSignal) queueMicrotask(() => reject(aborted));
-              else timer = setTimeout(() => reject(aborted), TOOL_ABORT_GRACE_MS);
-            };
-            settleSignal.addEventListener('abort', onAbort, { once: true });
-            if (settleSignal.aborted) {
-              onAbort();
-            }
-            // Consume abandoned rejections even after the grace window expires.
-            Promise.resolve(tool.execute(deps.args, deps.toolOptions)).then(resolve, error => {
-              executionError = error;
-              reject(error);
-            });
-          })
-        : await tool.execute(deps.args, deps.toolOptions);
-    } finally {
-      if (onAbort) settleSignal?.removeEventListener('abort', onAbort);
-      if (timer) clearTimeout(timer);
-      release?.();
-    }
-    deps.assertNotBailedOut?.();
-    // Both engines' mapping steps read `result === undefined` as "not executed /
-    // awaiting a client result", so a tool that ran and returned nothing must be
-    // recorded as `null` or the loop stops and drops the call from history.
-    const serialized = ensureSerializable(rawResult);
-    const result = serialized === undefined ? null : serialized;
-
-    if ('onOutput' in tool && typeof tool.onOutput === 'function') {
+      const release = deps.acquireExecution?.();
+      const settleSignal = deps.settleSignal ?? abortSignal;
+      let onAbort: (() => void) | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let rawResult: unknown;
       try {
-        await tool.onOutput({ toolCallId, toolName, output: result, abortSignal });
-      } catch (hookError) {
-        logger?.error?.('Error calling onOutput', hookError);
+        rawResult = settleSignal
+          ? await new Promise<unknown>((resolve, reject) => {
+              onAbort = () => {
+                if (deps.settleSignal) queueMicrotask(() => reject(aborted));
+                else timer = setTimeout(() => reject(aborted), TOOL_ABORT_GRACE_MS);
+              };
+              settleSignal.addEventListener('abort', onAbort, { once: true });
+              if (settleSignal.aborted) {
+                onAbort();
+              }
+              // Consume abandoned rejections even after the grace window expires.
+              execution = Promise.resolve(tool.execute(deps.args, deps.toolOptions));
+              execution.then(resolve, error => {
+                executionError = error;
+                reject(error);
+              });
+            })
+          : await (execution = Promise.resolve(tool.execute(deps.args, deps.toolOptions)));
+      } finally {
+        if (onAbort) settleSignal?.removeEventListener('abort', onAbort);
+        if (timer) clearTimeout(timer);
+        release?.();
       }
-    }
+      deps.assertNotBailedOut?.();
+      // Both engines' mapping steps read `result === undefined` as "not executed /
+      // awaiting a client result", so a tool that ran and returned nothing must be
+      // recorded as `null` or the loop stops and drops the call from history.
+      const serialized = ensureSerializable(rawResult);
+      const result = serialized === undefined ? null : serialized;
 
-    return { status: 'success', result, rawResult };
-  } catch (error) {
-    // Keep control-flow errors already available when cancellation settles;
-    // failures arriving after this point remain abandoned and handled.
-    if (error === aborted && executionError !== undefined) error = executionError;
-    // Re-throw FGA authorization errors instead of swallowing them — an
-    // authorization denial must fail the run, not be serialized as a
-    // recoverable tool error for the LLM to retry.
-    if (error instanceof Error && error.name === 'FGADeniedError') {
-      throw error;
+      if ('onOutput' in tool && typeof tool.onOutput === 'function') {
+        try {
+          await tool.onOutput({ toolCallId, toolName, output: result, abortSignal });
+        } catch (hookError) {
+          logger?.error?.('Error calling onOutput', hookError);
+        }
+      }
+
+      return { status: 'success', result, rawResult };
+    } catch (error) {
+      // Keep control-flow errors already available when cancellation settles;
+      // failures arriving after this point remain abandoned and handled.
+      if (error === aborted && executionError !== undefined) error = executionError;
+      // Re-throw FGA authorization errors instead of swallowing them — an
+      // authorization denial must fail the run, not be serialized as a
+      // recoverable tool error for the LLM to retry.
+      if (error instanceof Error && error.name === 'FGADeniedError') {
+        throw error;
+      }
+      deps.assertNotBailedOut?.(error);
+      if (abortSignal?.aborted) {
+        // Log the discarded error for observability (control flow unchanged).
+        logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
+          toolName,
+          toolCallId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { status: 'aborted' };
+      }
+      return { status: 'error', error };
     }
-    deps.assertNotBailedOut?.(error);
-    if (abortSignal?.aborted) {
-      // Log the discarded error for observability (control flow unchanged).
-      logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
-        toolName,
-        toolCallId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { status: 'aborted' };
-    }
-    return { status: 'error', error };
   }
 }

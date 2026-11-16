@@ -6,6 +6,8 @@ import { openai as openaiV4 } from 'openai-v4';
 import { openai as openaiV5 } from 'openai-v5';
 import { z as zv3 } from 'zod-v3';
 import { z as zv4 } from 'zod-v4';
+// MastraAgentNetworkStream extends the node:stream/web ReadableStream, whose types differ from the DOM global
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
 // Extract the model property type from Agent constructor parameters
 type AgentConstructorParams = ConstructorParameters<typeof Agent>[0];
@@ -124,10 +126,11 @@ describe('Agent with defaultOption', () => {
     });
   });
 
+  // network() does not apply defaultOptions (only defaultNetworkOptions), so TOutput does not carry over
   describe('network with defaultOption', () => {
-    it('should infer TOutput from agent generic when no structuredOutput is passed', async () => {
+    it('should not infer TOutput from agent generic when no structuredOutput is passed', async () => {
       const result = await typedAgent.network('Analyze this');
-      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<TypedOutput>>();
+      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<undefined>>();
     });
 
     it('should override TOutput when structuredOutput is explicitly provided', async () => {
@@ -142,11 +145,11 @@ describe('Agent with defaultOption', () => {
       expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<{ networkResult: string }>>();
     });
 
-    it('should provide correctly typed object promise', async () => {
+    it('should resolve object to undefined without structuredOutput', async () => {
       const result = await typedAgent.network('Get answer');
       const obj = await result.object;
 
-      expectTypeOf(obj).toExtend<TypedOutput>();
+      expectTypeOf(obj).toEqualTypeOf<undefined>();
     });
   });
 
@@ -182,9 +185,9 @@ describe('Agent with defaultOption', () => {
       expectTypeOf(result).toEqualTypeOf<MastraModelOutput<TypedOutputV4>>();
     });
 
-    it('should infer TOutput from zod v4 schema in network', async () => {
+    it('should not infer TOutput from zod v4 schema in network', async () => {
       const result = await typedAgentV4.network('Get result');
-      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<TypedOutputV4>>();
+      expectTypeOf(result).toEqualTypeOf<MastraAgentNetworkStream<undefined>>();
     });
   });
 });
@@ -377,7 +380,7 @@ describe('streamLegacy', () => {
     const result = await agent.streamLegacy('Analyze', {
       experimental_output: sentimentSchema,
     });
-    expectTypeOf(result).toExtend<StreamTextResult<any, undefined>>();
+    expectTypeOf(result).toExtend<StreamTextResult<any, typeof sentimentSchema>>();
     // Should have partialObjectStream property
     expectTypeOf(result).toHaveProperty('partialObjectStream');
   });
@@ -434,8 +437,11 @@ describe('network', () => {
       structuredOutput: { schema: sentimentSchema },
     });
 
+    // Resolves to undefined when the run produces no structured output
     const obj = await result.object;
-    expectTypeOf(obj).toExtend<{ sentiment: 'positive' | 'negative' | 'neutral'; confidence: number }>();
+    expectTypeOf(obj).toEqualTypeOf<
+      { sentiment: 'positive' | 'negative' | 'neutral'; confidence: number } | undefined
+    >();
   });
 
   it('should infer OUTPUT type from complex schema', async () => {
@@ -485,7 +491,6 @@ describe('network', () => {
 
   it('should extend ReadableStream for streaming', async () => {
     const result = await agent.network('Hello');
-    // MastraAgentNetworkStream extends ReadableStream
-    expectTypeOf(result).toExtend<ReadableStream>();
+    expectTypeOf(result).toExtend<NodeReadableStream>();
   });
 });

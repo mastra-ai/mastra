@@ -3,10 +3,7 @@ title: "Memory processors | Memory"
 description: "Configure Mastra memory processors to filter, trim, transform, and deduplicate messages before they reach the model while managing context limits."
 packages:
   - "@mastra/core"
-  - "@mastra/libsql"
   - "@mastra/memory"
-  - "@mastra/openai"
-  - "@mastra/pinecone"
 ---
 
 # Memory processors
@@ -218,7 +215,7 @@ Understanding the execution order is important when combining guardrails with me
 
 ### Input Processors
 
-```
+```text
 [Memory Processors] → [Your inputProcessors]
 ```
 
@@ -229,7 +226,7 @@ As a result, memory loads message history before your processors can validate or
 
 ### Output Processors
 
-```
+```text
 [Your outputProcessors] → [Memory Processors]
 ```
 

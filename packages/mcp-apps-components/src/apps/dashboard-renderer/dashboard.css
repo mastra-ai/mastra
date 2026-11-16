@@ -1,7 +1,0 @@
-/* The dashboard renders inside the host's chat, which already frames it: widgets drop their card
-   surface (corners, fill, rim and shadow) and sit directly on the host's background. */
-[data-widget-id] .bg-card.rounded-xl {
-  border-radius: 0;
-  background-color: transparent;
-  box-shadow: none;
-}

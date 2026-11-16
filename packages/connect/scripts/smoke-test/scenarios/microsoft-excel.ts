@@ -1,6 +1,5 @@
-import { crc32 } from 'node:zlib';
-
 import type { Scenario, ScenarioStep } from '../scenario.js';
+import { buildMinimalXlsx } from '../ooxml.js';
 import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js';
 
 const SHEET = 'Smoke';
@@ -29,8 +28,12 @@ const isPersonalAccount = process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim(
 
 function isAccountCapabilityError(error: unknown): boolean {
   const detail = errorMessage(error);
-  return /personal|consumer|msa account|tenant-directory|work or school|sharepoint|FileOpenUserUnauthorized|access denied|not supported|not available/i.test(
-    detail,
+  return (
+    /personal|consumer|msa account|tenant-directory|work or school|sharepoint|FileOpenUserUnauthorized|access denied|not supported|not available/i.test(
+      detail,
+    ) ||
+    // Graph answers tenant-directory calls from personal accounts with opaque errors such as `403 UnknownError`.
+    (isPersonalAccount && /status=(400|401|403|405|501)/i.test(detail))
   );
 }
 
@@ -83,6 +86,19 @@ export const microsoftExcelScenario: Scenario = {
           ),
         );
         return false;
+      }
+    }
+
+    // Sessionless workbook writes can take several seconds to reach the copy that serves the next read,
+    // so read-after-write checks retry before failing. Only wrap idempotent reads.
+    async function eventually<T>(read: () => Promise<T>): Promise<T> {
+      for (let poll = 1; ; poll++) {
+        try {
+          return await read();
+        } catch (error) {
+          if (poll >= 10) throw error;
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+        }
       }
     }
 
@@ -245,27 +261,31 @@ export const microsoftExcelScenario: Scenario = {
       if (got.rowCount !== 3 || got.columnCount !== 3) throw new Error(`wrote ${got.rowCount}x${got.columnCount}`);
     });
 
-    await attempt('get range', 'microsoft_excel_get_range', async () => {
-      const got = await call<{ values?: unknown[][] }>('microsoft_excel_get_range', {
-        driveId,
-        itemId,
-        worksheetIdOrName: SHEET,
-        address: 'A1:C3',
-      });
-      if (got.values?.[1]?.[0] !== runId || got.values?.[2]?.[2] !== 40) {
-        throw new Error(`read back ${JSON.stringify(got.values)}`);
-      }
-    });
+    await attempt('get range', 'microsoft_excel_get_range', () =>
+      eventually(async () => {
+        const got = await call<{ values?: unknown[][] }>('microsoft_excel_get_range', {
+          driveId,
+          itemId,
+          worksheetIdOrName: SHEET,
+          address: 'A1:C3',
+        });
+        if (got.values?.[1]?.[0] !== runId || got.values?.[2]?.[2] !== 40) {
+          throw new Error(`read back ${JSON.stringify(got.values)}`);
+        }
+      }),
+    );
 
-    await attempt('get used range', 'microsoft_excel_get_used_range', async () => {
-      const got = await call<{ address?: string }>('microsoft_excel_get_used_range', {
-        driveId,
-        itemId,
-        worksheetIdOrName: SHEET,
-      });
-      if (!got.address?.endsWith('A1:C3')) throw new Error(`used range ${got.address}`);
-      return got.address;
-    });
+    await attempt('get used range', 'microsoft_excel_get_used_range', () =>
+      eventually(async () => {
+        const got = await call<{ address?: string }>('microsoft_excel_get_used_range', {
+          driveId,
+          itemId,
+          worksheetIdOrName: SHEET,
+        });
+        if (!got.address?.endsWith('A1:C3')) throw new Error(`used range ${got.address}`);
+        return got.address;
+      }),
+    );
 
     await attempt('calculate workbook', 'microsoft_excel_calculate_workbook', async () => {
       await call('microsoft_excel_calculate_workbook', { driveId, itemId, calculationType: 'Recalculate' });
@@ -314,11 +334,13 @@ export const microsoftExcelScenario: Scenario = {
       if (got.name !== definedName) throw new Error(`created ${got.name}`);
     });
 
-    await attempt('list defined names', 'microsoft_excel_list_defined_names', async () => {
-      const got = await call<{ names: Array<{ name: string }> }>('microsoft_excel_list_defined_names', wb);
-      if (nameAdded && !got.names.some(n => n.name === definedName)) throw new Error(`${definedName} not listed`);
-      return `${got.names.length} names`;
-    });
+    await attempt('list defined names', 'microsoft_excel_list_defined_names', () =>
+      eventually(async () => {
+        const got = await call<{ names: Array<{ name: string }> }>('microsoft_excel_list_defined_names', wb);
+        if (nameAdded && !got.names.some(n => n.name === definedName)) throw new Error(`${definedName} not listed`);
+        return `${got.names.length} names`;
+      }),
+    );
 
     // ── tables ──────────────────────────────────────────────────────────────
     let tableId: string | undefined;
@@ -336,27 +358,33 @@ export const microsoftExcelScenario: Scenario = {
 
     if (tableId) {
       const table = { driveId, itemId, tableIdOrName: tableId };
-      await attempt('list tables', 'microsoft_excel_list_tables', async () => {
-        const got = await call<{ tables: Array<{ id: string; name: string }> }>('microsoft_excel_list_tables', wb);
-        if (!got.tables.some(t => t.id === tableId || t.name === tableId)) throw new Error(`${tableId} not listed`);
-      });
+      await attempt('list tables', 'microsoft_excel_list_tables', () =>
+        eventually(async () => {
+          const got = await call<{ tables: Array<{ id: string; name: string }> }>('microsoft_excel_list_tables', wb);
+          if (!got.tables.some(t => t.id === tableId || t.name === tableId)) throw new Error(`${tableId} not listed`);
+        }),
+      );
 
-      await attempt('list table columns', 'microsoft_excel_list_table_columns', async () => {
-        const got = await call<{ columns: Array<{ name?: string }> }>('microsoft_excel_list_table_columns', table);
-        const names = got.columns.map(c => c.name).join(',');
-        if (names !== 'label,q1,q2') throw new Error(`columns ${names}`);
-      });
+      await attempt('list table columns', 'microsoft_excel_list_table_columns', () =>
+        eventually(async () => {
+          const got = await call<{ columns: Array<{ name?: string }> }>('microsoft_excel_list_table_columns', table);
+          const names = got.columns.map(c => c.name).join(',');
+          if (names !== 'label,q1,q2') throw new Error(`columns ${names}`);
+        }),
+      );
 
       await attempt('add table rows', 'microsoft_excel_add_table_rows', async () => {
         await call('microsoft_excel_add_table_rows', { ...table, values: [['gamma', 50, 60]] });
       });
 
-      await attempt('list table rows', 'microsoft_excel_list_table_rows', async () => {
-        const got = await call<{ rows: Array<{ values: unknown[][] }> }>('microsoft_excel_list_table_rows', table);
-        if (got.rows.length !== 3 || got.rows[2]?.values[0]?.[0] !== 'gamma') {
-          throw new Error(`rows ${JSON.stringify(got.rows.map(r => r.values))}`);
-        }
-      });
+      await attempt('list table rows', 'microsoft_excel_list_table_rows', () =>
+        eventually(async () => {
+          const got = await call<{ rows: Array<{ values: unknown[][] }> }>('microsoft_excel_list_table_rows', table);
+          if (got.rows.length !== 3 || got.rows[2]?.values[0]?.[0] !== 'gamma') {
+            throw new Error(`rows ${JSON.stringify(got.rows.map(r => r.values))}`);
+          }
+        }),
+      );
     } else {
       for (const toolId of [
         'microsoft_excel_list_tables',
@@ -384,16 +412,18 @@ export const microsoftExcelScenario: Scenario = {
     });
 
     if (chartId) {
-      await attempt('get chart image', 'microsoft_excel_get_chart_image', async () => {
-        const got = await call<{ imageBase64: string }>('microsoft_excel_get_chart_image', {
-          driveId,
-          itemId,
-          worksheetIdOrName: SHEET,
-          chartId,
-        });
-        if (!got.imageBase64) throw new Error('empty image');
-        return `${got.imageBase64.length} base64 chars`;
-      });
+      await attempt('get chart image', 'microsoft_excel_get_chart_image', () =>
+        eventually(async () => {
+          const got = await call<{ imageBase64: string }>('microsoft_excel_get_chart_image', {
+            driveId,
+            itemId,
+            worksheetIdOrName: SHEET,
+            chartId,
+          });
+          if (!got.imageBase64) throw new Error('empty image');
+          return `${got.imageBase64.length} base64 chars`;
+        }),
+      );
     } else {
       steps.push(makeStep('get chart image', 'microsoft_excel_get_chart_image', 'skip', 'no chart created'));
     }
@@ -436,110 +466,3 @@ export const microsoftExcelScenario: Scenario = {
     return steps;
   },
 };
-
-/**
- * Builds the smallest .xlsx Excel Online accepts: one empty worksheet named
- * `sheetName`, packed as an uncompressed ZIP so no archive dependency is needed.
- */
-export function buildMinimalXlsx(sheetName: string): Buffer {
-  const ns = 'http://schemas.openxmlformats.org';
-  const xml = (body: string) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${body}`;
-  const ct = 'application/vnd.openxmlformats';
-  const files: Array<[string, string]> = [
-    [
-      '[Content_Types].xml',
-      xml(
-        `<Types xmlns="${ns}/package/2006/content-types">` +
-          `<Default Extension="rels" ContentType="${ct}-package.relationships+xml"/>` +
-          `<Default Extension="xml" ContentType="application/xml"/>` +
-          `<Override PartName="/xl/workbook.xml" ContentType="${ct}-officedocument.spreadsheetml.sheet.main+xml"/>` +
-          `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="${ct}-officedocument.spreadsheetml.worksheet+xml"/>` +
-          `<Override PartName="/xl/styles.xml" ContentType="${ct}-officedocument.spreadsheetml.styles+xml"/>` +
-          `</Types>`,
-      ),
-    ],
-    [
-      '_rels/.rels',
-      xml(
-        `<Relationships xmlns="${ns}/package/2006/relationships">` +
-          `<Relationship Id="rId1" Type="${ns}/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
-          `</Relationships>`,
-      ),
-    ],
-    [
-      'xl/workbook.xml',
-      xml(
-        `<workbook xmlns="${ns}/spreadsheetml/2006/main" xmlns:r="${ns}/officeDocument/2006/relationships">` +
-          `<sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
-      ),
-    ],
-    [
-      'xl/_rels/workbook.xml.rels',
-      xml(
-        `<Relationships xmlns="${ns}/package/2006/relationships">` +
-          `<Relationship Id="rId1" Type="${ns}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
-          `<Relationship Id="rId2" Type="${ns}/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
-          `</Relationships>`,
-      ),
-    ],
-    ['xl/worksheets/sheet1.xml', xml(`<worksheet xmlns="${ns}/spreadsheetml/2006/main"><sheetData/></worksheet>`)],
-    [
-      'xl/styles.xml',
-      xml(
-        `<styleSheet xmlns="${ns}/spreadsheetml/2006/main">` +
-          `<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>` +
-          `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
-          `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
-          `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-          `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
-          `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
-          `</styleSheet>`,
-      ),
-    ],
-  ];
-
-  // Stored (method 0) ZIP: local headers + data, then central directory, then EOCD.
-  const DOS_DATE_1980_01_01 = 0x21;
-  const locals: Buffer[] = [];
-  const centrals: Buffer[] = [];
-  let offset = 0;
-  for (const [name, content] of files) {
-    const nameBuf = Buffer.from(name, 'utf8');
-    const data = Buffer.from(content, 'utf8');
-    const crc = crc32(data);
-
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(DOS_DATE_1980_01_01, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    locals.push(local, nameBuf, data);
-
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(DOS_DATE_1980_01_01, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(nameBuf.length, 28);
-    central.writeUInt32LE(offset, 42);
-    centrals.push(central, nameBuf);
-
-    offset += local.length + nameBuf.length + data.length;
-  }
-
-  const centralDir = Buffer.concat(centrals);
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0);
-  eocd.writeUInt16LE(files.length, 8);
-  eocd.writeUInt16LE(files.length, 10);
-  eocd.writeUInt32LE(centralDir.length, 12);
-  eocd.writeUInt32LE(offset, 16);
-
-  return Buffer.concat([...locals, centralDir, eocd]);
-}

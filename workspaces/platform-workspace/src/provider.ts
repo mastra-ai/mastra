@@ -33,6 +33,11 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
         enum: ['ISOLATED', 'PRIVATE'],
         default: 'ISOLATED',
       },
+      publicPorts: {
+        type: 'boolean',
+        description: 'Let anyone with a port URL reach it without signing in',
+        default: false,
+      },
       env: { type: 'object', description: 'Environment variables', additionalProperties: { type: 'string' } },
       timeout: { type: 'number', description: 'Default command timeout in ms' },
     },

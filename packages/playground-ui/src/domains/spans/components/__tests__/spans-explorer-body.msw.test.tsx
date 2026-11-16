@@ -140,6 +140,221 @@ describe('SpansExplorerBody', () => {
     window.localStorage.clear();
   });
 
+  describe('when text search is supported', () => {
+    const renderSearchableBody = async (initial: string) => {
+      setHandlers(spanRowsPage, {
+        ...spanAggregateCapabilities,
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => HttpResponse.json(spanCountsAggregate({ to: new Date().toISOString() }))),
+      );
+      const result = renderBodyAtUrl(initial);
+      await waitFor(() => expect(result.queries.length).toBeGreaterThan(0));
+      return result;
+    };
+
+    it('marks an invalid restored search with a validation warning', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('textSearch=ab');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
+      expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+    });
+
+    it('applies a corrected restored search', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('textSearch=ab');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: ab' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'needle' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(screen.getByRole('group', { name: 'Contains text needle' }).getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it('does not offer an existing search field when editing another chip', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error&textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      const original = queries.at(-1);
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      await screen.findByRole('option', { name: 'Span name' });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      expect(queries.at(-1)).toEqual(original);
+    });
+
+    it('preserves an editable empty search after changing the field', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('');
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+    });
+
+    it('applies text entered into an empty search chip', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('');
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'needle' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+    });
+
+    it('removes an empty draft from the URL', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('');
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
+      await waitFor(() => expect(currentSearchParams().has('textSearch')).toBe(false));
+    });
+
+    it('applies normalized search without losing other filters', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error');
+      const originalWhere = queries.at(-1)?.where;
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      fireEvent.change(input, { target: { value: 'NEEDLE' } });
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(queries.at(-1)?.where).toEqual(originalWhere);
+    });
+
+    it('preserves the entered search in the URL', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error');
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      fireEvent.change(input, { target: { value: 'NEEDLE' } });
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(currentSearchParams().get('textSearch')).toBe('NEEDLE');
+    });
+
+    it('hides the histogram after applying search', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error');
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      fireEvent.change(input, { target: { value: 'NEEDLE' } });
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
+    });
+
+    it('rejects an oversized edit without changing the applied search', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: NEEDLE' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'x'.repeat(257) } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('NEEDLE');
+    });
+
+    it('applies a valid edit', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: NEEDLE' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'updated' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'updated'));
+    });
+
+    it('removes search without losing other filters', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
+      const originalWhere = queries.at(-1)?.where;
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
+      await waitFor(() => expect(queries.at(-1)).not.toHaveProperty('textSearch'));
+      expect(currentSearchParams().has('textSearch')).toBe(false);
+      expect(queries.at(-1)?.where).toEqual(originalWhere);
+    });
+
+    it('restores the histogram after removing search', async () => {
+      const { queries } = await renderSearchableBody('filter.status=error&textSearch=NEEDLE');
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
+      await waitFor(() => expect(queries.at(-1)).not.toHaveProperty('textSearch'));
+      await screen.findByRole('region', { name: 'Spans over time' });
+    });
+
+    it('restores search from the URL without requesting an unfiltered histogram', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanAggregateCapabilities,
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const aggregate = vi.fn();
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => {
+          aggregate();
+          return HttpResponse.json<AggregateSpansResponse>({ rows: [], truncated: false });
+        }),
+      );
+      const { queries } = renderBodyAtUrl('textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(queries.at(-1)).toHaveProperty('textSearch', 'needle');
+      expect(screen.getByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(screen.getByText('needle')).toBeTruthy();
+      expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
+      expect(aggregate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when text search is unavailable', () => {
+    it('ignores a search restored from a shared URL', async () => {
+      setHandlers(spanRowsPage);
+      const { queries } = renderBodyAtUrl('textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(screen.queryByRole('button', { name: 'Remove Contains text filter' })).toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+    });
+  });
+
   describe('when the store records span outcomes', () => {
     const spanQueryBodies = vi.fn<(body: unknown) => void>();
     const setOutcomeHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
@@ -289,6 +504,37 @@ describe('SpansExplorerBody', () => {
   describe('when a span ends while the page is open', () => {
     afterEach(() => {
       vi.useRealTimers();
+    });
+
+    it('keeps panel span references stable on an unrelated render after merging head rows', async () => {
+      setHandlers(spanRowsPage);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          const body: QuerySpansInput = await request.json();
+          return HttpResponse.json(body.orderBy?.[0]?.field === 'endedAt' ? spanHeadPage : spanRowsPage);
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+      const renderPanel = vi.fn<(args: SpansExplorerPanelArgs) => null>(() => null);
+      const onSelectionChange = vi.fn();
+      const { rerender } = renderWithProviders(
+        <SpansExplorerBody selection={undefined} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
+      );
+      await screen.findByText('agent run: weather');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
+      });
+      await screen.findByText(endedSpan.name);
+      const spans = renderPanel.mock.lastCall?.[0].spans;
+      expect(spans).toContainEqual({ traceId: endedSpan.traceId, spanId: endedSpan.spanId });
+      rerender(
+        <SpansExplorerBody
+          selection={firstListedSpan}
+          onSelectionChange={onSelectionChange}
+          renderPanel={renderPanel}
+        />,
+      );
+      expect(renderPanel.mock.lastCall?.[0].spans).toBe(spans);
     });
 
     it('appears in the list on the next poll', async () => {

@@ -2,18 +2,15 @@ import { ChartArea } from '../../../metrics/components/chart-area';
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ChartCardError } from '../../../metrics/components/chart-card-error';
 import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
-import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
-import { ViewGate } from '../../components/view-gate';
+import { bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { DrilldownAction } from '../../components/widget-controls';
-import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
-import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
+import { DrilldownAction, ExpandAction } from '../../components/widget-controls';
+import { hasDrilldownAction, useDrilldown, viewMenu } from '../../hooks/use-widget-views';
+import { alertAction, pendingHeading, withAction } from '../../lib/alert-actions';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
-import { pinActions } from '../../lib/pin-actions';
-import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
-import { shapeTimeseries } from '../../lib/timeseries';
+import { shapeTimeseries, timeseriesAlertValues } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
 import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -30,25 +27,45 @@ type ViewProps = Props & {
 };
 
 export function TimeseriesWidget(props: Props) {
-  const menu = useViewMenu(props.widget, props.views, 0, props.expand);
-  const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
-  return (
-    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
-      {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
-    </ViewGate>
+  const { gate, state, onStateChange } = props;
+  const menu = viewMenu(
+    props.widget,
+    props.views,
+    state.view ?? 0,
+    i => onStateChange({ ...state, view: i }),
+    props.expand,
   );
-}
-
-function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps) {
-  const { options } = view;
-  const { interval } = bucketPlan(page.window.start, page.window.end);
-  const totals = new Set(options.totals ?? []);
-  const results = useDashboardRequests(
-    view.queries.map(q =>
-      buildRequest(q, page, { interval: q.id !== undefined && totals.has(q.id) ? undefined : interval }),
+  const { view } = menu;
+  const { expand } = props;
+  const expandHref = expand?.href(props.widget);
+  const heading = withAction(
+    {
+      ...menu.heading,
+      dragHandle: props.dragHandle,
+      onTitleChange: props.onTitleChange,
+      actions: props.actions,
+    },
+    expand && expandHref && (
+      <ExpandAction title={menu.heading.title} href={expandHref} LinkComponent={expand.LinkComponent} />
     ),
   );
+  if (gate.status === 'pending')
+    return (
+      <PendingChartCard
+        gate={gate.gate}
+        heading={pendingHeading(heading, gate.gate, props.alert, props.widget, view)}
+      />
+    );
+  return <TimeseriesView {...props} view={view} heading={heading} page={gate.page} />;
+}
+
+function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, results, onRetry }: ViewProps) {
+  // Drilldown, then the alert, then the expand link and the host's actions.
+  const heading = withAction(
+    own,
+    alertAction(alert, widget, view, { page, values: timeseriesAlertValues(view.options) }),
+  );
+  const { options } = view;
   const sent = results.filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');
   const onClick = useDrilldown(widget, view, onDrilldown);
@@ -77,6 +94,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
       : [{ label: s.label, value: format.value(s.rangeTotal), color: chartColor(s.color) }],
   );
   const withRangeTotals = options.series.some(s => s.rangeTotal !== undefined);
+  const failed = sent.filter(r => r.isError);
 
   const layout = {
     ...heading,
@@ -88,8 +106,9 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
     ) : (
       heading.actions
     ),
-    // Range totals per series; with no series in the range, one plain 0.
-    total: withRangeTotals ? (rangeTotals.length ? rangeTotals : format.value(0)) : undefined,
+    // Range totals per series; with no series in the range, one plain 0. None while a request
+    // failed, so no total sits beside the error.
+    total: !withRangeTotals || failed.length ? undefined : rangeTotals.length ? rangeTotals : format.value(0),
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -98,15 +117,10 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
     ),
   };
 
-  const failed = sent.filter(r => r.isError);
   if (failed.length) {
     return (
       <ChartCard {...layout}>
-        {hasTraceQueries ? (
-          <ChartCardError error={failed[0]?.error} onRetry={() => failed.forEach(r => void r.refetch())} />
-        ) : (
-          <ChartCardError />
-        )}
+        {hasTraceQueries ? <ChartCardError error={failed[0]?.error} onRetry={onRetry} /> : <ChartCardError />}
       </ChartCard>
     );
   }

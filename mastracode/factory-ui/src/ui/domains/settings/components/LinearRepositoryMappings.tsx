@@ -4,6 +4,7 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { LinearProject } from '../../factory/services/linear';
 import { SourcePicker } from './IntakeSourcePicker';
+import type { SourcePickerItem } from './IntakeSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 
 export interface MappableLinearProject {
@@ -14,21 +15,26 @@ export interface MappableLinearProject {
 export function LinearRepositoryMappings({
   projects,
   mapping,
-  pending,
-  onChange,
+  saving,
+  onSetRepository,
 }: {
   projects: MappableLinearProject[];
   mapping: Record<string, string> | undefined;
-  pending: boolean;
-  onChange: (mapping: Record<string, string>) => Promise<void>;
+  saving: boolean;
+  onSetRepository: (projectId: string, slug: string | null) => void;
 }) {
   const slugsByProject = new Map(projects.map(({ project, repositorySlugs }) => [project.id, repositorySlugs]));
-  const setRepository = (projectId: string, slug: string | null) => {
-    const next = { ...mapping };
-    if (slug) next[projectId] = slug;
-    else delete next[projectId];
-    return onChange(next);
-  };
+  const repositorySelect = (item: SourcePickerItem, afterChange?: () => void) => (
+    <RepositorySelect
+      projectName={item.label}
+      value={mapping?.[item.id]}
+      slugs={slugsByProject.get(item.id) ?? []}
+      onChange={slug => {
+        onSetRepository(item.id, slug);
+        afterChange?.();
+      }}
+    />
+  );
 
   return (
     <>
@@ -51,29 +57,10 @@ export function LinearRepositoryMappings({
           },
         ]}
         selectedIds={projects.filter(({ project }) => mapping?.[project.id]).map(({ project }) => project.id)}
-        pending={pending}
-        onToggleItem={id => setRepository(id, null)}
-        itemActions={item => (
-          <RepositorySelect
-            projectName={item.label}
-            value={mapping?.[item.id]}
-            slugs={slugsByProject.get(item.id) ?? []}
-            disabled={pending}
-            onChange={slug => void setRepository(item.id, slug)}
-          />
-        )}
-        addControl={(item, focusSearch) => (
-          <RepositorySelect
-            projectName={item.label}
-            value={undefined}
-            slugs={slugsByProject.get(item.id) ?? []}
-            disabled={pending}
-            onChange={async slug => {
-              await setRepository(item.id, slug);
-              requestAnimationFrame(focusSearch);
-            }}
-          />
-        )}
+        saving={saving}
+        onToggleItem={id => onSetRepository(id, null)}
+        itemActions={item => repositorySelect(item)}
+        pickControl={(item, focusSearch) => repositorySelect(item, () => requestAnimationFrame(focusSearch))}
       />
     </>
   );
@@ -83,17 +70,15 @@ function RepositorySelect({
   projectName,
   value,
   slugs,
-  disabled,
   onChange,
 }: {
   projectName: string;
   value: string | undefined;
   slugs: string[];
-  disabled: boolean;
   onChange: (slug: string) => void;
 }) {
   return (
-    <Select value={value ?? null} disabled={disabled} onValueChange={slug => slug && onChange(slug)}>
+    <Select value={value ?? null} onValueChange={slug => slug && onChange(slug)}>
       <SelectTrigger size="sm" aria-label={`Repository for ${projectName}`} className="w-auto max-w-full min-w-0">
         <Txt as="span" variant="caption">
           {value ?? 'Choose repository'}

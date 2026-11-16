@@ -23,6 +23,8 @@ export const TEST_BASE_URL = 'http://localhost:4111';
 export interface ProvidersOptions {
   /** Base URL handed to `MastraReactProvider`; must match MSW handler URLs. */
   baseUrl?: string;
+  /** API prefix handed to `MastraReactProvider` (defaults to the client's `/api`). */
+  apiPrefix?: string;
   /** Wrap children in a `MemoryRouter`. Pass entries to seed the history/state. */
   router?: boolean | { initialEntries?: MemoryRouterEntry[] };
 }
@@ -36,12 +38,12 @@ const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { ret
  * wait for in-flight queries/mutations to settle via {@link waitForMutationsIdle}.
  */
 export const makeWrapper = (options: ProvidersOptions = {}) => {
-  const { baseUrl = TEST_BASE_URL, router } = options;
+  const { baseUrl = TEST_BASE_URL, apiPrefix, router } = options;
   const queryClient = makeQueryClient();
 
   const wrapper = ({ children }: { children: ReactNode }) => {
     const tree = (
-      <MastraReactProvider baseUrl={baseUrl}>
+      <MastraReactProvider baseUrl={baseUrl} apiPrefix={apiPrefix}>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </MastraReactProvider>
     );
@@ -62,8 +64,8 @@ export const renderWithProviders = (
   ui: ReactElement,
   options: ProvidersOptions & Omit<RenderOptions, 'wrapper'> = {},
 ): RenderResult & { queryClient: QueryClient } => {
-  const { baseUrl, router, ...renderOptions } = options;
-  const { wrapper, queryClient } = makeWrapper({ baseUrl, router });
+  const { baseUrl, apiPrefix, router, ...renderOptions } = options;
+  const { wrapper, queryClient } = makeWrapper({ baseUrl, apiPrefix, router });
   return { ...render(ui, { ...renderOptions, wrapper }), queryClient };
 };
 
@@ -72,8 +74,8 @@ export const renderHookWithProviders = <Result, Props>(
   callback: (props: Props) => Result,
   options: ProvidersOptions & Omit<RenderHookOptions<Props>, 'wrapper'> = {},
 ): RenderHookResult<Result, Props> & { queryClient: QueryClient } => {
-  const { baseUrl, router, ...hookOptions } = options;
-  const { wrapper, queryClient } = makeWrapper({ baseUrl, router });
+  const { baseUrl, apiPrefix, router, ...hookOptions } = options;
+  const { wrapper, queryClient } = makeWrapper({ baseUrl, apiPrefix, router });
   return { ...renderHook(callback, { ...hookOptions, wrapper }), queryClient };
 };
 

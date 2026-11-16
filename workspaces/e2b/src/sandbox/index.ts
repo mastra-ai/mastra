@@ -124,6 +124,17 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   timeout?: number;
   /** Environment variables to set in the sandbox */
   env?: Record<string, string>;
+  /**
+   * OS user to run commands as, by name.
+   *
+   * Defaults to the template's own default user. Set this to run agent
+   * commands as a second, unprivileged user — mounting still runs as the
+   * default user, which needs `sudo` to mount FUSE filesystems.
+   *
+   * The user must exist in the sandbox template; E2B starts the command as
+   * that user without creating it.
+   */
+  user?: string;
   /** Custom metadata */
   metadata?: Record<string, unknown>;
   /** Network configuration to use when creating the E2B sandbox */
@@ -274,6 +285,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       name: 'E2BSandbox',
       processes: new E2BProcessManager({
         defaultTimeout: options.timeout ?? 300_000,
+        user: options.user,
       }),
     });
 

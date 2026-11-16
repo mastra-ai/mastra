@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  alignLineCutToObservationGroups,
   combineObservationGroupRanges,
   deriveObservationGroupProvenance,
   parseObservationGroups,
@@ -322,5 +323,59 @@ describe('malformed observation group input', () => {
     expect(renderObservationGroupsForReflection(observations)).toBeNull();
 
     expect(performance.now() - start).toBeLessThan(200);
+  });
+});
+
+describe('alignLineCutToObservationGroups (#28445)', () => {
+  // Buffered reflection reflects the first `cut` lines and keeps the rest verbatim, so a cut must not
+  // split a group. Line numbers below are 0-based; a cut of N reflects lines 0..N-1.
+  const lines = [
+    '* legacy ungrouped observation', // 0
+    '', // 1
+    '<observation-group id="g1" range="1:2">', // 2
+    '* g1 fact', // 3
+    '</observation-group>', // 4
+    '', // 5
+    '<observation-group id="g2" range="3:4">', // 6
+    '* g2 fact mentioning <observation-group id="x" range="y"> inline', // 7
+    '* another g2 fact', // 8
+    '</observation-group>', // 9
+  ];
+
+  it('keeps cuts that already fall between groups', () => {
+    for (const cut of [0, 1, 2, 5, 6, 10]) {
+      expect(alignLineCutToObservationGroups(lines, cut)).toBe(cut);
+    }
+  });
+
+  it('moves a cut inside a group back to before that group and its blank separator', () => {
+    expect(alignLineCutToObservationGroups(lines, 8)).toBe(5);
+    expect(alignLineCutToObservationGroups(lines, 9)).toBe(5);
+    // Ungrouped lines before the first group stay reflectable.
+    expect(alignLineCutToObservationGroups(lines, 3)).toBe(1);
+  });
+
+  it('moves the cut forward past the first group when nothing precedes it', () => {
+    const grouped = lines.slice(2);
+    expect(alignLineCutToObservationGroups(grouped, 1)).toBe(3);
+    expect(alignLineCutToObservationGroups(['', ...grouped], 2)).toBe(4);
+  });
+
+  it('treats indented group tags like unindented ones', () => {
+    const indented = lines.map(line => (line.includes('observation-group') ? `  ${line}` : line));
+    expect(alignLineCutToObservationGroups(indented, 8)).toBe(5);
+  });
+
+  it('moves a cut inside an unterminated last group back to before it', () => {
+    const unterminated = [...lines.slice(0, 9), '* still open'];
+    expect(alignLineCutToObservationGroups(unterminated, 9)).toBe(5);
+    expect(alignLineCutToObservationGroups(unterminated.slice(6), 2)).toBe(2);
+  });
+
+  it('leaves observations without group tags unchanged', () => {
+    const plain = ['* a', '* b', '', '* c'];
+    for (let cut = 0; cut <= plain.length; cut++) {
+      expect(alignLineCutToObservationGroups(plain, cut)).toBe(cut);
+    }
   });
 });

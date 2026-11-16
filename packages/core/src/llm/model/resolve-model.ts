@@ -3,6 +3,8 @@ import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import type { DynamicArgument } from '../../types';
+import { resolveDynamicArgument } from '../../utils/dynamic-argument';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
@@ -89,22 +91,12 @@ export function isOpenAICompatibleObjectConfig(
  * ```
  */
 export async function resolveModelConfig(
-  modelConfig:
-    | MastraModelConfig
-    | (({
-        requestContext,
-        mastra,
-      }: {
-        requestContext: RequestContext;
-        mastra?: Mastra;
-      }) => MastraModelConfig | Promise<MastraModelConfig>),
+  modelConfig: DynamicArgument<MastraModelConfig>,
   requestContext: RequestContext = new RequestContext(),
   mastra?: Mastra,
 ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
   // If it's a function, resolve it first
-  if (typeof modelConfig === 'function') {
-    modelConfig = await modelConfig({ requestContext, mastra });
-  }
+  modelConfig = await resolveDynamicArgument(modelConfig, { requestContext, mastra });
 
   if (isIdentifiedModelConfig(modelConfig)) {
     const resolved = await resolveModelConfig(modelConfig.model, requestContext, mastra);

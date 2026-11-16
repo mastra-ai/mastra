@@ -23,6 +23,7 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../co
 import { createDurableAgent } from '../create-durable-agent';
 import { ExecutionFence, __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
+import { storeRunsInV2 } from './storage-version';
 
 function toolCallThenTextModel(toolName: string, text: string) {
   let calls = 0;
@@ -103,17 +104,21 @@ describe('DurableAgent resume claim loser (#27365)', () => {
       requireApproval: true,
       execute,
     });
-    const durableAgent = createDurableAgent({
-      agent: new Agent({
-        id: 'loser-agent',
-        name: 'Loser Agent',
-        instructions: 'You archive items.',
-        model: model.model as LanguageModelV2,
-        tools: { archive },
-        defaultOptions,
+    // The tests read and rewrite the run's row, and race its claim, through v1's snapshot methods.
+    const durableAgent = storeRunsInV2(
+      createDurableAgent({
+        agent: new Agent({
+          id: 'loser-agent',
+          name: 'Loser Agent',
+          instructions: 'You archive items.',
+          model: model.model as LanguageModelV2,
+          tools: { archive },
+          defaultOptions,
+        }),
+        pubsub,
       }),
-      pubsub,
-    });
+      false,
+    );
     new Mastra({ agents: { 'loser-agent': durableAgent as any }, logger: false, storage, pubsub });
     return { storage, model, durableAgent };
   }

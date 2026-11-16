@@ -13,6 +13,8 @@
 import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { DefaultObservabilityInstance } from '../instances';
+import type { EndSpanOptionsWithTime } from '../spans/default';
 import { TrackingExporter } from './tracking';
 import type { TraceData, TrackingExporterConfig } from './tracking';
 
@@ -425,6 +427,38 @@ describe('TrackingExporter', () => {
       await exporter.shutdown();
     }
   });
+
+  it.each(['explicit', 'clock'])(
+    'finishes and cleans up live spans with reversed %s timestamps (OBS-935)',
+    async source => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(1000);
+      exporter = new TestTrackingExporter({ traceCleanupDelayMs: 1 });
+      const instance = new DefaultObservabilityInstance({
+        name: 'reversed-time',
+        serviceName: 'test',
+        exporters: [exporter],
+      });
+      try {
+        const span = instance.startSpan({ name: 'work', type: SpanType.AGENT_RUN });
+        await instance.flush();
+        expect(exporter.builtSpans.has(span.id)).toBe(true);
+        vi.setSystemTime(999);
+        span.end(
+          source === 'explicit'
+            ? ({ endTime: new Date(999) } as EndSpanOptionsWithTime<SpanType.AGENT_RUN>)
+            : undefined,
+        );
+        await instance.flush();
+        expect(exporter.calls.filter(call => call.method === '_finishSpan' && call.spanId === span.id)).toHaveLength(1);
+        await vi.waitFor(() => expect(exporter.getTraceMapSize()).toBe(0));
+        expect(exporter.abortedSpans.size).toBe(0);
+      } finally {
+        await instance.shutdown();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   describe('Root span processing', () => {
     beforeEach(() => {

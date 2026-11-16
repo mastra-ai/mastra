@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -135,6 +136,11 @@ describe('Factory board saved views', () => {
 
   it('searches within a saved view without changing its filters or entering the editor', async () => {
     stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+        HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+      ),
+    );
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?label=later`],
     });
@@ -157,16 +163,17 @@ describe('Factory board saved views', () => {
 
     await user.clear(search);
     await user.type(search, 'Moved');
+    // The server searches once typing pauses.
+    await waitFor(() => expect(within(triage).queryByText('Created later')).not.toBeInTheDocument());
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
-    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(search).toHaveValue('');
     expect(within(triage).getByText('Created later')).toBeInTheDocument();
 
     await user.type(search, 'Moved');
     const boards = screen.getByRole('region', { name: 'Boards' });
-    await user.click(within(boards).getByRole('link', { name: 'Review' }));
-    await screen.findByTestId('board-column-review');
+    await user.click(within(boards).getByRole('link', { name: 'Release Preview' }));
+    await screen.findByTestId('board-column-queued');
     await user.click(within(boards).getByRole('link', { name: 'Work' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
@@ -185,13 +192,13 @@ describe('Factory board saved views', () => {
     await user.click(screen.getByRole('button', { name: 'New view' }));
     await user.click(screen.getByRole('button', { name: 'Save view' }));
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'Created');
-    expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'All cards' }));
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
     expect(within(triage).getByText('Moved recently')).toBeInTheDocument();
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'missing');
-    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(triage).queryByText('Created later')).not.toBeInTheDocument());
     await openPropertiesMenu(user, 'Board properties');
     expect(screen.queryByRole('menuitem', { name: 'Save as view' })).not.toBeInTheDocument();
     await closePropertiesMenus(user);

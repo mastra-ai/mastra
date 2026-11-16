@@ -1,5 +1,4 @@
 import { format, isValid, parse } from 'date-fns';
-import { CalendarIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
@@ -10,6 +9,9 @@ import type { ButtonProps } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
@@ -250,17 +252,17 @@ export const DateTimePickerContent = ({
         aria-label="Time"
         value={timeStrValue}
         onChange={e => handleTimeStrChange(e.target.value)}
-        className="m-4 mt-0 w-auto [&::-webkit-calendar-picker-indicator]:hidden"
+        className="m-4 mt-0 w-auto"
       />
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
         {newValueDefined && (
-          <Button icon={<X />} tabIndex={0} size="md" onClick={handleClear} type="button">
+          <Button icon={<IconCrossMedium />} tabIndex={0} size="md" onClick={handleClear} type="button">
             Clear
           </Button>
         )}
         <Button
-          icon={newValueDefined ? <Check /> : <X />}
+          icon={newValueDefined ? <IconCheckmark2Medium /> : <IconCrossMedium />}
           tabIndex={0}
           type="button"
           size="md"
@@ -295,7 +297,7 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
           controlTriggerOpenStateFor(variant),
           className,
         )}
-        icon={<CalendarIcon />}
+        icon={<IconCalendar1 />}
         {...props}
       >
         {value ? (

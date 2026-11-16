@@ -1208,7 +1208,7 @@ describe('Stored Agents Handlers', () => {
     it('should persist durable config on the initial version', async () => {
       const storage = new InMemoryStore();
       const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
-      const durable = { maxSteps: 25, cleanupTimeoutMs: 0 };
+      const durable = { cleanupTimeoutMs: 0 };
 
       const result = await CREATE_STORED_AGENT_ROUTE.handler({
         ...createTestContext(mastra),
@@ -2031,6 +2031,25 @@ describe('Stored Agents Handlers', () => {
         expect(published.instructions).toBe('Auto-published instructions');
       });
 
+      it('marks a draft agent as published when a PATCH auto-publishes', async () => {
+        const agentId = 'auto-publish-draft-status-test';
+        const { agentsStore, lifecycleMastra } = await setupPublishedAgent(agentId);
+        await agentsStore.update({ id: agentId, status: 'draft' });
+        await useRealAutoVersioningOnce();
+
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Published from draft',
+          autoPublish: true,
+        });
+
+        const latestVersion = await agentsStore.getLatestVersion(agentId);
+        const stored = await agentsStore.getById(agentId);
+        expect(stored?.activeVersionId).toBe(latestVersion?.id);
+        expect(stored?.status).toBe('published');
+      });
+
       it('preserves the active code-source version while replacing an unpublished rolling draft', async () => {
         const agentId = 'code-source-draft-test';
         const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId, 'code');
@@ -2120,6 +2139,34 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
       expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
+    });
+
+    it('still reports success when unregistering the deleted agent workspace fails', async () => {
+      mockAgentsData.set('delete-test', {
+        id: 'delete-test',
+        name: 'To Be Deleted',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      const warn = vi.fn();
+      const removeWorkspace = vi.fn().mockRejectedValue(new Error('workspace registry unavailable'));
+      Object.assign(mockMastra, {
+        listWorkspaces: vi.fn().mockReturnValue({ 'inline-abc': { source: 'agent', agentId: 'delete-test' } }),
+        removeWorkspace,
+        getLogger: () => ({ warn }),
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'delete-test',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
+      expect(removeWorkspace).toHaveBeenCalledWith('inline-abc');
+      expect(mockAgentsData.has('delete-test')).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        'Failed to unregister workspace of deleted agent',
+        expect.objectContaining({ storedAgentId: 'delete-test' }),
+      );
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -2789,19 +2836,19 @@ describe('createStoredAgentBodySchema', () => {
   it('should accept durable as a serializable config object', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
+      durable: { cleanupTimeoutMs: 0 },
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
+      expect(result.data.durable).toEqual({ cleanupTimeoutMs: 0 });
     }
   });
 
   it('should reject durable options that are not serializable config', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: -1 },
+      durable: { cleanupTimeoutMs: -1 },
     });
 
     expect(result.success).toBe(false);

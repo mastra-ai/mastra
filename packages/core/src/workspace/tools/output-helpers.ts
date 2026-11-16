@@ -66,16 +66,34 @@ export function sandboxToModelOutput(output: unknown): unknown {
  * - `undefined/null`: use DEFAULT_TAIL_LINES
  */
 export function applyTail(output: string, tail: number | null | undefined): string {
-  if (!output) return output;
+  const { header, body } = splitTail(output, tail);
+  return header ? `${header}\n${body}` : body;
+}
+
+interface TailSplit {
+  /** `[showing last N of M lines]` when lines were dropped, else undefined. */
+  header: string | undefined;
+  /** The kept lines. */
+  body: string;
+  /** Line number, in the full output, of the first line of `body`. */
+  firstLine: number;
+}
+
+function splitTail(output: string, tail: number | null | undefined): TailSplit {
+  const unchanged: TailSplit = { header: undefined, body: output, firstLine: 1 };
+  if (!output) return unchanged;
   const n = Math.floor(Math.abs(tail ?? DEFAULT_TAIL_LINES));
-  if (n === 0) return output; // 0 = no limit (also covers |tail| < 1)
+  if (n === 0) return unchanged; // 0 = no limit (also covers |tail| < 1)
   // Strip trailing newline before splitting so it doesn't count as a line
   const trailingNewline = output.endsWith('\n');
   const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
-  if (lines.length <= n) return output;
+  if (lines.length <= n) return unchanged;
   const sliced = lines.slice(-n).join('\n');
-  const body = trailingNewline ? sliced + '\n' : sliced;
-  return `[showing last ${n} of ${lines.length} lines]\n${body}`;
+  return {
+    header: `[showing last ${n} of ${lines.length} lines]`,
+    body: trailingNewline ? sliced + '\n' : sliced,
+    firstLine: lines.length - n + 1,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +134,11 @@ export async function applyTokenLimit(
  * of the output, with a truncation notice in the middle.
  * Uses tokenx for fast token estimation.
  *
+ * The notice names the dropped lines and the lines kept on each side, so the
+ * model can read exactly the missing range instead of re-running the command, e.g.
+ * `[...output truncated — dropped lines 24-199; showing first ~200 tokens (lines 1-23) + last ~1800 tokens (lines 200-400) of ~3600 tokens...]`.
+ * A line the cut goes through is reported as "the end of line N" / "the start of line N".
+ *
  * @param output - The text to truncate
  * @param limit - Maximum tokens (default: DEFAULT_MAX_OUTPUT_TOKENS)
  * @param headRatio - Fraction of the token budget to allocate to the head (default: 0.1 = 10%)
@@ -125,6 +148,14 @@ export async function applyTokenLimitSandwich(
   limit: number = DEFAULT_MAX_OUTPUT_TOKENS,
   headRatio: number = 0.1,
 ): Promise<string> {
+  return sandwich(output, limit, headRatio, 1);
+}
+
+/**
+ * Sandwich truncation where line 1 of `output` is line `firstLine` of the text the
+ * model asked for (after a line-based tail, the kept lines start part-way in).
+ */
+function sandwich(output: string, limit: number, headRatio: number, firstLine: number): string {
   if (!output) return output;
 
   const totalTokens = estimateTokenCount(output);
@@ -132,11 +163,83 @@ export async function applyTokenLimitSandwich(
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  const head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
-  const tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
+  // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
+  let head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
+  let tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
+  const headEnd = head.length;
+  let tailStart = output.length - tail.length;
+  // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.
+  head = head.replace(/\r?\n$/, '');
+  if (head.endsWith('\r') && output[headEnd] === '\n') head = head.slice(0, -1);
+  const tailBreak = tail.startsWith('\r\n') ? 2 : tail.startsWith('\n') ? 1 : 0;
+  tail = tail.slice(tailBreak);
+  tailStart += tailBreak;
 
-  const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${totalTokens} tokens...]`;
+  const lines = describeCutLines(output, headEnd, tailStart, firstLine - 1);
+  const dropped = lines.dropped ? `dropped ${lines.dropped}; ` : '';
+  const notice = `[...output truncated — ${dropped}showing first ~${headBudget} tokens${lines.head} + last ~${tailBudget} tokens${lines.tail} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');
+}
+
+/** 1-based line number of the character at `index`. */
+function lineAt(text: string, index: number): number {
+  let line = 1;
+  for (let i = text.indexOf('\n'); i !== -1 && i < index; i = text.indexOf('\n', i + 1)) line++;
+  return line;
+}
+
+function lineRange(from: number, to: number): string {
+  return from === to ? `line ${from}` : `lines ${from}-${to}`;
+}
+
+function joinClauses(clauses: string[]): string {
+  if (clauses.length <= 1) return clauses.join('');
+  return `${clauses.slice(0, -1).join(', ')} and ${clauses.at(-1)}`;
+}
+
+/**
+ * Describe which lines a sandwich cut kept and dropped. The head keeps
+ * `output[0, headEnd)` and the tail keeps `output[tailStart, end)`.
+ * `offset` is added to every line number.
+ */
+function describeCutLines(
+  output: string,
+  headEnd: number,
+  tailStart: number,
+  offset: number,
+): { head: string; tail: string; dropped: string } {
+  const trailingNewline = output.endsWith('\n');
+  const lastLine = lineAt(output, output.length) - (trailingNewline ? 1 : 0);
+  const hasHead = headEnd > 0;
+  const hasTail = tailStart < output.length;
+
+  // Last line the head reaches, and whether it reaches that line's end.
+  const headTo = hasHead ? lineAt(output, headEnd - 1) : 0;
+  const headWhole =
+    hasHead &&
+    (output[headEnd - 1] === '\n' ||
+      headEnd >= output.length ||
+      output.startsWith('\n', headEnd) ||
+      output.startsWith('\r\n', headEnd));
+  // First line the tail reaches, and whether it starts at that line's start.
+  const tailFrom = hasTail ? lineAt(output, tailStart) : lastLine + 1;
+  const tailWhole = tailStart === 0 || output[tailStart - 1] === '\n';
+
+  const n = (line: number) => line + offset;
+  const head = hasHead ? ` (${lineRange(n(1), n(headTo))})` : '';
+  const tail = hasTail ? ` (${lineRange(n(tailFrom), n(lastLine))})` : '';
+
+  // Token estimates are rounded, so the kept slices can meet or overlap; then nothing was dropped.
+  if (hasHead && hasTail && tailStart <= headEnd) return { head, tail, dropped: '' };
+  if (hasHead && hasTail && headTo === tailFrom) {
+    return { head, tail, dropped: `the middle of line ${n(headTo)}` };
+  }
+
+  const clauses: string[] = [];
+  if (hasHead && !headWhole) clauses.push(`the end of line ${n(headTo)}`);
+  if (tailFrom - 1 >= headTo + 1) clauses.push(lineRange(n(headTo + 1), n(tailFrom - 1)));
+  if (hasTail && !tailWhole) clauses.push(`the start of line ${n(tailFrom)}`);
+  return { head, tail, dropped: joinClauses(clauses) };
 }
 
 /**
@@ -162,9 +265,12 @@ export async function truncateOutput(
   tokenLimit?: number,
   tokenFrom?: 'start' | 'end' | 'sandwich',
 ): Promise<string> {
-  const tailed = applyTail(output, tail);
   if (tokenFrom === 'sandwich') {
-    return applyTokenLimitSandwich(tailed, tokenLimit);
+    // Cut the kept lines, not the `[showing last N of M lines]` header, so the
+    // notice can number lines as they appear in the full output.
+    const { header, body, firstLine } = splitTail(output, tail);
+    const cut = sandwich(body, tokenLimit ?? DEFAULT_MAX_OUTPUT_TOKENS, 0.1, firstLine);
+    return header ? `${header}\n${cut}` : cut;
   }
-  return applyTokenLimit(tailed, tokenLimit, tokenFrom);
+  return applyTokenLimit(applyTail(output, tail), tokenLimit, tokenFrom);
 }

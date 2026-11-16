@@ -1,19 +1,18 @@
-import {
-  CalendarClock,
-  Clock,
-  CornerDownRight,
-  GitBranch,
-  Layers,
-  List,
-  Network,
-  PlayCircle,
-  RefreshCw,
-  Repeat,
-  Repeat1,
-  Timer,
-  Workflow,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Network } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconArrowsRepeatRightLeft } from '@/ds/icons/central/IconArrowsRepeatRightLeft';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconPlayCircle } from '@/ds/icons/central/IconPlayCircle';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+
+export type WorkflowCardIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
 export const BADGE_COLORS = {
   sleep: 'var(--badge-purple-indicator)',
@@ -33,32 +32,32 @@ export const BADGE_COLORS = {
 } as const;
 
 export const BADGE_ICONS = {
-  sleep: Timer,
-  sleepUntil: CalendarClock,
-  forEach: List,
-  map: List,
-  parallel: Workflow,
-  suspend: PlayCircle,
-  after: Clock,
-  workflow: Layers,
+  sleep: IconStopwatch,
+  sleepUntil: IconCalendarClock4,
+  forEach: IconListBullets,
+  map: IconListBullets,
+  parallel: WorkflowIcon,
+  suspend: IconPlayCircle,
+  after: IconClock,
+  workflow: IconLayersTwo,
   when: Network,
-  dountil: Repeat1,
-  dowhile: Repeat,
-  until: Timer,
-  while: RefreshCw,
-  if: GitBranch,
-  else: CornerDownRight,
+  dountil: IconArrowsRepeatRightLeft,
+  dowhile: IconArrowsRepeatRightLeft,
+  until: IconStopwatch,
+  while: IconArrowRotateClockwise,
+  if: IconBranch,
+  else: IconArrowCornerDownRight,
 } as const;
 
 export interface ConditionIconConfig {
-  icon: LucideIcon | undefined;
+  icon: WorkflowCardIcon | undefined;
   color: string | undefined;
 }
 
 export interface WorkflowCardIndicator {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: WorkflowCardIcon;
   color: string;
 }
 

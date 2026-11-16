@@ -17,7 +17,7 @@ export {
   type AzureTokenCredential,
 } from './azure.js';
 export { ModelsDevGateway } from './models-dev.js';
-export { MastraGateway, type MastraGatewayConfig } from './mastra.js';
+export { MastraGateway, type MastraGatewayConfig, gatewayServesObservationalMemory } from './mastra.js';
 export { NetlifyGateway } from './netlify.js';
 export { GatewayManager, type GatewayModel } from './gateway-manager.js';
 export { defaultGateways, gateways } from './defaults.js';

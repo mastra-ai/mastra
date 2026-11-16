@@ -49,14 +49,24 @@ function serveCard(served?: Served) {
   });
 }
 
-/** Fails `failures` times (the client retries a 500 three times on its own), then serves the card. */
-function failThenServe(failures: number) {
-  let calls = 0;
+/**
+ * Fails every request until `recover()` is called, then serves the card. Failing by state, not by a
+ * count of requests, keeps the test independent of how often the client retries a 500 on its own.
+ */
+function failUntilRecovered() {
+  let failing = true;
+  const failed = new Set<'series' | 'totals'>();
   serveTraceAggregate(request => {
-    calls++;
-    if (calls <= failures) return HttpResponse.json(traceAggregateErrorFixture, { status: 500 });
-    return respond(request);
+    if (!failing) return respond(request);
+    failed.add(request.interval ? 'series' : 'totals');
+    return HttpResponse.json(traceAggregateErrorFixture, { status: 500 });
   });
+  return {
+    failed,
+    recover: () => {
+      failing = false;
+    },
+  };
 }
 
 function render(ui: ReactElement, filterTokens: PropertyFilterToken[] = []) {
@@ -139,15 +149,19 @@ describe('when the server answers aggregateTraces()', () => {
   });
 
   it('loads after Retry when both requests failed', async () => {
-    failThenServe(8);
-    render(<DistinctIdsCard />);
+    const outage = failUntilRecovered();
+    const { queryClient } = render(<DistinctIdsCard />);
 
-    await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+    expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
+    // The error shows as soon as one request fails; the other may still be in the client's own
+    // retries. Wait until both have failed, so Retry has to send both again.
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0), { timeout: 5000 });
+    expect([...outage.failed].sort()).toEqual(['series', 'totals']);
+    outage.recover();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('Resources', LEGEND, { timeout: 5000 })).toBeDefined();
+    expect(await screen.findByText('Resources', LEGEND)).toBeDefined();
     expect(screen.getByText('Threads', LEGEND)).toBeDefined();
-    // Two waits of up to 5 s each: the default 5 s test timeout cuts it short under a loaded run.
   }, 15_000);
 
   it('says a service filter has no trace equivalent, and sends nothing', async () => {

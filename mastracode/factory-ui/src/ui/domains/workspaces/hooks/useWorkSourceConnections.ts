@@ -1,23 +1,60 @@
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 
 export type WorkSource = 'linear' | 'jira' | 'incident-io';
 
 export const WORK_SOURCES: readonly WorkSource[] = ['linear', 'jira', 'incident-io'];
 
-export const WORK_SOURCE_NAME: Record<WorkSource, string> = {
+/**
+ * The repository hosts a Factory can take issues from. They are not trackers: nothing is
+ * connected up front, the codebase step's repository is what feeds them.
+ */
+export type CodeHostSource = 'github' | 'gitlab';
+
+/** Everything the Work step can preview or list as an issue source. */
+export type BoardSource = WorkSource | CodeHostSource;
+
+export function isCodeHostSource(source: BoardSource): source is CodeHostSource {
+  return source === 'github' || source === 'gitlab';
+}
+
+export const WORK_SOURCE_NAME: Record<BoardSource, string> = {
   linear: 'Linear',
   jira: 'Jira',
   'incident-io': 'incident.io',
+  github: 'GitHub',
+  gitlab: 'GitLab',
 };
 
-export function useWorkSourceConnections(): Record<WorkSource, boolean> {
+export interface WorkSourceConnectionsStatus {
+  connected: Record<WorkSource, boolean>;
+  /** Some source has not answered yet, so `connected` may still flip to true. */
+  isPending: boolean;
+  /** Some source failed to load. A deployment without Platform connections (403/404) is not a failure. */
+  isError: boolean;
+}
+
+export function useWorkSourceConnectionsStatus(): WorkSourceConnectionsStatus {
   const linear = useLinearStatusQuery();
   const jira = usePlatformConnectionsQuery('jira');
   const incidentIo = usePlatformConnectionsQuery('incident-io');
+  const platforms = [jira, incidentIo];
   return {
-    linear: linear.data?.connected === true,
-    jira: jira.data?.some(connection => connection.status === 'active') === true,
-    'incident-io': incidentIo.data?.some(connection => connection.status === 'active') === true,
+    connected: {
+      linear: linear.data?.connected === true,
+      jira: jira.data?.some(connection => connection.status === 'active') === true,
+      'incident-io': incidentIo.data?.some(connection => connection.status === 'active') === true,
+    },
+    isPending: linear.isPending || platforms.some(query => query.isPending),
+    // Linear reports a failed status request as `reason: 'unavailable'` rather than a query error.
+    isError:
+      linear.isError ||
+      linear.data?.reason === 'unavailable' ||
+      platforms.some(query => query.isError && !isPlatformConnectUnavailableError(query.error)),
   };
+}
+
+export function useWorkSourceConnections(): Record<WorkSource, boolean> {
+  return useWorkSourceConnectionsStatus().connected;
 }

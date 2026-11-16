@@ -1,7 +1,10 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
 import type { ToolPayloadTransform } from '../../../../tools/types';
 import {
@@ -690,6 +693,57 @@ describeForAllEngines(
       expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research complete on "quantum computing"' });
     }, 30_000);
 
+    // Technical: the finish signal woke the thread with no request context, so a model
+    // resolved from it could not be picked and the user got no report. (#29032)
+    it('reports a deferred task with the model the request picked when it finishes after the stream ended (#29032)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-wake-context-thread', resourceId: 'bg-wake-context-user' };
+      const prompt = 'Research superconductors for my workspace';
+      const llm = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const requestContext = new RequestContext();
+      requestContext.set('workspace-model', 'workspace-model-1');
+      const { chunks, mastra } = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        model: ({ requestContext }: { requestContext: RequestContext }) => {
+          const modelId = requestContext.get('workspace-model') as string | undefined;
+          if (!modelId) throw new Error('No model configured for this request');
+          return openai(modelId);
+        },
+        requestContext,
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock =>
+          onReportTurns(mock, prompt, {
+            dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'superconductors' } }] },
+            ack: 'Working on it.',
+            report: 'The superconductor research is finished.',
+          }),
+      });
+      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+      expect(requestsFor(llm, prompt)).toHaveLength(2);
+
+      release();
+      await waitFor(
+        () => mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+
+      await waitFor(storedText(memory, thread), s => s.includes('The superconductor research is finished.'));
+      const requests = requestsFor(llm, prompt);
+      expect(requests).toHaveLength(3);
+      expect((requests[2]!.body as any).model).toBe('workspace-model-1');
+    }, 30_000);
+
     it("doesn't signal a finished deferred task when the app delivers its own notification (#28986)", async () => {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
@@ -821,6 +875,316 @@ describeForAllEngines(
       // Delivered to the active run, so no other run is woken for it.
       await new Promise(resolve => setTimeout(resolve, 500));
       expect(requestsFor(llm, 'Research quantum computing now')).toHaveLength(4);
+    }, 30_000);
+
+    // Technical: another agent's run suspended on the thread (awaiting approval), so the finish
+    // signal resolved `blocked` and was dropped instead of queued behind that run. (#29032)
+    it("reports a deferred task that finishes while another agent's run waits for approval on the thread, once that run ends (#29032)", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-blocked-thread', resourceId: 'bg-blocked-user' };
+      const prompt = 'Research glaciers for the report';
+      const reviewerModel = 'reviewer-model';
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        engine,
+      });
+
+      // A second agent on the same thread, whose run waits for approval while the research finishes.
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const reviewer = new Agent({
+        id: 'bg-blocked-reviewer',
+        name: 'Reviewer',
+        instructions: 'You review the thread.',
+        model: openai(reviewerModel),
+        memory,
+        tools: {
+          publishReview: createTool({
+            id: 'publish-review',
+            description: 'Publish the review',
+            inputSchema: z.object({}),
+            outputSchema: z.object({ ok: z.boolean() }),
+            requireApproval: true,
+            execute: async () => ({ ok: true }),
+          }),
+        },
+      });
+      shared.mastra.addAgent(reviewer, 'bg-blocked-reviewer');
+
+      const isReviewer = (req: unknown) => (req as any)?.model === reviewerModel;
+      const mentions = (req: unknown, text: string) => JSON.stringify(req).includes(text);
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => isReviewer(req) && !mentions(req, 'call-fg-1') },
+        { toolCalls: [{ id: 'call-fg-1', name: 'publishReview', arguments: {} }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => isReviewer(req) && mentions(req, 'call-fg-1') },
+        { content: 'Review published.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isReviewer(req) && mentions(req, FINISH_SIGNAL) },
+        { content: 'The glacier research is finished.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isReviewer(req) && !hasToolResult(req) },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'glaciers' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isReviewer(req) && hasToolResult(req) },
+        { content: 'Working on it.' },
+      );
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+      });
+      const taskId = (first.chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+
+      const registeredReviewer = shared.mastra.getAgent('bg-blocked-reviewer');
+      const review = await registeredReviewer.stream('Review the thread', {
+        memory: { thread: thread.threadId, resource: thread.resourceId },
+        maxSteps: 3,
+      });
+      const reviewChunks = await collect(review.fullStream as AsyncIterable<unknown>);
+      expect(reviewChunks.some(c => c.type === 'tool-call-approval')).toBe(true);
+
+      release();
+      await waitFor(
+        () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      // The finish notice is sent while the reviewer's run still holds the thread.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(await storedText(memory, thread)()).not.toContain('The glacier research is finished.');
+
+      const resumed = await registeredReviewer.approveToolCall({ runId: review.runId, toolCallId: 'call-fg-1' });
+      expect(await resumed.text).toBe('Review published.');
+
+      await waitFor(storedText(memory, thread), s => s.includes('The glacier research is finished.'));
+      const report = requestsFor(llm, prompt).find(r => !isReviewer(r.body) && mentions(r.body, FINISH_SIGNAL));
+      expect(JSON.stringify((report!.body as any).messages)).toContain(
+        `Background task ${taskId} for tool call call-bg-1 (research) has completed`,
+      );
+    }, 30_000);
+
+    // Technical: a newer untilIdle stream on the thread closed the waiting one as `replaced`, which
+    // marked its running task as caller-stopped; when the newer stream couldn't adopt the task,
+    // the task's finish never woke the agent. (#29032)
+    it('reports a deferred task when the newer untilIdle stream that replaced the one waiting for it stops waiting first (#29032)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-replaced-thread', resourceId: 'bg-replaced-user' };
+      const prompt = 'Research coral reefs';
+      const laterPrompt = 'Say hello meanwhile';
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        // Short enough that the newer stream gives up waiting before the task finishes.
+        backgroundTasks: { ...BG_CONFIG, untilIdleMaxIdleMs: 2_000 },
+        memory,
+        engine,
+      });
+
+      const mentions = (req: unknown, text: string) => JSON.stringify(req).includes(text);
+      const lastUserMessage = (req: unknown) =>
+        ((req as any)?.messages ?? []).filter((m: any) => m.role === 'user').at(-1)?.content;
+      const isLater = (req: unknown) => lastUserMessage(req) === laterPrompt;
+      llm.on({ endpoint: 'chat', predicate: (req: unknown) => isLater(req) }, { content: 'Hello.' });
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && mentions(req, FINISH_SIGNAL) },
+        { content: 'The coral research is finished.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && !hasToolResult(req) },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'coral reefs' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && hasToolResult(req) },
+        { content: 'Working on it.' },
+      );
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      const firstChunks: Chunk[] = [];
+      const firstDone = (async () => {
+        for await (const chunk of first.output.fullStream as AsyncIterable<unknown>) firstChunks.push(chunk as Chunk);
+      })();
+      await vi.waitFor(() => expect(firstChunks.some(c => c.type === 'background-task-started')).toBe(true), {
+        timeout: 10_000,
+      });
+      await waitFor(storedText(memory, thread), s => s.includes('Working on it.'));
+      const taskId = firstChunks.find(c => c.type === 'background-task-started')!.payload.taskId as string;
+
+      const later = await runLoopScenario({
+        engine,
+        llm,
+        prompt: laterPrompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      expect(textOf(await collect(later.output.fullStream as AsyncIterable<unknown>))).toContain('Hello.');
+      await firstDone;
+
+      release();
+      await waitFor(
+        () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      await waitFor(storedText(memory, thread), s => s.includes('The coral research is finished.'));
+    }, 30_000);
+
+    it("doesn't wake the agent for a deferred task when the caller stops the newer untilIdle stream that replaced the one waiting for it", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-replaced-stop-thread', resourceId: 'bg-replaced-stop-user' };
+      const prompt = 'Research coral reefs';
+      const laterPrompt = 'Say hello meanwhile';
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        engine,
+      });
+
+      const lastUserMessage = (req: unknown) =>
+        ((req as any)?.messages ?? []).filter((m: any) => m.role === 'user').at(-1)?.content;
+      const isLater = (req: unknown) => lastUserMessage(req) === laterPrompt;
+      llm.on({ endpoint: 'chat', predicate: (req: unknown) => isLater(req) }, { content: 'Hello.' });
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && JSON.stringify(req).includes(FINISH_SIGNAL) },
+        { content: 'The coral research is finished.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && !hasToolResult(req) },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'coral reefs' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && hasToolResult(req) },
+        { content: 'Working on it.' },
+      );
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      const firstChunks: Chunk[] = [];
+      const firstDone = (async () => {
+        for await (const chunk of first.output.fullStream as AsyncIterable<unknown>) firstChunks.push(chunk as Chunk);
+      })();
+      await vi.waitFor(() => expect(firstChunks.some(c => c.type === 'background-task-started')).toBe(true), {
+        timeout: 10_000,
+      });
+      await waitFor(storedText(memory, thread), s => s.includes('Working on it.'));
+      const taskId = firstChunks.find(c => c.type === 'background-task-started')!.payload.taskId as string;
+
+      // The newer stream's lookup of the thread's running tasks hasn't answered when its caller stops it.
+      vi.spyOn(shared.mastra.backgroundTaskManager!, 'listTasks').mockReturnValueOnce(new Promise(() => {}));
+      const later = await runLoopScenario({
+        engine,
+        llm,
+        prompt: laterPrompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      for await (const chunk of later.output.fullStream as AsyncIterable<unknown>) {
+        if ((chunk as Chunk).type === 'finish') break;
+      }
+      await firstDone;
+
+      release();
+      await waitFor(
+        () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(JSON.stringify(llm.getRequests().map(r => r.body))).not.toContain(FINISH_SIGNAL);
+    }, 30_000);
+
+    it("doesn't wake the agent for a deferred task when the caller stops the untilIdle stream waiting for it", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const llm = getMock();
+      const prompt = 'Research volcanoes';
+      const { output, mastra } = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory: new MockMemory(),
+        threadId: 'bg-stopped-thread',
+        resourceId: 'bg-stopped-user',
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+        fixtures: mock =>
+          onReportTurns(mock, prompt, {
+            dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'volcanoes' } }] },
+            ack: 'Working on it.',
+            report: 'The volcano research is finished.',
+          }),
+      });
+      let taskId = '';
+      for await (const chunk of output.fullStream as AsyncIterable<unknown>) {
+        if ((chunk as Chunk).type === 'background-task-started') {
+          taskId = (chunk as Chunk).payload.taskId as string;
+          break;
+        }
+      }
+
+      release();
+      await waitFor(
+        () => mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(JSON.stringify(requestsFor(llm, prompt).map(r => r.body))).not.toContain(FINISH_SIGNAL);
     }, 30_000);
 
     it('wakes the agent to report a suspended deferred task once it is answered and finishes (#28986)', async () => {

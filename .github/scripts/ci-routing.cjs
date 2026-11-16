@@ -3,6 +3,7 @@ const { join } = require('node:path');
 
 const WORKSPACE_ROUTING_FILES = new Set([
   '.github/scripts/ci-routing.cjs',
+  '.github/scripts/select-affected-tests.cjs',
   '.github/workflows/prebuild.yml',
   '.github/workflows/test-workspaces.yml',
   '.github/workflows/secrets.test-workspaces.yml',

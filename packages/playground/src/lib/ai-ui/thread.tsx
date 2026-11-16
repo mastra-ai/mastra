@@ -14,6 +14,8 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -32,15 +34,16 @@ import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import { useReadAloud } from '@mastra/react/hooks/voice';
-import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { MessageFactoryPart } from '@mastra/react/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { AttachFilePopover } from './attachments/attach-file-popover';
+import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
@@ -523,7 +526,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start(onTranscript))}
     >
-      {isListening ? <CircleStopIcon /> : <Mic />}
+      {isListening ? <CircleStopIcon /> : <IconMicrophone />}
     </Button>
   );
 };
@@ -555,24 +558,19 @@ const ComposerActionRow = ({
 }: ComposerActionRowProps) => {
   return (
     <>
-      {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
-          {showModelSwitcher && agentId && (
-            <>
-              <ComposerModelSwitcher />
-              <ComposerModelSettings agentId={agentId} />
-            </>
-          )}
-          {runOptionsSlot}
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        <div className="flex items-center gap-2">
-          {canExecute && <AttachFilePopover />}
-          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
-          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </div>
+      <ComposerActionsStart>
+        {canExecute && <AttachFileMenu />}
+        {runOptionsSlot}
+      </ComposerActionsStart>
+      <ComposerActionsEnd>
+        {showModelSwitcher && agentId && (
+          <>
+            <ComposerModelSwitcher />
+            <ComposerModelSettings agentId={agentId} />
+          </>
+        )}
+        {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+        {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -580,7 +578,7 @@ const ComposerActionRow = ({
           canSendWhileStreaming={canSendWhileStreaming}
           onCancel={onCancel}
         />
-      </div>
+      </ComposerActionsEnd>
     </>
   );
 };
@@ -605,7 +603,7 @@ const ComposerSendButton = ({
   if (isRunning && !draftCanSteerRun) {
     return (
       <Button
-        variant="default"
+        variant="primary"
         size="icon-md"
         type="button"
         tooltip="Cancel"
@@ -623,12 +621,12 @@ const ComposerSendButton = ({
   return (
     <Button
       type="submit"
-      variant="default"
+      variant="primary"
       size="icon-md"
       tooltip={canExecute ? 'Send' : 'No permission to execute'}
       disabled={!canExecute || isEmpty || isAddingAttachments}
     >
-      <ArrowUp />
+      <IconArrowUp />
     </Button>
   );
 };

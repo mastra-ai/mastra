@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsListHeader,
+  SettingsNoticeRow,
   SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
+  SettingsSkeleton,
   SettingsTitle,
 } from './index';
 import { Form } from '@/ds/components/Form';
@@ -64,31 +69,6 @@ describe('Settings', () => {
           .getByRole('region', { name: 'Connection' })
           .contains(screen.getByRole('heading', { name: 'Connection' })),
       ).toBe(true);
-    });
-  });
-
-  describe('SettingsContainer variants', () => {
-    it('defaults to the divided variant', () => {
-      render(
-        <SettingsContainer>
-          <SettingsRow label="Theme" />
-        </SettingsContainer>,
-      );
-
-      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
-    });
-
-    it('renders every row inside the inset variant', () => {
-      render(
-        <SettingsContainer variant="inset">
-          <SettingsRow label="Theme" />
-          <SettingsRow label="Notifications" />
-        </SettingsContainer>,
-      );
-
-      const container = document.querySelector('[data-slot="settings-container"]');
-      expect(container?.getAttribute('data-variant')).toBe('inset');
-      expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
     });
   });
 
@@ -189,6 +169,132 @@ describe('Settings', () => {
       expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
       expect(screen.queryByRole('textbox')).toBeNull();
+    });
+  });
+
+  describe('where a row places its control', () => {
+    function rowOf(label: string) {
+      return screen.getByText(label).closest('[data-slot="settings-row"]');
+    }
+
+    it('puts it beside the label by default, and under it when placed below', () => {
+      render(
+        <>
+          <SettingsRow label="Name">
+            <Input aria-label="Name" />
+          </SettingsRow>
+          <SettingsRow label="Email" controlPlacement="below">
+            <Input aria-label="Email" />
+          </SettingsRow>
+        </>,
+      );
+
+      expect(rowOf('Name')?.getAttribute('data-orientation')).toBe('responsive');
+      expect(rowOf('Email')?.getAttribute('data-orientation')).toBe('vertical');
+    });
+  });
+
+  describe('when a title has info', () => {
+    it('describes the title with it', () => {
+      render(
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          </SettingsHeader>
+        </SettingsGroup>,
+      );
+
+      screen.getByRole('heading', { name: 'General' });
+      expect(screen.getByText('General').closest('[aria-describedby]')).toBeTruthy();
+      expect(screen.getByText('Stored in this browser.')).toBeTruthy();
+    });
+  });
+
+  describe('when a list sits in a container', () => {
+    function renderList(onAdd: () => void = () => {}) {
+      return render(
+        <SettingsContainer>
+          <SettingsListHeader
+            action={
+              <button type="button" onClick={onAdd}>
+                Add account
+              </button>
+            }
+          >
+            1 account
+          </SettingsListHeader>
+          <SettingsItem title="mastra-ai" description="GitHub" />
+        </SettingsContainer>,
+      );
+    }
+
+    it('shows the count and action in a header above the items', () => {
+      const { container } = renderList();
+
+      const list = within(container);
+      const count = list.getByText('1 account');
+      list.getByRole('button', { name: 'Add account' });
+      expect(
+        count.compareDocumentPosition(list.getByText('mastra-ai')) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('runs the header action', () => {
+      let added = 0;
+      renderList(() => (added += 1));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+
+      expect(added).toBe(1);
+    });
+
+    it('keeps a truncated title readable in full on hover', () => {
+      renderList();
+
+      expect(screen.getByText('mastra-ai').getAttribute('title')).toBe('mastra-ai');
+    });
+
+    it('shows an empty list as its empty text and action', () => {
+      const { container } = render(
+        <SettingsContainer>
+          <SettingsEmptyRow action={<button type="button">Add header</button>}>No request headers</SettingsEmptyRow>
+        </SettingsContainer>,
+      );
+
+      const list = within(container);
+      list.getByText('No request headers');
+      list.getByRole('button', { name: 'Add header' });
+    });
+  });
+
+  describe('when a list has notices and other controls', () => {
+    it('shows them in the list, and renders nothing for an empty notice row', () => {
+      const { container } = render(
+        <SettingsContainer>
+          <SettingsListHeader action={<button type="button">Refresh</button>}>2 accounts</SettingsListHeader>
+          <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
+          <SettingsNoticeRow data-testid="empty-notices" />
+        </SettingsContainer>,
+      );
+
+      const list = within(container);
+      list.getByText('Couldn’t load accounts');
+      list.getByRole('button', { name: 'Refresh' });
+      expect(screen.getByTestId('empty-notices').textContent).toBe('');
+    });
+  });
+
+  describe('SettingsSkeleton', () => {
+    it('announces one loading status with the requested number of hidden placeholder rows', () => {
+      render(
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading members" variant="item" rows={3} />
+        </SettingsContainer>,
+      );
+
+      const status = screen.getByRole('status', { name: 'Loading members' });
+      expect(status.children).toHaveLength(3);
+      for (const row of status.children) expect(row.getAttribute('aria-hidden')).toBe('true');
     });
   });
 });

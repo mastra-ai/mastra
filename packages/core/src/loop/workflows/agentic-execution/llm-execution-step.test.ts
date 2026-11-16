@@ -19,6 +19,11 @@ import type { OuterLLMRun } from '../../types';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createToolCallStep } from './tool-call-step';
 
+// 'does not signal a processor retry when aborted during the retry delay' aborts
+// from a timer while the backoff is pending, so it needs the real waitDelay rather
+// than the instant one from @internal/test-utils/setup.
+vi.unmock('../../../utils/retry-after');
+
 type IterationData = {
   messageId: string;
   messages: {

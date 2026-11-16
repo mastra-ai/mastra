@@ -30,7 +30,7 @@ export async function publishAbortRequest(pubsub: PubSub, runId: string): Promis
  * carried a `requestId`. Kept apart from the control topic so a requester never
  * has to read (or replay) the control history to wait for its own reply.
  */
-const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
+export const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
 const ABORT_ACK = 'abort-ack';
 
 /** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
@@ -104,13 +104,17 @@ export async function requestAcknowledgedAbort(
 /**
  * Listen for abort requests targeting `runId`.
  *
+ * `onAbortRequested` returns `false` when there was nothing left to stop (the
+ * run already ended here); the request is then not acknowledged, so a waiting
+ * requester does not report a cancellation that never happened.
+ *
  * @returns An unsubscribe function. Callers must invoke it when the run leaves
  * this process, otherwise the subscription outlives the work it guards.
  */
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
   runId: string,
-  onAbortRequested: () => void,
+  onAbortRequested: () => boolean | void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
@@ -118,9 +122,9 @@ export async function subscribeToAbortRequests(
   // keeps unacknowledged entries pending for the life of the subscription.
   const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
-      onAbortRequested();
+      const stopped = onAbortRequested() !== false;
       const requestId = event.data?.requestId;
-      if (requestId) {
+      if (requestId && stopped) {
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
         // acknowledgement only makes the requester retry; the abort has applied.
         await pubsub

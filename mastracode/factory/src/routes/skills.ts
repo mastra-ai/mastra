@@ -14,7 +14,7 @@ import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/b
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { FACTORY_ROUTE_CONTRACTS, skillOverrideSaveRequestSchema } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const MAX_SESSION_ID_LENGTH = 512;
 const MAX_ARGUMENTS_LENGTH = 16_384;
@@ -51,10 +51,6 @@ export interface SkillRoutesDeps extends RouteDependencies {
 }
 
 type ProjectAccess = { orgId: string; userId: string; projectId: string } | { response: Response };
-
-function loose(context: unknown): Context {
-  return context as Context;
-}
 
 function parseBody(value: unknown): SkillInvocationBody | undefined {
   if (!value || typeof value !== 'object') return undefined;

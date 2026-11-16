@@ -45,6 +45,34 @@ type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snap
   snapshot: WorkflowRunState | string;
 };
 
+/**
+ * A stored snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`. Reads the stored value in place, without a full copy.
+ */
+function summarySnapshot(stored: WorkflowRunState | string | undefined): WorkflowRunState {
+  const parsed: unknown = typeof stored === 'string' ? JSON.parse(stored) : stored;
+  const source = (parsed !== null && typeof parsed === 'object' ? parsed : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
+}
+
 export class WorkflowsConvex extends WorkflowsStorage {
   /**
    * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
@@ -209,8 +237,12 @@ export class WorkflowsConvex extends WorkflowsStorage {
     return typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : JSON.parse(JSON.stringify(row.snapshot));
   }
 
+  /**
+   * Lists runs newest first. With `summary`, each snapshot keeps only its status, timestamp and
+   * parent run; the full rows are still read from Convex.
+   */
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
+    const { workflowName, fromDate, toDate, perPage, page, resourceId, status, summary } = args;
 
     // Pass known filters to queryTable for server-side filtering instead of fetching all rows
     const filters: Array<{ field: string; value: string }> = [];
@@ -243,10 +275,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
       rows = rows.slice(offset, offset + normalized);
     }
 
+    // Reduced last, since the status filter above reads the full snapshot.
     const runs: WorkflowRun[] = rows.map(run => ({
       workflowName: run.workflow_name,
       runId: run.run_id,
-      snapshot: this.ensureSnapshot(run),
+      snapshot: summary ? summarySnapshot(run.snapshot) : this.ensureSnapshot(run),
       createdAt: new Date(run.createdAt),
       updatedAt: new Date(run.updatedAt),
       resourceId: run.resourceId,

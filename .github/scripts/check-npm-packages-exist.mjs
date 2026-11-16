@@ -31,6 +31,7 @@
 // Usage:
 //   node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>]
 //                                     [--retry-404 <ms>] [--pnpm-filter <filter>]...
+//                                     [--pnpm-filter-prod <filter>]...
 //                                     [--oidc]
 //
 // Exit codes: 0 = all publishable packages exist on npm (and, with --oidc,
@@ -65,11 +66,13 @@ function parseArgs(argv) {
     if (arg === '--since') options.since = value(++i);
     else if (arg === '--registry') options.registry = value(++i).replace(/\/+$/, '');
     else if (arg === '--retry-404') options.retry404 = Number(value(++i));
-    else if (arg === '--pnpm-filter') options.pnpmFilters.push(value(++i));
+    else if (arg === '--pnpm-filter') options.pnpmFilters.push(['--filter', value(++i)]);
+    // Skips devDependencies, matching `pnpm --filter-prod` in the publish step.
+    else if (arg === '--pnpm-filter-prod') options.pnpmFilters.push(['--filter-prod', value(++i)]);
     else if (arg === '--oidc') options.oidc = true;
     else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>] [--retry-404 <ms>] [--pnpm-filter <filter>]... [--oidc]',
+        'Usage: node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>] [--retry-404 <ms>] [--pnpm-filter <filter>]... [--pnpm-filter-prod <filter>]... [--oidc]',
       );
       process.exit(0);
     } else {
@@ -87,7 +90,7 @@ function parseArgs(argv) {
 // Same workspace discovery the publish workflow itself uses (npm-publish.yml).
 function discoverPublishablePackages(pnpmFilters) {
   const args = ['m', 'ls', '--depth', '-1', '--json'];
-  for (const filter of pnpmFilters) args.push('--filter', filter);
+  for (const [flag, filter] of pnpmFilters) args.push(flag, filter);
   const output = execFileSync('pnpm', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const packages = [];
   for (const pkg of JSON.parse(output)) {

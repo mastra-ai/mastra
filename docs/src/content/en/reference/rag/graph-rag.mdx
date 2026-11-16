@@ -185,8 +185,9 @@ Returns a `GraphRAGSnapshot` object containing:
   content={[
   {
     name: 'version',
-    type: 'number',
-    description: "Snapshot format version, used to reject snapshots this version of the class can't load",
+    type: '1',
+    description:
+      'Snapshot format version. Always `1` in the current format, so `deserialize` rejects snapshots with any other version',
   },
   {
     name: 'dimension',
@@ -233,7 +234,7 @@ static deserialize(snapshot: GraphRAGSnapshot): GraphRAG
 ]}
 />
 
-Throws if the snapshot version is unsupported, if a node embedding doesn't match the snapshot dimension, or if an edge references a node that isn't in the snapshot. A bad snapshot therefore fails at load time instead of during a later query.
+Throws if the snapshot version is unsupported, if a node embedding doesn't match the snapshot dimension or contains non-finite values, or if an edge references a node that isn't in the snapshot. A bad snapshot therefore fails at load time instead of during a later query.
 
 ## Persisting a graph
 

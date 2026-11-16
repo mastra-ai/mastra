@@ -225,7 +225,7 @@ describeForAllEngines('AIMock loop scenario: cancelling an untilIdle stream whil
       }
 
       try {
-        if (detachObserver && isDurableEngineVariant(engine)) {
+        if (detachObserver) {
           expect(toolSignal?.aborted).toBe(false);
           release();
           const observer = await shared.agent.observe(result.runId);

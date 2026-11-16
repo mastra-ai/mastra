@@ -337,6 +337,7 @@ const properNouns = [
   'Mastra Code',
   'Claude Code',
   'Mastra Gateway',
+  'Mastra Platform',
   'Mastra',
   'Studio',
   'Trace Intelligence',

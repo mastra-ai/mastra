@@ -3,13 +3,55 @@ title: "Telegram | Channels"
 description: "Connect a Mastra agent to Telegram direct messages, groups, and bot mentions by installing the adapter and configuring the webhook route."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
 ---
 
 # Telegram
 
-Telegram channels let a Mastra agent receive direct messages, group messages, and bot mentions from Telegram. Mastra handles the agent wiring and webhook route; the Chat SDK Telegram adapter docs cover bot setup, webhook registration, and polling behavior.
+Telegram channels let people talk to your agent in Telegram direct messages, groups, and bot mentions.
 
-## Install the adapter
+[Mastra Connect](/docs/mastra-platform/connect) stores your Telegram bot token on the Mastra platform and registers the webhook for you. You can also manage the bot token and webhook yourself.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+Connect uses a bot token from BotFather. Before you connect an agent, set `MASTRA_ENCRYPTION_KEY` on a persistent production server. Mastra uses it to encrypt the stored webhook secret. Without a key, the secret is stored unencrypted.
+
+Webhook mode needs a public HTTPS server URL. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development without a public webhook URL, the [Telegram provider reference](/reference/channels/telegram-provider) describes polling mode.
+
+1. Open [BotFather](https://t.me/botfather), run `/newbot`, and follow the prompts.
+
+1. Copy the bot token that BotFather returns.
+
+1. Run `mastra connect add telegram` and enter the bot token.
+
+1. Pass [`channels()`](/reference/connect/channels) to the `Mastra` constructor. It registers the Telegram channel provider and its routes:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { channels } from '@mastra/connect'
+   import { assistant } from './agents/assistant'
+
+   export const mastra = new Mastra({
+     agents: { assistant },
+     channels: await channels({ providers: ['telegram'] }),
+   })
+   ```
+
+   To register other channels too, add their provider IDs to `providers`.
+
+1. Start your Mastra application.
+
+1. In Studio, connect the Telegram channel to an agent. Mastra verifies the bot, creates a webhook secret, and registers the agent's public webhook URL with Telegram.
+
+To change an agent to a different bot, disconnect the agent in Studio, then connect it again. Mastra won't move an existing agent's webhook to another bot.
+
+## Self-managed setup
+
+Use the Chat SDK Telegram adapter with your own bot token and webhook.
+
+### Install the adapter
 
 Install the Telegram adapter from the Chat SDK:
 
@@ -17,7 +59,7 @@ Install the Telegram adapter from the Chat SDK:
 npm install @chat-adapter/telegram
 ```
 
-## Agent configuration
+### Agent configuration
 
 Add `createTelegramAdapter()` to the agent's `channels.adapters` object:
 
@@ -49,7 +91,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Adapter setup
+### Adapter setup
 
 Follow the [Chat SDK Telegram adapter docs](https://chat-sdk.dev/adapters/official/telegram) for Telegram-specific setup, including BotFather, webhook registration, secret tokens, and polling mode.
 
@@ -61,7 +103,7 @@ TELEGRAM_WEBHOOK_SECRET_TOKEN=your-webhook-secret-token
 TELEGRAM_BOT_USERNAME=your_bot_username
 ```
 
-## Webhook URL
+### Webhook URL
 
 Mastra generates the Telegram webhook route from the agent ID and adapter key:
 
@@ -75,7 +117,7 @@ Use your public Mastra server URL as the base URL:
 https://your-app.example.com/api/agents/telegram-agent/channels/telegram/webhook
 ```
 
-Use this URL anywhere the Telegram adapter docs ask for the webhook URL. Telegram also supports polling mode; follow the Chat SDK adapter docs if you want to use polling for local development.
+Use this URL anywhere the Telegram adapter docs ask for the webhook URL. Telegram also supports polling mode. Follow the Chat SDK adapter docs if you want to use polling for local development.
 
 ## Related
 

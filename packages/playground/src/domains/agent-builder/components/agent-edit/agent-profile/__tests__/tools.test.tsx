@@ -169,7 +169,7 @@ describe('Tools', () => {
       </FormHarness>,
     );
 
-    const searchField = getByTestId('tools-card-picker-search').closest('[data-slot="field"]');
+    const searchField = getByTestId('tools-card-picker-search').closest('[data-slot="input-group"]');
     const filterLabel = getByTestId('tools-only-selected-filter');
 
     expect(searchField?.parentElement).toBe(filterLabel.parentElement);

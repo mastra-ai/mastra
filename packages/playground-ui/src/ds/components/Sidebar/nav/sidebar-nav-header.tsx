@@ -34,7 +34,8 @@ export function SidebarNavHeader({
   const toneClassName = isActive ? 'text-foreground' : 'text-muted-foreground';
 
   return (
-    <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'h-10', className)}>
+    // Collapsed, the title keeps its expanded height, so nothing moves vertically between the two states.
+    <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'relative h-4.5', className)}>
       {showTitle ? (
         <>
           {icon ? (
@@ -67,7 +68,11 @@ export function SidebarNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border" />
+          {/* Centred in the whole space between the two groups: 14px above the title, its 18px, 4px below. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-3 top-[3.5px] h-px bg-border motion-safe:animate-[sidebar-rail-in_calc(var(--resize-dur)*0.6)_ease-out_both]"
+          />
           {action ? <VisuallyHidden>{action}</VisuallyHidden> : null}
         </>
       )}

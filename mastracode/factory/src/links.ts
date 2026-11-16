@@ -4,6 +4,8 @@
  * `MASTRACODE_PUBLIC_URL` is unset or blank: an unconfigured server has no address to link to.
  */
 
+import { DEFAULT_BOARD_ID } from './boards/default-board.js';
+
 /** The configured web UI origin, trimmed and without a trailing slash; null when unset or blank. */
 export function factoryUiOrigin(raw: string | undefined = process.env.MASTRACODE_PUBLIC_URL): string | null {
   return raw?.trim().replace(/\/+$/, '') || null;
@@ -14,24 +16,22 @@ function factoryUrl(factoryProjectId: string, path: string): string | undefined 
   return origin ? `${origin}/factories/${encodeURIComponent(factoryProjectId)}${path}` : undefined;
 }
 
-/** Board path segment: the built-in boards have their own routes, others live under /boards/:id. */
+/** Board path segment: the default board has its own route, others live under /boards/:id. */
 function boardSegment(board: string): string {
-  return board === 'work' || board === 'review' ? `/${board}` : `/boards/${encodeURIComponent(board)}`;
+  return board === DEFAULT_BOARD_ID ? '/work' : `/boards/${encodeURIComponent(board)}`;
 }
 
 export function factoryBoardUrl(factoryProjectId: string, board: string): string | undefined {
   return factoryUrl(factoryProjectId, boardSegment(board));
 }
 
-/** A card opened on its board, optionally scrolled to one feed comment. */
+/** A card opened on its board. */
 export function factoryWorkItemUrl(input: {
   factoryProjectId: string;
   board: string;
   workItemId: string;
-  commentId?: string;
 }): string | undefined {
   const query = new URLSearchParams({ item: input.workItemId });
-  if (input.commentId) query.set('comment', input.commentId);
   return factoryUrl(input.factoryProjectId, `${boardSegment(input.board)}?${query}`);
 }
 

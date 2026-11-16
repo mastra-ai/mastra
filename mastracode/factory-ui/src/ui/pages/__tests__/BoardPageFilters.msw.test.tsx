@@ -14,60 +14,32 @@ import {
   togglePropertyOption,
 } from '../../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import type { WorkItem } from '../../domains/factory/services/workItems';
-import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
 import { OverlaysProvider } from '../../lib/overlays';
-import { ReviewBoardPage, WorkBoardPage } from '../BoardPage';
+import { WorkBoardPage } from '../BoardPage';
 
 const now = '2026-09-01T12:00:00.000Z';
-const workItem = (id: string, board: 'work' | 'review', metadata: Record<string, unknown>): WorkItem => ({
+const workItem = (id: string, card: 'issue' | 'pull-request', metadata: Record<string, unknown>): WorkItem => ({
   id,
   orgId: 'org-1',
   createdBy: 'user-1',
   githubProjectId: 'factory-1',
-  board,
-  source: board === 'review' ? 'github-pr' : 'github-issue',
+  board: 'work',
+  source: card === 'pull-request' ? 'github-pr' : 'github-issue',
   sourceKey: `github:${id}`,
   parentWorkItemId: null,
   title: `Card ${id}`,
   url: null,
-  stages: [board === 'work' ? 'planning' : 'intake'],
-  stageHistory: [{ stage: board === 'work' ? 'planning' : 'intake', enteredAt: now, by: 'user-1' }],
+  stages: [card === 'issue' ? 'planning' : 'intake'],
+  stageHistory: [{ stage: card === 'issue' ? 'planning' : 'intake', enteredAt: now, by: 'user-1' }],
   sessions: {},
   metadata,
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 1,
-  createdAt: now,
-  updatedAt: now,
-});
-
-const issue = (number: number, labels: string[], author: string): GithubIssue => ({
-  number,
-  title: `Issue ${number}`,
-  url: `https://github.com/acme/app/issues/${number}`,
-  author,
-  labels,
-  comments: 0,
-  createdAt: now,
-  updatedAt: now,
-});
-const pull = (
-  number: number,
-  author: string,
-  requestedReviewers: string[],
-  labels: string[] = [],
-): GithubPullRequest => ({
-  number,
-  title: `Pull ${number}`,
-  url: `https://github.com/acme/app/pull/${number}`,
-  author,
-  requestedReviewers,
-  labels,
-  baseBranch: 'main',
-  headBranch: 'feature',
   createdAt: now,
   updatedAt: now,
 });
@@ -77,11 +49,7 @@ function Location() {
   return <output data-testid="board-url">{location.search}</output>;
 }
 
-function renderBoard(
-  kind: 'work' | 'review',
-  initialSearch = '',
-  issues = [issue(10, ['bug'], 'alice'), issue(11, ['other'], 'bob')],
-) {
+function renderBoard(initialSearch = '', extraWorkItems: WorkItem[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
@@ -89,7 +57,7 @@ function renderBoard(
           {
             id: 'factory-1',
             name: 'Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -97,13 +65,14 @@ function renderBoard(
     http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, () =>
       HttpResponse.json({
         workItems: [
-          workItem('bug', 'work', { labels: ['bug'], author: 'alice', assignees: ['bob'] }),
-          workItem('docs', 'work', { labels: ['documentation'], author: 'bob' }),
-          workItem('both', 'work', { labels: ['bug', 'documentation'], author: 'alice' }),
-          workItem('unlabelled', 'work', { labels: ['other'], author: 'bob' }),
-          workItem('authored', 'review', { author: 'alice' }),
-          workItem('requested', 'review', { author: 'bob', requestedReviewers: ['alice'] }),
-          workItem('unrelated', 'review', { author: 'bob' }),
+          workItem('bug', 'issue', { labels: ['bug'], author: 'alice', assignees: ['bob'] }),
+          workItem('docs', 'issue', { labels: ['documentation'], author: 'bob' }),
+          workItem('both', 'issue', { labels: ['bug', 'documentation'], author: 'alice' }),
+          workItem('unlabelled', 'issue', { labels: ['other'], author: 'bob' }),
+          workItem('authored', 'pull-request', { author: 'alice', labels: ['needs-review'] }),
+          workItem('requested', 'pull-request', { author: 'bob', requestedReviewers: ['alice'] }),
+          workItem('unrelated', 'pull-request', { author: 'bob' }),
+          ...extraWorkItems,
         ].map(({ githubProjectId, source, sourceKey, url, ...item }) => ({
           ...item,
           factoryProjectId: githubProjectId,
@@ -125,29 +94,15 @@ function renderBoard(
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ connected: false })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
-    // Label-routed intake refetches issues per routed label; keep that lane empty so candidates aren't duplicated.
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-      HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label') ? [] : issues,
-        nextPage: null,
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({
-        pullRequests: [pull(20, 'alice', [], ['needs-review']), pull(21, 'bob', ['alice'])],
-        nextPage: null,
-      }),
-    ),
   );
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/factory-1/${kind}${initialSearch}`]}>
+    <MemoryRouter initialEntries={[`/factories/factory-1/work${initialSearch}`]}>
       <SidebarProvider storageKey="board-filters-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Location />
           <Routes>
             <Route path="/factories/:factoryId" element={<FactoryLayout />}>
               <Route path="work" element={<WorkBoardPage />} />
-              <Route path="review" element={<ReviewBoardPage />} />
             </Route>
           </Routes>
         </OverlaysProvider>
@@ -156,26 +111,25 @@ function renderBoard(
   );
 }
 
-const candidateTitles = () => screen.queryAllByTestId('candidate-card').map(card => card.getAttribute('aria-label'));
-
 const MENU = 'Board properties';
 
 describe('BoardPage filters', () => {
-  it('offers pull request labels on the review board and filters candidates by them', async () => {
+  it('offers pull request labels on Work filtered to pull requests and filters pull request cards by them', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard(`?source=${PULL_REQUEST_SOURCE_FILTER}`);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(candidateTitles()).toEqual(expect.arrayContaining(['Pull 20', 'Pull 21'])));
+    expect(screen.getByText('Card requested')).toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Label', /^needs-review$/);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=needs-review'));
-    expect(candidateTitles()).toContain('Pull 20');
-    expect(candidateTitles()).not.toContain('Pull 21');
+    expect(screen.getByText('Card authored')).toBeInTheDocument();
+    expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
   });
 
   it('requires every selected label on work cards, then restores cards when removed', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('work');
+    const { client } = renderBoard();
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Label', /^bug$/);
@@ -194,30 +148,27 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card unlabelled')).toBeInTheDocument();
   });
 
-  it('combines person and label filters on work items and intake candidates and survives a URL reload', async () => {
+  it('combines person and label filters on work items and survives a URL reload', async () => {
     const user = userEvent.setup();
-    const { client, unmount } = renderBoard('work');
+    const { client, unmount } = renderBoard();
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(candidateTitles()).toContain('Issue 11');
+    expect(screen.getByText('Card docs')).toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Author', /alice/i);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Aalice'));
     expect(screen.getByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).not.toContain('Issue 11'));
+    await waitFor(() => expect(screen.queryByText('Card docs')).not.toBeInTheDocument());
     await togglePropertyOption(user, MENU, 'Label', /^bug$/);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug'));
     expect(screen.getByText('Card both')).toBeInTheDocument();
     expect(screen.queryByText('Card unlabelled')).not.toBeInTheDocument();
     const search = screen.getByTestId('board-url').textContent ?? '';
     unmount();
-    renderBoard('work', search);
+    renderBoard(search);
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(candidateTitles()).not.toContain('Issue 11');
+    expect(screen.getByText('Card both')).toBeInTheDocument();
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card unlabelled')).not.toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Author', /alice/i);
     expect(screen.getByTestId('board-url')).not.toHaveTextContent('author=');
     expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug');
@@ -226,7 +177,7 @@ describe('BoardPage filters', () => {
 
   it('keeps only work cards authored by one person and assigned to another', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('work');
+    const { client } = renderBoard();
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Author', /alice/i);
@@ -235,16 +186,15 @@ describe('BoardPage filters', () => {
     await togglePropertyOption(user, MENU, 'Assignee', /bob/i);
     await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
     expect(screen.getByText('Card bug')).toBeInTheDocument();
-    expect(candidateTitles()).toEqual([]);
     // Work holds pull request cards too, so it filters by who review was requested from.
     await openPropertiesMenu(user, MENU);
     expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 
-  it('keeps only review cards authored by one person with review requested from another', async () => {
+  it('keeps only pull request cards authored by one person with review requested from another', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('review');
+    const { client } = renderBoard(`?source=${PULL_REQUEST_SOURCE_FILTER}`);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Involves', /alice/i);
@@ -258,7 +208,6 @@ describe('BoardPage filters', () => {
     expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Abob&reviewer=github%3Aalice');
     expect(screen.getByText('Card requested')).toBeInTheDocument();
     expect(screen.queryByText('Card authored')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 21']));
   });
 
   it('lists you first and matches your cards through your GitHub login', async () => {
@@ -277,7 +226,7 @@ describe('BoardPage filters', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderBoard('review', '?teammate=github%3Aalice');
+    const { client } = renderBoard(`?source=${PULL_REQUEST_SOURCE_FILTER}&teammate=github%3Aalice`);
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await openPropertySubmenu(user, MENU, 'Involves');
@@ -292,19 +241,20 @@ describe('BoardPage filters', () => {
     );
     expect(screen.getByText('Card authored')).toBeInTheDocument();
     expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
-    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 20']));
+    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
   });
 
   it('searches a long list of people and keeps picked people on top', async () => {
     const authors = ['carol', 'dave', 'erin', 'frank', 'grace', 'heidi', 'ivan', 'judy'];
     const user = userEvent.setup();
     const { client } = renderBoard(
-      'work',
       '?author=github%3Ajudy',
-      authors.map((author, index) => issue(30 + index, [], author)),
+      authors.map(author => workItem(author, 'issue', { author })),
     );
-    await waitFor(() => expect(candidateTitles()).toEqual(['Issue 37']));
+    expect(await screen.findByText('Card judy')).toBeInTheDocument();
     await waitForMutationsIdle(client);
+    expect(screen.queryByText('Card erin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card bug')).not.toBeInTheDocument();
     await openPropertySubmenu(user, MENU, 'Author');
     expect(screen.getAllByRole('menuitemcheckbox')[0]).toHaveTextContent('judy');
     await user.keyboard('ER');
@@ -335,7 +285,7 @@ describe('BoardPage filters', () => {
 
   it('resets every filter and the sort in one step', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('work', '?label=bug&sort=created-newest');
+    const { client } = renderBoard('?label=bug&sort=created-newest');
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     const trigger = screen.getByRole('button', { name: 'Board properties, 2 changed' });
@@ -355,7 +305,7 @@ describe('BoardPage filters', () => {
 
   it('labels a multi-pick with its count', async () => {
     const user = userEvent.setup();
-    const { client } = renderBoard('work');
+    const { client } = renderBoard();
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Label', /^bug$/);

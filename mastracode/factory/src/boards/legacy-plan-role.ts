@@ -1,4 +1,5 @@
-import { factoryLaneForRole } from '../rules/types.js';
+import { codeBoardOf } from './define-board.js';
+import type { InstalledBoard } from './registry.js';
 import { workBoard } from './work.js';
 
 /*
@@ -10,14 +11,27 @@ import { workBoard } from './work.js';
 
 const LEGACY_PLAN_ROLE = 'plan';
 
+// Each Work role and the lane its run holds the card in, kept for the roles above.
+const WORK_ROLE_LANES: Readonly<Record<string, string>> = Object.freeze({
+  triage: 'triage',
+  [LEGACY_PLAN_ROLE]: 'planning',
+  work: 'execute',
+  review: 'review',
+});
+
 /*
- * Only the built-in Work board gets these rules. A board installed as `work` in
- * place of it is matched by its own contexts, like any other board.
+ * Only the built-in Work board, as code defines it or as a project edited it, gets
+ * these rules. A board installed as `work` in place of it is matched by its own
+ * contexts, like any other board.
  */
+
+function isWorkBoard(board: unknown): board is InstalledBoard {
+  return typeof board === 'object' && board !== null && codeBoardOf(board) === workBoard;
+}
 
 /** The built-in Work lane a role's run belongs to: `plan` plans, `work` builds. Undefined on other boards. */
 export function workLaneForRole(board: unknown, role: string): string | undefined {
-  return board === workBoard ? factoryLaneForRole(role) : undefined;
+  return isWorkBoard(board) && Object.hasOwn(WORK_ROLE_LANES, role) ? WORK_ROLE_LANES[role] : undefined;
 }
 
 /**
@@ -27,10 +41,10 @@ export function workLaneForRole(board: unknown, role: string): string | undefine
  * Building and Review the other `work` runs. Undefined on other boards.
  */
 export function workStageCarries(board: unknown, stage: string, role: string, skillName: unknown): boolean | undefined {
-  if (board !== workBoard) return undefined;
+  if (!isWorkBoard(board)) return undefined;
   if (role === LEGACY_PLAN_ROLE) return stage === 'planning';
-  if (role !== 'work') return workBoard.roleForPhase(stage) === role;
-  if (workBoard.roleForPhase(stage) !== 'work') return false;
+  if (role !== 'work') return board.roleForPhase(stage) === role;
+  if (board.roleForPhase(stage) !== 'work') return false;
   return (stage === 'planning') === (skillName === 'factory-plan');
 }
 

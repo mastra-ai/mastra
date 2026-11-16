@@ -95,46 +95,56 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
   const conditions: string[] = [];
   const values: any[] = [];
 
-  Object.entries(value).forEach(([field, val]) => {
-    const nextParamIndex = paramIndex + values.length;
-
-    let paramOperator;
-    let paramKey;
-    let paramValue;
-
-    if (field.startsWith('$')) {
-      paramOperator = field;
-      paramKey = '';
-      paramValue = val;
-    } else if (typeof val === 'object' && !Array.isArray(val)) {
-      const [op, opValue] = Object.entries(val || {})[0] || [];
-      paramOperator = op;
-      paramKey = field;
-      paramValue = opValue;
-    } else {
-      paramOperator = '$eq';
-      paramKey = field;
-      paramValue = val;
+  function buildFieldCondition(field: string, operator: string, operatorValue: any): string {
+    if (operator === '$not') {
+      const nested = Object.entries(operatorValue as Record<string, unknown>);
+      if (nested.length === 0) {
+        throw new Error('$not requires at least one operator');
+      }
+      return `NOT (COALESCE(${nested.map(([nestedOp, nestedValue]) => buildFieldCondition(field, nestedOp, nestedValue)).join(' AND ')}, FALSE))`;
     }
 
-    const operatorFn = FILTER_OPERATORS[paramOperator as OperatorType];
+    const operatorFn = FILTER_OPERATORS[operator as OperatorType];
     if (!operatorFn) {
-      throw new Error(`Invalid operator: ${paramOperator}`);
+      throw new Error(`Invalid operator: ${operator}`);
     }
-    const result = operatorFn(paramKey, nextParamIndex, paramValue);
+    const scalarElement = field.startsWith('$');
+    const result = operatorFn(scalarElement ? '' : field, paramIndex + values.length, operatorValue);
 
-    // Rewrite every column reference to the per-element alias. Order matters:
-    // replace the longer `metadata#>>` / `metadata->>` tokens before `metadata#>` / `metadata->` so the latter
-    // doesn't partially match the former (e.g. the jsonb_typeof guard emitted by
-    // the numeric operators uses the single-arrow `metadata->` / `metadata#>` form).
+    // Rewrite column references to the current element; scalar arrays have no field key.
     const sql = result.sql
       .replaceAll('metadata->>', 'elem->>')
       .replaceAll('metadata->', 'elem->')
       .replaceAll('metadata#>>', 'elem#>>')
-      .replaceAll('metadata#>', 'elem#>');
-    conditions.push(sql);
+      .replaceAll('metadata#>', 'elem#>')
+      .replaceAll('metadata ?', 'elem ?');
+    const elementSql = scalarElement
+      ? sql.replaceAll("elem->>''", "elem #>> '{}'").replaceAll("elem->''", 'elem')
+      : sql;
     if (result.needsValue) {
-      values.push(paramValue);
+      const transformedValue = result.transformValue ? result.transformValue() : operatorValue;
+      if (operator === '$elemMatch') {
+        values.push(...transformedValue);
+      } else {
+        values.push(transformedValue);
+      }
+    }
+    return elementSql;
+  }
+
+  Object.entries(value).forEach(([field, val]) => {
+    const operators: [string, any][] = field.startsWith('$')
+      ? [[field, val]]
+      : typeof val === 'object' && val !== null && !Array.isArray(val)
+        ? Object.entries(val)
+        : [['$eq', val]];
+
+    if (operators.length === 0) {
+      throw new Error(`$elemMatch field ${field} requires at least one operator`);
+    }
+
+    for (const [operator, operatorValue] of operators) {
+      conditions.push(buildFieldCondition(field, operator, operatorValue));
     }
   });
 

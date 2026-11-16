@@ -13,21 +13,27 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
+import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
+import type { StatusEvent } from '../boards/board-events.js';
 import { intakeTargetProblem } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
+import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type { StoredBoardScope, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 export interface IntakeRouteRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   storage: StoredBoardsStorage;
+  /** Cards an intake route change may move to another board. */
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'update' | 'supersedeDecisionsForWorkItem'>;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;
 }
@@ -42,10 +48,6 @@ class Refusal {
   ) {}
 }
 
-function loose(context: unknown): Context {
-  return context as Context;
-}
-
 function issueMessage(issues: readonly z.core.$ZodIssue[]): string {
   return issues
     .map(issue => (issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message))
@@ -54,7 +56,7 @@ function issueMessage(issues: readonly z.core.$ZodIssue[]): string {
 
 function present(route: StoredIntakeRouteRecord, registry: BoardRegistry) {
   const { orgId: _orgId, factoryProjectId: _project, ...fields } = route;
-  const problem = intakeTargetProblem(registry, route.target);
+  const problem = intakeTargetProblem(registry, route);
   return { ...fields, problems: problem ? [problem.message] : [] };
 }
 
@@ -113,17 +115,33 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     return (await this.deps.boards.describe(scope)).registry;
   }
 
-  /** Refuses a target that isn't an installed board and a phase new cards can land in. */
-  async #checkTarget(scope: Resolved, target: { boardKey: string; phaseKey?: string | null } | undefined) {
-    if (!target) return;
-    const problem = intakeTargetProblem(await this.#registry(scope), target);
+  /** Refuses a target that isn't an installed board and phase, or, for a route placing new cards, one they can't land in. */
+  async #checkTarget(
+    scope: Resolved,
+    route: {
+      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+      on: readonly StatusEvent[];
+    },
+  ) {
+    const problem = intakeTargetProblem(await this.#registry(scope), route);
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
+  }
+
+  async #planReroute(scope: Resolved) {
+    const [registry, routes, items] = await Promise.all([
+      this.#registry(scope),
+      this.deps.storage.listIntakeRoutes(scope),
+      this.deps.workItems.listShared(scope),
+    ]);
+    return planReroute(routes, items, registry);
   }
 
   async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
-    return c.json({ intakeRoutes: routes.map(route => present(route, registry)) });
+    const { auth } = this.deps;
+    const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
+    return c.json({ intakeRoutes: routes.map(route => present(route, registry)), canEdit });
   }
 
   async #respond(c: Context, scope: Resolved, route: StoredIntakeRouteRecord, status: 200 | 201 = 200) {
@@ -162,7 +180,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           if (error instanceof StoredBoardError) {
             return context.json(
               { error: error.code, message: error.message },
-              error.code === 'intake_route_not_found' ? 404 : 409,
+              error.code === 'intake_route_not_found' ? 404 : error.code === 'invalid_intake_route' ? 422 : 409,
             );
           }
           throw error;
@@ -176,6 +194,34 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     const contracts = FACTORY_ROUTE_CONTRACTS;
     return [
       this.#route(contracts.intakeRouteList, async c => this.#list(c, await this.#resolve(c))),
+
+      this.#route(contracts.intakeRouteReroutePreview, async c => {
+        const scope = await this.#resolve(c);
+        const moves = await this.#planReroute(scope);
+        return c.json({ total: moves.length, moves: summarizeReroute(moves) });
+      }),
+
+      this.#route(contracts.intakeRouteRerouteApply, async c => {
+        const scope = await this.#resolve(c);
+        await this.#requireAdmin(c, scope);
+        const moves = await this.#planReroute(scope);
+        const result = await applyReroute({
+          moves,
+          workItems: this.deps.workItems,
+          registry: await this.#registry(scope),
+          userId: scope.userId,
+        });
+        await this.deps.audit.emit({
+          context: c,
+          input: {
+            action: 'factory.intake_route.rerouted',
+            factoryProjectId: scope.factoryProjectId,
+            targets: [...new Set(moves.map(move => move.routeId))].map(id => ({ type: 'intake_route', id })),
+            metadata: { ...result, moves: summarizeReroute(moves) },
+          },
+        });
+        return c.json(result);
+      }),
 
       this.#route(contracts.intakeRouteReorder, async c => {
         const scope = await this.#resolve(c);
@@ -197,7 +243,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const input = await this.#body(c, contracts.intakeRouteCreate.bodySchema);
-        await this.#checkTarget(scope, input.target);
+        await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
         return this.#respond(c, scope, route, 201);
@@ -208,7 +254,12 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         await this.#requireAdmin(c, scope);
         const id = this.#routeId(c);
         const { expectedRevision, ...patch } = await this.#body(c, contracts.intakeRouteUpdate.bodySchema);
-        await this.#checkTarget(scope, patch.target);
+        if (patch.target || patch.on) {
+          // Narrowing or widening `on` changes which targets are allowed, so check the route as it will be.
+          const current = await storage.getIntakeRoute(scope, id);
+          if (!current) throw new Refusal(404, { error: 'intake_route_not_found' });
+          await this.#checkTarget(scope, { target: patch.target ?? current.target, on: patch.on ?? current.on });
+        }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
         await this.#audit(c, scope, 'updated', [route]);
         return this.#respond(c, scope, route);

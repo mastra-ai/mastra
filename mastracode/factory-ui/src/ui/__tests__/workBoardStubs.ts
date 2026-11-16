@@ -30,7 +30,7 @@ export function workItem(
     metadata: {},
     triageType: null,
     acceptedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt,
     updatedAt: createdAt,
@@ -38,7 +38,7 @@ export function workItem(
 }
 
 export function stubWorkBoard() {
-  const repository = listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' });
+  const repository = listedRepository(REPO_ID, 'acme/app', { branch: 'main' });
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -94,12 +94,6 @@ export function stubWorkBoard() {
     ),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
-      HttpResponse.json({ pullRequests: [], nextPage: null }),
-    ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),

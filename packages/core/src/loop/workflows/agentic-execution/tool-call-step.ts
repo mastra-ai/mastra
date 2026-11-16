@@ -1492,6 +1492,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         status: params.status === 'failed' ? 'failed' : 'completed',
+                        requestContext,
                       });
                     }
                   }
@@ -1579,8 +1580,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
         }
 
-        // A run that loses its thread lease while this call runs lets it finish before it stops.
-        const settleRunTool = startRunStep(options?.abortSignal);
+        // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
+        // running until the tool body settles, even after the abort grace hands control back to the loop.
+        const settleRunTool = startRunStep(options?.stepOwner ?? options?.abortSignal);
         const outcome = await executeToolCall({
           tool: tool as any,
           args,
@@ -1609,8 +1611,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               });
             }
           },
+          onToolSettled: settleRunTool,
           logger,
-        }).finally(settleRunTool);
+        });
         if (outcome.status === 'aborted') {
           return { ...inputData, aborted: true, result: TOOL_ABORT_NOTICE };
         }
