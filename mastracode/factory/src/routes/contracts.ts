@@ -268,11 +268,14 @@ export const runQueueResponseSchema = z.object({
   /** The project's runs holding a slot on any server. */
   running: z.number().int(),
   claimed: z.array(runQueueEntrySchema),
-  /** Every waiting run, though `queued` lists at most the oldest 50. */
+  /** Every waiting run, though `queued` lists at most 50. */
   queuedCount: z.number().int(),
   /** `queuedCount` split by lane. */
   queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
-  /** Oldest first. `position` counts within the run's lane: interactive runs are claimed before automated ones. */
+  /**
+   * Waiting replies, then automated runs, each oldest first: interactive runs are claimed before
+   * automated ones. `position` counts within the run's lane.
+   */
   queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
 });
 export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
