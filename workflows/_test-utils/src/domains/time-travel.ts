@@ -1289,8 +1289,9 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       stateSchema,
-      execute: async ({ state }) => {
-        chargeSawOrder(state.order);
+      // Storage v2 rejects the sync `state` field, so read state the way every engine supports.
+      execute: async ({ getState }) => {
+        chargeSawOrder((await getState()).order);
         const attempt = chargeAttempts++;
         if (attempt === 0 || !retrySucceeds) {
           throw new Error('card declined');
@@ -1303,9 +1304,10 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       inputSchema: z.object({}),
       outputSchema: z.object({ order: z.number().optional() }),
       stateSchema,
-      execute: async ({ state }) => {
-        receiptSawOrder(state.order);
-        return { order: state.order };
+      execute: async ({ getState }) => {
+        const { order } = await getState();
+        receiptSawOrder(order);
+        return { order };
       },
     });
 
