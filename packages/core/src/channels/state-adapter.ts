@@ -60,27 +60,13 @@ export class MastraStateAdapter implements StateAdapter {
     // Find the Mastra thread mapped to this external thread ID and mark it
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return; // Thread not yet mapped — subscribe will be a no-op
-    await this.memoryStore.patchThread({
-      id: thread.id,
-      metadata: {
-        ...thread.metadata,
-        channel_subscribed: 'true',
-        ...this.ownerStamp(thread.metadata),
-      },
-    });
+    await this.writeSubscription(thread.id, 'true');
   }
 
   async unsubscribe(threadId: string): Promise<void> {
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return;
-    await this.memoryStore.patchThread({
-      id: thread.id,
-      metadata: {
-        ...(thread.metadata ?? {}),
-        channel_subscribed: 'false',
-        ...this.ownerStamp(thread.metadata),
-      },
-    });
+    await this.writeSubscription(thread.id, 'false');
   }
 
   async isSubscribed(threadId: string): Promise<boolean> {
@@ -246,8 +232,24 @@ export class MastraStateAdapter implements StateAdapter {
   private ownerStamp(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
     const ownerId = this.getOwnerId?.() ?? null;
     if (ownerId === null) return {};
-    if (metadata && 'channel_ownerId' in metadata) return {};
+    if (hasOwnerClaim(metadata)) return {};
     return { channel_ownerId: ownerId };
+  }
+
+  /**
+   * Persist a subscription flag. The patch carries only the keys this adapter
+   * owns and `updateThreadMetadata` applies it to the row as stored, so the
+   * write can never restore keys another writer removed in between (such as a
+   * channel unmap clearing the mapping).
+   */
+  private async writeSubscription(threadId: string, subscribed: 'true' | 'false'): Promise<void> {
+    await this.memoryStore.updateThreadMetadata({
+      id: threadId,
+      update: latest => ({
+        channel_subscribed: subscribed,
+        ...this.ownerStamp(latest.metadata),
+      }),
+    });
   }
 
   /**
@@ -288,8 +290,19 @@ export class MastraStateAdapter implements StateAdapter {
     return (
       candidates.find(candidate => {
         const metadata = candidate.metadata ?? {};
-        return !('channel_ownerId' in metadata);
+        return !hasOwnerClaim(metadata);
       }) ?? null
     );
   }
+}
+
+/**
+ * Whether a channel row carries an agent owner claim. Checked by value, not by
+ * key presence: a row written by an adapter that keeps keys written as
+ * `undefined` (the in-memory store does; JSON-backed adapters drop them) must
+ * still read as unclaimed.
+ */
+function hasOwnerClaim(metadata: Record<string, unknown> | undefined): boolean {
+  const claimed = metadata?.channel_ownerId;
+  return typeof claimed === 'string' && claimed.length > 0;
 }

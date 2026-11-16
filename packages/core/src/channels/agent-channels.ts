@@ -24,6 +24,7 @@ import type {
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
+import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 import { WORKSPACE_TOOLS } from '../workspace/constants';
@@ -2310,6 +2311,102 @@ export class AgentChannels {
     return { channel: channelContext, render };
   }
 
+  /**
+   * Binds a chat account's thread to an existing Mastra thread.
+   *
+   * Call this when an account (say a WhatsApp number) is connected to an app
+   * user who already has a thread, so the account's messages are delivered into
+   * that thread instead of starting a new one. Any other thread this agent has
+   * bound to the same external thread id is unbound first, so the mapping moves
+   * rather than being duplicated.
+   *
+   * Only this agent's own mappings are moved; a binding claimed by a different
+   * agent is left untouched.
+   */
+  async mapThread({
+    platform,
+    externalThreadId,
+    threadId,
+    externalChannelId,
+  }: {
+    platform: string;
+    externalThreadId: string;
+    /** The Mastra thread id the external thread should belong to. */
+    threadId: string;
+    /** The platform channel the external thread lives in, when known. */
+    externalChannelId?: string;
+  }): Promise<void> {
+    const mastra = this.getMastra();
+    if (!mastra) {
+      throw new Error('mapThread requires this channels instance to be attached to a Mastra instance.');
+    }
+    const memoryStore = await this.resolveMemoryStore(mastra);
+
+    // Unbind any other thread already bound to this external thread before
+    // stamping the new one: a crash in between leaves the account unmapped (the
+    // next message creates a thread) instead of bound to two.
+    const { threads } = await memoryStore.listThreads({
+      filter: { metadata: { channel_platform: platform, channel_externalThreadId: externalThreadId } },
+      perPage: 50,
+    });
+    for (const candidate of threads) {
+      if (candidate.id === threadId || this.isThreadClaimedByAnotherAgent(candidate.metadata)) continue;
+      await memoryStore.updateThreadMetadata({ id: candidate.id, update: () => unmappedThreadMetadata() });
+    }
+
+    const ownerId = this.getOwnerId();
+    const mapped = await memoryStore.updateThreadMetadata({
+      id: threadId,
+      update: () => ({
+        channel_platform: platform,
+        channel_externalThreadId: externalThreadId,
+        ...(externalChannelId === undefined ? {} : { channel_externalChannelId: externalChannelId }),
+        ...(ownerId === null ? {} : { channel_ownerId: ownerId }),
+        // A fresh mapping is not subscribed yet, so the first inbound message
+        // fetches the external thread's history instead of assuming it has it.
+        channel_subscribed: 'false',
+      }),
+    });
+    if (!mapped) {
+      throw new Error(
+        `Cannot map channel thread "${externalThreadId}" to thread "${threadId}": the thread does not exist.`,
+      );
+    }
+  }
+
+  /**
+   * Removes the mapping between a chat account's thread and its Mastra thread.
+   *
+   * Afterwards the Mastra thread no longer renders into the channel - runs on
+   * it from any origin (schedules, Studio, custom UI, user code) stop posting
+   * to the account - and the account's messages are no longer delivered into
+   * it; the next one creates a new thread. The Mastra thread and its history
+   * are kept, so {@link AgentChannels.mapThread} can point an account at it
+   * again.
+   *
+   * Idempotent: an external thread with no mapping returns `{ threadId: null }`
+   * and changes nothing.
+   */
+  async unmapThread({
+    platform,
+    externalThreadId,
+  }: {
+    platform: string;
+    externalThreadId: string;
+  }): Promise<{ threadId: string | null }> {
+    const mastra = this.getMastra();
+    if (!mastra) {
+      throw new Error('unmapThread requires this channels instance to be attached to a Mastra instance.');
+    }
+    const memoryStore = await this.resolveMemoryStore(mastra);
+
+    const { thread } = await this.findThreadMapping({ externalThreadId, platform, mastra });
+    if (!thread || this.isThreadClaimedByAnotherAgent(thread.metadata)) return { threadId: null };
+
+    await memoryStore.updateThreadMetadata({ id: thread.id, update: () => unmappedThreadMetadata() });
+    return { threadId: thread.id };
+  }
+
   private async loadChannelThread(
     threadId: string,
   ): Promise<{ render: ChatChannelRenderContext; sender: LastSender | undefined } | null> {
@@ -2390,11 +2487,11 @@ export class AgentChannels {
     }
     const memoryStore = await mastra.getStorage()?.getStore('memory');
     if (!memoryStore) return;
-    // Re-read so keys other writers set since `thread` was loaded survive.
-    const current = (await memoryStore.getThreadById({ threadId: thread.id }))?.metadata ?? metadata;
-    await memoryStore.patchThread({
+    // Write only our own keys, applied to the row as stored: a key another
+    // writer changed or removed since `thread` was loaded is left alone.
+    await memoryStore.updateThreadMetadata({
       id: thread.id,
-      metadata: { ...current, [LAST_SENDER_KEY]: sender, [IS_DM_KEY]: chatThread.isDM },
+      update: () => ({ [LAST_SENDER_KEY]: sender, [IS_DM_KEY]: chatThread.isDM }),
     });
   }
 
@@ -2685,20 +2782,10 @@ export class AgentChannels {
   }
 
   /**
-   * Look up a channel-backed Mastra thread and retain the store/metadata needed
-   * by the create path when no mapping exists.
+   * The memory domain of the Mastra instance's storage. Throws when the
+   * instance has neither storage nor a memory store configured.
    */
-  private async findThreadMapping({
-    externalThreadId,
-    channelId,
-    platform,
-    mastra,
-  }: {
-    externalThreadId: string;
-    channelId: string;
-    platform: string;
-    mastra: Mastra;
-  }) {
+  private async resolveMemoryStore(mastra: Mastra): Promise<MemoryStorage> {
     const storage = mastra.getStorage();
     if (!storage) {
       throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
@@ -2711,10 +2798,44 @@ export class AgentChannels {
       );
     }
 
+    return memoryStore;
+  }
+
+  /**
+   * Whether a channel row is bound by a different agent. Unclaimed rows belong
+   * to nobody and may be adopted; when no owner id is bound, every claim
+   * belongs to someone else and is left alone.
+   */
+  private isThreadClaimedByAnotherAgent(metadata: Record<string, unknown> | undefined): boolean {
+    if (!hasOwnerClaim(metadata)) return false;
+    return metadata?.channel_ownerId !== this.getOwnerId();
+  }
+
+  /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   *
+   * `channelId` is optional because only the inbound path always has it: the
+   * mapping helpers address a thread by platform and external thread id alone,
+   * so an app can move a mapping without knowing the channel it came from.
+   */
+  private async findThreadMapping({
+    externalThreadId,
+    channelId,
+    platform,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId?: string;
+    platform: string;
+    mastra: Mastra;
+  }) {
+    const memoryStore = await this.resolveMemoryStore(mastra);
+
     const legacyMetadata = {
       channel_platform: platform,
       channel_externalThreadId: externalThreadId,
-      channel_externalChannelId: channelId,
+      ...(channelId === undefined ? {} : { channel_externalChannelId: channelId }),
     };
 
     const ownerId = this.getOwnerId();
@@ -2751,14 +2872,15 @@ export class AgentChannels {
     });
     const unclaimed = candidates.find(candidate => {
       const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
-      return !('channel_ownerId' in candidateMeta);
+      return !hasOwnerClaim(candidateMeta);
     });
     if (unclaimed) {
       // Lazily adopt the legacy thread: the first agent to touch it claims it
-      // by stamping its own id, preserving all existing metadata.
+      // by stamping its own id. Only the claim key is written so nothing else
+      // another writer changed since the lookup is rolled back.
       const claimed = await memoryStore.patchThread({
         id: unclaimed.id,
-        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+        metadata: { channel_ownerId: ownerId },
       });
       return { thread: claimed, memoryStore, metadata };
     }
@@ -3020,6 +3142,36 @@ export class AgentChannels {
 
 const LAST_SENDER_KEY = 'channel_lastSender';
 const IS_DM_KEY = 'channel_isDM';
+
+/**
+ * Whether a channel row carries an agent owner claim. Checked by value, not by
+ * key presence: a row written by an adapter that keeps keys written as
+ * `undefined` (the in-memory store does; JSON-backed adapters drop them) must
+ * still read as unclaimed.
+ */
+function hasOwnerClaim(metadata: Record<string, unknown> | undefined): boolean {
+  const claimed = metadata?.channel_ownerId;
+  return typeof claimed === 'string' && claimed.length > 0;
+}
+
+/**
+ * Metadata patch that disconnects a thread from its chat account. The keys are
+ * written as `undefined` through `updateThreadMetadata`, so they are applied to
+ * the stored row rather than to a snapshot of it: storage adapters persist
+ * metadata as JSON, which drops undefined values. `channel_ownerId` is kept -
+ * it records which agent the thread belonged to, and clearing it would let
+ * another agent's legacy adoption take the thread and its history with it.
+ */
+function unmappedThreadMetadata(): Record<string, unknown> {
+  return {
+    channel_platform: undefined,
+    channel_externalThreadId: undefined,
+    channel_externalChannelId: undefined,
+    channel_subscribed: undefined,
+    [LAST_SENDER_KEY]: undefined,
+    [IS_DM_KEY]: undefined,
+  };
+}
 
 interface LastSender {
   author: Message['author'];

@@ -426,4 +426,67 @@ describe('thread ownership (#24878)', () => {
     expect((senderAgent as any).stream).not.toHaveBeenCalled();
     subscription.unsubscribe();
   });
+
+  it('refuses a signal that addresses a run through another resource', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const agent = { id: 'mismatched-run-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'mismatched-run-thread';
+    const ownerResourceId = 'mismatched-run-owner';
+    const otherResourceId = 'mismatched-run-other';
+
+    const run = registerRun(runtime, agent, pubsub, 'run-a', threadId, ownerResourceId);
+    await run.registered;
+
+    // The run belongs to `ownerResourceId`, but the caller names another
+    // resource. Delivering would put this message into someone else's
+    // conversation, so the signal is refused like a cross-agent one.
+    const refused = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'steer' },
+      { runId: 'run-a', resourceId: otherResourceId, threadId },
+      pubsub,
+    );
+    await expect(refused.accepted).resolves.toEqual({
+      action: 'blocked',
+      reason: 'thread-blocked',
+      runId: 'run-a',
+    });
+
+    // The run stays reachable through its own resource.
+    const delivered = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'steer' },
+      { resourceId: ownerResourceId, threadId },
+      pubsub,
+    );
+    await expect(delivered.accepted).resolves.toEqual({ action: 'deliver', runId: 'run-a' });
+
+    run.complete();
+  });
+
+  it('refuses a signal that names a thread other than the run it addresses', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    const agent = { id: 'mismatched-thread-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'mismatched-thread-owner';
+    const resourceId = 'mismatched-thread-user';
+
+    const run = registerRun(runtime, agent, pubsub, 'run-a', threadId, resourceId);
+    await run.registered;
+
+    const refused = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'steer' },
+      { runId: 'run-a', resourceId, threadId: 'some-other-thread' },
+      pubsub,
+    );
+    await expect(refused.accepted).resolves.toEqual({
+      action: 'blocked',
+      reason: 'thread-blocked',
+      runId: 'run-a',
+    });
+
+    run.complete();
+  });
 });

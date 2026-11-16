@@ -246,6 +246,44 @@ In group conversations, Mastra prefixes each message with the sender's name and 
 [Bob (@U456DEF)]: I have a question too.
 ```
 
+## Move or remove a chat thread's mapping
+
+A Mastra thread that a chat conversation started is bound to that conversation: messages from the account are delivered into the thread, and runs on the thread post their replies back to the account. Use this when an account and a thread need to be separated, such as when someone disconnects an account or connects an account that already belongs to a Mastra thread.
+
+### Disconnect an account
+
+`unmapThread` removes the binding. Runs on the thread, from any origin, stop posting to the account, and messages from the account no longer arrive in the thread. The thread and its history are kept, and the next message from the account starts a new thread:
+
+```typescript title="src/mastra/your-app.ts"
+const channels = agent.getChannels()
+
+await channels?.unmapThread({
+  platform: 'whatsapp',
+  externalThreadId: 'wa:15551234567',
+})
+```
+
+An account with no binding returns `{ threadId: null }` and changes nothing, so calling this for every disconnect is safe.
+
+### Connect an account to an existing thread
+
+`mapThread` binds a conversation to a thread you already have, so the account's messages are delivered into it. If the account was bound to another thread of this agent, that binding is removed first:
+
+```typescript title="src/mastra/your-app.ts"
+const channels = agent.getChannels()
+
+await channels?.mapThread({
+  platform: 'whatsapp',
+  externalThreadId: 'wa:15551234567',
+  threadId: 'user-42',
+  externalChannelId: 'wa:15551234567',
+})
+```
+
+`externalChannelId` is the platform channel the conversation lives in, when it differs from the conversation itself. Without a mapping, the first message creates a thread; with one, messages go to the thread you named and keep its memory resource.
+
+`mapThread` throws when the thread doesn't exist. Both methods require `agent.getChannels()` to be bound to a Mastra instance with storage configured, and neither method moves a binding that a different agent owns.
+
 ## Per-message Signal metadata
 
 Use `signalMetadata` in a custom Channel handler to attach structured context to one inbound message. The metadata follows the message when it starts an idle run or joins an active run.

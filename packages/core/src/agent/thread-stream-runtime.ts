@@ -8157,6 +8157,22 @@ export class AgentThreadStreamRuntime {
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
 
+    // A caller can address an active run by id. When it also names a resource or thread,
+    // those must be the run's own: otherwise the signal would be queued into a run that
+    // belongs to a different conversation (the new-run path rejects the same mismatch with
+    // a resource-owner check, this is the delivery counterpart).
+    if (
+      isActiveTarget &&
+      activeRecord &&
+      runId &&
+      (activeRecord.resourceId !== resourceId || activeRecord.threadId !== threadId)
+    ) {
+      return {
+        signal,
+        accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId }),
+      };
+    }
+
     if (remoteCrossAgent) {
       return {
         signal,

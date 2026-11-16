@@ -81,6 +81,80 @@ describe('MastraStateAdapter', () => {
     });
   });
 
+  describe('subscription writes under a concurrent clear (stale write window)', () => {
+    const externalThreadId = 'discord:guild1:channel1:thread2';
+    let armNextMatchingWrite: (hook: () => Promise<void>) => void;
+
+    // Subscription writes race with the rest of an inbound message (unmap, owner
+    // claim, last-sender bookkeeping). To model that, the store's next matching
+    // metadata write runs a hook first — the concurrent clear — and only then
+    // applies the caller's patch. A writer that spreads a stale snapshot onto the
+    // row undoes the clear; a writer that patches only its own keys leaves it.
+    beforeEach(async () => {
+      await memoryStore.saveThread({
+        thread: {
+          id: 'mastra-thread-2',
+          title: 'Test thread',
+          resourceId: 'discord:user1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: externalThreadId,
+            channel_externalChannelId: 'discord:guild1:channel1',
+          },
+        },
+      });
+
+      const originalPatchThread = memoryStore.patchThread.bind(memoryStore);
+      let pending: (() => Promise<void>) | null = null;
+      (memoryStore as any).patchThread = async (args: any) => {
+        if (pending && args?.metadata && 'channel_subscribed' in args.metadata) {
+          const hook = pending;
+          pending = null;
+          await hook();
+        }
+        return originalPatchThread(args);
+      };
+      armNextMatchingWrite = hook => {
+        pending = hook;
+      };
+    });
+
+    it('does not restore a binding cleared between the read and the write on subscribe', async () => {
+      armNextMatchingWrite(async () => {
+        await memoryStore.updateThread({
+          id: 'mastra-thread-2',
+          metadata: { channel_externalThreadId: undefined },
+        });
+      });
+
+      await adapter.subscribe(externalThreadId);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'mastra-thread-2' });
+      expect((thread?.metadata as Record<string, unknown>)?.channel_externalThreadId).toBeUndefined();
+      expect((thread?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('true');
+      expect(await adapter.isSubscribed(externalThreadId)).toBe(false);
+    });
+
+    it('does not restore a binding cleared between the read and the write on unsubscribe', async () => {
+      await adapter.subscribe(externalThreadId);
+
+      armNextMatchingWrite(async () => {
+        await memoryStore.updateThread({
+          id: 'mastra-thread-2',
+          metadata: { channel_externalThreadId: undefined },
+        });
+      });
+
+      await adapter.unsubscribe(externalThreadId);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'mastra-thread-2' });
+      expect((thread?.metadata as Record<string, unknown>)?.channel_externalThreadId).toBeUndefined();
+      expect((thread?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('false');
+    });
+  });
+
   describe('cache (in-memory)', () => {
     it('stores and retrieves values', async () => {
       await adapter.set('key1', { hello: 'world' });
