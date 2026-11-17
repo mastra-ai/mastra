@@ -7,7 +7,7 @@ import { testCard } from '../routes/test-utils.js';
 import { sessionActivity, sessionRowsView } from './session-row-view.js';
 import type { SessionRowsView } from './session-row-view.js';
 import { SessionRowIndex } from './session-rows.js';
-import type { RowSession } from './session-rows.js';
+import type { CardSessionStatus, RowSession } from './session-rows.js';
 
 const VIEWER = 'user-1';
 const NOW = Date.parse('2026-09-04T12:00:00.000Z');
@@ -410,7 +410,7 @@ describe('sessionActivity', () => {
     startedBy: VIEWER,
   });
 
-  it("reports runs on the project's sessions only, and counts each card once by its most urgent session", () => {
+  it("reports runs on the project's sessions only, the statuses of the cards neither idle nor done, and the cards a session holds", () => {
     const activity = sessionActivity({
       sessions: [session('listed'), session('coming', null)],
       cards: [
@@ -420,13 +420,23 @@ describe('sessionActivity', () => {
       ],
       runningSessionIds: new Set(['listed', 'card-run', 'parked-and-running', 'elsewhere', VIEWER]),
       parkedSessionIds: new Set(['parked']),
+      cardStatuses: new Map<string, CardSessionStatus>([
+        ['working', { status: 'working', held: true }],
+        ['waiting', { status: 'waiting', held: true }],
+        ['proposed', { status: 'waiting', held: false }],
+        ['quiet', { status: 'idle', held: false }],
+        ['shipped', { status: 'done', held: false }],
+        ['coming', { status: 'initializing', held: true }],
+      ]),
     });
 
     expect(activity).toEqual({
       runningSessionIds: ['card-run', 'listed', 'parked-and-running'],
       parkedSessionIds: ['parked'],
-      initializingSessionIds: ['coming'],
-      cards: { working: 1, waiting: 1 },
+      cardStatuses: { coming: 'initializing', proposed: 'waiting', waiting: 'waiting', working: 'working' },
+      sessionHeldCardIds: ['coming', 'waiting', 'working'],
+      cards: { working: 1, waiting: 2 },
     });
+    expect(Object.keys(activity.cardStatuses)).toEqual(['coming', 'proposed', 'waiting', 'working']);
   });
 });

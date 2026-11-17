@@ -193,8 +193,6 @@ async function readBoardPhases(
       : {}),
     matchingTotal: answer.matchingTotal,
     boardTotal: answer.boardTotal,
-    runningSessionIds: answer.runningSessionIds,
-    parkedSessionIds: answer.parkedSessionIds,
   };
   const workItems = [...cards.values()];
   const previous = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));

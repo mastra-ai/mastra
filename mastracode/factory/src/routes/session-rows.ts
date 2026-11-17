@@ -5,6 +5,7 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { sessionActivity, sessionRowsView } from '../session/session-row-view.js';
 import { runningSessionIds } from '../session/session-rows.js';
+import type { SessionRowIndex, SessionStatusViewer } from '../session/session-rows.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { hashedBody, sendRevalidated, sessionIdsWhere } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -23,7 +24,7 @@ interface SessionRowRouteDependencies {
   resolveProject(context: unknown): Promise<ViewerScope | { response: Response }>;
   workItems: Pick<WorkItemsStorage, 'ensureReady' | 'listDeferredDecisionPage'>;
   boards: ProjectBoardSource;
-  liveSessions: Pick<LiveSessions, 'parked'>;
+  liveSessions: Pick<LiveSessions, 'parked' | 'sessionOnThread'>;
   sessionCards(scope: ProjectScope): Promise<readonly Card[]>;
   projectSessions: ProjectSessionsReader;
   activeRuns: () => readonly { threadId: string; resourceId?: string }[];
@@ -31,33 +32,52 @@ interface SessionRowRouteDependencies {
 }
 
 interface SessionFacts {
-  sessions: ProjectSessions;
   seen: SeenSessions;
   cards: readonly Card[];
-  runningSessionIds: Set<string>;
-  parkedSessionIds: Set<string>;
+  index: SessionRowIndex;
+  viewer: SessionStatusViewer;
 }
 
 async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScope): Promise<SessionFacts> {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
-  const [sessions, cards] = await Promise.all([deps.projectSessions(project), deps.sessionCards(project)]);
+  await deps.workItems.ensureReady();
+  const [sessions, cards, boards, { decisions }] = await Promise.all([
+    deps.projectSessions(project),
+    deps.sessionCards(project),
+    deps.boards.load(project),
+    deps.workItems.listDeferredDecisionPage({
+      ...project,
+      statuses: [...CARD_DECISION_STATUSES],
+      limit: CARD_DECISION_PAGE_SIZE,
+    }),
+  ]);
   const seen = sessions.seenBy(scope.userId);
+  const isParked = (sessionId: string) => deps.liveSessions.parked(sessionId) !== undefined;
   return {
-    sessions,
     seen,
     cards,
-    runningSessionIds: runningSessionIds(deps.activeRuns(), {
-      authEnabled: deps.authEnabled(),
+    index: sessions.rowIndex(cards, boards),
+    viewer: {
       viewerUserId: scope.userId,
-      factoryProjectId: scope.factoryProjectId,
-      visibleSessionIds: seen,
-    }),
-    parkedSessionIds: new Set(sessionIdsWhere(cards, sessionId => deps.liveSessions.parked(sessionId) !== undefined)),
+      awaitingPerson: cardsAwaitingPerson(decisions),
+      runningSessionIds: runningSessionIds(deps.activeRuns(), {
+        authEnabled: deps.authEnabled(),
+        viewerUserId: scope.userId,
+        factoryProjectId: scope.factoryProjectId,
+        visibleSessionIds: seen,
+        sessionOnThread: threadId => deps.liveSessions.sessionOnThread(threadId),
+      }),
+      parkedSessionIds: new Set([
+        ...sessionIdsWhere(cards, isParked),
+        ...seen.sessions.flatMap(({ sessionId, userId }) =>
+          userId === scope.userId && isParked(sessionId) ? [sessionId] : [],
+        ),
+      ]),
+    },
   };
 }
 
 export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRoute[] {
-  const { workItems } = deps;
   return [
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.sessionRows.path, {
       method: FACTORY_ROUTE_CONTRACTS.sessionRows.method,
@@ -79,22 +99,9 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         });
         if (!query.success) return c.json({ error: 'invalid_session_rows_query' }, 400);
         const { pin, children, ...view } = query.data;
-        const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
-        await workItems.ensureReady();
-        const [facts, boards, { decisions }] = await Promise.all([
-          sessionFacts(deps, resolved),
-          deps.boards.load(project),
-          workItems.listDeferredDecisionPage({
-            ...project,
-            statuses: [...CARD_DECISION_STATUSES],
-            limit: CARD_DECISION_PAGE_SIZE,
-          }),
-        ]);
-        const rows = facts.sessions.rowIndex(facts.cards, boards).rows({
-          viewerUserId: resolved.userId,
-          awaitingPerson: cardsAwaitingPerson(decisions),
-          runningSessionIds: facts.runningSessionIds,
-          parkedSessionIds: facts.parkedSessionIds,
+        const facts = await sessionFacts(deps, resolved);
+        const rows = facts.index.rows({
+          ...facts.viewer,
           pinnedSessionIds: pin,
           revealChildSessions: children === 'true',
         });
@@ -109,9 +116,19 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         const context = loose(c);
         const resolved = await deps.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        await workItems.ensureReady();
-        const facts = await sessionFacts(deps, resolved);
-        return sendRevalidated(context, hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions })));
+        const { seen, cards, index, viewer } = await sessionFacts(deps, resolved);
+        return sendRevalidated(
+          context,
+          hashedBody(
+            sessionActivity({
+              sessions: seen.sessions,
+              cards,
+              runningSessionIds: viewer.runningSessionIds,
+              parkedSessionIds: viewer.parkedSessionIds,
+              cardStatuses: index.cardStatuses(viewer),
+            }),
+          ),
+        );
       },
     }),
   ];

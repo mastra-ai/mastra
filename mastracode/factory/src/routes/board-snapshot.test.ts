@@ -26,26 +26,24 @@ describe('board listing cache validators', () => {
     expect(hashedBody({ created: 3, completed: 1 }).etag).not.toBe(answer.etag);
   });
 
-  it('changes the scoped listing validator when session activity changes and the cards do not', () => {
+  it('changes the scoped listing validator when the total changes and the cards do not', () => {
     const cardsJson = JSON.stringify(noCards.map(card => card));
-    const rest = JSON.stringify({ runningSessionIds: ['session-a'], parkedSessionIds: [] as string[] });
-    const listing = scopedSnapshot(noCards, card => card, ['session-a'], []);
+    const listing = scopedSnapshot(noCards, card => card, 3);
 
-    expect(listing.etag).toBe(`W/"${cacheDigest(cardsJson)}.${cacheDigest(rest)}"`);
-    expect(scopedSnapshot(noCards, card => card, ['session-b'], []).etag).not.toBe(listing.etag);
+    expect(listing.etag).toBe(`W/"${cacheDigest(cardsJson)}.${cacheDigest(JSON.stringify({ total: 3 }))}"`);
+    expect(scopedSnapshot(noCards, card => card, 4).etag).not.toBe(listing.etag);
     expect(matchesEtag(listing.etag, listing.etag)).toBe(true);
   });
 
-  it('includes running and parked sessions in the full-board validator', () => {
-    const rest = JSON.stringify({
-      runningSessionIds: ['session-a'],
-      parkedSessionIds: ['session-b'],
-      cursor: 'cursor-1',
-    });
-    const listing = boardSnapshot(noCards, card => card, ['session-a'], ['session-b'], 'cursor-1');
+  it('answers a scoped listing with nothing beside the cards as JSON', () => {
+    expect(JSON.parse(scopedSnapshot(noCards, card => card).json)).toEqual({ workItems: [] });
+  });
+
+  it('includes the cursor in the full-board validator', () => {
+    const listing = boardSnapshot(noCards, card => card, 'cursor-1');
 
     expect(listing.etag.startsWith('W/"')).toBe(true);
-    expect(listing.etag.endsWith(`.${cacheDigest(rest)}"`)).toBe(true);
-    expect(listing.json).toContain('"runningSessionIds":["session-a"]');
+    expect(listing.etag.endsWith(`.${cacheDigest(JSON.stringify({ cursor: 'cursor-1' }))}"`)).toBe(true);
+    expect(JSON.parse(listing.json)).toEqual({ workItems: [], cursor: 'cursor-1' });
   });
 });

@@ -490,12 +490,14 @@ describe('cardActions', () => {
 
   it('leads with the likeliest click and offers nothing while a session holds the card', () => {
     const idle = { state: boardCardState({}) };
-    const running = { state: boardCardState({ sessionStatus: 'working' }) };
+    const running = { state: boardCardState({ sessionStatus: 'working', sessionHolds: true }) };
     const labels = (actions: CardAction[]) => actions.map(action => action.label);
     expect(labels(cardActions({ ...idle, run }))).toEqual(['Investigate']);
     expect(labels(cardActions({ ...idle, retry, run }))).toEqual(['Retry', 'Investigate']);
     expect(labels(cardActions({ ...running, retry, run }))).toEqual([]);
-    expect(labels(cardActions({ state: boardCardState({ sessionStatus: 'ready' }), run }))).toEqual([]);
+    expect(labels(cardActions({ state: boardCardState({ sessionStatus: 'ready', sessionHolds: true }), run }))).toEqual(
+      [],
+    );
     expect(cardActions(idle)).toEqual([]);
   });
 
