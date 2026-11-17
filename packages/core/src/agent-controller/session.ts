@@ -1777,6 +1777,11 @@ export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallI
   return JSON.stringify([resourceId, threadId, runId, toolCallId]);
 }
 
+/** Whether a resume failed because the agent no longer holds the suspended run. */
+function isUnresumableRun(error: unknown): boolean {
+  return error instanceof MastraError && error.id === 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN';
+}
+
 /**
  * Owns the session's parked tool suspensions: tool calls paused via the native
  * tool-suspension primitive (e.g. `ask_user` / `request_access` / `submit_plan`)
@@ -4490,10 +4495,10 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
-    { abortReason }: { abortReason?: string } = {},
+    { abortReason, runId: endingRunId }: { abortReason?: string; runId?: string } = {},
   ): Promise<void> {
     const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
-    const runId = this.run.getRunId();
+    const runId = endingRunId ?? this.run.getRunId();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
         await listener(event);
@@ -6290,8 +6295,10 @@ export class Session<TState = unknown> {
         address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
       if (!sourceIsActive) throw err;
       this.emit({ type: 'error', error: err });
+      // The run tracker may already be reset by the failed start, so name the
+      // ending run; otherwise the display would drop other runs' prompts too.
       if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
-        await this.finishAgentRun('error');
+        await this.finishAgentRun('error', { runId: address.runId });
     }
   }
 
@@ -6953,7 +6960,18 @@ export class Session<TState = unknown> {
     } catch (error) {
       // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
       restoreAbortedRun?.();
-      if (!observer?.dispatched()) {
+      if (!observer?.dispatched() && isUnresumableRun(error)) {
+        // The agent has no suspended run left to resume (another runtime answered
+        // it, or it was lost). Re-parking would leave prompts that every answer
+        // fails on, so retract every prompt parked on that run instead.
+        const reason = getErrorFromUnknown(error).message;
+        for (const pending of [
+          { ...address, toolName: suspension.toolName },
+          ...this.suspensions.deleteForRun(address),
+        ]) {
+          this.emit({ type: 'tool_suspension_cancelled', ...pending, reason });
+        }
+      } else if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
         if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });
