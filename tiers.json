@@ -16360,10 +16360,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/memory/working-memory-utils.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-13",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-17",
+      "last_failure": "2026-11-17",
+      "reason": "versioning-fail"
     },
     "packages/core/src/notifications/dispatch-lazy.test.ts": {
       "tier": "out",
