@@ -152,9 +152,10 @@ export function createFactoryWorkItemTools(
       reason,
     });
   /**
-   * Approving or retrying a run starts it as this person, so this session follows its card as a
+   * Approving or retrying a run starts it from this session, so this session follows its card as a
    * move does: the run's report and anything it waits on reach this session, which can pass them on.
-   * The run has started by now: a failed follow is reported with it, not instead of it.
+   * Only approval acts as the person; a retry keeps the run's original approver. The run has
+   * started by now: a failed read or follow is reported with it, not instead of it.
    */
   const followStartedRun = async (result: ReturnType<typeof settled>) => {
     if (!result.workItemId) return result;
