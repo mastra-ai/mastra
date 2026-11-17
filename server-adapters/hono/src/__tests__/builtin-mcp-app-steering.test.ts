@@ -333,6 +333,36 @@ it('stores nothing for a view until the model or the user changes it', async () 
   expect(keys().filter(key => key.includes('mcp-apps:view'))).toEqual(before);
 });
 
+it('keeps only the latest changes of a view in long use, and still knows what it shows', async () => {
+  const cache = new SharedCache();
+  const client = await (await start({}, cache)).connect('ada');
+  const { viewId } = await openExplorer(client);
+  const stored = () =>
+    [...(cache as unknown as { values: Map<string, string> }).values.entries()]
+      .filter(([key]) => key.includes(viewId) && !key.endsWith(':n'))
+      .reduce((count, [, value]) => count + (JSON.parse(value) as unknown[]).length, 0);
+
+  // Ten segments' worth of the user's changes, each against the version the last one left.
+  let version = 0;
+  for (let change = 0; change < 160; change++) {
+    ({ version } = json(
+      await client.callTool({ name: SYNC, arguments: { viewId, base: version, state: { context: `screen ${change}` } } }),
+    ));
+  }
+  // Then a run of stale reports the server refuses.
+  for (let stale = 0; stale < 10; stale++) {
+    const refused = await client.callTool({ name: SYNC, arguments: { viewId, base: 3, state: { context: 'stale' } } });
+    expect(refused.isError).toBe(true);
+  }
+
+  expect(stored()).toBeLessThanOrEqual(3 * 16);
+  expect(json(await client.callTool({ name: SYNC, arguments: { viewId, since: 0 } }))).toMatchObject({
+    version: 170,
+    by: 'app',
+    state: { context: 'screen 159' },
+  });
+}, 30_000);
+
 it('offers no steering on a read-only server', async () => {
   const client = await (await start({ readOnly: true, appSteering: true })).connect('ada');
   expect((await client.listTools()).tools.map(t => t.name)).not.toContain(STEER);

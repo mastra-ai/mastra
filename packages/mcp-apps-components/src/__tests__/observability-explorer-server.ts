@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   listLogsArgsSchema,
   listLogsResponseSchema,
@@ -137,6 +138,12 @@ export type ViewRecord = {
   state: Record<string, any> | null;
   /** How many sync calls to fail next, as a cache outage would. */
   failures?: number;
+  /** Set when the view is gone (expired, or not the caller's): sync calls fail with a 404 as the server's do. */
+  gone?: boolean;
+  /** While set, the server holds its answers to the view's reports until it resolves. */
+  reportsHeld?: Promise<void>;
+  /** How many sync calls (polls and reports) reached the server. */
+  syncCalls?: number;
 };
 
 export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
@@ -217,12 +224,25 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
           state: z.record(z.string(), z.any()).optional(),
         }),
         execute: async args => {
+          view.syncCalls = (view.syncCalls ?? 0) + 1;
+          if (view.gone) {
+            // The built-in server's `toolError`: a MastraError carrying the HTTP status.
+            throw new MastraError({
+              id: 'MASTRA_MCP_TOOL_CALL_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.USER,
+              text: `No open view ${args.viewId}.`,
+              details: { status: 404 },
+            });
+          }
           if (view.failures) {
             view.failures--;
-            throw new Error('500 The cache is unavailable');
+            // A transient failure whose wording happens to mention 404; only its status says whether to retry.
+            throw new Error('500 The cache is unavailable (404 keys evicted)');
           }
           if (args.state) {
             record('sync_observability_view', args);
+            await view.reportsHeld;
             if (args.base !== view.version) throw new Error(`View changed since version ${args.base}`);
             Object.assign(view, { version: view.version + 1, by: 'app', state: args.state });
             return { version: view.version };

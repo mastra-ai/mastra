@@ -31,12 +31,15 @@ export type ViewRecord = { version: number; by: 'model' | 'app'; state: ViewStat
 export const VIEW_TTL_MS = 60 * 60 * 1000;
 
 /**
- * A view's changes, oldest first, each with the index the cache gave it. The cache hands out indexes and appends
- * in one step, so changes from any number of server instances get a single order without a lock. The braces put
- * the log and its counter in one Redis Cluster slot, which keeps that step one atomic script there.
+ * A view's changes, each with the index the cache gave it. The cache hands out indexes and appends in one step,
+ * so changes from any number of server instances get a single order without a lock. The log is split into
+ * segments of `SEGMENT` changes that share one counter, so a view in long use keeps only its latest segments.
+ * The braces put a view's segments and counter in one Redis Cluster slot, which keeps that step one atomic
+ * script there.
  */
-const logKey = (viewId: string) => `mastra:mcp-apps:view:{${viewId}}`;
-const counterKey = (viewId: string) => `${logKey(viewId)}:n`;
+const viewKey = (viewId: string) => `mastra:mcp-apps:view:{${viewId}}`;
+const segmentKey = (viewId: string, segment: number) => `${viewKey(viewId)}:${segment}`;
+const counterKey = (viewId: string) => `${viewKey(viewId)}:n`;
 
 /** One change. `base` is the version a view's report was made against; the model's changes have none. */
 type Change = { by: ViewRecord['by']; state: ViewState; base?: number; index: number };
@@ -44,8 +47,17 @@ type Change = { by: ViewRecord['by']; state: ViewState; base?: number; index: nu
 /** A report made against an older version than the one it landed after lost to that change. */
 const applies = (change: Change) => change.base === undefined || change.base === change.index;
 
-/** Recent changes are enough to find the latest that applied: refused reports only pile up in a race. */
-const RECENT = 16;
+/**
+ * Changes per segment. A reader looks back at most two segments for the latest change that applied; refused
+ * reports only come from races, so a run of this many refusals in a row doesn't happen in practice.
+ */
+export const SEGMENT = 16;
+
+/** How many changes the view has had, which is the next change's index. */
+async function changeCount(cache: MastraServerCache, viewId: string): Promise<number> {
+  const count = await cache.get(counterKey(viewId));
+  return typeof count === 'number' ? count : 0;
+}
 
 /**
  * Who may read and change a view: the signed-in user, else the resource the auth layer set. Without auth
@@ -87,14 +99,21 @@ async function checkOwner(viewId: string, owner: string | null): Promise<void> {
 /** What the view shows, or a 404 when the id isn't one of `owner`'s. A view nobody changed is at version 0. */
 export async function readView(cache: MastraServerCache, viewId: string, owner: string | null): Promise<ViewRecord> {
   await checkOwner(viewId, owner);
-  const recent = (await cache.listFromTo(logKey(viewId), -RECENT)) as Change[];
-  if (recent.length === 0) return { version: 0, by: 'model', state: null };
-  const latest = (changes: Change[]) =>
-    changes.filter(applies).reduce<Change | undefined>((a, b) => (a && a.index > b.index ? a : b), undefined);
-  const last =
-    latest(recent) ??
-    (recent.length === RECENT ? latest((await cache.listFromTo(logKey(viewId), 0)) as Change[]) : undefined);
-  const version = Math.max(...recent.map(change => change.index)) + 1;
+  const count = await changeCount(cache, viewId);
+  if (count === 0) return { version: 0, by: 'model', state: null };
+  // A writer picks its segment from the count it read just before appending, so a change can sit one segment
+  // below its index's: look in the current segment, then the one before.
+  const current = Math.floor((count - 1) / SEGMENT);
+  let version = 0;
+  let last: Change | undefined;
+  for (const segment of [current, current - 1]) {
+    if (segment < 0) break;
+    for (const change of (await cache.listFromTo(segmentKey(viewId, segment), 0)) as Change[]) {
+      version = Math.max(version, change.index + 1);
+      if (applies(change) && (!last || change.index > last.index)) last = change;
+    }
+  }
+  version = Math.max(version, count);
   return last ? { version, by: last.by, state: last.state } : { version, by: 'model', state: null };
 }
 
@@ -114,7 +133,12 @@ export async function writeView(
 ): Promise<ViewRecord> {
   await checkOwner(viewId, owner);
   const change = base === undefined ? { by, state } : { by, state, base };
-  const index = await cache.listPushIndexed(logKey(viewId), counterKey(viewId), change, VIEW_TTL_MS);
+  const segment = Math.floor((await changeCount(cache, viewId)) / SEGMENT);
+  const index = await cache.listPushIndexed(segmentKey(viewId, segment), counterKey(viewId), change, VIEW_TTL_MS);
+  // Exactly one write gets each index, so one write per new segment drops the segment readers no longer reach.
+  if (index % SEGMENT === 0 && index >= 2 * SEGMENT) {
+    await cache.delete(segmentKey(viewId, index / SEGMENT - 2));
+  }
   if (!applies({ ...change, index })) {
     throw toolError(409, `View ${viewId} changed since version ${base}; it is now at ${index + 1}.`);
   }

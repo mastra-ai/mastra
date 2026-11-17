@@ -331,3 +331,51 @@ it("doesn't poll a view the server gave no id", async () => {
   expect(mcp.calls.some(call => call.tool === 'sync_observability_view')).toBe(false);
   expect(mcp.view.version).toBe(0);
 });
+
+it("keeps the user's latest change when they make two before the first report is answered", async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+
+  // The model shows error logs; the view applies them and reports that screen.
+  Object.assign(mcp.view, { version: 1, by: 'model', state: { tool: 'list_logs', args: { level: 'error' } } });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+  await waitFor(() => expect(mcp.view.version).toBe(2), POLL);
+
+  // The server is slow to answer: the user makes two changes before the first report comes back.
+  let release!: () => void;
+  mcp.view.reportsHeld = new Promise<void>(resolve => (release = resolve));
+  const reports = () => mcp.calls.filter(call => call.tool === 'sync_observability_view');
+  const before = reports().length;
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Traces' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Traces' }));
+  await waitFor(() => expect(reports()).toHaveLength(before + 1), POLL);
+  fireEvent.click(await screen.findByText('weather-agent'));
+  expect(await screen.findByRole('button', { name: 'Back to the list' })).toBeTruthy();
+  // Past the host's debounce, the second change waits for the first instead of racing it.
+  await new Promise(resolve => setTimeout(resolve, 1_000));
+  expect(reports()).toHaveLength(before + 1);
+  release();
+
+  // It goes out against the version the first one left, so the server takes it.
+  await waitFor(() => expect(reports()).toHaveLength(before + 2), POLL);
+  const [first, second] = reports().slice(before);
+  expect(second!.args.base).toBe(first!.args.base + 1);
+  await waitFor(() => expect(mcp.view.state?.context).toBe(second!.args.state.context), POLL);
+  expect(mcp.view.by).toBe('app');
+  // The next polls leave the user where they are instead of snapping back to the model's logs.
+  await new Promise(resolve => setTimeout(resolve, 2_000));
+  expect(screen.getByRole('button', { name: 'Back to the list' })).toBeTruthy();
+  expect(screen.queryByRole('tab', { name: 'Logs', selected: true })).toBeNull();
+}, 20_000);
+
+it('stops polling a view the server says is gone', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  Object.assign(mcp.view, { gone: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+  await waitFor(() => expect(mcp.view.syncCalls).toBe(1), POLL);
+  // A 404 (its status in the error, not its wording) is final: no retry follows.
+  await new Promise(resolve => setTimeout(resolve, 3_500));
+  expect(mcp.view.syncCalls).toBe(1);
+}, 20_000);
