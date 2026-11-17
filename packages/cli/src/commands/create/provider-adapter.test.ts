@@ -590,4 +590,41 @@ describe('writeManagedApiKey', () => {
       `TURSO_DATABASE_URL=file:local.db\nMASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`,
     );
   });
+
+  it('writes the gateway URL next to the key so a staging key reaches the staging gateway', async () => {
+    const projectPath = await createFixture();
+    await fs.rm(path.join(projectPath, '.env'));
+    await adaptFixture({ projectPath, provider: 'mastra', versionTag: 'latest' });
+
+    await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
+    });
+
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      `MASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\nMASTRA_GATEWAY_URL=https://gateway-api.staging.mastra.ai\n`,
+    );
+  });
+
+  it('replaces a gateway URL already in .env instead of adding a second one', async () => {
+    const projectPath = await createFixture();
+    await fs.writeFile(
+      path.join(projectPath, '.env'),
+      'MASTRA_GATEWAY_URL=https://old.example\nMASTRA_GATEWAY_API_KEY=\n',
+      'utf8',
+    );
+
+    await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
+    });
+
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      `MASTRA_GATEWAY_URL=https://gateway-api.staging.mastra.ai\nMASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`,
+    );
+  });
 });

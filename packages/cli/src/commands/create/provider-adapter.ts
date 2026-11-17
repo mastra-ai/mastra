@@ -210,15 +210,18 @@ async function writeSecureEnv(envPath: string, content: string): Promise<boolean
 /**
  * Write an API key that arrived after the template was adapted (the Gateway key is created
  * while the template clones). Starts from `.env`, or `.env.example` when there is no `.env` yet.
+ * `extraEnv` holds settings the key needs to work, such as a non-default gateway URL.
  */
 export async function writeManagedApiKey({
   projectPath,
   apiKeyEnv,
   apiKey,
+  extraEnv = {},
 }: {
   projectPath: string;
   apiKeyEnv: string;
   apiKey: string;
+  extraEnv?: Record<string, string>;
 }): Promise<boolean> {
   const envPath = path.join(projectPath, '.env');
   let source = '';
@@ -231,10 +234,14 @@ export async function writeManagedApiKey({
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
     }
   }
-  const result = setEnvValue(source, apiKeyEnv, apiKey);
-  const content = result.applied
-    ? result.content
-    : `${source}${source && !source.endsWith('\n') ? '\n' : ''}${apiKeyEnv}=${apiKey}\n`;
+  let content = source;
+  const entries: [string, string][] = [[apiKeyEnv, apiKey], ...Object.entries(extraEnv)];
+  for (const [key, value] of entries) {
+    const result = setEnvValue(content, key, value);
+    content = result.applied
+      ? result.content
+      : `${content}${content && !content.endsWith('\n') ? '\n' : ''}${key}=${value}\n`;
+  }
   return writeSecureEnv(envPath, content);
 }
 

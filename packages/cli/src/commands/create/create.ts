@@ -7,6 +7,7 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
+import { MASTRA_GATEWAY_URL, MASTRA_PROJECTS_URL } from '../auth/client.js';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
@@ -640,6 +641,18 @@ async function discardUnusedGatewayKey(platformSetup: PlatformSetupResult | unde
   });
 }
 
+const DEFAULT_GATEWAY_URL = 'https://gateway-api.mastra.ai';
+
+/**
+ * The gateway the new key belongs to, when it is not the production default. A key minted
+ * against staging only works on the staging gateway, and the project would otherwise call
+ * production. Written without the `/v1` suffix, the form the runtime and templates document.
+ */
+function nonDefaultGatewayUrl(): string | undefined {
+  const url = MASTRA_GATEWAY_URL.replace(/\/+$/, '').replace(/\/v1$/, '');
+  return url === DEFAULT_GATEWAY_URL ? undefined : url;
+}
+
 async function finishGatewaySetup({
   projectPath,
   platformSetup,
@@ -650,7 +663,7 @@ async function finishGatewaySetup({
   analytics: PosthogAnalytics | null | undefined;
 }): Promise<string> {
   const envName = color.cyan(GATEWAY_API_KEY_ENV);
-  const manualSteps = `Get a key at ${color.cyan('https://gateway.mastra.ai')} and set ${envName} in ${color.cyan('.env')}.`;
+  const manualSteps = `Get a key in the Mastra dashboard at ${color.cyan(MASTRA_PROJECTS_URL)} and set ${envName} in ${color.cyan('.env')}.`;
   const gateway = platformSetup?.status === 'ready' ? platformSetup.gateway : undefined;
 
   if (gateway?.status !== 'ready') {
@@ -666,7 +679,15 @@ async function finishGatewaySetup({
     return `${reason}${manualSteps}`;
   }
 
-  if (!(await writeManagedApiKey({ projectPath, apiKeyEnv: GATEWAY_API_KEY_ENV, apiKey: gateway.apiKey }))) {
+  const gatewayUrl = nonDefaultGatewayUrl();
+  if (
+    !(await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: GATEWAY_API_KEY_ENV,
+      apiKey: gateway.apiKey,
+      ...(gatewayUrl ? { extraEnv: { MASTRA_GATEWAY_URL: gatewayUrl } } : {}),
+    }))
+  ) {
     await discardUnusedGatewayKey(platformSetup);
     analytics?.trackEvent('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
     return `${color.yellow('Could not write the Gateway key to .env.')}\n\n${manualSteps}`;
