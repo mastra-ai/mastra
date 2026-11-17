@@ -3628,7 +3628,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
         if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          try {
+            item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          } catch (error) {
+            // One unreadable card must not end the sweep for every binding after it.
+            // Nothing is known about this card, so its binding stays for the next sweep.
+            console.error(
+              `[factory] stale-binding sweep could not read card ${binding.workItemId}`,
+              error instanceof Error ? error.message : error,
+            );
+            continue;
+          }
           itemCache.set(key, item);
         }
         // Terminal-ness comes from the installed board via the host-wired
