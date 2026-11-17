@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
+import { http, HttpResponse } from 'msw';
 
 import { DOCK_MIN_REM } from '../src/ui/domains/workspace-viewer/layout';
 import { HEAVY, heavySessionHandlers } from './ui/heavy-session';
@@ -215,5 +216,29 @@ test.describe('Session panel with a heavy session', () => {
     await panel.getByRole('button', { name: 'Back to files' }).click();
     await finder.press('Escape');
     await expect(panel.getByRole('treeitem', { name: /agent-runner\.ts/, selected: true })).toBeVisible();
+  });
+
+  test("keeps a card draft's setup screen clear of the panel, whatever the panel's width", async ({
+    page,
+  }, testInfo) => {
+    server.use(
+      http.get('*/web/factory/projects/:factoryId/work-items/:workItemId/session-repository', () =>
+        HttpResponse.json({ status: 'resolved', projectRepositoryId: HEAVY.repositoryId, slug: 'mastra-ai/mastra' }),
+      ),
+    );
+    await page.goto(`/factories/${HEAVY.factoryId}/cards/card-c2`);
+    await expect(page.getByRole('heading', { name: 'No model available' })).toBeVisible();
+    const toggle = page.getByRole('button', { name: 'Session panel' });
+    if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
+    const setup = page.getByText('Chats in this Factory run on your own keys');
+    const panel = page.getByTestId('workspace-files-card');
+
+    for (const width of [1600, 1400]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await transitionsEnd(page);
+      const text = await boxOf(setup);
+      expect(text.x + text.width).toBeLessThan((await boxOf(panel)).x);
+      await page.screenshot({ path: testInfo.outputPath(`card-draft-setup-${width}.png`) });
+    }
   });
 });
