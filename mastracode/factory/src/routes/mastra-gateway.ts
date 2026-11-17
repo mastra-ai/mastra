@@ -6,17 +6,21 @@ import type { RouteAuth } from './route.js';
 
 /**
  * The Mastra Gateway this server sends model calls to: the `memoryGateway.baseUrl` setting, then
- * `MASTRA_GATEWAY_URL`, then production. Resolved the same way as the run path, without a trailing
- * slash or `/v1`.
+ * `MASTRA_GATEWAY_URL`, then production, without a trailing slash or `/v1`. This is the order the SDK's
+ * per-request model resolution reads them in, which is where run calls go. (The SDK's startup reads the
+ * environment first, but only for its boot-time gateway, which does not send model calls.) A setting
+ * that is not a non-empty string is ignored.
  */
 export function mastraGatewayBaseUrl(): string {
-  let configured: string | undefined;
+  let configured: unknown;
   try {
     configured = loadSettings().memoryGateway?.baseUrl;
   } catch {
     // An unreadable settings file leaves the environment and the default in charge.
   }
-  const raw = configured ?? process.env.MASTRA_GATEWAY_URL ?? 'https://gateway-api.mastra.ai';
+  const fromSettings = typeof configured === 'string' && configured.trim() ? configured.trim() : undefined;
+  const fromEnv = process.env.MASTRA_GATEWAY_URL?.trim() || undefined;
+  const raw = fromSettings ?? fromEnv ?? 'https://gateway-api.mastra.ai';
   return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 

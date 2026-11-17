@@ -161,9 +161,9 @@ const UPSTREAM_RATE_LIMITED = 'provider_rate_limited';
 const BUDGET_CAPACITY_HELD = new Set(['key_budget_capacity_held', 'organization_budget_capacity_held']);
 const GATEWAY_RATE_LIMITED = 'rate_limit_exceeded';
 
-/** Reason codes only the Mastra Gateway sends, so a reply carrying one came from it. */
-const GATEWAY_REASON_CODES = new Set([
-  'insufficient_credit',
+/** Every reason code described here as a gateway refusal. */
+const GATEWAY_CODES = new Set([
+  ...OUT_OF_CREDITS,
   ORGANIZATION_BUDGET_EXHAUSTED,
   ...ORGANIZATION_BUDGET_SHORT,
   ...SPEND_LIMIT_REACHED,
@@ -173,6 +173,25 @@ const GATEWAY_REASON_CODES = new Set([
   UPSTREAM_RATE_LIMITED,
   ...BUDGET_CAPACITY_HELD,
 ]);
+
+/**
+ * Codes another provider or proxy can send too. They describe a gateway refusal only alongside another
+ * sign of the gateway; every other code in `GATEWAY_CODES` is the gateway's alone.
+ */
+const SHARED_CODES = new Set([
+  'insufficient_credit',
+  'credit_balance_exhausted',
+  'spend_limit_reached',
+  'model_not_allowed',
+  'context_too_large',
+]);
+
+function onlyTheGatewaySends(code: string): boolean {
+  return GATEWAY_CODES.has(code) && !SHARED_CODES.has(code);
+}
+
+/** Bounds a gateway-written sentence before it is shown. */
+const MAX_GATEWAY_MESSAGE_LENGTH = 500;
 
 const STARTING_BUDGET =
   'An organization that has not added credits yet has a small starting budget, and adding credits lifts it.';
@@ -306,18 +325,23 @@ function isMastraGatewayError(
 ): boolean {
   return (
     providerModelId(error)?.startsWith(MASTRA_GATEWAY_PREFIX) === true ||
-    calledMastraGateway(error, configuredGatewayHost(options.gatewayBaseUrl)) ||
+    calledMastraGateway(error, configuredGatewayOrigin(options.gatewayBaseUrl)) ||
     /gateway\.mastra\.ai/.test(providerErrorReason(error) ?? error.message) ||
     reply?.v1Billing === true ||
     reply?.type === 'gateway_error' ||
-    (reply?.code !== undefined && GATEWAY_REASON_CODES.has(reply.code))
+    (reply?.code !== undefined && onlyTheGatewaySends(reply.code))
   );
 }
 
-function configuredGatewayHost(baseUrl: string | undefined): string | undefined {
+/**
+ * The configured gateway's origin: scheme, host and port. A gateway served under a path prefix shares
+ * its origin with anything else on that host, so a provider at the same origin would also match.
+ */
+function configuredGatewayOrigin(baseUrl: string | undefined): string | undefined {
   if (!baseUrl) return undefined;
   try {
-    return new URL(baseUrl).host || undefined;
+    const { origin } = new URL(baseUrl);
+    return origin === 'null' ? undefined : origin;
   } catch {
     return undefined;
   }
@@ -327,21 +351,22 @@ function configuredGatewayHost(baseUrl: string | undefined): string | undefined 
  * Whether the request, or a provider error it wraps, went to the gateway's host. A saved error part
  * keeps no URL, only the request's origin as `requestOrigin` on versions of `@mastra/core` that record it.
  */
-function calledMastraGateway(error: unknown, configuredHost: string | undefined, depth = 0): boolean {
+function calledMastraGateway(error: unknown, configuredOrigin: string | undefined, depth = 0): boolean {
   if (depth > 4 || typeof error !== 'object' || error === null) return false;
   const url = 'url' in error ? error.url : 'requestOrigin' in error ? error.requestOrigin : undefined;
   const cause = 'cause' in error ? error.cause : undefined;
   return (
-    (typeof url === 'string' && isGatewayUrl(url, configuredHost)) ||
-    calledMastraGateway(cause, configuredHost, depth + 1)
+    (typeof url === 'string' && isGatewayUrl(url, configuredOrigin)) ||
+    calledMastraGateway(cause, configuredOrigin, depth + 1)
   );
 }
 
-function isGatewayUrl(url: string, configuredHost: string | undefined): boolean {
+function isGatewayUrl(url: string, configuredOrigin: string | undefined): boolean {
   try {
     const parsed = new URL(url);
     return (
-      MASTRA_GATEWAY_HOST.test(parsed.hostname) || (configuredHost !== undefined && parsed.host === configuredHost)
+      MASTRA_GATEWAY_HOST.test(parsed.hostname) ||
+      (configuredOrigin !== undefined && parsed.origin === configuredOrigin)
     );
   } catch {
     return false;
@@ -360,7 +385,7 @@ function gatewayReply(error: unknown, depth = 0): GatewayReply | undefined {
   const fromCause = gatewayReply('cause' in error ? error.cause : undefined, depth + 1);
   if (fromCause) return fromCause;
   const codes = 'codes' in error && Array.isArray(error.codes) ? error.codes.filter(isString) : [];
-  const code = codes.find(candidate => GATEWAY_REASON_CODES.has(candidate));
+  const code = codes.find(candidate => GATEWAY_CODES.has(candidate));
   if (code || codes.includes('gateway_error')) {
     return { ...(codes.includes('gateway_error') ? { type: 'gateway_error' } : {}), ...(code ? { code } : {}) };
   }
@@ -387,7 +412,11 @@ function replyFromBody(body: unknown): GatewayReply | undefined {
       : type === 'gateway_error' && rawMessage && CODE_SHAPED.test(rawMessage)
         ? rawMessage
         : undefined;
-  const message = rawMessage && rawMessage !== code && !CODE_SHAPED.test(rawMessage) ? rawMessage : undefined;
+  const sentence = rawMessage && rawMessage !== code && !CODE_SHAPED.test(rawMessage) ? rawMessage : undefined;
+  const message =
+    sentence && sentence.length > MAX_GATEWAY_MESSAGE_LENGTH
+      ? `${sentence.slice(0, MAX_GATEWAY_MESSAGE_LENGTH - 1)}…`
+      : sentence;
   if (!type && !code) return undefined;
   const helpUrl = 'help_url' in inner && isString(inner.help_url) ? inner.help_url : undefined;
   const v1Billing = type !== undefined && V1_BILLING_TYPES.has(type) && helpUrl !== undefined && onMastraHost(helpUrl);

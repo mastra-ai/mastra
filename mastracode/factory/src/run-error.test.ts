@@ -345,6 +345,56 @@ describe('describeRunError', () => {
       expect(describeRunError(staging, { gatewayBaseUrl: 'http://localhost:9999' })).toMatchObject({
         title: 'Provider quota exhausted',
       });
+      expect(describeRunError(staging, { gatewayBaseUrl: 'https://localhost:8787' })).toMatchObject({
+        title: 'Provider quota exhausted',
+      });
+    });
+
+    describe('a code another provider can also send', () => {
+      // A direct provider's saved error: no gateway type, no request origin, no `mastra/` model.
+      const direct = (status: number, code: string) =>
+        toPersistedErrorIdentity({
+          name: 'AI_APICallError',
+          message: 'Refused.',
+          statusCode: status,
+          responseBody: JSON.stringify({ error: { type: 'invalid_request_error', code, message: 'Refused.' } }),
+          requestBodyValues: { model: 'acme/model-1' },
+        });
+
+      it.each([
+        [403, 'model_not_allowed', 'Provider access failed'],
+        [402, 'insufficient_credit', 'Provider quota exhausted'],
+        [402, 'spend_limit_reached', 'Provider quota exhausted'],
+      ])('keeps a direct provider’s %i %s its own refusal', (status, code, title) => {
+        expect(describeRunError(direct(status, code))).toMatchObject({ title, recoveries: ['credentials', 'model'] });
+      });
+
+      it('names the gateway when the saved request origin is the gateway’s', () => {
+        const saved = { ...direct(403, 'model_not_allowed'), requestOrigin: 'https://gateway-api.mastra.ai' };
+        expect(describeRunError(saved)).toMatchObject({ title: 'Model not available through the Mastra Gateway' });
+      });
+
+      it('names the gateway from saved codes alone only for a code no one else sends', () => {
+        const savedCodes = (codes: string[]) => ({
+          name: 'AI_APICallError',
+          message: 'Refused.',
+          statusCode: 402,
+          codes,
+        });
+        expect(describeRunError(savedCodes(['insufficient_credit']))).toMatchObject({
+          title: 'Provider quota exhausted',
+        });
+        expect(describeRunError(savedCodes(['key_budget_exhausted']))).toMatchObject({
+          title: 'Mastra Gateway spend limit reached',
+        });
+      });
+    });
+
+    it('bounds a long gateway sentence before showing it', () => {
+      const long = 'The budget is spent. '.repeat(60).trim();
+      const { message } = describeRunError(gatewayRefusal(402, 'spend_limit_reached', long));
+      expect(message.length).toBeLessThan(600);
+      expect(message).toContain('…');
     });
 
     it.each([
