@@ -46,7 +46,10 @@ import type { intakeDryRunBodySchema, intakeTestBodySchema } from './contracts.j
 type DryRunBody = z.infer<typeof intakeDryRunBodySchema>;
 type TestBody = z.infer<typeof intakeTestBodySchema>;
 type Draft = Pick<DryRunBody, 'boards' | 'order'>;
-type DraftRoute = Pick<StoredIntakeRouteRecord, 'id' | 'name' | 'enabled' | 'when' | 'target' | 'on'>;
+type DraftRoute = Pick<
+  StoredIntakeRouteRecord,
+  'id' | 'name' | 'enabled' | 'when' | 'target' | 'on' | 'outsiderPullRequestsGated'
+>;
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
 
 /** How many of a card's newest status events the tester replays. */
@@ -98,6 +101,8 @@ export class IntakeCheck {
   /** The saved rules with each drafted board's rules swapped for its draft, and the draft order if any. */
   #draft(saved: { routes: readonly DraftRoute[]; order: string[] }, body: Draft, registry: BoardRegistry) {
     let routes: DraftRoute[] = [...saved.routes];
+    // A draft of a stored gated rule keeps its gate: editing it doesn't widen it, so the preview must not either.
+    const savedGated = new Set(saved.routes.filter(route => route.outsiderPullRequestsGated).map(route => route.id));
     for (const board of body.boards ?? []) {
       if (!registry.has(board.boardKey)) {
         throw new IntakeCheckRefusal(422, 'intake_board_not_found', `No board "${board.boardKey}" in this project.`);
@@ -114,6 +119,7 @@ export class IntakeCheck {
           moveToBoardKey: route.target.moveToBoardKey ?? null,
         },
         on: route.on ?? [...DEFAULT_ROUTE_EVENTS],
+        ...(route.id !== undefined && savedGated.has(route.id) && { outsiderPullRequestsGated: true as const }),
       }));
       // Held to the checks saving it would face, so a typo'd phase can't quietly land on the first one.
       for (const route of drafts) {

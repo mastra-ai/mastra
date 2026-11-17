@@ -20,7 +20,7 @@ import {
 } from '../useWorkItems';
 import type { BoardPhasesSnapshot } from '../useWorkItems';
 
-const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
+const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems });
 
 /** The board the paged reads list: the two phases these cards sit in. */
 const BOARD = { id: 'work', phases: [{ id: 'intake' }, { id: 'execute' }] };
@@ -193,7 +193,7 @@ describe('useDeleteWorkItemMutation', () => {
     let deleted = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: deleted ? [] : [wireItem], parkedSessionIds: [] }),
+        HttpResponse.json({ workItems: deleted ? [] : [wireItem] }),
       ),
       http.delete(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, () => {
         deleted = true;

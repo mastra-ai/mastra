@@ -38,6 +38,7 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
+import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
 
@@ -817,6 +818,10 @@ export class ExecutionFence implements RunFenceScope {
     return this.#lossError !== undefined;
   }
 
+  get settlement(): ExecutionSettlement | undefined {
+    return this.#settledAs;
+  }
+
   /** An owned deadline settlement revokes writes without handing its topics to another execution. */
   ownsRunTopics(): boolean {
     return this.#settledAs === 'owned' || !this.#lossError;
@@ -1246,6 +1251,10 @@ export function watchExecutionLoss(
 export function fencePubSub(pubsub: PubSub, fence: Pick<ExecutionFence, 'isLost'>): PubSub {
   return new Proxy(pubsub, {
     get(target, property) {
+      if (property === executionTransport) {
+        const transport: PubSub | undefined = Reflect.get(target, executionTransport);
+        return transport ? fencePubSub(transport, fence) : undefined;
+      }
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
       if (property === 'publish') {
@@ -1403,6 +1412,25 @@ export async function runFencedToClaim<T>(
   );
 }
 
+/**
+ * Reject a superseded claim without verifying or mutating the local fence, so a late reader
+ * can settle after its execution releases the claim. Does not require an active lease;
+ * skips the check when no ownership backend is available.
+ */
+export async function assertExecutionGenerationCurrent(args: {
+  runId: string;
+  agentId: string;
+  mastra: Mastra | undefined;
+  claim: DurableExecutionClaim;
+}): Promise<void> {
+  const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, args.claim);
+  if (!backend) return;
+  const details = { agentId: args.agentId, runId: args.runId, executionId: args.claim.executionId };
+  if (await retryOnce(() => backend.isSuperseded(args.claim), details)) {
+    throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+  }
+}
+
 const OWNERSHIP_GUARD = Symbol('durable-execution-ownership-guard');
 type GuardHandle = { scope: RunScope; key: RunScopeKey<ExecutionOwnershipGuard> };
 
@@ -1487,7 +1515,17 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
               // Preserve lazy workflow properties, especially the unused step writer.
               ...Object.getOwnPropertyDescriptors(params),
               [OWNERSHIP_GUARD]: { enumerable: true, value: { scope, key } },
-              [PUBSUB_SYMBOL]: { enumerable: true, value: pubsub && fencePubSub(pubsub, guard) },
+              [PUBSUB_SYMBOL]: {
+                enumerable: true,
+                value:
+                  pubsub &&
+                  withExecutionStreamProducer(fencePubSub(pubsub, guard), {
+                    runId,
+                    agentId,
+                    mastra: params.mastra,
+                    claim,
+                  }),
+              },
               writer: {
                 enumerable: true,
                 get() {

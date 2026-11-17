@@ -47,7 +47,8 @@ const NO_SESSION_ROWS: SessionRowsResponse = {
 const NO_SESSION_ACTIVITY: SessionActivity = {
   runningSessionIds: [],
   parkedSessionIds: [],
-  initializingSessionIds: [],
+  cardStatuses: {},
+  sessionHeldCardIds: [],
   cards: { working: 0, waiting: 0 },
 };
 const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
@@ -78,7 +79,7 @@ function card(title: string, stage = 'intake') {
 }
 
 function boardSnapshot(title: string, stage?: string) {
-  return { workItems: [card(title, stage)], runningSessionIds: [], parkedSessionIds: [] };
+  return { workItems: [card(title, stage)] };
 }
 
 function inner({ children }: { children: React.ReactNode }) {

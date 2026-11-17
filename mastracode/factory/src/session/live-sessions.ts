@@ -4,9 +4,10 @@ import type { PubSub } from '@mastra/core/events';
 import { touchFeed } from '../feed-events.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 
-/** The slice of a live session this registry needs: its id, its run, its parked tools, and who it works for. */
+/** The slice of a live session this registry needs: its id, its thread, its run, its parked tools, and who it works for. */
 export interface LiveSession {
   readonly identity: { getId(): string };
+  readonly thread: { getId(): string | null };
   readonly run: { isRunning(): boolean };
   readonly state: { get(): Readonly<{ factoryOrgId?: string; factoryProjectId?: string }> };
   readonly displayState: { get(): { pendingSuspensions: ReadonlyMap<string, { toolName: string }> } };
@@ -97,6 +98,12 @@ export class LiveSessions {
   /** Whether the session has an agent run in flight right now. */
   isRunning(sessionId: string): boolean {
     return this.#byId.get(sessionId)?.session.run.isRunning() ?? false;
+  }
+
+  /** The session on this thread now: a run always lies on its session's current thread. */
+  sessionOnThread(threadId: string): string | undefined {
+    for (const [sessionId, { session }] of this.#byId) if (session.thread.getId() === threadId) return sessionId;
+    return undefined;
   }
 
   /** The tool the session is parked on, oldest first, or nothing when no answer is owed. */

@@ -79,9 +79,7 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
         ),
       }),
     ),
-    http.get(`${projectUrl}/work-items`, () =>
-      HttpResponse.json({ workItems: data.items, runningSessionIds: data.runningSessionIds }),
-    ),
+    http.get(`${projectUrl}/work-items`, () => HttpResponse.json({ workItems: data.items })),
     http.post(`${projectUrl}/work-items`, () => {
       data.items = [{ ...reviewItem }];
       return HttpResponse.json({ workItem: data.items[0] });

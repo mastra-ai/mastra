@@ -53,7 +53,7 @@ export async function knowledgeReadScopeFor(
   compiled: CompiledKnowledgeScopes,
   principals: readonly string[],
   lookupScopes: KnowledgeScopeLookup,
-): Promise<KnowledgeReadScope> {
+): Promise<Exclude<KnowledgeReadScope, 'all'>> {
   const addresses = new Set<string>();
   const prefixes = new Map<string, { declaration: string; prefix: string }>();
   const parents = new Map<string, Set<string>>();

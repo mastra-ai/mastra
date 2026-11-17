@@ -241,8 +241,10 @@ describe('DurableAgent observability tracing', () => {
       const { output, cleanup } = await durableAgent.stream('What is the weather in Paris?');
       await output.consumeStream();
 
+      await vi.waitFor(() =>
+        expect(endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.')).toBeDefined(),
+      );
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.');
-      expect(finalCall).toBeDefined();
       expect(finalCall.output.toolCalls).toEqual([
         { toolCallId: 'call_1', toolName: 'get_weather', args: { city: 'Paris' } },
       ]);
@@ -313,8 +315,8 @@ describe('DurableAgent observability tracing', () => {
       const { output, cleanup } = await durableAgent.stream('Hi');
       await output.consumeStream();
 
+      await vi.waitFor(() => expect(endGenerationCalls.find(call => call.output?.text === 'Hello')).toBeDefined());
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'Hello');
-      expect(finalCall).toBeDefined();
       expect(finalCall.output.toolCalls).toBeUndefined();
 
       cleanup();

@@ -52,6 +52,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   sessionStatus,
+  sessionHolds,
   ownerCurrent = true,
   onMove,
   onRemove,
@@ -78,11 +79,14 @@ export function WorkItemCard({
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
-  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  /** The card's marker, resolved once for the whole board: the status its row in the sidebar shows. */
   sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
   /**
    * Whether the board read everything that says who holds the card. When it has not, the card
-   * refuses no move up front and the server, which holds the rule too, decides.
+   * refuses no move up front and the server, which holds the rule too, decides. A suggested run
+   * skips that rule on the server, so the card holds it back instead.
    */
   ownerCurrent?: boolean;
   onMove: (toStage: string) => void;
@@ -94,7 +98,12 @@ export function WorkItemCard({
   const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
-  const { moves, proposedRunLabel, state, actions } = cardControls({
+  const {
+    moves,
+    proposedRunLabel,
+    state,
+    actions: offered,
+  } = cardControls({
     item,
     definition,
     columnStage,
@@ -106,6 +115,7 @@ export function WorkItemCard({
     approvingDecisionId,
     retryingDecisionId,
     sessionStatus,
+    sessionHolds,
     onApproveProposal,
     onRetryDecision,
     onMove,
@@ -119,6 +129,8 @@ export function WorkItemCard({
   const busy = lockedByYou || owner.kind === 'automation';
   // Your own move in flight is known here for certain; anyone else's hold only once the board read it.
   const movesOwner: BoardCardOwner = ownerCurrent || lockedByYou ? owner : { kind: 'free' };
+  const actions =
+    ownerCurrent || status.kind !== 'waiting' ? offered : offered.map(action => ({ ...action, disabled: true }));
   const dragPayload: DragPayload | undefined = lockedByYou
     ? undefined
     : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: movesOwner.kind };
@@ -131,6 +143,7 @@ export function WorkItemCard({
     proposedRunLabel,
     approvingDecisionId,
     owner: movesOwner,
+    ownerCurrent,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -155,7 +168,11 @@ export function WorkItemCard({
   };
   const relatedLinks = relatedItems.map(relatedLink);
   const upstreamLinks = (
-    <WorkItemUpstreamLinks item={item} shownAsRelated={relatedItems.flatMap(related => related.url ?? [])} />
+    <WorkItemUpstreamLinks
+      item={item}
+      shownAsRelated={relatedItems.flatMap(related => related.url ?? [])}
+      short={layout === 'list'}
+    />
   );
 
   if (layout === 'list') {

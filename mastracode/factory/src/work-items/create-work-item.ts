@@ -265,6 +265,8 @@ export async function createFactoryWorkItem({
       actor: { type: 'system', id: 'factory-intake-route' },
       ingress: { type: 'rule', identity: `work-item:${id}:intake-route` },
       cause: 'work_item_created',
+      // The route's target is admin-authored, so the first phase's next phases don't restrict it.
+      routeFiling: true,
     });
     if (!moved) return notFound;
     if (moved.status === 'rejected') {

@@ -28,8 +28,11 @@ import { loadExporter, loadSignalExporter } from './loadExporter.js';
 import { convertLog } from './log-converter.js';
 import { resolveProviderConfig } from './provider-configs.js';
 import type { ResolvedProviderConfig } from './provider-configs.js';
-import { SpanConverter } from './span-converter.js';
+import { SCHEMA_URLS, SpanConverter } from './span-converter.js';
+import type { SpanFormat } from './span-converter.js';
 import type { ExportProtocol, OtelExporterConfig } from './types.js';
+
+const FORMAT: SpanFormat = 'GenAI_v1_41_0';
 
 /**
  * Wrapper around a SpanExporter that logs export results when debug mode is enabled.
@@ -325,7 +328,7 @@ export class OtelExporter extends BaseExporter {
         packageName: '@mastra/otel-exporter',
         serviceName,
         config: this.config,
-        format: 'GenAI_v1_38_0',
+        format: FORMAT,
       });
 
       const exporterForProcessor = this.isDebug
@@ -377,10 +380,14 @@ export class OtelExporter extends BaseExporter {
         ? new DebugLogExporterWrapper(logExporter, msg => this.debugLog(msg))
         : logExporter;
 
-      const resource = resourceFromAttributes({
-        ...(this.config.resourceAttributes ?? {}),
-        [ATTR_SERVICE_NAME]: this.observabilityConfig?.serviceName || 'mastra-service',
-      });
+      const schemaUrl = SCHEMA_URLS[FORMAT];
+      const resource = resourceFromAttributes(
+        {
+          ...(this.config.resourceAttributes ?? {}),
+          [ATTR_SERVICE_NAME]: this.observabilityConfig?.serviceName || 'mastra-service',
+        },
+        { schemaUrl },
+      );
 
       this.loggerProvider = new LoggerProvider({
         resource,
@@ -395,7 +402,7 @@ export class OtelExporter extends BaseExporter {
         ],
       });
 
-      this.otelLogger = this.loggerProvider.getLogger('@mastra/otel-exporter');
+      this.otelLogger = this.loggerProvider.getLogger('@mastra/otel-exporter', undefined, { schemaUrl });
 
       this.debugLog(`Log export initialized (endpoint: ${logEndpoint})`);
     } catch (error) {
