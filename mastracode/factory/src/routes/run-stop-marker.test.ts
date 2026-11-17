@@ -1,3 +1,4 @@
+import { ABORT_AGENT_CONTROLLER_SESSION_ROUTE } from '@mastra/server/handlers/agent-controller';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
@@ -5,6 +6,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createRunStopMarker } from './run-stop-marker.js';
 
 const ORG_ID = 'org-1';
+const ABORT_ROUTE = `/api${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path}`;
 
 async function setup() {
   const { workItems } = await createFactoryStorageForTests();
@@ -25,38 +27,36 @@ async function setup() {
     '*',
     createRunStopMarker(() => workItems),
   );
-  app.post('/api/agent-controller/:controllerId/sessions/:sessionId/abort', c => {
+  app.post(ABORT_ROUTE, c => {
     aborted.push(c.req.param('sessionId'));
     return c.json({ success: true });
   });
-  app.get('/api/agent-controller/:controllerId/sessions/:sessionId/abort', c => c.json({}));
-  const stoppedSince = (since: Date) =>
-    workItems.runBindingStoppedSince({ orgId: ORG_ID, bindingId: binding.id, since });
-  return { app, aborted, stoppedSince };
+  app.get(ABORT_ROUTE, c => c.json({}));
+  const stopRequested = () => workItems.runBindingStopRequested({ orgId: ORG_ID, bindingId: binding.id });
+  const startRun = () => workItems.clearRunBindingStopRequest({ orgId: ORG_ID, bindingId: binding.id });
+  return { app, aborted, stopRequested, startRun };
 }
 
 describe('createRunStopMarker', () => {
-  it('marks the session run as stopped before the abort runs', async () => {
-    const { app, aborted, stoppedSince } = await setup();
-    const runStart = new Date(Date.now() - 1_000);
+  it('marks the session run as stopped before the abort runs, until the next run starts', async () => {
+    const { app, aborted, stopRequested, startRun } = await setup();
 
     const response = await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
 
     expect(response.status).toBe(200);
     expect(aborted).toEqual(['session-1']);
-    expect(await stoppedSince(runStart)).toBe(true);
-    // A run that starts after the stop is not covered by it.
-    expect(await stoppedSince(new Date(Date.now() + 1_000))).toBe(false);
+    expect(await stopRequested()).toBe(true);
+    await startRun();
+    expect(await stopRequested()).toBe(false);
   });
 
   it('leaves the run unmarked for other requests and other sessions', async () => {
-    const { app, stoppedSince } = await setup();
-    const runStart = new Date(Date.now() - 1_000);
+    const { app, stopRequested } = await setup();
 
     await app.request('/api/agent-controller/code/sessions/session-1/abort');
     await app.request('/api/agent-controller/code/sessions/session-2/abort', { method: 'POST' });
 
-    expect(await stoppedSince(runStart)).toBe(false);
+    expect(await stopRequested()).toBe(false);
   });
 
   it('still aborts when the stop cannot be recorded', async () => {
@@ -70,7 +70,7 @@ describe('createRunStopMarker', () => {
         },
       })),
     );
-    app.post('/api/agent-controller/:controllerId/sessions/:sessionId/abort', c => {
+    app.post(ABORT_ROUTE, c => {
       aborted.push(c.req.param('sessionId'));
       return c.json({ success: true });
     });

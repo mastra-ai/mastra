@@ -86,14 +86,6 @@ export function CardStatus({ status, compact = false }: { status: BoardCardStatu
     );
   }
 
-  if (status.kind === 'stopped') {
-    return (
-      <Txt as="span" variant="meta" tone="muted" role="status" className="shrink-0">
-        {status.label}
-      </Txt>
-    );
-  }
-
   if (status.kind === 'busy') {
     return (
       <Txt

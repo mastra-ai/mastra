@@ -215,14 +215,15 @@ export function cardPrimaryAction({
 
 export type CardAction = CardPrimaryAction & { disabled?: boolean; urgent?: boolean };
 
-export function retryButton(
-  status: BoardCardStatus,
-  onRetry: (decisionId: string) => void,
-): CardPrimaryAction | undefined {
-  if (status.kind !== 'error' && status.kind !== 'stopped') return undefined;
-  const { retryDecisionId } = status;
-  if (retryDecisionId === undefined) return undefined;
-  return { label: status.kind === 'stopped' ? 'Start again' : 'Retry', start: () => onRetry(retryDecisionId) };
+export function retryButton({
+  decisionId,
+  onRetry,
+}: {
+  decisionId?: string;
+  onRetry: (decisionId: string) => void;
+}): CardPrimaryAction | undefined {
+  if (decisionId === undefined) return undefined;
+  return { label: 'Retry', start: () => onRetry(decisionId) };
 }
 
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */

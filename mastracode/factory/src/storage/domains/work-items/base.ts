@@ -228,7 +228,6 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'notification_delivery_failed',
   'run_terminal_event_missing',
   'run_incomplete',
-  'run_stopped',
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
@@ -3628,8 +3627,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Mark that a client stopped the session's run on purpose, so the dispatcher settles it instead of
-   * retrying. Keyed by session alone: the abort request was already authorized for this session.
+   * A client asked to stop the session's run on purpose. Stored, not held in memory: the dispatcher
+   * watching that run can be on another replica. Keyed by session alone: the abort request was
+   * already authorized for this session.
    */
   async requestRunBindingStop(input: { sessionId: string; at: Date }): Promise<number> {
     return this.#db.updateMany(
@@ -3639,13 +3639,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
-  async runBindingStoppedSince(input: { orgId: string; bindingId: string; since: Date }): Promise<boolean> {
+  /** Before each kickoff: a stop requested earlier, even with nothing running, is not about the run it starts. */
+  async clearRunBindingStopRequest(input: { orgId: string; bindingId: string }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId },
+      { stop_requested_at: null },
+    );
+  }
+
+  async runBindingStopRequested(input: { orgId: string; bindingId: string }): Promise<boolean> {
     const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
       id: input.bindingId,
       org_id: input.orgId,
     });
-    const stoppedAt = row?.stop_requested_at as Date | null | undefined;
-    return stoppedAt != null && stoppedAt.getTime() >= input.since.getTime();
+    return row?.stop_requested_at != null;
   }
 
   /**

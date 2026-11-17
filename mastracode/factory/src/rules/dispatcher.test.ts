@@ -4344,12 +4344,12 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   it.each([
-    { when: 'during the run', stoppedDuringRun: true, status: 'failed', failureCode: 'run_stopped', sends: 1 },
-    // A stop left by an earlier run must not swallow a later run's abort.
-    { when: 'before the run', stoppedDuringRun: false, status: 'retry', failureCode: 'unknown', sends: 2 },
+    { when: 'during the run', stoppedDuringRun: true, settled: { status: 'superseded', failureCode: null }, sends: 1 },
+    // A stop left while nothing ran must not swallow a later run's abort.
+    { when: 'before the run', stoppedDuringRun: false, settled: { status: 'retry', failureCode: 'unknown' }, sends: 2 },
   ])(
-    'settles an aborted run whose session was stopped $when as $status',
-    async ({ stoppedDuringRun, status, failureCode, sends }) => {
+    'settles an aborted run whose session was stopped $when as $settled.status',
+    async ({ stoppedDuringRun, settled, sends }) => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, {
         type: 'invokeSkill',
@@ -4402,7 +4402,7 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
       await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status, failureCode });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject(settled);
       expect(session.sendSignal).toHaveBeenCalledTimes(sends);
     },
   );
@@ -7623,6 +7623,32 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
   });
 
+  it.each([
+    { when: 'stopped during the run', stopped: true, status: 'sent', sends: 1 },
+    { when: 'aborted without a stop', stopped: false, status: 'retry', sends: 1 },
+  ])('settles a kickoff whose run was $when as $status', async ({ stopped, status, sends }) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, sendNotificationSignal } = createSession(undefined, { agentEndReason: 'aborted' });
+    const send = sendNotificationSignal.getMockImplementation()!;
+    sendNotificationSignal.mockImplementation(async (input, options) => {
+      if (stopped) await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      return send(input, options);
+    });
+    const { transitionService } = await preparePromptKickoff(storage);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(sends);
+  });
+
   it('dispatches a pending start on the first tick even when the deferred-decision queue exceeds the batch size', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Deeper than one tick's claim limit: without starts-first claiming these
@@ -9494,6 +9520,35 @@ describe('review status comment lifecycle', () => {
     expect(comments()[0]!.body).toContain('Review failed');
     expect(comments()[0]!.body).not.toContain('ChatGPT account');
     expect(comments()[0]!.body).not.toContain('reviewing.gif');
+  });
+
+  it('ends the progress display as cancelled, not failed, when the review run is stopped', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = await queueDecision(
+      storage,
+      { type: 'invokeSkill', role: 'review', prompt: 'Review this pull request.', idempotencyKey: 'review-stopped' },
+      { armed: true },
+    );
+    await bindReviewRun(storage, queued.item.id);
+    const conversation = pullRequestConversation();
+    const { controller, session } = createSession(undefined, { agentEndReason: 'aborted' });
+    const send = session.sendSignal.getMockImplementation()!;
+    session.sendSignal.mockImplementation((input, options) => {
+      const stopped = storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      const result = send(input, options);
+      return { ...result, accepted: stopped.then(() => result.accepted) };
+    });
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: queued.transitionService,
+      storage,
+      ownerId: 'worker-1',
+      boards: autoStartingBoards(),
+      reportReviewStatus: conversation.reportReviewStatus,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'superseded' });
+    expect(conversation.events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'cancelled']);
   });
 
   it('says why a review attempt failed in fixed public wording, never the provider text', async () => {

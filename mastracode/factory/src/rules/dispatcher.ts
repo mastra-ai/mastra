@@ -164,6 +164,12 @@ const RECONCILE_INTERVAL_MS = 30_000;
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
 class FactoryDecisionSuperseded extends Error {}
 
+/**
+ * A client stopped the run on purpose (Stop, Esc, /stop). Like a card that moved on, nothing is
+ * left for the decision to do: it settles as superseded, neither failed nor retried.
+ */
+class FactoryRunStopped extends FactoryDecisionSuperseded {}
+
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
 class FactoryDecisionPostponed extends Error {
   constructor(readonly availableAt?: Date) {
@@ -386,7 +392,7 @@ function watchRun(
       }
       if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
-        if (await stopRequested?.()) throw new FactoryDispatchError('run_stopped', `${label} was stopped.`);
+        if (await stopRequested?.()) throw new FactoryRunStopped();
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
         // the run because observation/reflection failed. Surface that real
@@ -1772,11 +1778,11 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
-            stopRequested: () =>
-              this.#storage.runBindingStoppedSince({ orgId: record.orgId, bindingId: binding.id, since }),
+            stopRequested: () => this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id }),
           });
 
           const sendKickoff = async () => {
+            await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
             const result = session.sendSignal(
               {
                 id: deliveryId,
@@ -3377,11 +3383,11 @@ export class FactoryDecisionDispatcher {
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
-            stopRequested: () =>
-              this.#storage.runBindingStoppedSince({ orgId: record.orgId, bindingId: binding.id, since }),
+            stopRequested: () => this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id }),
           });
-          const sendKickoff = (dedupeKey: string) =>
-            awaitNotification(
+          const sendKickoff = async (dedupeKey: string) => {
+            await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
+            return awaitNotification(
               () =>
                 session.sendNotificationSignal(
                   {
@@ -3397,6 +3403,7 @@ export class FactoryDecisionDispatcher {
                 ),
               true,
             );
+          };
           try {
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
             let deliveryGeneration = 0;
@@ -3434,6 +3441,11 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
+      // The kickoff started its run; retrying would undo the stop.
+      if (error instanceof FactoryRunStopped) {
+        await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
