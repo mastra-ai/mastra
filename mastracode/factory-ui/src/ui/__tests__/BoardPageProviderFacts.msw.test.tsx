@@ -92,6 +92,7 @@ it.each([
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
     expect(card).toHaveTextContent(reference);
+    if (layout === 'list') expect(within(card).getByText(reference, { exact: true })).toBeVisible();
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();

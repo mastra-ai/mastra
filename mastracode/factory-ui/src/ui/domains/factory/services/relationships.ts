@@ -108,7 +108,7 @@ const CODE_HOST_REFERENCES: Partial<Record<WorkItemSource, Pick<CodeHostReferenc
 function codeHostReference(item: IdentifiableItem, identifier: string): CodeHostReference | undefined {
   const codeHost = CODE_HOST_REFERENCES[item.source];
   const key = codeHost && /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier);
-  return codeHost && key ? { ...codeHost, number: key[2]!, repository: key[1] } : undefined;
+  return codeHost && key ? { ...codeHost, number: key[2], repository: key[1] } : undefined;
 }
 
 export function workItemReference(item: IdentifiableItem, contextRepository?: string): string | undefined {
