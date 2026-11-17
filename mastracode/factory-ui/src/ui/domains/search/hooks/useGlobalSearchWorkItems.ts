@@ -1,10 +1,9 @@
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionCardsQuery } from '../../../../hooks/useWorkItems';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
 
@@ -39,7 +38,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string) {
  * so no provider is asked for its list.
  */
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string) {
-  const sessionCards = useSidebarWorkItemsQuery(factoryId);
+  const sessionCards = useSessionCardsQuery(factoryId);
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
   const settled = useDebouncedValue(typed.trim(), 150);
   // Clearing the box goes back to the cached empty search at once.
@@ -48,14 +47,9 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
   const everything = useUnstartedSearch(factoryId, '');
   const unstarted = search.data?.cards ?? NO_CARDS;
 
-  // Kept across renders that load nothing new, so what is derived from it downstream is too.
-  const loaded = useMemo(() => [...withSessions, ...unstarted], [withSessions, unstarted]);
-
   return {
     withSessions,
     unstarted,
-    /** Every card either read loaded, for acting on a row. */
-    loaded,
     count: everything.data?.total ?? 0,
     pending: sessionCards.isLoading || search.isLoading,
     failed: sessionCards.isError || search.isError,

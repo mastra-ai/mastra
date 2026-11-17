@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { recreateSessionSandbox } from '../services/user-sessions';
 
 export interface RecreateSandboxTarget {
@@ -26,7 +27,7 @@ export function useRecreateSessionSandbox(
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
       toast('Sandbox recreated. Send a message to continue.');
       onSuccess?.();
     },

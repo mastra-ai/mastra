@@ -2096,13 +2096,14 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toHaveLength(1);
     });
 
-    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+    it("primes the woken session owner's custom providers after resolving its credential policy", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
-      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+      // A user session runs on its owner's credentials, so on their own endpoints.
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').create({
+        owner: { orgId: 'org-1', userId: 'user-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'acme',
           name: 'Acme',
@@ -3067,6 +3068,23 @@ describe('MastraFactory.prepare integrations', () => {
   it('omits the source-control owner from the routes context when github is absent', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
     expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
+  it('hands workers the Not routed lookup only when the boards domain is ready', async () => {
+    const contextFor = async (boardsReady: boolean) => {
+      const storage = fakeStorage();
+      if (!boardsReady) vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'boards');
+      const workers = vi.fn((_ctx: IntegrationContext) => [{ name: 'custom-poller' } as unknown as MastraWorker]);
+      await new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'custom', workers })],
+      }).prepare();
+      return workers.mock.calls[0]![0];
+    };
+
+    expect((await contextFor(true)).runtime?.notRouted).toBeDefined();
+    expect((await contextFor(false)).runtime?.notRouted).toBeUndefined();
   });
 
   it('does not collect workers from integrations that are not ready', async () => {

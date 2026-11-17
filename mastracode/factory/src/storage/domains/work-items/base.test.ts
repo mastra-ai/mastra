@@ -1054,6 +1054,30 @@ describe('work item subscriptions', () => {
     ).toEqual([]);
   });
 
+  it('lists a follow made or dropped after the Factory was last listed', async () => {
+    const { storage, item, other } = await seed();
+    const followed = async () =>
+      (await storage.listProjectSubscriptions({ orgId: 'org1', factoryProjectId: 'project1' })).map(
+        row => `${row.sessionId}:${row.workItemId}`,
+      );
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-15T10:00:00Z') });
+    try {
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+      vi.setSystemTime(Date.now() + 10_000);
+      expect(await followed()).toEqual([`sess-a:${item.id}`]);
+
+      await storage.subscribeToWorkItem(follow(other.id, 'sess-b', 'subscribed'));
+      expect(await followed()).toEqual([`sess-a:${item.id}`, `sess-b:${other.id}`]);
+
+      vi.setSystemTime(Date.now() + 10_000);
+      expect(await followed()).toEqual([`sess-a:${item.id}`, `sess-b:${other.id}`]);
+      await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' });
+      expect(await followed()).toEqual([`sess-b:${other.id}`]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('unsubscribes one session from one item', async () => {
     const { storage, item, other } = await seed();
     await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));

@@ -157,7 +157,7 @@ describe('KnowledgePageDetail', () => {
       />,
     );
     const detail = screen.getByRole('article', { name: 'Refunds' });
-    expect(within(detail).getByText('In Acme')).toBeTruthy();
+    expect(within(within(detail).getByRole('region', { name: 'Details' })).getByText('Acme')).toBeTruthy();
     expect(within(detail).getByText('How refunds work')).toBeTruthy();
     expect(within(detail).getByText('Pinned for org:acme')).toBeTruthy();
     expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();

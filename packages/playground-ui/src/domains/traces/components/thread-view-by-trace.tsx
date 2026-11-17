@@ -15,8 +15,8 @@ import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-sour
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -170,14 +170,14 @@ function ThreadTraceRowContent({
         <ThreadTrace.TabList>
           <ThreadTrace.Tab value="messages">
             <Icon size="xs">
-              <IconBubbleText />
+              <IconChatBubble7 />
             </Icon>
             Messages
           </ThreadTrace.Tab>
           {withFeedback && (
             <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <IconBubbleSparkle />
+                <IconChatBubble7Plus />
               </Icon>
               Feedback
             </ThreadTrace.Tab>

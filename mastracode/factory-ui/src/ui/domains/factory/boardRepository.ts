@@ -1,3 +1,4 @@
+import type { FactoryEnvironmentRepository } from '../workspaces/services/environment';
 import type { LinkedRepositoryPayload } from '../workspaces/services/github';
 import type { IntakeConfig } from './services/intake';
 
@@ -7,7 +8,7 @@ export function cardLinearProjectId(source: string, metadata: Record<string, unk
   return metadata.linearProjectId;
 }
 
-export function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
+function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
   const provider = repository.provider ?? 'github';
   if (source === 'github-issue' || source === 'github-pr') return provider === 'github';
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return provider === 'gitlab';
@@ -50,16 +51,63 @@ export function cardRepositorySlug(
   return config?.linear.repositoryByLinearProject?.[projectId];
 }
 
-/** The linked repository a card's source lives in, else the board's primary repository. */
+interface CardRepositoryFacts {
+  source: string;
+  metadata?: Record<string, unknown>;
+  workItem?: { metadata: Record<string, unknown> | null };
+}
+
+export function cardSourceMetadata(card: CardRepositoryFacts): Record<string, unknown> {
+  return { ...card.metadata, ...card.workItem?.metadata };
+}
+
+export type CardSessionRepository =
+  | { kind: 'resolved'; repository: LinkedRepositoryPayload }
+  | { kind: 'firstInEnvironment'; candidates: LinkedRepositoryPayload[] }
+  | { kind: 'unavailable'; reason: string };
+
+export function cardSessionRepository(
+  repositories: LinkedRepositoryPayload[],
+  card: CardRepositoryFacts,
+  config: IntakeConfig | undefined,
+): CardSessionRepository {
+  const compatible = repositories.filter(repository => repositoryMatchesCardSource(repository, card.source));
+  if (compatible.length === 0) {
+    return { kind: 'unavailable', reason: "No repository matching this card's provider is linked to this Factory." };
+  }
+  const slug = cardRepositorySlug(card.source, cardSourceMetadata(card), config, repositories);
+  if (slug === undefined) {
+    const [only] = compatible;
+    return compatible.length === 1 && only
+      ? { kind: 'resolved', repository: only }
+      : { kind: 'firstInEnvironment', candidates: compatible };
+  }
+  const named = compatible.find(candidate => candidate.slug === slug);
+  if (named) return { kind: 'resolved', repository: named };
+  return {
+    kind: 'unavailable',
+    reason: `Repository ${slug} is not linked to this Factory with a provider matching this card.`,
+  };
+}
+
+export function firstEnvironmentRepository(
+  candidates: LinkedRepositoryPayload[],
+  environment: FactoryEnvironmentRepository[],
+) {
+  const first = environment
+    .filter(entry => entry.inEnvironment)
+    .sort((a, b) => a.position - b.position)
+    .find(entry => candidates.some(candidate => candidate.projectRepositoryId === entry.projectRepositoryId));
+  return first && candidates.find(candidate => candidate.projectRepositoryId === first.projectRepositoryId);
+}
+
 export function cardProjectRepositoryId<Fallback extends string | undefined>(
   repositories: LinkedRepositoryPayload[],
-  card: {
-    source: string;
-    metadata?: Record<string, unknown>;
-    workItem?: { metadata: Record<string, unknown> | null };
-  },
+  card: CardRepositoryFacts,
   fallback: Fallback,
 ): string | Fallback {
-  const metadata = { ...card.metadata, ...card.workItem?.metadata };
-  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? fallback;
+  return (
+    findUniqueRepositoryByProviderId(repositories, card.source, cardSourceMetadata(card))?.projectRepositoryId ??
+    fallback
+  );
 }

@@ -492,7 +492,7 @@ describe('Jira board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open Jira issue is not a status change.
       { event: 'issueObserved', boardEvent: undefined },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

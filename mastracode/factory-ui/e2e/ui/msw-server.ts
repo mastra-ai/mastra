@@ -3,6 +3,7 @@ import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
 import { boardReadHandlers } from './board-reads';
+import { sessionReadHandlers } from './session-reads';
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -23,6 +24,9 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient custom endpoints: every provider list reads them next to the
+  // catalog above. Custom-endpoint tests override it with `server.use(...)`.
+  http.get('*/web/config/custom-providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
@@ -43,6 +47,20 @@ export const server = setupServer(
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
+  // Ambient intake order: Work alone, worked out from the routes. Intake order tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/intake-order', () =>
+    HttpResponse.json({
+      boards: [{ boardKey: 'work', name: 'Work' }],
+      origin: 'derived',
+      evaluator: 'route-list',
+      comparison: { compared: 0, differing: 0, notRouted: 0 },
+      canEdit: false,
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/intake/skipped', () => HttpResponse.json({ skipped: [] })),
+  http.get('*/web/factory/projects/:id/intake/not-routed', () =>
+    HttpResponse.json({ notRouted: [], nextCursor: null, canEdit: false }),
+  ),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
@@ -71,6 +89,8 @@ export const server = setupServer(
   // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   ...boardReadHandlers,
+  http.get('*/web/factory/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
+  ...sessionReadHandlers,
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
   http.get('*/web/factory/projects/:id/work-items/starters', () =>
     HttpResponse.json({

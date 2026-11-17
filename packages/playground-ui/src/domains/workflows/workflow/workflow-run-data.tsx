@@ -40,7 +40,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   return (
     <Collapsible className="border-t border-border" data-testid="workflow-run-data">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
-        <IconServer1 aria-hidden className="size-3.5 text-muted-foreground" />
+        <IconServer1 aria-hidden className="size-icon-sm text-muted-foreground" />
         <span>Run data</span>
         <DisclosureChevron direction="right" className="ml-auto size-4 text-muted-foreground" />
       </CollapsibleTrigger>
@@ -48,17 +48,17 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
         <Tabs defaultTab={tab} value={tab} onValueChange={setSelectedTab} className="min-w-0 px-5 pb-4">
           <TabList variant="pill" className="mb-3">
             <Tab value="input">
-              <IconArrowWallDown aria-hidden className="size-3.5" />
+              <IconArrowWallDown aria-hidden className="size-icon-sm" />
               Input
             </Tab>
             {hasOutput && (
               <Tab value="output">
-                <IconArrowUpWall aria-hidden className="size-3.5" />
+                <IconArrowUpWall aria-hidden className="size-icon-sm" />
                 Output
               </Tab>
             )}
             <Tab value="execution">
-              <IconCodeBrackets aria-hidden className="size-3.5" />
+              <IconCodeBrackets aria-hidden className="size-icon-sm" />
               Execution
             </Tab>
           </TabList>

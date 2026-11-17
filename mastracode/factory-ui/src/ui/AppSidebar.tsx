@@ -100,6 +100,6 @@ function sameLocation(a: BoardConfigLocation, b: BoardConfigLocation | undefined
     a.boardId === b.boardId &&
     a.phaseKey === b.phaseKey &&
     a.skills === b.skills &&
-    a.moves === b.moves
+    a.rules === b.rules
   );
 }

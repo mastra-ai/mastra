@@ -3,6 +3,7 @@ import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-quer
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { answerParkedApproval } from '../services/user-sessions';
 
 /** Answers the tool call a followed card's phase session waits on, from the row of the session following it. */
@@ -19,6 +20,7 @@ export function useAnswerParkedApproval(factoryId: string, sessionId: string | u
     },
     onSuccess: (_, decision) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
       toast(decision === 'approve' ? 'Approved' : 'Declined');
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to answer the approval'),
