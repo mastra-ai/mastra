@@ -10,6 +10,7 @@ describe('sessionRowStatus', () => {
 
   it('shows a run parked on a prompt as waiting while it is still in flight, and runs no marker when idle', () => {
     expect(sessionRowStatus({ running: true, initializing: false, attention: true })).toBe('ready');
+    expect(sessionRowStatus({ running: true, initializing: true, attention: true })).toBe('ready');
     expect(sessionRowStatus({ running: false, initializing: false, attention: true })).toBe('ready');
     expect(sessionRowStatus({ running: false, initializing: false })).toBeUndefined();
   });

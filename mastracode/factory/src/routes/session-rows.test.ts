@@ -330,6 +330,24 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(await readRows(running), 'never-set-up')?.status).toBe('initializing');
   });
 
+  it('marks a session waiting when its run asks a person before its sandbox ever came up', async () => {
+    await createSession('asking-first', { materialized: false });
+    await createCardSession('card-asking-first', 'Asks first', { materialized: false });
+
+    const body = await readRows(
+      buildApp('u1', {
+        running: [
+          { threadId: 'asking-first', resourceId: 'u1' },
+          { threadId: 'card-asking-first', resourceId: 'u1' },
+        ],
+        parked: new Set(['asking-first', 'card-asking-first']),
+      }),
+    );
+
+    expect(rowOf(body, 'asking-first')?.status).toBe('waiting');
+    expect(rowOf(body, 'card-asking-first')?.status).toBe('waiting');
+  });
+
   it("marks the follower's own session waiting when the card it follows parks on a person", async () => {
     const card = await createCardSession('card-run', 'Followed');
     await createSession('follower');

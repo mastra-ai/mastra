@@ -142,10 +142,10 @@ describe('session row status', () => {
 
   it.each([
     [
-      'a sandbox coming up over a parked run',
+      'a run parked on a person before its sandbox came up',
       { materializedAt: null },
       { runningSessionIds: new Set(['s1']), parkedSessionIds: new Set(['s1']) },
-      'initializing',
+      'waiting',
     ],
     ['a run on a finished card', {}, { cards: [doneCard], runningSessionIds: new Set(['s1']) }, 'working'],
     ['a parked run on a finished card', {}, { cards: [doneCard], parkedSessionIds: new Set(['s1']) }, 'waiting'],
