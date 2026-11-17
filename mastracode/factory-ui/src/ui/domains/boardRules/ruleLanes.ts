@@ -232,16 +232,18 @@ export function intakePosition(order: readonly { boardKey: string; name: string 
 }
 
 /**
- * Where a new item no rule on this board takes goes next: "Otherwise: checked by Work next, then Not routed". Falls
- * back to a generic line while the intake order is loading or doesn't list the board.
+ * Where a new item no rule on this board takes goes next: "Otherwise: checked by Work next, then Not routed", or
+ * "…by Work next, then the boards after it, then Not routed" when more than one board follows. Falls back to a generic
+ * line while the intake order is loading or doesn't list the board.
  */
 export function arrivalFallback(order: readonly { boardKey: string; name: string }[] | undefined, boardKey: string) {
   const at = order?.findIndex(board => board.boardKey === boardKey) ?? -1;
   if (!order || at === -1) return 'Otherwise: checked by the next board, then Not routed';
   const next = order[at + 1]?.name;
-  return next
-    ? `Otherwise: checked by ${next} next, then Not routed`
-    : 'Otherwise: Not routed (no board after this one)';
+  if (!next) return 'Otherwise: Not routed (no board after this one)';
+  return at + 2 < order.length
+    ? `Otherwise: checked by ${next} next, then the boards after it, then Not routed`
+    : `Otherwise: checked by ${next} next, then Not routed`;
 }
 
 /** 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th". */
