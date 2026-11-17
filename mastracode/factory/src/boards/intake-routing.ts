@@ -251,29 +251,18 @@ export async function arrivalRuleFacts(
  */
 export const ROUTE_AGAIN_KEY_PREFIX = 'intake-route-again:';
 
-/** The env var that forces an evaluator on every project when the Factory's `intake.evaluator` option doesn't. */
+/** The env var that forces an evaluator on every project, for deployments with projects from before intake order. */
 export const INTAKE_EVALUATOR_ENV = 'FACTORY_INTAKE_EVALUATOR';
 
-/** An evaluator this process forces on every project, and what forced it. */
-export interface ForcedIntakeEvaluator {
-  evaluator: IntakeEvaluator;
-  source: 'option' | 'env';
-}
-
-/** Where a project's evaluator came from: forced, its own setting, or none (an older project). */
-export type IntakeEvaluatorSource = ForcedIntakeEvaluator['source'] | 'project' | 'legacy';
-
 /**
- * The evaluator this process forces on every project: the configured one, else a valid
- * `FACTORY_INTAKE_EVALUATOR`. Undefined when neither is set: each project uses its own.
+ * The evaluator this process forces on every project: a valid `FACTORY_INTAKE_EVALUATOR`.
+ * Undefined when it isn't set: each project uses its own.
  */
 export function intakeEvaluatorFrom(
-  configured: IntakeEvaluator | undefined,
   env: Record<string, string | undefined> = process.env,
-): ForcedIntakeEvaluator | undefined {
-  if (configured) return { evaluator: configured, source: 'option' };
+): IntakeEvaluator | undefined {
   const value = env[INTAKE_EVALUATOR_ENV];
-  return value === 'intake-order' || value === 'route-list' ? { evaluator: value, source: 'env' } : undefined;
+  return value === 'intake-order' || value === 'route-list' ? value : undefined;
 }
 
 /**

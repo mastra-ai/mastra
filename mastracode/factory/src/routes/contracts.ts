@@ -247,11 +247,10 @@ const intakeOrderResponseSchema = z.object({
   /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
   evaluator: z.enum(['route-list', 'intake-order']),
   /**
-   * What decided `evaluator`: the Factory's `intake.evaluator` option or `FACTORY_INTAKE_EVALUATOR`
-   * (forced on every project), the project's own setting, or none (a project from before the
-   * setting, on `route-list`).
+   * What decided `evaluator`: `FACTORY_INTAKE_EVALUATOR` (forced on every project), the project's
+   * own setting, or none (a project from before the setting, on `route-list`).
    */
-  evaluatorSource: z.enum(['option', 'env', 'project', 'legacy']),
+  evaluatorSource: z.enum(['env', 'project', 'legacy']),
   /** The project's own setting, used unless one is forced; null for a project from before the setting. */
   projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
   /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */

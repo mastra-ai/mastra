@@ -968,6 +968,11 @@ describe('MastraFactory.prepare', () => {
     expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
   });
 
+  it('rejects the removed intake option and points at FACTORY_INTAKE_EVALUATOR', () => {
+    const config = { storage: fakeStorage(), intake: { evaluator: 'intake-order' } };
+    expect(() => new MastraFactory(config as never)).toThrow(/FACTORY_INTAKE_EVALUATOR/);
+  });
+
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
     const prepared = await prepareFactory({
       storage: fakeStorage(),
