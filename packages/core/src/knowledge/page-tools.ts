@@ -16,6 +16,7 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { moveKnowledgePageAndRelink } from './host-writes';
 import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
@@ -60,7 +61,7 @@ const UNEMBED_FAILED =
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
 async function embed(
   host: KnowledgePageToolHost,
-  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  work: (index: KnowledgeSemanticIndex) => Promise<unknown>,
   failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
@@ -1302,16 +1303,11 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== destination.id && parent.scopeId !== destination.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        const moved = await storage.movePage({
+        const moved = await moveKnowledgePageAndRelink(storage, host.warn, {
           id: page.id,
           expectedVersion: args.expectedVersion ?? page.version,
           parentId: parent.id,
           provenance,
-        });
-        // The subtree's `scope#key/key` paths changed: links by old path stop resolving, new ones may.
-        await updateKnowledgeLinks(host.warn, async () => {
-          await syncKnowledgePageBodyLinks(storage, moved);
-          await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
         });
         return done(moved);
       }

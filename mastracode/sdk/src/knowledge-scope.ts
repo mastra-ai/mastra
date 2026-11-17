@@ -1,5 +1,4 @@
-import { encodeKnowledgeScopeId } from '@mastra/core/knowledge';
-
+import { encodeKnowledgeScopeId } from './knowledge-scope-id.js';
 import type { MastraCodeState } from './schema.js';
 
 /**

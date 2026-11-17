@@ -1,30 +1,31 @@
+import { SESSION_ROW_WINDOW } from '@mastra/factory/session/session-row-query';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
-import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
+import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
+import { useSessionPullRequestSubscriptions } from '../../../../hooks/useSessionPullRequestSubscriptions';
+import { useSessionRowsQuery } from '../../../../hooks/useSessionRows';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
+import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
-import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
-import { filterSessionRows } from '../services/sessionFilters';
-import {
-  collapsedRowsKeepingActive,
-  groupSessionRows,
-  orderGroupHeadings,
-  sessionGroupHeadings,
-} from '../services/sessionGroups';
-import type { SessionGroupContext } from '../services/sessionGroups';
-import { pullRequestMergeTargets } from '../services/sessionRows';
+import { SESSION_GROUP_INCREMENT, orderGroupHeadings, sessionGroupHeadings } from '../services/sessionGroups';
+import type { SessionGroup } from '../services/sessionGroups';
+import { sessionRowsRequest } from '../services/sessionRowReads';
+import { presentSessionRow, sessionOwners, sessionPullRequestTargets } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
-import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
@@ -38,10 +39,14 @@ import {
   SESSION_UPDATED_MENU_OPTIONS,
   sessionOwnerMenuOptions,
 } from './sessionPropertyOptions';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
+
+const NO_EXTRA_ROWS: Readonly<Record<string, number>> = {};
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
+  const openSessionId = useRouteSessionId();
   const openNewUserSession = useOpenNewUserSession();
   const {
     view,
@@ -54,36 +59,77 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const sidebarState = useMaybeSidebarState()?.state;
-  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
-    // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
-    revealChildSessions: view.revealChildSessions && sidebarState !== 'collapsed',
-  });
-  const catalog = useBoardCatalog(factoryId);
-  const viewerUserId = useFactoryAuth().data?.user?.userId;
+  // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
+  const children = view.revealChildSessions && sidebarState !== 'collapsed';
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
+  const pinned = usePinnedSessions();
+  const viewKey = JSON.stringify([factoryId, view.sort, view.groupBy, filters, children]);
+  const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
+  if (deepened.viewKey !== viewKey) setDeepened({ viewKey, extraRows: NO_EXTRA_ROWS });
+  const extraRows = deepened.viewKey === viewKey ? deepened.extraRows : NO_EXTRA_ROWS;
+  const deepen = (groupKey: string, extra: number | undefined) => {
+    const { [groupKey]: _previous, ...others } = extraRows;
+    setDeepened({ viewKey, extraRows: extra === undefined ? others : { ...others, [groupKey]: extra } });
+  };
+  const { read: rowsRead, shown: response } = useSessionRowsQuery(
+    factoryId,
+    sessionRowsRequest({
+      sort: view.sort,
+      groupBy: view.groupBy,
+      filters,
+      pinned,
+      open: openSessionId,
+      children,
+      windows: Object.fromEntries(
+        Object.entries(extraRows).map(([groupKey, extra]) => [groupKey, SESSION_ROW_WINDOW + extra]),
+      ),
+    }),
+  );
+  const factory = useFactoryQuery(factoryId);
+  const catalog = useBoardCatalog(factoryId);
+  const viewer = useFactoryAuth().data?.user;
   const deletion = useSessionDeletion(factoryId);
+  const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
 
-  const sortedRows = rows.toSorted(compareSessionRows(view.sort));
-  const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
-  const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
-  const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
+  const owners = sessionOwners(response?.owners ?? [], viewer);
+  const defaultHeadings = sessionGroupHeadings(view.groupBy, {
+    catalog: catalog.data,
+    boardIds: response?.boards ?? [],
+    owners,
+    viewerUserId: viewer?.userId,
+  });
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
-  const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
+  const groups: SessionGroup[] = factoryId
+    ? menuGroups.flatMap(heading => {
+        const group = response?.groups.find(candidate => candidate.key === heading.key);
+        if (!group || hiddenGroupKeys.includes(heading.key)) return [];
+        return [
+          {
+            ...heading,
+            total: group.total,
+            ...(group.openIndex !== undefined ? { openIndex: group.openIndex } : {}),
+            rows: group.rows.map(row =>
+              presentSessionRow(row, { factoryId, openSessionId, viewer, repositories: factory.data?.repositories }),
+            ),
+          },
+        ];
+      })
+    : [];
+  const subscriptionsBySessionId = useSessionPullRequestSubscriptions({
     baseUrl,
-    targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
-    enabled: chatSessionOpen,
+    targets: sessionPullRequestTargets(groups.flatMap(group => group.rows)),
+    enabled: sessionEnabled && Boolean(routeSessionId) && Boolean(chatSessionId),
   });
 
-  const emptyMessage = emptyListMessage({
-    rowCount: rows.length,
-    filteredCount: filteredRows.length,
-    groupCount: groups.length,
-  });
-
-  const nothingToList = loaded && !hasRepositories && rows.length === 0 && !loadFailed;
+  const loaded = rowsRead.isSuccess;
+  const loadFailed = rowsRead.isError;
+  const hasRepositories = (factory.data?.repositories.length ?? 0) > 0;
+  const nothingToList = loaded && !hasRepositories && response?.total === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
+
+  const emptyMessage = rowsRead.data
+    ? emptyListMessage({ total: rowsRead.data.total, matching: rowsRead.data.matching, groupCount: groups.length })
+    : undefined;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -99,7 +145,7 @@ export function SessionsSection() {
                 onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
-                <Plus size={15} />
+                <IconPlusMedium />
               </Button>
             )}
             <PropertiesMenu
@@ -112,28 +158,28 @@ export function SessionsSection() {
             >
               <DropdownMenu.RadioSub
                 label="Sort"
-                icon={<ArrowUpDown aria-hidden />}
+                icon={<IconArrowsUpDown aria-hidden />}
                 options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}
               />
               <DropdownMenu.RadioSub
                 label="Owner"
-                icon={<UserRound aria-hidden />}
-                options={sessionOwnerMenuOptions(rows, viewerUserId)}
+                icon={<IconUser aria-hidden />}
+                options={sessionOwnerMenuOptions(owners, viewer?.userId)}
                 value={filters.owner}
                 onValueChange={owner => changeFilters({ owner })}
               />
               <DropdownMenu.RadioSub
                 label="Status"
-                icon={<CircleDashed aria-hidden />}
+                icon={<IconCircleDashed aria-hidden />}
                 options={SESSION_STATUS_MENU_OPTIONS}
                 value={filters.status}
                 onValueChange={status => changeFilters({ status })}
               />
               <DropdownMenu.RadioSub
                 label="Updated"
-                icon={<Clock aria-hidden />}
+                icon={<IconClock aria-hidden />}
                 options={SESSION_UPDATED_MENU_OPTIONS}
                 value={filters.updated}
                 onValueChange={updated => changeFilters({ updated })}
@@ -164,25 +210,24 @@ export function SessionsSection() {
       </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-4">
-        {!loaded && !loadFailed && rows.length === 0 && <SidebarNavigationSkeleton label="Loading sessions" />}
+        {!response && !loadFailed && <SidebarNavigationSkeleton label="Loading sessions" />}
         {groups.map(group => (
           <SessionGroupList
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
+            onShowMore={() => deepen(group.key, (extraRows[group.key] ?? 0) + SESSION_GROUP_INCREMENT)}
+            onShowLess={() => deepen(group.key, undefined)}
             renderRow={row => {
               const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
                 <SessionListItem
                   key={entry.session.sessionId}
                   factoryId={factoryId}
                   row={entry}
+                  subscriptions={subscriptionsBySessionId[entry.session.sessionId]}
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}
-                  liveStatus={
-                    liveStatusBySessionId[entry.session.sessionId] ??
-                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
-                  }
                   onDelete={deletion.requestDeletion}
                   subItems={subItems}
                 />
@@ -201,11 +246,11 @@ export function SessionsSection() {
 
       {loadFailed && (
         // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
-        <SidebarLoadError onRetry={retry} announce={false}>
+        <SidebarLoadError onRetry={() => void rowsRead.refetch()} announce={false}>
           Couldn’t load sessions
         </SidebarLoadError>
       )}
-      {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
+      {emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (
         <DeleteSessionDialog
@@ -220,15 +265,15 @@ export function SessionsSection() {
 }
 
 function emptyListMessage({
-  rowCount,
-  filteredCount,
+  total,
+  matching,
   groupCount,
 }: {
-  rowCount: number;
-  filteredCount: number;
+  total: number;
+  matching: number;
   groupCount: number;
 }): string | undefined {
-  if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
-  if (rowCount === 0) return 'No sessions yet';
+  if (matching > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
+  if (total === 0) return 'No sessions yet';
   return 'No sessions match these filters';
 }

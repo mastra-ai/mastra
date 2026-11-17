@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.50.1-alpha.1",
+  "version": "0.50.1-alpha.7",
   "description": "",
   "type": "module",
   "files": [
@@ -70,6 +70,12 @@
       "require": {
         "types": "./dist/plugin.d.ts",
         "default": "./dist/plugin.cjs"
+      }
+    },
+    "./run-tui": {
+      "import": {
+        "types": "./dist/run-tui.d.ts",
+        "default": "./dist/run-tui.js"
       }
     },
     "./package.json": "./package.json"

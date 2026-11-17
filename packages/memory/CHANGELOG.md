@@ -1,5 +1,29 @@
 # @mastra/memory
 
+## 1.41.2-alpha.2
+
+### Patch Changes
+
+- `recall()` now only returns messages from the requested thread or resource, even if the vector store returns results outside its filter or labels them with the wrong thread or resource. `searchMessages()` now skips observation results whose thread or resource metadata is outside the requested scope, even if the vector store ignores its filter. ([#30446](https://github.com/mastra-ai/mastra/pull/30446))
+
+- Fixed semantic recall re-embedding the same text on every save. Saving messages whose text was already embedded by this Memory instance (a repeated reply, a re-saved message, a cloned thread) now reuses the stored vectors instead of calling the embedder again, while each message still gets its own vector row. Reused vectors are not counted again in the reported embedding usage. ([#30429](https://github.com/mastra-ai/mastra/pull/30429))
+
+- Fixed Observational Memory losing every message for agents that use a `mastra/` gateway model with a Gateway organization key. The processor skipped local memory for any gateway model, but a gateway with an organization key has no memory API, so nothing was saved locally and nothing was recalled on the gateway either: the agent forgot every earlier turn. Memory now stays local when the gateway doesn't serve it, and an agent that switches between gateway-served and local memory mid-run no longer drops the messages it already collected. If saving those messages fails while the ownership switches, the storage error reaches the caller instead of the run reporting success ([#30391](https://github.com/mastra-ai/mastra/issues/30391)). ([#30414](https://github.com/mastra-ai/mastra/pull/30414))
+
+  Upgrade `@mastra/core` and `@mastra/memory` together. Older `@mastra/core` versions don't report whether the gateway serves memory, so `@mastra/memory` keeps the previous behavior for them.
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
+## 1.41.2-alpha.1
+
+### Patch Changes
+
+- Observational Memory does half as much work per step in long tool runs. Token counting no longer serializes every plain JSON tool result a second time just to check it for images, so each step serializes the earlier tool results twice instead of four times. Token counts are unchanged. ([#30400](https://github.com/mastra-ai/mastra/pull/30400))
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+
 ## 1.41.2-alpha.0
 
 ### Patch Changes

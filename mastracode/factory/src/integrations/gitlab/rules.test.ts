@@ -8,11 +8,12 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
-import { GitLabRules } from './rules.js';
+import { GitLabRules, updateEventFor } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
 
 const PROJECT_ID = '101';
@@ -119,6 +120,8 @@ async function setup(
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
+    /** The user Factory's GitLab connection acts as. */
+    factoryUsername?: string;
   } = {},
 ) {
   const seeded = options.storage
@@ -157,9 +160,6 @@ async function setup(
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
   }
 
@@ -186,6 +186,7 @@ async function setup(
     rules: resolveGitLabRules(options.rules),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
+    getCurrentUsername: vi.fn().mockResolvedValue(options.factoryUsername ?? 'factory-bot'),
     resolveActiveConnectionForHost: vi
       .fn()
       .mockImplementation(async (connectionId: string, host: string) =>
@@ -200,6 +201,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
+    notRouted: seeded.boards,
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -805,6 +807,8 @@ describe('GitLabRules', () => {
         }),
         storage: seeded.workItems,
         boards: autoStartingBoards(boards),
+        // No intake rules to read: the route list, as before intake order.
+        intakeEvaluator: 'route-list',
         ownerId: 'worker-1',
       });
       // Run the dispatcher's poll tick right after the push's re-review
@@ -1256,6 +1260,8 @@ describe('merge request cards on the Work board', () => {
       }),
       storage: base.seeded.workItems,
       boards: autoStartingBoards(boards),
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'worker-1',
     });
     let tick = 0;
@@ -1494,7 +1500,7 @@ describe('GitLab board events', () => {
       await service.ingest(issueHook(`board-event-${action}`, action));
     }
     expect(seen).toEqual([
-      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueOpened', boardEvent: { type: 'work_item.opened' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
       { event: 'issueUpdated', boardEvent: undefined },
@@ -1621,9 +1627,177 @@ describe('GitLab activity signals', () => {
         reference: `${PROJECT_PATH}#42`,
         idleBehavior: 'persist',
       }),
+      // A label change is no activity: it goes to the card's routes as an update.
+      {
+        type: 'routeEvent',
+        idempotencyKey: 'gitlab:101:activity-labels:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      },
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
+  });
+});
+
+const ISSUE_42_KEY = encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 });
+const MERGE_REQUEST_17_KEY = `gitlab-pr:${Buffer.from(
+  JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+).toString('base64url')}`;
+const titles = (names: string[]) => names.map(title => ({ title }));
+
+/** A GitLab update hook for issue 42 or merge request 17, with `changes` and any `object_attributes` overrides. */
+function updateHook(
+  kind: 'issue' | 'merge request',
+  deliveryId: string,
+  changes: Record<string, unknown>,
+  attributes: Record<string, unknown> = {},
+  user?: string,
+) {
+  const delivery = kind === 'issue' ? issueOpened(deliveryId) : mergeRequestOpened(deliveryId);
+  return {
+    ...delivery,
+    payload: {
+      ...delivery.payload,
+      ...(user ? { user_username: user, user: { username: user } } : {}),
+      object_attributes: { ...delivery.payload.object_attributes, action: 'update', ...attributes },
+      changes,
+    },
+  };
+}
+
+async function gitlabCard(
+  seeded: Awaited<ReturnType<typeof setup>>['seeded'],
+  projectId: string,
+  input: { mergeRequest?: true; metadata?: Record<string, unknown>; sessions?: Record<string, unknown> } = {},
+) {
+  return (
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      input: {
+        externalSource: input.mergeRequest
+          ? { integrationId: 'gitlab', type: 'pull-request', externalId: MERGE_REQUEST_17_KEY }
+          : { integrationId: 'gitlab', type: 'issue', externalId: ISSUE_42_KEY },
+        title: input.mergeRequest ? 'MR 17' : 'Issue 42',
+        board: input.mergeRequest ? 'review' : 'work',
+        stages: input.mergeRequest ? ['done'] : ['execute'],
+        sessions: input.sessions ?? {},
+        metadata: input.metadata ?? (input.mergeRequest ? { authorTrusted: true } : {}),
+      },
+    })
+  ).item;
+}
+
+const routeEvents = async (seeded: Awaited<ReturnType<typeof setup>>['seeded'], projectId: string, workItemId: string) =>
+  (await seeded.workItems.listDeferredDecisions('org-1', projectId, { workItemId }))
+    .map(record => record.decision)
+    .flatMap(decision => (decision.type === 'routeEvent' ? [decision] : []));
+
+describe('GitLab label and assignee changes on a card', () => {
+  // Factory's own changes wait for the card's run, matched against each active connection's user.
+  it.each([
+    { case: "Factory's user, in any case", options: { factoryUsername: 'Factory-Bot' }, user: 'factory-bot', fromCardSession: true },
+    { case: 'a person', options: { factoryUsername: 'Factory-Bot' }, user: 'maintainer', fromCardSession: false },
+    { case: "Factory's user on the second connection", options: { duplicateInstallation: true }, otherFirst: true, user: 'factory-bot', fromCardSession: true },
+  ])('holds a change by $case for the run: $fromCardSession', async ({ options, otherFirst, user, fromCardSession }) => {
+    const { seeded, project, service, gitlab } = await setup(options);
+    if (otherFirst) vi.mocked(gitlab.getCurrentUsername!).mockResolvedValueOnce('other-bot');
+    const card = await gitlabCard(seeded, project.id);
+    await service.ingest(updateHook('issue', 'by-user', { labels: { previous: [], current: titles(['bug']) } }, {}, user));
+    expect((await routeEvents(seeded, project.id, card.id)).map(decision => decision.fromCardSession === true)).toEqual([
+      fromCardSession,
+    ]);
+  });
+
+  // Each hook is [deliveryId, updated_at, labels before, labels after]; the card starts with ['bug'].
+  it.each([
+    {
+      case: 'an earlier hook delivered again',
+      hooks: [['add-ship', '01', ['bug'], ['bug', 'ship']], ['remove-ship', '02', ['bug', 'ship'], ['bug']], ['add-ship', '01', ['bug'], ['bug', 'ship']]],
+      labels: ['bug'],
+    },
+    { case: 'the earlier hook arriving after the newer one', hooks: [['remove-ship', '02', ['bug', 'ship'], ['bug']], ['add-ship', '01', ['bug'], ['bug', 'ship']]], labels: ['bug'] },
+    { case: 'one hook', hooks: [['add-ship', '01', ['bug'], ['bug', 'ship']]], labels: ['bug', 'ship'] },
+  ] as const)("keeps the newest labels on the card after $case", async ({ hooks, labels }) => {
+    const { seeded, project, service } = await setup();
+    const card = await gitlabCard(seeded, project.id, { metadata: { labels: ['bug'], assignees: ['grace'] } });
+    for (const [deliveryId, second, previous, current] of hooks) {
+      await service.ingest(
+        updateHook(
+          'issue',
+          deliveryId,
+          { labels: { previous: titles([...previous]), current: titles([...current]) }, assignees: { previous: [{ username: 'grace' }], current: [] } },
+          { updated_at: `2030-01-01T00:00:${second}Z` },
+        ),
+      );
+    }
+    const stored = (await seeded.workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect({ labels: stored.workItem.labels, assignees: stored.workItem.metadata?.assignees }).toEqual({ labels, assignees: [] });
+  });
+
+  it.each([
+    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] }, pullRequestTrusted: true }] },
+    // Neither filed nor attached: another merge request that happens to use the card's branch name.
+    { case: 'a card whose session only builds on its branch', mergeRequest: false, events: [] },
+  ])("hands a merge request's change to $case", async ({ mergeRequest, events }) => {
+    const { seeded, project, service } = await setup();
+    const card = mergeRequest
+      ? await gitlabCard(seeded, project.id, { mergeRequest: true })
+      : await gitlabCard(seeded, project.id, { sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } } });
+    await service.ingest(updateHook('merge request', 'relabel', { labels: { previous: [], current: titles(['ship']) } }));
+    expect((await routeEvents(seeded, project.id, card.id)).map(decision => decision.event).filter(event => event.type.endsWith('.updated'))).toEqual(events);
+  });
+});
+
+/** Records that intake turned the item with this source key away (Not routed), as intake does. */
+async function turnAway(seeded: Awaited<ReturnType<typeof setup>>['seeded'], projectId: string, sourceKey: string) {
+  await seeded.boards.recordIntakeDecision(
+    { orgId: 'org-1', factoryProjectId: projectId },
+    {
+      idempotencyKey: `intake:${sourceKey}`,
+      outcome: 'not_routed',
+      evaluator: 'intake-order',
+      sourceKey,
+      title: 'Turned away',
+      reason: 'The project has no board to take it.',
+    },
+  );
+}
+
+describe('GitLab updates to an item intake turned away', () => {
+  const ADD_SHIP = { labels: { previous: titles(['bug']), current: titles(['bug', 'ship']) } };
+  // Filed under the key intake recorded it Not routed with, so the dispatcher resolves that record.
+  it.each([
+    { kind: 'issue', turnedAway: true, state: 'opened', changes: ADD_SHIP, filed: { source: 'gitlab-issue', sourceKey: ISSUE_42_KEY } },
+    { kind: 'issue', turnedAway: true, state: 'closed', changes: ADD_SHIP, filed: undefined },
+    { kind: 'issue', turnedAway: false, state: 'opened', changes: ADD_SHIP, filed: undefined },
+    { kind: 'issue', turnedAway: true, state: 'opened', changes: { title: { previous: 'Old', current: 'New' } }, filed: undefined },
+    { kind: 'merge request', turnedAway: true, state: 'opened', changes: ADD_SHIP, filed: { source: 'gitlab-pr', sourceKey: MERGE_REQUEST_17_KEY } },
+    { kind: 'merge request', turnedAway: true, state: 'closed', changes: ADD_SHIP, filed: undefined },
+    { kind: 'merge request', turnedAway: false, state: 'opened', changes: ADD_SHIP, filed: undefined },
+  ] as const)(
+    'runs intake again for a $state $kind (turned away: $turnedAway) changing $changes',
+    async ({ kind, turnedAway, state, changes, filed }) => {
+      const { seeded, project, service } = await setup();
+      if (turnedAway) await turnAway(seeded, project.id, kind === 'issue' ? ISSUE_42_KEY : MERGE_REQUEST_17_KEY);
+      await service.ingest(updateHook(kind, 'changed', changes, { state }));
+      expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual(
+        filed ? [expect.objectContaining({ type: 'upsertLinkedWorkItem', ...filed })] : [],
+      );
+    },
+  );
+
+  it('files a merge request reopened with no card the way a new one is filed', async () => {
+    const { seeded, project, service } = await setup();
+    const delivery = mergeRequestOpened('mr-reopened-no-card');
+    await service.ingest({
+      ...delivery,
+      payload: { ...delivery.payload, object_attributes: { ...delivery.payload.object_attributes, action: 'reopen' } },
+    });
+    expect((await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr' }),
+    ]);
   });
 });
 
@@ -1751,20 +1925,101 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(boundChangeRequestNumber(createBoardRegistry(), own)).toBe('23');
     });
 
-    it("never files an outsider's \"Closes #42\" merge request on issue 42's card", async () => {
+    it("links an outsider's \"Closes #42\" merge request to issue 42's card, untrusted, and moves or runs nothing", async () => {
       const h = await harness(10);
       const issue = await h.issueCard('intake');
 
       await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(issueAfter).toMatchObject({ stages: ['intake'], revision: issue.revision });
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      expect(cards.find(card => card.id !== issue.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.untrustedPullRequests).toHaveLength(1);
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
+
+    it("keeps issue 42's card in PR review when an outsider closes their linked merge request unmerged", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('pr-review');
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
+
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author', action: 'close', deliveryId: 'd-close-17' }));
+
+      expect(await h.cards()).toEqual([expect.objectContaining({ id: issue.id, stages: ['pr-review'] })]);
+    });
+
+    it("treats an outsider's fork merge request from a card's session branch as the outsider's, not Factory's", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('intake');
+      const branch = 'factory/gitlab-issue-42';
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: { sessions: { work: { sessionId: 'sess-work', threadId: 'thread-work', branch, startedBy: 'user-1' } } },
+      });
+      const delivery = mergeRequest(17, 'Closes #42', { author: 'external-author', sourceBranch: branch });
+
+      // A fork's branch can carry any name, including the one the card's session pushes.
+      await h.ingest({
+        ...delivery,
+        payload: { ...delivery.payload, object_attributes: { ...delivery.payload.object_attributes, source_project_id: 999 } },
+      } as never);
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.untrustedPullRequests).toHaveLength(1);
+      expect(
+        (await h.decisions()).filter(entry => ['invokeSkill', 'sendMessage'].includes(entry.decision.type)),
+      ).toEqual([]);
+    });
+
+    it("starts nothing on the issue's card when an outsider pushes to their linked merge request in PR review", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('pr-review');
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
+      const before = (await h.decisions()).length;
+
+      const pushed = mergeRequest(17, 'Closes #42', { author: 'external-author', action: 'update', deliveryId: 'd-push-17' });
+      await h.ingest({
+        ...pushed,
+        payload: { ...pushed.payload, object_attributes: { ...pushed.payload.object_attributes, oldrev: 'a'.repeat(40) } },
+      });
+
+      expect((await h.decisions()).slice(before).filter(entry => entry.workItemId === issue.id)).toEqual([]);
+      expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+    });
+
+    it.each([
+      ['an outsider', 10, 'external-author', false],
+      ['a maintainer', 40, 'maintainer', true],
+    ])(
+      "hands a label change on %s's linked merge request to the issue's card with that merge request's trust",
+      async (_who, accessLevel, author, trusted) => {
+        const h = await harness(accessLevel);
+        const issue = await h.issueCard('intake');
+        await h.ingest(mergeRequest(17, 'Closes #42', { author }));
+        const before = (await h.decisions()).length;
+
+        const labelled = mergeRequest(17, 'Closes #42', { author, action: 'update', deliveryId: 'd-label-17' });
+        await h.ingest({
+          ...labelled,
+          payload: { ...labelled.payload, changes: { labels: { previous: [], current: [{ title: 'ready' }] } } },
+        });
+
+        const updates = (await h.decisions())
+          .slice(before)
+          .filter(entry => entry.workItemId === issue.id && entry.decision.type === 'routeEvent')
+          .map(entry => entry.decision.event);
+        expect(updates).toEqual([
+          { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, pullRequestTrusted: trusted },
+        ]);
+      },
+    );
 
     it('gives a merge request that closes no issue on the board its own card', async () => {
       const h = await harness();
@@ -2071,14 +2326,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       );
     });
 
-    it('gives a second merge request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
+    it('links a second merge request without moving the card, and moves the card to Done when the first merges', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');
       await h.ingest(mergeRequest(17, 'Closes #42'));
       await h.ingest(mergeRequest(18, 'Closes #42'));
 
-      expect(await h.cards()).toHaveLength(2);
-      expect(sourceTypes((await h.cards()).find(card => card.id === issue.id)!)).toEqual(['issue', 'pull-request']);
+      const linked = await h.cards();
+      expect(linked).toHaveLength(1);
+      expect(linked[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+      expect(sourceTypes(linked[0]!)).toEqual(['issue', 'pull-request', 'pull-request']);
 
       await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-merge-17', action: 'merge' }));
       const card = (await h.cards()).find(item => item.id === issue.id)!;
@@ -2086,8 +2343,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card.workItem.sources[1]).toMatchObject({ state: 'merged' });
     });
 
-    it.each(['planning', 'execute', 'review'])(
-      "gives someone else's merge request its own card once the issue is in %s, by the default route",
+    it.each(['triage', 'planning', 'execute', 'review'])(
+      "links someone else's merge request to the issue's card in %s, and the seeded rules leave the card there",
       async stage => {
         const h = await harness();
         const issue = await h.issueCard(stage);
@@ -2095,15 +2352,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await h.ingest(mergeRequest(17, 'Closes #42'));
 
         const cards = await h.cards();
-        expect(cards).toHaveLength(2);
-        expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+        expect(cards).toHaveLength(1);
+        expect(cards[0]).toMatchObject({ id: issue.id, stages: [stage] });
+        expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+        expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
       },
     );
 
-    it("follows the project's closing-issue route: edited, it joins a planned issue", async () => {
+    it("follows the project's card-move rule for linked merge requests: edited, it moves a planned issue", async () => {
       const h = await harness();
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
-      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(entry => entry.target.joinClosedIssue)!;
+      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(
+        entry => entry.name === 'Trusted pull requests take a waiting issue to Review',
+      )!;
       await h.seeded.boards.updateIntakeRoute(
         scope,
         route.id,
@@ -2111,7 +2372,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           when: {
             operator: 'AND',
             conditions: [
-              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'pullRequest.trusted', operator: 'equals', value: true },
               { field: 'closedIssue.phase', operator: 'equals', value: 'planning' },
             ],
           },
@@ -2124,34 +2385,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       const cards = await h.cards();
       expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['planning'] });
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
       expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
-    });
-
-    it('gives a merge request for an issue in Triage its own card in PR review, and reviews it right away', async () => {
-      const h = await harness();
-      const issue = await h.issueCard('triage');
-
-      await h.ingest(mergeRequest(17, 'Closes #42'));
-
-      const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(issueAfter).toMatchObject({ stages: ['triage'] });
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      const own = cards.find(card => card.id !== issue.id)!;
-      expect(own).toMatchObject({ board: 'work', stages: ['pr-review'] });
-      expect(sourceTypes(own)).toEqual(['pull-request']);
-      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
-        expect.objectContaining({ workItemId: own.id, decision: expect.objectContaining({ role: 'review' }) }),
-      ]);
     });
 
     const builderSession = {
       work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
     };
 
-    it("gives someone else's \"Closes #42\" merge request its own card once the issue's builder has started", async () => {
+    it("links someone else's \"Closes #42\" merge request to the card once its builder has started, but tracks only the builder's own", async () => {
       const h = await harness();
       const issue = await h.issueCard('execute');
       await h.seeded.workItems.update({
@@ -2164,14 +2406,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       await h.ingest(mergeRequest(17, 'Closes #42'));
       const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      expect(issueAfter.metadata.openPullRequestNumber ?? null).toBeNull();
+      expect(cards).toHaveLength(1);
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
 
       await h.ingest(mergeRequest(18, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
       const card = (await h.cards()).find(item => item.id === issue.id)!;
-      expect(sourceTypes(card)).toEqual(['issue', 'pull-request']);
+      expect(sourceTypes(card)).toEqual(['issue', 'pull-request', 'pull-request']);
       expect(card.metadata).toMatchObject({ openPullRequestNumber: 18 });
     });
 
@@ -2216,6 +2457,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       [card] = await h.cards();
       expect(card!.workItem.sources.map(source => source.state)).toEqual(['opened', 'open']);
       expect(card!.workItem.sources).toHaveLength(2);
+    });
+
+    it('opens a merge request on its own card again when it is reopened after the sweep settled it closed', async () => {
+      const h = await harness();
+      await h.ingest(mergeRequest(17, 'No linked issue'));
+      await h.ingest(mergeRequest(17, 'No linked issue', { deliveryId: 'd-close-17', action: 'close' }));
+      for (const card of await h.cards()) {
+        await h.seeded.workItems.syncCard({
+          orgId: 'org-1',
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { state: 'closed', merged: false, [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed' } },
+        });
+      }
+      const mergeRequests = async () =>
+        (await h.cards()).map(card => ({
+          states: card.workItem.sources.map(source => source.state),
+          settled: { ...card.workItem.metadata, ...card.metadata }[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] ?? 'no',
+        }));
+      expect(await mergeRequests()).toEqual([{ states: ['closed'], settled: 'closed' }]);
+
+      await h.ingest(mergeRequest(17, 'No linked issue', { deliveryId: 'd-reopen-17', action: 'reopen' }));
+
+      expect(await mergeRequests()).toEqual([{ states: ['open'], settled: 'no' }]);
     });
   },
 );

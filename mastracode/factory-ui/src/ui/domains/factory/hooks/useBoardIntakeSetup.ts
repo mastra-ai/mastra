@@ -5,6 +5,7 @@ import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { placesArrivals } from '@mastra/factory/boards/intake-order';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { InstalledBoardInfo } from '../../../../api/types';
 
@@ -76,17 +77,13 @@ export function useBoardIntakeSetup({
     (jiraEligible && boundToProject('jira', config?.jira.sourceIds)) ||
     (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
   // A connected source files onto the default board, and onto another board only through an
-  // intake route that places its new cards there: enabled, run on `work_item.created`, and not
-  // one that only joins a pull request to an existing card (the server's `resolveIntakeRoute`).
+  // intake route that places its new cards there: enabled, run on an arrival event, and not
+  // a retired route that joined pull requests to an existing card (the server skips those).
   const readsIntakeRoutes = !defaultBoard && sourceConnected;
   const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
   const intakeRoutesPending = readsIntakeRoutes && intakeRoutesQuery.isPending;
   const routePlacesCardsHere = (intakeRoutesQuery.data?.intakeRoutes ?? []).some(
-    route =>
-      route.enabled &&
-      route.on.includes('work_item.created') &&
-      !route.target.joinClosedIssue &&
-      route.target.boardKey === kind,
+    route => placesArrivals(route) && route.target.boardKey === kind,
   );
   // Sources are connected and the routes loaded, but none places new cards on this board.
   const unrouted = readsIntakeRoutes && intakeRoutesQuery.isSuccess && !routePlacesCardsHere;

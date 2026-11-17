@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { faker } from '@faker-js/faker';
+import type { MastraVector } from '@mastra/core/vector';
 import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -129,6 +130,28 @@ export function getPerformanceTests(memoryFactory: () => Memory) {
 
       console.timeEnd('Data setup');
       console.info(`Total messages created: ${threadCount * messagesPerThread}`);
+
+      // The timings below only mean something if the messages were actually indexed: a writer that
+      // skips embedding leaves an empty index and fast, useless recalls.
+      // @ts-expect-error - vector is not part of the public Memory type
+      const vector: MastraVector = memory.vector;
+      const indexes = await vector.listIndexes();
+      const indexedRows = (await Promise.all(indexes.map(indexName => vector.describeIndex({ indexName })))).reduce(
+        (sum, index) => sum + index.count,
+        0,
+      );
+      expect(indexedRows).toBeGreaterThanOrEqual(threadCount * messagesPerThread);
+
+      for (const thread of threads) {
+        const { messages } = await memory.recall({
+          threadId: thread.id,
+          resourceId,
+          vectorSearchString: 'What are your thoughts on this approach?',
+          threadConfig: { lastMessages: false, semanticRecall: { topK: 3, messageRange: 0, scope: 'thread' } },
+        });
+        expect(messages.length).toBeGreaterThan(0);
+        expect(messages.every(message => message.threadId === thread.id)).toBe(true);
+      }
 
       // Measure query time for each thread with different search patterns
       const searchQueries = [

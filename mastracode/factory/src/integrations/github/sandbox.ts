@@ -16,6 +16,7 @@
  */
 
 import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
@@ -113,17 +114,23 @@ async function execute(
         ...options,
         timeoutMs: Math.max(deadlineMs - Date.now(), 1),
       });
-      if (options.phase && bootDiagnosticsEnabled) {
-        process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
-        );
+      if (options.phase) {
+        const elapsed = performance.now() - started;
+        if (bootDiagnosticsEnabled) {
+          process.stderr.write(
+            `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(elapsed)}ms\n`,
+          );
+        }
+        recordSandboxCommand(options.phase, elapsed, result.exitCode === 0 ? 'ok' : 'exit');
       }
       return result;
     } catch (error) {
       if (options.phase) {
+        const elapsed = performance.now() - started;
         process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(elapsed)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
         );
+        recordSandboxCommand(options.phase, elapsed, 'threw');
       }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
@@ -241,6 +248,44 @@ export class MaterializeError extends Error {
 
 function cleanUrl(repoFullName: string): string {
   return `https://github.com/${repoFullName}.git`;
+}
+
+/**
+ * True when a repository name or clone URL contains a `.` or `..` path segment.
+ * `new URL` and git both collapse those, and `new URL` also treats `\` as `/`,
+ * so `owner/../other` names a different repository than the row. Checked on the
+ * raw text, before that collapse. A backslash is refused on its own: the origin
+ * strip below would otherwise treat it as part of the host.
+ */
+function pathHasDotSegment(value: string): boolean {
+  if (value.includes('\\')) return true;
+  const withoutOrigin = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '');
+  const path = withoutOrigin.split(/[?#]/)[0] ?? '';
+  return path.split('/').some(part => {
+    let decoded = part;
+    try {
+      decoded = decodeURIComponent(part);
+    } catch {
+      return true;
+    }
+    return decoded === '.' || decoded === '..' || decoded.includes('\\');
+  });
+}
+
+function assertRepositoryLocator(
+  repoFullName: string | undefined,
+  cloneUrl: string | undefined,
+  code: 'clone-failed' | 'pull-failed' | 'push-failed',
+): void {
+  if (
+    repoFullName !== undefined &&
+    (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName) || pathHasDotSegment(repoFullName))
+  ) {
+    throw new MaterializeError(`Refusing to use an invalid repo full name '${repoFullName}'.`, code);
+  }
+  if (cloneUrl && pathHasDotSegment(cloneUrl)) {
+    throw new MaterializeError('Refusing to use a clone URL whose path rewrites to another repository.', code);
+  }
 }
 
 function credentialScope(
@@ -365,11 +410,11 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 
   // 0. Defense in depth: never build a git command from values that aren't
   // strictly shaped, even if a malformed row reached the DB. Inputs are also
-  // validated at the route boundary before storage.
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repo)) {
-    throw new MaterializeError(`Refusing to materialize: invalid repo full name '${repo}'.`, 'clone-failed');
-  }
-  if (!/^[A-Za-z0-9_./-]+$/.test(repoInfo.defaultBranch)) {
+  // validated at the route boundary before storage. `..` in a repository path
+  // collapses to a different repository, and a branch git can read as an option
+  // is rejected by the same ref rules the checkout path uses.
+  assertRepositoryLocator(repo, repoInfo.cloneUrl, 'clone-failed');
+  if (!isValidGitRef(repoInfo.defaultBranch)) {
     throw new MaterializeError(
       `Refusing to materialize: invalid default branch '${repoInfo.defaultBranch}'.`,
       'clone-failed',
@@ -421,8 +466,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // destination with a non-retryable fatal. Nothing here is recoverable,
     // the probe above already ruled out a checkout of this repo, so
     // clear its contents before cloning, exactly as the retry path does. Keep
-    // the workdir itself because LocalSandbox runs commands with this
-    // directory as the child process cwd.
+    // the workdir itself because Factory's own commands use it as their cwd
+    // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
+    // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
       cleanCloneUrl,
       token,
@@ -439,7 +485,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
-          // clean without removing LocalSandbox's process cwd.
+          // clean, leaving a directory Factory's commands still use as cwd.
           await clearWorkdir(sandbox, workdir);
         },
       },
@@ -585,6 +631,7 @@ export async function syncEnvironmentRepository(
   if (!isValidGitRef(branch) || !isValidGitRef(defaultBranch)) {
     throw new MaterializeError('Refusing to sync a repository from an invalid branch name.', 'pull-failed');
   }
+  assertRepositoryLocator(repoFullName, cloneUrl, 'pull-failed');
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
 
@@ -706,6 +753,7 @@ export async function refreshMergeRequestCheckout(
   input: { branch: string; mergeRequestNumber: number; expectedHeadSha: string; access: RepositoryAccess },
 ): Promise<{ headSha: string; changed: boolean }> {
   const { branch, mergeRequestNumber, expectedHeadSha, access } = input;
+  assertRepositoryLocator(undefined, access.cloneUrl, 'pull-failed');
   if (
     !isValidGitRef(branch) ||
     !Number.isSafeInteger(mergeRequestNumber) ||
@@ -769,6 +817,7 @@ async function checkoutSessionBranchImpl(
   ) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
+  assertRepositoryLocator(repoFullName, cloneUrl, 'clone-failed');
 
   const changeRequestSession = pullRequestNumber !== undefined || mergeRequestNumber !== undefined;
   // GitHub delegates later authenticated operations to `gh`. Other providers
@@ -1060,9 +1109,7 @@ export async function pushBranch(
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
+  assertRepositoryLocator(repoFullName, undefined, 'push-failed');
   await pushAuthenticatedBranch(sandbox, workdir, branch, cleanUrl(repoFullName), token, 'x-access-token');
 }
 
@@ -1080,9 +1127,7 @@ export async function pushRepositoryBranch(
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
-  if (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
+  assertRepositoryLocator(repoFullName, access.cloneUrl, 'push-failed');
   const authorization = access.authorization;
   if (!authorization?.token) {
     throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');

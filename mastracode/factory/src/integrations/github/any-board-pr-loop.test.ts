@@ -11,7 +11,11 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { createFactoryTransitionTools } from '../../rules/tools.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { StoredBoardInput } from '../../storage/domains/boards/base.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  finishQueuedRunsForTests,
+} from '../../storage/test-utils.js';
 import { resolveGithubRules } from './default-rules.js';
 import { GithubRules } from './rules.js';
 
@@ -193,10 +197,8 @@ async function harness(
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
+  await seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/repo'] } } });
 
   if (loop.storedWithSelfReview) {
     // The project's Work row as Factory stored it back then: its row is its board from then on.
@@ -261,6 +263,7 @@ async function harness(
     sourceControl,
     integrationStorage,
     projects: seeded.projects,
+    intake: seeded.intake,
     storage: workItems,
     boards,
     configVersion,
@@ -291,8 +294,9 @@ async function harness(
         const decision = entry.decision as { role: string; skillName: string };
         return `${decision.role}:${decision.skillName}`;
       });
-  /** A person moving the card, the way the board UI does. */
+  /** A person moving the card, the way the board UI does, once what was queued for it has run. */
   const move = async (id: string, stage: string) => {
+    await finishQueuedRunsForTests(workItems, new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
     const current = await card(id);
     return transitionService.transition({
       ...scope,

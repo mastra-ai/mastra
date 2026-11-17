@@ -295,6 +295,35 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('.tool() forwards updateState to the tool', async () => {
+    const stateTool = createTool({
+      id: 'state-tool',
+      description: 'Writes workflow state',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      execute: async (_input, context) => {
+        await context.workflow!.updateState({ b: 2 });
+        return { seen: await context.workflow!.getState() };
+      },
+    });
+    const wf = createWorkflow({
+      id: 'rt-tool-update-state',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      stateSchema: z.object({ a: z.number(), b: z.number() }),
+    })
+      .tool(stateTool)
+      .commit();
+    bind(wf);
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: {}, initialState: { a: 1, b: 1 } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['state-tool'] as any).output).toEqual({ seen: { a: 1, b: 2 } });
+    }
+  });
+
   it.each([
     { factory: 'default', createToolStep: createStep },
     { factory: 'evented', createToolStep: createEventedStep },

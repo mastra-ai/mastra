@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -42,9 +41,13 @@ describe('native card facts', () => {
   });
 });
 
-it.each(['board', 'list'])(
-  'shows source facts in %s and details without provider lookups beyond routine intake browsing',
-  async layout => {
+it.each([
+  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
+  { layout: 'list', repositories: ['acme/app'], reference: 'Issue #73' },
+  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
+])(
+  'shows source facts in $layout without provider lookups beyond routine intake browsing, as $reference among $repositories',
+  async ({ layout, repositories, reference }) => {
     const projectUrl = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
     const providerRequests: string[] = [];
     server.use(
@@ -57,7 +60,9 @@ it.each(['board', 'list'])(
             {
               id: 'fp-1',
               name: 'Acme Factory',
-              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+              repositories: repositories.map((slug, index) =>
+                listedRepository(`repo-${index + 1}`, slug, { branch: 'main' }),
+              ),
             },
           ],
         }),
@@ -74,43 +79,24 @@ it.each(['board', 'list'])(
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      // Routine intake browsing can fail; card facts must not trigger a detail lookup to recover.
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/prs`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
+      // Provider reads can fail; card facts must not trigger a detail lookup to recover.
       http.get(`${TEST_BASE_URL}/web/github/projects/*`, ({ request }) => {
         providerRequests.push(request.url);
         return HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 });
       }),
     );
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/work?layout=${layout}`] });
-    const user = userEvent.setup();
     renderWithProviders(<RouterProvider router={router} />);
 
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
-    expect(card).toHaveTextContent('acme/app#73');
+    expect(card).toHaveTextContent(reference);
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();
     expect(card).not.toHaveTextContent('stale-author');
     expect(card).not.toHaveTextContent('stale-label');
-
-    await user.click(within(card).getByRole('button', { name: 'Details for Repair source facts' }));
-    const details = await screen.findByRole('dialog', { name: 'Repair source facts' });
-    // The details show the reporter twice: in the source facts and as the card's latest activity.
-    const sourceFacts = within(details)
-      .getAllByText('reporter')
-      .map(reporter => reporter.closest('[data-slot="metadata"]'))
-      .filter(Boolean);
-    expect(sourceFacts).toHaveLength(1);
-    expect(sourceFacts[0]).toHaveTextContent('acme/app#73');
-    expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
-    expect(within(details).getByText('customer-visible')).toBeVisible();
-    expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(
       'href',
       providerFactsCard.workItem.url,
     );

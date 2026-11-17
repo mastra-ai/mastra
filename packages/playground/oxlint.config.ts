@@ -95,7 +95,12 @@ export default defineConfig({
     copyRuleExclusions,
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
-      rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
+      rules: {
+        'playground-ui/text-role': 'off',
+        'playground-ui/txt-tone': 'off',
+        'playground-ui/font-mono': 'off',
+        'playground-ui/icon-size-from-parent': 'off',
+      },
     },
     {
       // Test stubs aren't UI people see.

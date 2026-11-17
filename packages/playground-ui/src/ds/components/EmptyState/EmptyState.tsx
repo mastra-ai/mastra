@@ -1,13 +1,14 @@
-import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
 import { cn } from '@/lib/utils';
 
 type EmptyStateTone = 'default' | 'error';
 
 const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
-  default: <CircleSlashIcon />,
-  error: <CircleXIcon />,
+  default: <IconCircleBanSign />,
+  error: <IconCircleX />,
 };
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
@@ -51,7 +52,7 @@ export function EmptyState({
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-5', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 max-w-full [&>svg]:size-icon-lg', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && (
         <Txt variant="caption" tone="muted" className="mt-1.5 max-w-md wrap-anywhere">

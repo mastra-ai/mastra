@@ -1,5 +1,208 @@
 # mastra
 
+## 1.40.0-alpha.6
+
+### Patch Changes
+
+- The Factory sidebar now groups sessions by board and shows a second line under each session by default, with when it last changed and its pull request. Turn on **Compact view** or set **Group** to **None** in the sidebar's properties menu to get one line per session or a single list back. Settings you already changed keep their values; the rest follow the new defaults. ([#30656](https://github.com/mastra-ai/mastra/pull/30656))
+
+- Factory **Settings** now shows theme and completion sound on **My account**, next to your profile and log out, instead of on a separate **Preferences** page. Settings opens on **My account**, and old Preferences links go there. ([#30658](https://github.com/mastra-ai/mastra/pull/30658))
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/deployer@1.84.0-alpha.6
+
+## 1.40.0-alpha.5
+
+### Patch Changes
+
+- The Factory **Settings › Tools** page shows how many tools sessions get from each Mastra Connect connection. Expand one to see its tools with their descriptions, which ones ask for approval, and which ones Factory leaves out. With a `tools` option, a connection the code doesn't use shows no tools, and the code's other tools are listed under **Other tools from code**. ([#30610](https://github.com/mastra-ai/mastra/pull/30610))
+
+- The Factory **Settings › Tools** page lists a project's Mastra Connect connections when the Factory sets its session tools in code, with a note that the `tools` option decides which of their tools sessions get. When Connect isn't set up, it names the missing Platform credentials or `MASTRA_PROJECT_ID` (#30579). ([#30607](https://github.com/mastra-ai/mastra/pull/30607))
+
+- Added `mastra api factory work-item session-repository <project-id> <work-item-id>`. It shows the repository a session on a Factory card starts in, or why the card has none. ([#30609](https://github.com/mastra-ai/mastra/pull/30609))
+
+- Fixed board cards showing a different session status than the sidebar. A card with a suggested run and a running session now shows it waits on you on the board too, and a card with one working and one starting session shows it working. ([#30624](https://github.com/mastra-ai/mastra/pull/30624))
+
+- Fixed the session status in Factory's sidebar and board. A person's own session now shows "Waiting on you" while its agent waits for their answer, instead of "Working". A session now shows "Working" while it runs on a thread opened after its first one, such as a new thread or a Slack conversation. A session shows "Initializing" only while a run waits on its first setup, so a session whose setup never finished, or that never ran, no longer stays stuck on "Initializing". ([#30627](https://github.com/mastra-ai/mastra/pull/30627))
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/deployer@1.84.0-alpha.5
+
+## 1.40.0-alpha.4
+
+### Minor Changes
+
+- Added a Rules page to every Factory board. It replaces the board's Card moves page and the Factory-wide "Where new cards go" list in Settings, so everything that decides where a board's issues and pull requests go is in one place. ([#30507](https://github.com/mastra-ai/mastra/pull/30507))
+
+  **Rules page**
+
+  Each event gets its own lane, grouped under Issues and Pull requests, such as "Issue opened", "Issue closed" or "Pull request merged". In each lane, rules are checked top to bottom and the first match wins. The two lanes that file items with no card yet, Issue opened and Pull request opened, show where the board sits in the intake order; an item no rule here takes goes to the next board, and ends up in Not routed if no board takes it. Rules still stored on the old opened event show in both of those lanes, marked "Issue or pull request opened (legacy)". Rules are added and edited in a step-by-step dialog: pick the event, choose which items it applies to, then choose where they go. A card-move rule, on any event other than an item opening, can send cards to another board: pick the board, then the phase. Condition filters include the pull request author's trust, and on label or assignee changes, which label or assignee was added or removed. Rules can be reordered, switched off or deleted. A rule that can never be reached, because a rule above it matches everything, is marked as such. A card-move rule that matched but couldn't move the card, for example because the target phase doesn't take cards, shows how often that happened in the last 30 days, with a link to the latest item. "Test an item" opens the intake tester, which shows where an issue or pull request would go and what every rule answered. Old `/moves` links now open the Rules page.
+
+  **Settings → Intake**
+
+  - **Intake order**: set the order in which boards are offered a new item. Drag rows or use the up and down buttons to try an order, then save or discard it. The page shows whether the order was worked out from your rules or saved, and how many recent cards would land on a different board than they do now.
+  - **Not routed**: a list of items no board took, loaded a page at a time. Click "Why?" to open the tester on an item and see what each rule answered. Once a rule takes it, click "Route again" to file it.
+
+  The board config page now sums this up in one line, for example "2 rules for new items · Checked 2nd", with a link to the board's rules. The "Send new cards to" control is removed.
+
+### Patch Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Added `mastra api` commands for Factory intake order and Not routed items: read and set a project's intake order or evaluator, list items no board took, and route one again. ([#30370](https://github.com/mastra-ai/mastra/pull/30370))
+
+  ```sh
+  mastra api factory intake-order get <project-id>
+  mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'
+  mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'
+  mastra api factory not-routed list <project-id> '{"limit":50}'
+  mastra api factory not-routed route-again <project-id> <decision-id>
+  ```
+
+- Added `GET /web/factory/projects/:id/intake/skipped`. For each card-move rule that matched an event but was skipped because its target couldn't take the card, it returns how often that happened in the last 30 days and the newest skip. ([#30507](https://github.com/mastra-ai/mastra/pull/30507))
+
+  Also added `mastra api factory intake skipped <project-id>` to read the same counts from the CLI.
+
+- `mastra api factory decision queue` now returns each run's `lane`, `queuedByLane`, and the reply reserve in `slots.interactive`. A waiting reply from a person is listed before the automated runs, and `position` counts within the run's lane: ([#30307](https://github.com/mastra-ai/mastra/pull/30307))
+
+  ```bash
+  mastra api factory decision queue <project-id>
+  ```
+
+  ```json
+  {
+    "slots": { "scope": "server", "inUse": 10, "cap": 10, "interactive": { "inUse": 2, "cap": 2 } },
+    "queuedCount": 2,
+    "queuedByLane": { "automated": 1, "interactive": 1 },
+    "queued": [
+      { "lane": "interactive", "position": 1, "type": "sendMessage" },
+      { "lane": "automated", "position": 1, "type": "invokeSkill" }
+    ]
+  }
+  ```
+
+  The board's run queue lists waiting replies from people first, under their own heading, and shows how many reply slots are in use.
+
+- Added `mastra api factory work-item working-pull-request` to pick which of a card's linked pull requests its sessions work on. ([#30491](https://github.com/mastra-ai/mastra/pull/30491))
+
+  ```sh
+  mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'
+  ```
+
+- Added `mastra api factory intake dry-run` and `mastra api factory intake test` to check a Factory project's intake rules against real items without filing anything. ([#30380](https://github.com/mastra-ai/mastra/pull/30380))
+
+  ```sh
+  mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'
+  mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'
+  ```
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- Improved how fast the Factory sidebar opens on projects with many sessions. The sidebar now asks the server for the sessions it shows, five per group with **Show more** for the rest, instead of downloading every session and every card that holds one. Sorting, grouping and filters run on the server, and reopening the sidebar when nothing changed downloads almost nothing. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+- Fixed a `.foreach()` run staying stuck as running when the first failed item's failure could not be sent. The run now fails with the first item's error once that failure is delivered again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed `create-mastra` leaving an unused Gateway organization key in your organization when project setup is cancelled after the key was created. ([#30457](https://github.com/mastra-ai/mastra/pull/30457))
+
+- Hardened how the CLI opens your browser (login, `mastra connect`, add credits). Only `http://` and `https://` URLs are opened now, and on Windows the URL is no longer passed through `cmd.exe`, which could interpret characters like `&` as extra commands and also truncated login URLs with multiple query parameters. ([#30573](https://github.com/mastra-ai/mastra/pull/30573))
+
+- Added a dry run and a "Where would this go?" tester for intake rules. A rule that never fires because an earlier board takes everything it would match now shows up with evidence, before it files anything. ([#30380](https://github.com/mastra-ai/mastra/pull/30380))
+
+  **Dry run**
+
+  `POST /web/factory/projects/:id/intake/dry-run` runs the intake rules over the project's newest 200 items, from what Factory already stored about them, and reports per board and per rule what it would take, what it would lose to an earlier board, and how many cards it actually filed in the last 30 days. Pass unsaved `boards` rules or an unsaved `order` to preview an edit: the response also says how many items would land somewhere else.
+
+  **Tester**
+
+  `POST /web/factory/projects/:id/intake/test` takes one item, by `url` or by the `itemId` of a recent card or Not routed item, and shows which board takes it and what every rule answered, including the condition each rule failed on and the item's value. A URL Factory hasn't seen is read once from a GitHub repository or GitLab project linked to the project; others are refused with `not_linked`.
+
+  On a card, the tester also replays its recent status events, and one `event` passed in the request, through its board's card-move rules, and says for each whether the card moves, stays or is left to the integration, with every rule's answer. The dispatcher moves cards with the same code.
+
+  ```json
+  { "itemId": "<card-id>", "event": { "type": "work_item.updated", "labels": { "added": ["ship"], "removed": [] } } }
+  ```
+
+  Neither request files a card, records a decision or writes to a provider. Both run the intake order evaluator's own code, so they answer exactly what filing under intake order would.
+
+- Added `mastra api factory session rows` and `mastra api factory session activity`, which read a Factory project's sessions as the sidebar lists them, and which of them are running or waiting on a person. ([#30473](https://github.com/mastra-ai/mastra/pull/30473))
+
+  ```bash
+  mastra api factory session rows <project-id> '{"owner":"mine","groupBy":"board","window":["board:work:25"]}'
+  mastra api factory session activity <project-id>
+  ```
+
+- Fixed a `.foreach()` over a nested workflow on a run stored with the experimental `storageVersion: 2` option only keeping the last item's run. Restarting the run could give an item another item's result. Every item's run is kept again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/deployer@1.84.0-alpha.4
+
+## 1.39.1-alpha.3
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- Improved Factory card sessions: the card's stage, links, changes and files now sit in one place beside the conversation. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+  **Stage bar**
+
+  The session header shows the card's phase, with arrows to the nearest phase it can move to and a menu of every allowed move. A move that can't happen says why. The breadcrumb is gone: the sidebar names the session and the panel names the card.
+
+  **Session panel**
+
+  The panel runs from the top of the page beside the conversation, which keeps its width: when room runs out, the panel narrows, then folds into the header. Its overview lists the card's source and description, the workspace branch and pull request, the changed files, the pull requests the work opened, related cards, and a timeline of the card's moves. Pull request links now show once, here. Opening the panel doesn't re-render the conversation, and its text doesn't rewrap while the panel opens, narrows or folds.
+
+  **Go to file**
+
+  Go to file searches every file in the workspace, not only folders already opened, and ranks changed files first. The file tree marks changed files and the file viewer numbers its lines.
+
+  **Consistency fixes**
+
+  - A pull request's status icon follows one rule on the board, in the sidebar and in the panel, and GitLab merge request cards show it too.
+  - Links name what they point at, such as **PR #202** or **Issue #42**.
+  - Phase names follow the card's own board everywhere, including custom boards.
+  - A finished pull request card whose pull request is still open offers **Re-review**.
+  - A section that can't load says so instead of looking empty.
+
+  Search now sits only in the sidebar, on phones too. Cmd/Ctrl+K still opens it.
+
+  The sidebar no longer asks for each session's pull request status every 5 seconds. It reads the status again when the board's live feed reports a change.
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Factory no longer sends or expects a `sandboxProvider` value when linking a repository during setup. Update `mastra` together with `@mastra/factory`: repository linking fails when one of them is older than the other. ([#30508](https://github.com/mastra-ai/mastra/pull/30508))
+
+- Updated the Factory API route schemas used by `mastra api`: project repository responses no longer list `sandboxWorkdir` or `lastBuiltAt`. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/deployer@1.84.0-alpha.3
+
+## 1.39.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/deployer@1.84.0-alpha.2
+
 ## 1.39.1-alpha.1
 
 ### Patch Changes

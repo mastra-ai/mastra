@@ -42,6 +42,7 @@ describe('durable tool-call registry keep-alive', () => {
       },
       mastra: { getLogger: () => undefined },
       suspend: vi.fn(),
+      getState: async () => ({}),
       getInitData: () => ({
         runId,
         agentId: 'agent-1',

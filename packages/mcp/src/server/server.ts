@@ -180,6 +180,14 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    */
   legacy?: 'reject' | 'stateless';
   /**
+   * Upper bound, in bytes, on the HTTP request body this server reads from the request stream.
+   * A larger body is answered with a `413` JSON-RPC error before it is parsed or any tool runs.
+   * It bounds only the body the server reads itself: when body-parsing middleware supplies the
+   * parsed body, this bound does not apply, so set the size limit on that parser as well. Leave
+   * it unset to keep the SDK default of 4194304 (4 MiB). Must be a positive number.
+   */
+  maxRequestBodySize?: number;
+  /**
    * How a tool's return value becomes the result an MCP client receives: build it from the tool's
    * `toModelOutput` (`modelOutput`), and rewrite it before it is sent (`transform`).
    */
@@ -300,6 +308,7 @@ export class MCPServer extends MCPServerBase {
   private tasksInspector: MCPServerTasksInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
   private readonly legacy: 'reject' | 'stateless';
+  private readonly maxRequestBodySize?: number;
   private readonly toolResultOptions: MCPServerToolResultOptions;
   private readonly tasks: ResolvedTasksConfig;
   /** Where tasks are kept: `tasks.store`, or the store picked on first use. */
@@ -326,6 +335,7 @@ export class MCPServer extends MCPServerBase {
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
+    this.maxRequestBodySize = config.maxRequestBodySize;
     this.toolResultOptions = config.toolResult ?? {};
     this.tasks = resolveTasksConfig(config.tasks, {
       tools: Object.keys(config.tools ?? {}),
@@ -2205,9 +2215,11 @@ export class MCPServer extends MCPServerBase {
     if (!this.nodeHandler) {
       this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
         legacy: this.legacy,
+        maxRequestBodySize: this.maxRequestBodySize,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
       this.nodeHandler = toNodeHandler(this.httpHandler, {
+        maxRequestBodySize: this.maxRequestBodySize,
         onerror: error => this.logger.error('MCP Node handler adapter error', { error: error.toString() }),
       });
     }

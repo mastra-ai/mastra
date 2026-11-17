@@ -315,7 +315,7 @@ describe('JiraRules', () => {
     });
   });
 
-  it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {
+  it.each(['completed', 'canceled'])('closes linked issues in state %s', async stateType => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -337,8 +337,7 @@ describe('JiraRules', () => {
     });
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
-        configVersion: 'factory-config-v1',
-        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}`, triggerType: 'jira.issueObserved' },
+        ingress: { identity: `jira:${issue.id}:${issue.updatedAt}` },
       }),
     );
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -493,7 +492,7 @@ describe('Jira board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open Jira issue is not a status change.
       { event: 'issueObserved', boardEvent: undefined },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

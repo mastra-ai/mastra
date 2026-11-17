@@ -4,10 +4,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
 import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
-import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -130,7 +130,7 @@ function ExperimentPage() {
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
-          <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
+          <Button render={<Link to="/experiments" />} icon={<IconArrowLeft />}>
             Back to experiments
           </Button>
         }

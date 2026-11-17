@@ -2924,9 +2924,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await this.#completeRollover(collection, doc, doc.pendingSuccessor);
     }
 
+    // A head fenced for rollover still counts here: between the fence and the successor insert,
+    // the key would otherwise show a single live document and be skipped, leaving an older legacy
+    // document live beside the successor once it lands.
     const keys = await collection
       .aggregate<{ _id: string }>([
-        { $match: { supersededBy: null } },
+        { $match: { $or: [{ supersededBy: null }, { pendingSuccessor: { $exists: true } }] } },
         { $group: { _id: '$lookupKey', live: { $sum: 1 } } },
         { $match: { live: { $gt: 1 } } },
       ])
