@@ -7764,18 +7764,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       operator: 'AND',
       conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: false }],
     };
-    // A project set up before pull requests linked keeps "Pull requests go to Review" as it stored
-    // it. For an outsider's linked pull request a card-move rule counts only if it tests the pull
-    // request's trust; one that doesn't never moves the issue's card.
+    const trustedOnly: RuleGroup = {
+      operator: 'AND',
+      conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+    };
+    // A card-move rule decides outsiders' pull requests itself: one meant only for maintainers says
+    // so with a `pullRequest.trusted` condition. Only a rule stored before rules decided
+    // (`outsider_pull_requests_gated` NULL) keeps the old gate: there an outsider's linked pull
+    // request moves the issue's card only by a rule that tests the pull request's trust.
     it.each([
-      ['an outsider', 'read', 'testing nothing', null, ['intake']],
-      ['an outsider', 'read', 'testing the repository', repositoryIsAcme, ['intake']],
-      ['a maintainer', 'write', 'testing nothing', null, ['pr-review']],
-      ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, ['pr-review']],
-      ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, ['pr-review']],
+      ['an outsider', 'read', 'testing nothing', null, false, ['pr-review']],
+      ['an outsider', 'read', 'testing the repository', repositoryIsAcme, false, ['pr-review']],
+      ['an outsider', 'read', 'testing for a trusted pull request', trustedOnly, false, ['intake']],
+      ['a maintainer', 'write', 'testing nothing', null, false, ['pr-review']],
+      ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, false, ['pr-review']],
+      ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, false, ['pr-review']],
+      ['an outsider', 'read', 'testing nothing, stored before rules decided', null, true, ['intake']],
+      ['an outsider', 'read', 'testing the repository, stored before rules decided', repositoryIsAcme, true, ['intake']],
+      ['a maintainer', 'write', 'testing nothing, stored before rules decided', null, true, ['pr-review']],
+      [
+        'an outsider',
+        'read',
+        "testing for an outsider's pull request, stored before rules decided",
+        outsidersOnly,
+        true,
+        ['pr-review'],
+      ],
     ] as const)(
       "puts issue 42's card for %s's (%s) linked pull request, by a stored Review rule %s (%j), in %j",
-      async (_author, permission, _rule, when, stages) => {
+      async (_author, permission, _rule, when, legacy, stages) => {
         const h = await harness(permission);
         const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
         const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
@@ -7787,7 +7804,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await h.storage.ops.updateMany(
           'factory_intake_routes',
           { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
-          { when_condition: when },
+          // NULL is what a rule stored before the column existed reads as: it was never backfilled.
+          { when_condition: when, ...(legacy ? { outsider_pull_requests_gated: null } : {}) },
         );
         const issue = await h.issueCard(42, 'intake');
 
@@ -7800,6 +7818,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // Factory leaves the stored rule as the project has it.
         const stored = (await h.boards.listIntakeRoutes(scope)).find(route => route.name === PULL_REQUEST_INTAKE_ROUTE.name);
         expect(stored?.when).toEqual(when);
+        expect(stored?.outsiderPullRequestsGated).toBe(legacy ? true : undefined);
       },
     );
 
