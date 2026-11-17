@@ -102,8 +102,7 @@ export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease
       const dy = touch.clientY - current.startY;
       if (Math.hypot(dx, dy) < LOCK_DISTANCE_PX) return 'pending';
 
-      const owner = scope.getAttribute(OWNER_ATTR);
-      if (owner && owner !== name) return 'ignored';
+      if (revealOwnedByOther(scope, name)) return 'ignored';
       const layers = revealLayers(scope, layerAttr);
       const width = layerNamed(layers, layerAttr, 'panel')?.offsetWidth ?? 0;
       const opening = !isOpen();
@@ -204,6 +203,12 @@ function revealLayers(scope: ParentNode, layerAttr: string) {
 
 function layerNamed(layers: readonly HTMLElement[], layerAttr: string, name: 'panel' | 'scrim') {
   return layers.find(layer => layer.getAttribute(layerAttr) === name);
+}
+
+/** Whether another edge drawer is out, so this one must stay shut. */
+export function revealOwnedByOther(scope: HTMLElement | null, name: string) {
+  const owner = scope?.getAttribute(OWNER_ATTR);
+  return Boolean(owner && owner !== name);
 }
 
 function releaseOwner(scope: Element, name: string) {

@@ -38,9 +38,9 @@ function SessionPage() {
   );
 }
 
-function renderApp() {
+function renderApp({ shortcut = false }: { shortcut?: boolean } = {}) {
   const view = render(
-    <SidebarProvider>
+    <SidebarProvider disableKeyboardShortcut={!shortcut}>
       <AppShell
         mobileHeader={<Sidebar.MobileTrigger />}
         sidebar={
@@ -149,6 +149,27 @@ describe('AsideReveal', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Close session panel' }));
 
       expect(sessionPanel()).toBeNull();
+    });
+
+    it('returns focus to the control that opened it, even without a trigger ref', async () => {
+      renderApp();
+      const opener = screen.getByRole('button', { name: 'Show details' });
+      await userEvent.click(opener);
+      expect(document.activeElement).not.toBe(opener);
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(document.activeElement).toBe(opener);
+    });
+
+    it('ignores the sidebar shortcut, so navigation never opens over the panel', async () => {
+      renderApp({ shortcut: true });
+      await userEvent.click(screen.getByRole('button', { name: 'Show details' }));
+
+      fireEvent.keyDown(window, { code: 'KeyB', key: 'b', ctrlKey: true });
+
+      expect(navigation()).toBeNull();
+      expect(sessionPanel()).not.toBeNull();
     });
   });
 

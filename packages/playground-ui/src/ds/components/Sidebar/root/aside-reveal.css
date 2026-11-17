@@ -1,4 +1,5 @@
-/* The right-edge mirror of sidebar-reveal.css: the page slides left instead of right. */
+/* The right-edge mirror of sidebar-reveal.css: the page slides left instead of right.
+   State is read off the drawer itself (portaled as a direct child of the scope), so nothing is synced onto the scope. */
 @property --aside-reveal-drag {
   syntax: '*';
   inherits: false;
@@ -20,25 +21,25 @@
   inherits: false;
 }
 
-[data-aside-reveal] {
+[data-sidebar-scope]:has(> [data-reveal-drawer='aside']) {
   --aside-reveal-width: calc(100vw - 3.5rem);
   --aside-reveal-radius: 0 var(--studio-frame-radius, 1.5rem) var(--studio-frame-radius, 1.5rem) 0;
   --aside-reveal-rest: 0;
   --aside-reveal-settle: 320ms;
 }
 
-[data-aside-reveal][data-aside-reveal-open='true'] {
+[data-sidebar-scope]:has(> [data-reveal-drawer='aside'][data-open='true']) {
   --aside-reveal-rest: 1;
   --aside-reveal-settle: 400ms;
 }
 
-[data-aside-reveal] [data-aside-reveal-layer] {
+[data-aside-reveal-layer] {
   --aside-reveal-progress: var(--aside-reveal-drag, var(--aside-reveal-rest));
-  --aside-reveal-motion: var(--aside-reveal-duration, var(--aside-reveal-settle)) var(--aside-reveal-ease);
+  --aside-reveal-motion: var(--aside-reveal-duration, var(--aside-reveal-settle)) var(--reveal-ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-aside-reveal] [data-aside-reveal-layer] {
+  [data-aside-reveal-layer] {
     --aside-reveal-motion: 0ms;
   }
 }
@@ -60,15 +61,15 @@
     opacity var(--aside-reveal-motion);
 }
 
-[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='panel'] {
+[data-reveal-drawer='aside'][data-present='true'] [data-aside-reveal-layer='panel'] {
   will-change: scale, opacity;
 }
 
-[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='scrim'] {
+[data-reveal-drawer='aside'][data-present='true'] [data-aside-reveal-layer='scrim'] {
   will-change: translate, opacity;
 }
 
-[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='page'] {
+[data-sidebar-scope]:has(> [data-reveal-drawer='aside'][data-present='true']) [data-aside-reveal-layer='page'] {
   position: relative;
   z-index: 1;
   overflow: clip;
@@ -81,6 +82,6 @@
   will-change: translate;
 }
 
-[data-aside-reveal][data-aside-reveal-present='true'] [data-slot='app-shell'] {
+[data-sidebar-scope]:has(> [data-reveal-drawer='aside'][data-present='true']) [data-slot='app-shell'] {
   overflow-x: clip;
 }

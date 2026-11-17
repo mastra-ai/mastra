@@ -13,6 +13,7 @@ type SidebarContextValue = {
   collapsedWidth: number;
   isMobile: boolean;
   openMobile: boolean;
+  mobileDrawerPresent: boolean;
   mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
   setOpenMobile: (open: boolean) => void;
   setMobileDrawerPresent: (present: boolean) => void;
@@ -23,6 +24,8 @@ type SidebarContextValue = {
   commit: () => void;
   setGestureActive: (active: boolean) => void;
   scopeRef: React.RefObject<HTMLDivElement | null>;
+  /** The scope element once mounted, for drawers that portal into it. */
+  scope: HTMLDivElement | null;
   panelRef: React.RefObject<HTMLDivElement | null>;
   LinkComponent?: LinkComponent;
 };
@@ -31,6 +34,7 @@ type SidebarContextValue = {
 // do not re-render when the mobile drawer toggles.
 export type MobileDrawerContextValue = {
   openMobile: boolean;
+  mobileDrawerPresent: boolean;
   mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
   setOpenMobile: (open: boolean) => void;
   setMobileDrawerPresent: (present: boolean) => void;
@@ -38,7 +42,7 @@ export type MobileDrawerContextValue = {
 
 export type SidebarStateContextValue = Omit<
   SidebarContextValue,
-  'openMobile' | 'mobileTriggerRef' | 'setOpenMobile' | 'setMobileDrawerPresent'
+  'openMobile' | 'mobileDrawerPresent' | 'mobileTriggerRef' | 'setOpenMobile' | 'setMobileDrawerPresent'
 >;
 
 export const SidebarContext = React.createContext<SidebarStateContextValue | null>(null);
