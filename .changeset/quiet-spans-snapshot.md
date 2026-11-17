@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Stop deep-copying span metadata twice for every logger and metrics context. `getLoggerContext` and `getMetricsContext` now pass span metadata straight to the context implementation, which snapshots it once, halving the deep copies taken on the agent execution path when observability is enabled.
+Improved logger and metrics context creation so span metadata is copied once per context instead of twice. Emitted logs and metrics still keep the metadata captured when each context was created.
