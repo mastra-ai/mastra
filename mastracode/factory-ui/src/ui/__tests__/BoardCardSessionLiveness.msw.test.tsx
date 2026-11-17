@@ -178,7 +178,44 @@ describe('Board card session liveness', () => {
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
   });
 
-  it('hides Retry while the bound session is working, even for a retryable failure', async () => {
+  it('keeps the working dot while a second session of the card is still materializing', async () => {
+    stubFactoryWithBoundSession();
+    const reviewSession = { sessionId: 'session-2', branch: 'factory/issue-2', threadId: 'session-2' };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            { ...workItem, sessions: { ...workItemSessions, review: { ...reviewSession, startedBy: 'user-1' } } },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [
+            boundSession,
+            {
+              ...boundSession,
+              id: 'session-row-2',
+              sessionId: 'session-2',
+              branch: 'factory/issue-2',
+              materializedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    await waitForMutationsIdle(client);
+    expect(card.querySelector('[data-live-session-indicator="initializing"]')).toBeNull();
+  });
+
+  it('hides Retry while the bound session runs, and marks the failure as waiting on you', async () => {
     stubFactoryWithBoundSession();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
@@ -210,7 +247,7 @@ describe('Board card session liveness', () => {
     const { client } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
     await waitForMutationsIdle(client);
     expect(within(card).queryByRole('button', { name: 'Retry' })).toBeNull();
   });

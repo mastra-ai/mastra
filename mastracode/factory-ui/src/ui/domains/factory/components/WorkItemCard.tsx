@@ -52,6 +52,7 @@ export function WorkItemCard({
   onDismissProposal,
   onRetryDecision,
   sessionStatus,
+  sessionHolds,
   ownerCurrent = true,
   onMove,
   onRemove,
@@ -78,8 +79,10 @@ export function WorkItemCard({
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
-  /** Live status of the card's bound sessions, resolved once for the whole board. */
+  /** The card's marker, resolved once for the whole board: the status its row in the sidebar shows. */
   sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
   /**
    * Whether the board read everything that says who holds the card. When it has not, the card
    * refuses no move up front and the server, which holds the rule too, decides.
@@ -106,6 +109,7 @@ export function WorkItemCard({
     approvingDecisionId,
     retryingDecisionId,
     sessionStatus,
+    sessionHolds,
     onApproveProposal,
     onRetryDecision,
     onMove,

@@ -324,6 +324,22 @@ describe('Board card with a proposed run', () => {
     expect(transitions).toEqual([]);
   });
 
+  it('marks a card whose session runs beside a suggested run as waiting on you, and holds the run back', async () => {
+    stubBoardEndpoints({ withLiveSession: true });
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: 'thread-1' }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    await waitForMutationsIdle(client);
+    expect(card.querySelector('[data-live-session-indicator="working"]')).toBeNull();
+    expect(within(card).getByRole('button', { name: 'Start suggested run: Plan' })).toBeDisabled();
+  });
+
   it('asks for the maintainer decision on a held card, not the run parked on it', async () => {
     const { settled, transitions } = stubBoardEndpoints({ held: true });
     const user = userEvent.setup();

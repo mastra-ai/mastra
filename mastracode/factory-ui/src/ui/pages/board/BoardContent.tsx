@@ -11,6 +11,7 @@ import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { useRunQueue } from '../../../hooks/useFactoryDecisions';
+import { useCardSessions } from '../../../hooks/useSessionRows';
 import { useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '../../../hooks/useWorkItems';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
@@ -30,7 +31,6 @@ import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
 import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
-import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
@@ -48,7 +48,6 @@ import { BoardStages } from './BoardStages';
 
 const NO_CARDS: WorkItem[] = [];
 const NO_WINDOWS: Readonly<Record<string, number>> = {};
-const NO_SESSIONS: readonly string[] = [];
 const NO_ACTORS: string[] = [];
 const NO_PEOPLE: readonly ProviderPerson[] = [];
 const NO_LABELS: readonly string[] = [];
@@ -120,11 +119,7 @@ export function BoardContent({
   };
   const intake = useBoardIntakeSetup({ factoryProjectId, repositories: factory.repositories, definition });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
-  const sessionStatuses = useItemSessionStatuses({
-    factoryProjectId,
-    items: cards,
-    parkedSessionIds: snapshot?.parkedSessionIds ?? NO_SESSIONS,
-  });
+  const cardSessions = useCardSessions(factoryProjectId);
   const decisions = useBoardDecisions(factoryProjectId);
   const runQueue = useRunQueue(factoryProjectId);
   // Keyed by card, not by the card's board decision: the board reads the newest
@@ -281,7 +276,8 @@ export function BoardContent({
                 highlighted={targetItemId === item.id}
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
-                sessionStatus={sessionStatuses.get(item.id)}
+                sessionStatus={cardSessions.statuses.get(item.id)}
+                sessionHolds={cardSessions.held.has(item.id)}
                 ownerCurrent={ownerCurrent}
                 activityPage={activityPage}
                 evaluatingStage={items.evaluatingStages.get(item.id)}

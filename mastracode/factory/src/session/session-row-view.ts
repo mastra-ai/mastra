@@ -13,8 +13,8 @@ import {
   sessionRowGroupKeys,
   sessionRowOwnerKey,
 } from './session-row-query.js';
-import { sessionRowStatus } from './session-row-status.js';
-import type { RowSession } from './session-rows.js';
+import { isInFlight } from './session-rows.js';
+import type { CardSessionStatus, RowSession } from './session-rows.js';
 
 export type SessionRowsView = Omit<SessionRowsQuery, 'pin' | 'children'>;
 
@@ -142,21 +142,11 @@ export function sessionRowsView(
   };
 }
 
-function liveSessionCounts(
-  cards: readonly Card[],
-  running: ReadonlySet<string>,
-  parked: ReadonlySet<string>,
-): SessionActivityResponse['cards'] {
+function liveSessionCounts(statuses: Iterable<SessionRow['status']>): SessionActivityResponse['cards'] {
   const counts = { working: 0, waiting: 0 };
-  for (const card of cards) {
-    const sessionIds = Object.values(card.sessions).map(ref => ref.sessionId);
-    const status = sessionRowStatus({
-      running: sessionIds.some(id => running.has(id)),
-      initializing: false,
-      attention: sessionIds.some(id => parked.has(id)),
-    });
+  for (const status of statuses) {
     if (status === 'working') counts.working += 1;
-    if (status === 'ready') counts.waiting += 1;
+    if (status === 'waiting') counts.waiting += 1;
   }
   return counts;
 }
@@ -166,18 +156,19 @@ export function sessionActivity(facts: {
   cards: readonly Card[];
   runningSessionIds: ReadonlySet<string>;
   parkedSessionIds: ReadonlySet<string>;
+  cardStatuses: ReadonlyMap<string, CardSessionStatus>;
 }): SessionActivityResponse {
   const known = new Set([
     ...facts.sessions.map(session => session.sessionId),
     ...facts.cards.flatMap(card => Object.values(card.sessions).map(ref => ref.sessionId)),
   ]);
   const sorted = (ids: Iterable<string>) => [...ids].toSorted((a, b) => a.localeCompare(b));
+  const cards = [...facts.cardStatuses].toSorted(([a], [b]) => a.localeCompare(b));
   return {
     runningSessionIds: sorted([...facts.runningSessionIds].filter(id => known.has(id))),
     parkedSessionIds: sorted(facts.parkedSessionIds),
-    initializingSessionIds: sorted(
-      facts.sessions.flatMap(session => (session.materializedAt === null ? [session.sessionId] : [])),
-    ),
-    cards: liveSessionCounts(facts.cards, facts.runningSessionIds, facts.parkedSessionIds),
+    cardStatuses: Object.fromEntries(cards.flatMap(([id, { status }]) => (isInFlight(status) ? [[id, status]] : []))),
+    sessionHeldCardIds: cards.flatMap(([id, { held }]) => (held ? [id] : [])),
+    cards: liveSessionCounts(cards.map(([, { status }]) => status)),
   };
 }

@@ -26,19 +26,13 @@ export interface BoardSnapshot {
 const cardsJson = new WeakMap<readonly Card[], CardsJson>();
 
 /**
- * The listing's wire body for one board version and its run activity. Every tab
- * polling an unchanged board shares one serialization and one gzip, and its
- * ETag lets the browser revalidate instead of downloading the board again.
+ * The listing's wire body for one board version. Every tab polling an unchanged board shares one
+ * serialization and one gzip, and its ETag lets the browser revalidate instead of downloading the
+ * board again.
  */
-export function boardSnapshot(
-  items: readonly Card[],
-  toWire: (item: Card) => unknown,
-  runningSessionIds: readonly string[],
-  parkedSessionIds: readonly string[],
-  cursor?: string,
-): BoardSnapshot {
+export function boardSnapshot(items: readonly Card[], toWire: (item: Card) => unknown, cursor?: string): BoardSnapshot {
   // Random per cached list, so an ETag from before a restart never matches a different board.
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, () => randomUUID(), { cursor });
+  return snapshot(items, toWire, () => randomUUID(), { cursor });
 }
 
 /**
@@ -47,14 +41,8 @@ export function boardSnapshot(
  * so the tab gets a 304. A caller that passes the same list again shares its serialization.
  * `total` is how many cards matched when `items` is only the first of them.
  */
-export function scopedSnapshot(
-  items: readonly Card[],
-  toWire: (item: Card) => unknown,
-  runningSessionIds: readonly string[],
-  parkedSessionIds: readonly string[],
-  total?: number,
-): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, etagDigest, { total });
+export function scopedSnapshot(items: readonly Card[], toWire: (item: Card) => unknown, total?: number): BoardSnapshot {
+  return snapshot(items, toWire, etagDigest, { total });
 }
 
 /** What moved on a board, for the one reader whose cursor it answers: nothing of it is kept. */
@@ -102,8 +90,6 @@ export function listCheck(items: readonly Card[]): string {
 function snapshot(
   items: readonly Card[],
   toWire: (item: Card) => unknown,
-  runningSessionIds: readonly string[],
-  parkedSessionIds: readonly string[],
   cardsId: (json: string) => string,
   more: { total?: number; cursor?: string },
 ): BoardSnapshot {
@@ -114,11 +100,11 @@ function snapshot(
     cardsJson.set(items, cards);
   }
   // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
-  const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, ...more });
+  const rest = JSON.stringify(more);
   const etag = `W/"${cards.id}.${etagDigest(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
-  const json = `{"workItems":${cards.json},${rest.slice(1)}`;
+  const json = `{"workItems":${cards.json}${rest === '{}' ? '}' : `,${rest.slice(1)}`}`;
   let gzipped: Promise<Buffer> | undefined;
   // zlib runs on the libuv pool, off the event loop.
   cards.latest = { etag, json, gzipped: () => (gzipped ??= gzip(json)) };

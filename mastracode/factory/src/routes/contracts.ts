@@ -1070,9 +1070,6 @@ export const boardPhasesResponseSchema = z.object({
   matchingTotal: countSchema,
   /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
   workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
-  /** Among the named cards. */
-  runningSessionIds: z.array(z.string()),
-  parkedSessionIds: z.array(z.string()),
 });
 
 /** What the board's filter menus offer, read over every card of the project. */
@@ -1232,8 +1229,11 @@ export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
   /** Sessions of a card whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
-  initializingSessionIds: z.array(z.string()),
-  /** Cards with a session working, and with one waiting on a person. */
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
+  /** Cards one of whose sessions is coming up, running, or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),
 });
 
@@ -1857,14 +1857,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items',
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
-      runningSessionIds: z.array(z.string()),
-      parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
       /** Names this read of the whole board. Absent when the next read must list it whole again. */
@@ -1908,7 +1906,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
   sessionActivity: {
     method: 'GET',
     path: '/web/factory/projects/:id/session-activity',
-    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    description: "List which of a project's sessions are running or waiting on a person, and each card's status",
     pathSchema: projectPathSchema,
     responseSchema: sessionActivityResponseSchema,
   },
