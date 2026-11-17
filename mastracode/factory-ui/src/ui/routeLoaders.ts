@@ -199,7 +199,6 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
 
 const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
 
-/** Held by a navigation, so the thread's header and panel paint complete instead of filling in. */
 export const loadSessionFrame: Prefetch = async ({ queryClient, api }, { params }) => {
   const { factoryId, threadId } = params;
   const sessionId = params.sessionId ?? threadId;
