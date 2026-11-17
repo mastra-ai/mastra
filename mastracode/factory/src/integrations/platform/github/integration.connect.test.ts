@@ -187,6 +187,45 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(platform.requests.filter(request => request.path.startsWith('/v1/server'))).toEqual([]);
   });
 
+  it("searches the repo picker's repositories through the Mastra Factory app, never the legacy routes", async () => {
+    const { platform, github, integration } = await setup();
+    const repository = (name: string, pushedAt: string) => ({
+      id: name.length,
+      name,
+      full_name: `acme/${name}`,
+      private: false,
+      default_branch: 'main',
+      html_url: `https://github.com/acme/${name}`,
+      pushed_at: pushedAt,
+      owner: { login: 'acme' },
+    });
+    const route = github.route;
+    github.route = request =>
+      request.method === 'GET' && request.path === '/installation/repositories'
+        ? {
+            status: 200,
+            body: {
+              repositories: [
+                repository('app', '2026-11-01T00:00:00Z'),
+                repository('docs', '2026-11-12T00:00:00Z'),
+                repository('mobile-app', '2026-11-10T00:00:00Z'),
+                repository('apps-infra', '2026-11-05T00:00:00Z'),
+              ],
+            },
+          }
+        : route?.(request);
+
+    const found = await integration.listInstallationRepos(900, { query: 'APP', limit: 2 });
+
+    expect(found.map(repo => repo.fullName)).toEqual(['acme/mobile-app', 'acme/apps-infra']);
+    expect(found.every(repo => repo.installationId === 900)).toBe(true);
+    expect((await integration.getInstallationRepo(900, 'acme/docs'))?.pushedAt).toBe('2026-11-12T00:00:00Z');
+    expect(github.calls('/installation/repositories', 'GET').every(request => request.token === 'tok-github')).toBe(
+      true,
+    );
+    expect(platform.requests.filter(request => request.path.startsWith('/v1/server'))).toEqual([]);
+  });
+
   it('hands an agent sandbox a token scoped to its repository, never an installation-wide one', async () => {
     const { platform, integration, storage } = await setup();
     const installation = await integration.versionControl.registerInstallation({

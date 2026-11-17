@@ -62,6 +62,7 @@ import type {
   RepoListOptions,
   RepoSummary,
 } from '../../github/integration.js';
+import { narrowRepos } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { DEFAULT_GITHUB_RECONCILE_INTERVAL_MS, GithubReconcileWorker } from '../../github/reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
@@ -1561,7 +1562,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     // A narrowed listing (the repo picker) asks the Platform to search or
     // trim, so accounts with hundreds of repositories never page them all.
     if (options?.query || options?.limit) {
-      const repositories = await this.#legacy.listInstallationRepositories(installationId, {
+      const repositories = await this.#installationRepositories(installationId, undefined, {
         query: options.query,
         limit: options.limit,
       });
@@ -2093,14 +2094,23 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   }
 
   /** Every repository an installation reaches, from whichever app it belongs to. */
-  async #installationRepositories(installationId: number, orgId?: string): Promise<LegacyInstallationRepository[]> {
+  /**
+   * An installation's repositories. With a `query` or `limit`, only the
+   * matching ones, most recently pushed first: the legacy platform searches
+   * for us, while GitHub can't, so a switched org's listing is narrowed here.
+   */
+  async #installationRepositories(
+    installationId: number,
+    orgId?: string,
+    search?: { query?: string; limit?: number },
+  ): Promise<LegacyInstallationRepository[]> {
     const transport = await this.#connectTransport(
       { type: 'app-installation', installationId, ...(orgId ? { orgId } : {}) },
       undefined,
     );
-    return transport
-      ? transport.listInstallationRepositories()
-      : this.#legacy.listInstallationRepositories(installationId);
+    if (!transport) return this.#legacy.listInstallationRepositories(installationId, search);
+    const repositories = await transport.listInstallationRepositories();
+    return search ? narrowRepos(repositories, search.query, search.limit) : repositories;
   }
 
   /**
