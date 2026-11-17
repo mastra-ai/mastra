@@ -280,6 +280,7 @@ export async function moveKnowledgePage(
   host: KnowledgeHostWriter,
   input: KnowledgeMovePageInput,
 ): Promise<KnowledgePage> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   const ref = `${input.scope}#${keys.join('/')}`;
   await host.runtime.checkDeclarations();

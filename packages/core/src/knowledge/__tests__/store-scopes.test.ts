@@ -225,6 +225,14 @@ describe('Knowledge scope declarations a store supplies', () => {
     await expect((await setup({})).knowledge.readScopeFor(['docs:eng'])).rejects.toThrow(KnowledgeDeclarationError);
   });
 
+  it('moves a page in a store-declared scope as the first call, before anything else reads the store', async () => {
+    const { knowledge, storage } = await setup();
+    const [linear] = await storage.getScopesByAddress(['linear:acme:conn_1']);
+    await storage.createPage({ parentId: linear!.id, key: 'archive-plans', name: 'Plans', body: '', provenance: host });
+    const moved = await knowledge.movePage({ scope: 'linear:acme:conn_1', path: 'roadmap', parent: 'archive-plans' });
+    expect(moved.name).toBe('Roadmap');
+  });
+
   it('reads nothing a store declaration gives no rule, and writes only with the role a rule gives', async () => {
     const closed = await setup({
       'imports:$name': {},
