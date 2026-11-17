@@ -20,6 +20,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import { ConditionRows } from '../../settings/components/ConditionRows';
 import { describeRule, intakeRouteFacts } from '../../settings/components/conditionFields';
 import { boardName, phaseName, phaseOptions } from '../ruleTargets';
@@ -79,6 +80,7 @@ function suggestName(on: readonly RuleEvent[], when: RuleGroup | null, target: s
 }
 
 export function RuleBuilderDialog({
+  factoryId,
   board,
   boards,
   initial,
@@ -90,6 +92,8 @@ export function RuleBuilderDialog({
   onSave,
   onClose,
 }: {
+  /** The Factory project whose repositories, teams and projects the source filter suggests. */
+  factoryId: string;
   board: InstalledBoardInfo;
   boards: readonly InstalledBoardInfo[];
   /** The rule being edited; a new rule when undefined. */
@@ -104,6 +108,7 @@ export function RuleBuilderDialog({
   onSave: (draft: RuleDraft) => void;
   onClose: () => void;
 }) {
+  const sources = useSourceSuggestions(factoryId);
   const [on, setOn] = useState<RuleEvent[]>(() => initial?.on ?? (initialEvent ? [initialEvent] : []));
   const [when, setWhen] = useState<RuleGroup | null>(() => initial?.when ?? null);
   const [filtered, setFiltered] = useState(() => (initial?.when?.conditions.length ?? 0) > 0);
@@ -249,7 +254,7 @@ export function RuleBuilderDialog({
                         label="Conditions"
                         rule={when}
                         facts={intakeRouteFacts(on)}
-                        options={phaseOptions(board)}
+                        options={{ ...phaseOptions(board), 'source.repository': sources }}
                         onChange={(next, unfinished) => {
                           setWhen(next);
                           setIncomplete(unfinished);

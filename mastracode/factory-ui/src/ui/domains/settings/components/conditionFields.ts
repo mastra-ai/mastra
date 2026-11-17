@@ -13,9 +13,8 @@ const CARD_FACT_PROPERTIES = {
       title: { type: 'string', title: 'Title' },
       author: { type: 'string', title: 'Author' },
       key: { type: 'string', title: 'Key' },
-      state: { type: 'string', title: 'State' },
       assignees: { type: 'string', title: 'Assignees' },
-      pullRequest: { type: 'number', title: 'Open pull request' },
+      pullRequest: { type: 'number', title: 'Has pull request' },
       trusted: { type: 'boolean', title: 'Author trusted' },
     },
   },
@@ -28,9 +27,7 @@ const CARD_FACT_PROPERTIES = {
     type: 'object',
     title: 'Source',
     properties: {
-      kind: { type: 'string', title: 'Kind' },
-      integration: { type: 'string', title: 'Integration' },
-      provider: { type: 'string', title: 'Provider' },
+      provider: { type: 'string', title: 'Source' },
       // A GitHub repository or GitLab project path, a Linear team key (ENG), a Jira project key (PLAT).
       repository: { type: 'string', title: 'Repository, team or project' },
     },
@@ -59,10 +56,34 @@ const ROUTE_FACT_PROPERTIES = {
     title: 'Closed issue',
     properties: {
       phase: { type: 'string', title: 'Phase' },
-      hasPullRequest: { type: 'boolean', title: 'Has a pull request' },
     },
   },
 } as const;
+
+/**
+ * Facts the picker no longer offers but stored rules may still name, and which still evaluate: the
+ * events say what state or kind an item is in, `source.provider` is `source.integration`, and
+ * `item.pullRequest` covers a closed issue's pull request. Rules naming them still read and edit.
+ */
+const LEGACY_FACTS: Facts = {
+  type: 'object',
+  properties: {
+    item: { type: 'object', title: 'Card', properties: { state: { type: 'string', title: 'State' } } },
+    source: {
+      type: 'object',
+      title: 'Source',
+      properties: {
+        kind: { type: 'string', title: 'Kind' },
+        integration: { type: 'string', title: 'Integration' },
+      },
+    },
+    closedIssue: {
+      type: 'object',
+      title: 'Closed issue',
+      properties: { hasPullRequest: { type: 'boolean', title: 'Has a pull request' } },
+    },
+  },
+};
 
 /** The events that fire on a label or assignee change, and so carry what changed. */
 const UPDATE_EVENTS = new Set(['work_item.updated', 'pull_request.updated']);
@@ -155,12 +176,17 @@ type FieldShape = { label?: string; options?: FilterBarOption[]; strict?: boolea
 /** What a value typed for a fact looks like, shown until one is typed. */
 export const VALUE_PLACEHOLDERS: Record<string, string> = { 'source.repository': 'owner/repo, ENG, PLAT' };
 
-/** Facts only tested for being there, such as a card's open pull request. */
+/** Facts only tested for being there, such as a card's open pull request: picked as yes or no. */
 const PRESENCE_OPERATORS = ['exists', 'not_exists'];
-const PRESENCE_LABELS: Record<string, string> = { exists: 'exists', not_exists: 'does not exist' };
+const PRESENCE_LABELS: Record<string, string> = { exists: 'is yes', not_exists: 'is no' };
 const PRESENCE_TEXT: Record<string, readonly [yes: string, no: string]> = {
-  'item.pullRequest': ['card has an open pull request', 'card has no open pull request'],
+  'item.pullRequest': ['card has a pull request', 'card has no pull request'],
 };
+
+/** Whether a field is only tested for being there, so it reads as a yes or no. */
+export function isPresenceField(id: string): boolean {
+  return id in PRESENCE_TEXT;
+}
 
 /** How each fact reads in the condition editor, beyond its fact title. */
 const FIELD_SHAPES: Record<string, FieldShape> = {
@@ -170,7 +196,7 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   'item.key': { label: 'Key' },
   'item.state': { label: 'State' },
   'item.assignees': { label: 'Assignees', list: true },
-  'item.pullRequest': { label: 'Open pull request' },
+  'item.pullRequest': { label: 'Has pull request' },
   'item.trusted': { label: 'Author trust', options: yesNo('Trusted', 'Outside author'), strict: true },
   'pullRequest.trusted': {
     label: 'Pull request author trust',
@@ -185,7 +211,7 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     ],
   },
   'source.integration': { label: 'Integration', options: INTEGRATIONS },
-  'source.provider': { label: 'Provider', options: INTEGRATIONS },
+  'source.provider': { label: 'Source', options: INTEGRATIONS },
   // Suggested from the project's repositories, teams and projects, but any value can be typed: `strict: false`.
   'source.repository': { label: 'Repository, team or project', strict: false },
   'pullRequest.closesIssue': { label: 'Pull request closes an issue', options: yesNo(), strict: true },
@@ -232,6 +258,15 @@ export function fieldLabel(field: string): string | undefined {
  * pick from when they are known. `options` adds values per field, such as a board's phases.
  */
 export function conditionFields(facts: Facts, options: Record<string, FilterBarOption[]> = {}): FilterBarField[] {
+  return leafFields(facts, options).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Fields stored rules may still name but the picker no longer offers, so those rules still read and edit. */
+export function legacyConditionFields(options: Record<string, FilterBarOption[]> = {}): FilterBarField[] {
+  return leafFields(LEGACY_FACTS, options);
+}
+
+function leafFields(facts: Facts, options: Record<string, FilterBarOption[]>): FilterBarField[] {
   return Object.entries(facts.properties ?? {}).flatMap(([group, groupFact]) =>
     Object.entries(groupFact.properties ?? {}).map(([property, fact]): FilterBarField => {
       const id = `${group}.${property}`;
@@ -269,6 +304,8 @@ const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
 const PROPER_VALUES = new Set(['source.integration', 'source.provider', 'closedIssue.phase']);
 
 const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed', 'work_item.updated']);
+const everyField = (options: Record<string, FilterBarOption[]>) =>
+  new Map([...conditionFields(EVERY_FACT, options), ...legacyConditionFields(options)].map(field => [field.id, field]));
 
 function describeMember(member: RuleCondition | RuleGroup, fields: ReadonlyMap<string, FilterBarField>): string {
   if ('conditions' in member) return `(${describeMembers(member, fields)})`;
@@ -314,7 +351,7 @@ export function describeConditions(
   options: Record<string, FilterBarOption[]> = {},
 ): { join: 'and' | 'or'; parts: string[] } | null {
   if (!rule || rule.conditions.length === 0) return null;
-  const fields = new Map(conditionFields(EVERY_FACT, options).map(field => [field.id, field]));
+  const fields = everyField(options);
   return {
     join: rule.operator === 'AND' ? 'and' : 'or',
     parts: rule.conditions.map(member => capitalize(describeMember(member, fields))),
@@ -330,7 +367,7 @@ export function describeRule(
   options: Record<string, FilterBarOption[]> = {},
 ): string {
   if (!rule || rule.conditions.length === 0) return 'Every card';
-  const fields = new Map(conditionFields(EVERY_FACT, options).map(field => [field.id, field]));
+  const fields = everyField(options);
   const text = describeMembers(rule, fields);
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
