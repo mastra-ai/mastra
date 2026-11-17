@@ -2,10 +2,10 @@ import { useId, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import type { InputGroupInputProps } from '../InputGroup';
-import { Spinner } from '../Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import './autosave-input.css';
@@ -27,8 +27,13 @@ export type AutosaveInputProps = Omit<
 /** How long the check stays after a save. */
 const SAVED_CHECK_MS = 1600;
 
-/** The spinner, check and alert share one 18px slot at the end of the field, so swapping them moves nothing. */
+/**
+ * The loader, check and alert are icons from one set at one icon size, so they read as the same size, and they share
+ * one slot at the end of the field, so swapping them moves nothing.
+ */
 const glyphClassName = 'size-icon-md shrink-0';
+
+export type AutosaveInputStatusValue = 'idle' | 'saving' | 'saved' | 'error';
 
 /**
  * A settings text field that saves itself: leaving it or pressing Enter saves a changed value, Escape puts the
@@ -134,21 +139,45 @@ export function AutosaveInput({
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
       />
-      {/* Always there, empty while idle, so the spinner, check or alert never change the field's width. */}
+      <AutosaveInputStatus
+        status={saving ? 'saving' : error ? 'error' : justSaved ? 'saved' : 'idle'}
+        label={label}
+        error={error}
+        errorId={errorId}
+      />
+    </InputGroup>
+  );
+}
+
+/**
+ * The end of an `AutosaveInput`: empty while idle, then a loader, a check, or an alert whose tooltip shows `error`.
+ * Always rendered, so the field's width never changes. Exported for stories that pin each state.
+ */
+export function AutosaveInputStatus({
+  status,
+  label,
+  error,
+  errorId,
+}: {
+  status: AutosaveInputStatusValue;
+  label: string;
+  error?: string | null;
+  errorId: string;
+}) {
+  return (
+    <>
       <InputGroupAddon
         align="inline-end"
         className={cn(
           // The addon colours its glyphs through --control-icon.
-          error && '[--control-icon:var(--color-destructive-foreground)]',
-          !error && justSaved && '[--control-icon:var(--color-success-indicator)]',
+          status === 'error' && '[--control-icon:var(--color-destructive-foreground)]',
+          status === 'saved' && '[--control-icon:var(--color-success-indicator)]',
         )}
       >
         <span className="flex size-icon-md items-center justify-center">
-          {saving ? (
-            // The ring fills 17/24 of the spinner's box but the alert's circle about 20/24, so the spinner gets a
-            // 20px box, held to the 18px slot by the negative margin, to draw at the same size.
-            <Spinner className="-m-px size-5 shrink-0" aria-label={`Saving ${label}`} />
-          ) : error ? (
+          {status === 'saving' ? (
+            <IconLoadingCircle className={cn(glyphClassName, 'motion-safe:animate-spin')} aria-hidden />
+          ) : status === 'error' ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -167,14 +196,14 @@ export function AutosaveInput({
                 {error}
               </TooltipContent>
             </Tooltip>
-          ) : justSaved ? (
+          ) : status === 'saved' ? (
             <IconCheckmark2Medium className={cn('autosave-input-glyph', glyphClassName)} aria-hidden />
           ) : null}
         </span>
       </InputGroupAddon>
       <span className="sr-only" role="status">
-        {justSaved ? `${label} saved` : ''}
+        {status === 'saving' ? `Saving ${label}` : status === 'saved' ? `${label} saved` : ''}
       </span>
-    </InputGroup>
+    </>
   );
 }
