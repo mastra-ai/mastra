@@ -214,6 +214,15 @@ async function listCatalogModels(
   return [...models.filter(m => m.provider !== MASTRA_GATEWAY_CATALOG_PROVIDER), ...gatewayModels];
 }
 
+function originOf(url: string): string | undefined {
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The tenant's stored gateway key, personal before organization, as model resolution picks it. */
 function tenantGatewayKey(tenantCredentials: CredentialRecord[]): string | undefined {
   const credential = grantingTenantRecord(tenantCredentials, MASTRA_GATEWAY_PROVIDER)?.credential;
@@ -1219,6 +1228,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const gatewayOrigin = originOf(mastraGatewayBaseUrl());
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
               ? async () => {
@@ -1237,6 +1247,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
+              // Lets the web UI recognize a saved run error from this server's gateway, wherever it is hosted.
+              ...(gatewayOrigin ? { mastraGatewayOrigin: gatewayOrigin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

@@ -332,35 +332,89 @@ describe('describeRunError', () => {
       expect(describeRunError(withoutBody)).toMatchObject({ title: 'Mastra Gateway spend limit reached' });
     });
 
-    it("keeps a provider's relayed 429 the provider account's limit", () => {
-      const relayed = {
-        name: 'AI_APICallError',
-        message: 'Rate limit reached for requests',
-        statusCode: 429,
-        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
-        responseBody: JSON.stringify({
-          error: { type: 'requests', code: 'rate_limit_exceeded', message: 'Rate limit reached for requests' },
-        }),
-      };
-      expect(describeRunError(relayed)).toMatchObject({ title: 'Provider rate limit reached' });
-    });
+    it.each([
+      [
+        'an OpenAI-style',
+        { type: 'requests', code: 'rate_limit_exceeded', message: 'Rate limit reached for requests' },
+      ],
+      ['an uncoded', { message: 'rate limited', type: 'rate_limit_error', code: null }],
+    ])(
+      "names the provider behind the gateway, not the session's credential, for %s 429 it relayed",
+      (_shape, error) => {
+        const relayed = {
+          name: 'AI_APICallError',
+          message: error.message,
+          statusCode: 429,
+          url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+          responseBody: JSON.stringify({ error }),
+        };
+        expect(describeRunError(relayed)).toEqual({
+          title: 'Model provider rate limit reached',
+          message:
+            'The model provider behind the Mastra Gateway is limiting requests. Continue shortly, or choose another model.',
+          recoveries: ['continue', 'model'],
+          model: undefined,
+        });
+      },
+    );
 
-    it('cannot yet tell the gateway’s own 429 from a saved part, which keeps no request URL', () => {
-      // The reply's type and code are also used by other providers, so they cannot identify the gateway alone.
-      const saved = toPersistedErrorIdentity({
-        name: 'AI_APICallError',
-        message: 'Gateway key requests limit exceeded. Retry in 12s.',
-        statusCode: 429,
-        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
-        responseBody: JSON.stringify({
-          error: {
-            type: 'rate_limit_error',
-            code: 'rate_limit_exceeded',
-            message: 'Gateway key requests limit exceeded. Retry in 12s.',
-          },
+    describe('a saved 429, rebuilt from history', () => {
+      // History keeps no request URL. Versions of core that record the request's origin save it as
+      // `requestOrigin`; this core does not emit it yet, so the tests add it to the real saved part.
+      const saved429 = (url: string, error: Record<string, unknown>, requestOrigin?: string) => ({
+        ...toPersistedErrorIdentity({
+          name: 'AI_APICallError',
+          message: String(error.message),
+          statusCode: 429,
+          url,
+          responseBody: JSON.stringify({ error }),
         }),
+        ...(requestOrigin ? { requestOrigin } : {}),
       });
-      expect(describeRunError(saved)).toMatchObject({ title: 'Provider rate limit reached' });
+      const gatewayLimit = {
+        type: 'rate_limit_error',
+        code: 'rate_limit_exceeded',
+        message: 'Gateway key requests limit exceeded. Retry in 12s.',
+      };
+      const relayedLimit = { message: 'rate limited', type: 'rate_limit_error', code: null };
+
+      it('stays a provider rate limit without a request origin, since its type and code are shared', () => {
+        const saved = saved429('https://gateway-api.mastra.ai/v1/chat/completions', gatewayLimit);
+        expect(saved).not.toHaveProperty('url');
+        expect(describeRunError(saved)).toMatchObject({ title: 'Provider rate limit reached' });
+      });
+
+      it("names the gateway's own limit when the request went to the production gateway", () => {
+        const saved = saved429(
+          'https://gateway-api.mastra.ai/v1/chat/completions',
+          gatewayLimit,
+          'https://gateway-api.mastra.ai',
+        );
+        expect(describeRunError(saved)).toMatchObject({
+          title: 'Mastra Gateway rate limit reached',
+          recoveries: ['continue', 'model'],
+        });
+      });
+
+      it('names the provider behind the gateway for a limit the gateway relayed', () => {
+        const saved = saved429(
+          'https://gateway-api.mastra.ai/v1/chat/completions',
+          relayedLimit,
+          'https://gateway-api.mastra.ai',
+        );
+        expect(describeRunError(saved)).toMatchObject({
+          title: 'Model provider rate limit reached',
+          recoveries: ['continue', 'model'],
+        });
+      });
+
+      it('recognizes a non-production gateway only when the configured origin is passed', () => {
+        const saved = saved429('http://127.0.0.1:4180/v1/chat/completions', gatewayLimit, 'http://127.0.0.1:4180');
+        expect(describeRunError(saved)).toMatchObject({ title: 'Provider rate limit reached' });
+        expect(describeRunError(saved, { gatewayBaseUrl: 'http://127.0.0.1:4180' })).toMatchObject({
+          title: 'Mastra Gateway rate limit reached',
+        });
+      });
     });
 
     it('keeps an Anthropic 403 a credential problem', () => {

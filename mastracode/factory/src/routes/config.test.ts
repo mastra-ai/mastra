@@ -1192,6 +1192,20 @@ describe('Mastra Gateway routes with a tenant', () => {
       expect(settings.gatewayRow).not.toHaveProperty('connectWithMastraAccount');
     });
 
+    it.each([
+      ['https://gateway-api.mastra.ai', 'https://gateway-api.mastra.ai'],
+      ['http://127.0.0.1:4180/v1/', 'http://127.0.0.1:4180'],
+    ])('reports the origin of the configured gateway %s to the web UI', async (configured, origin) => {
+      vi.stubEnv('MASTRA_GATEWAY_URL', configured);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const body = (await (await buildApp(fakePlatform()).request('/web/config/providers')).json()) as {
+        mastraGatewayOrigin?: string;
+      };
+
+      expect(body.mastraGatewayOrigin).toBe(origin);
+    });
+
     it('keeps the one-click connect when the server is in v2 mode without a key', async () => {
       vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
       vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');

@@ -275,15 +275,22 @@ function explainGatewayRefusal(
       recoveries: ['continue', 'model'],
     };
   }
-  return undefined;
+  // A provider's own limit relayed through the gateway: the provider account is the gateway's route,
+  // not one of this session's credentials, and the relayed text names no one.
+  return {
+    title: 'Model provider rate limit reached',
+    message:
+      'The model provider behind the Mastra Gateway is limiting requests. Continue shortly, or choose another model.',
+    recoveries: ['continue', 'model'],
+  };
 }
 
 /**
  * The Mastra Gateway answered: a `mastra/…` model, a request sent to its host (production, or the
  * configured base URL), a v1 billing reply (which links to `gateway.mastra.ai`), or a v2 reply naming
  * itself a gateway error or carrying a reason code only the gateway sends. The request reaches the
- * gateway without the `mastra/` prefix, and history keeps neither the request URL nor the host, so
- * the reply body is what identifies the gateway when the web UI rebuilds a saved error.
+ * gateway without the `mastra/` prefix, and history keeps no request URL, so the web UI rebuilds a saved
+ * error from its request origin, when one was recorded, and otherwise from the reply body.
  */
 function isMastraGatewayError(
   error: RunErrorIdentity,
@@ -308,10 +315,13 @@ function configuredGatewayHost(baseUrl: string | undefined): string | undefined 
   }
 }
 
-/** Whether the request, or a provider error it wraps, went to the gateway's host. */
+/**
+ * Whether the request, or a provider error it wraps, went to the gateway's host. A saved error part
+ * keeps no URL, only the request's origin as `requestOrigin` on versions of `@mastra/core` that record it.
+ */
 function calledMastraGateway(error: unknown, configuredHost: string | undefined, depth = 0): boolean {
   if (depth > 4 || typeof error !== 'object' || error === null) return false;
-  const url = 'url' in error ? error.url : undefined;
+  const url = 'url' in error ? error.url : 'requestOrigin' in error ? error.requestOrigin : undefined;
   const cause = 'cause' in error ? error.cause : undefined;
   return (
     (typeof url === 'string' && isGatewayUrl(url, configuredHost)) ||
