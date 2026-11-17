@@ -49,15 +49,17 @@ function requestContextFor(modelId: string): RequestContext {
 }
 
 /** Runs one agent turn with the model and tools mastracode builds, returning the first request sent. */
-async function firstRequest(modelId: string): Promise<{ url: string; body: any }> {
-  const requests: { url: string; body: any }[] = [];
+async function firstRequest(modelId: string): Promise<{ url: string; body: any; headers: Headers }> {
+  const requests: { url: string; body: any; headers: Headers }[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
       // OAuth fetch wrappers forward a Request with a streamed body.
       const text = typeof init?.body === 'string' ? init.body : input instanceof Request ? await input.text() : '';
-      if (text) requests.push({ url, body: JSON.parse(text) });
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      if (text) requests.push({ url, body: JSON.parse(text), headers });
       // Only the request matters; a client error ends the turn without retries.
       return new Response(JSON.stringify({ error: { message: 'stubbed' } }), {
         status: 400,
@@ -149,6 +151,41 @@ describe('provider web search follows the model transport', () => {
       expect(url).toMatch(/\/responses$/);
       expect(body.tools).toContainEqual(expect.objectContaining({ type: 'web_search' }));
     });
+  });
+
+  it('keeps the Claude sign-in pass-through for a project key when MASTRA_GATEWAY_VERSION is v2', async () => {
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_project-key');
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    signInWithOAuth('anthropic');
+    const modelId = 'mastra/anthropic/claude-sonnet-4-5';
+    expect(resolveProviderWebSearchRoute(modelId)).toBe('anthropic');
+
+    const { url, headers } = await firstRequest(modelId);
+    expect(url).toMatch(/\/v1\/messages/);
+    expect(headers.get('x-memory-gateway-authorization')).toBe('Bearer msk_project-key');
+  });
+
+  describe('Mastra gateway alias with a Gateway v2 organization key', () => {
+    it.each([
+      ['anthropic', 'mastra/anthropic/claude-sonnet-4-5', 'msk-gateway-us_org-key'],
+      ['openai-codex', 'mastra/openai/gpt-5.5', 'msk-gateway-eu_org-key'],
+      ['anthropic', 'mastra/anthropic/claude-sonnet-4-5', 'mskv2_org-key'],
+    ] as const)(
+      'sends a %s OAuth sign-in turn for %s to the gateway chat endpoint with the %s key',
+      async (credentialId, modelId, gatewayKey) => {
+        vi.stubEnv('MASTRA_GATEWAY_API_KEY', gatewayKey);
+        signInWithOAuth(credentialId);
+        expect(resolveProviderWebSearchRoute(modelId)).toBe('mastra-gateway');
+
+        const { url, body, headers } = await firstRequest(modelId);
+        expect(url).toMatch(/\/v1\/chat\/completions$/);
+        expect(body.model).toBe(modelId.slice('mastra/'.length));
+        expect(headers.get('authorization')).toBe(`Bearer ${gatewayKey}`);
+        expect(headers.get('x-memory-gateway-authorization')).toBeNull();
+        expect(body.tools).toContainEqual({ type: 'openrouter:web_search' });
+        expect(JSON.stringify(body.tools)).not.toMatch(/openai:web_search|anthropic:web_search|web_search_2025/);
+      },
+    );
   });
 
   it.each([
