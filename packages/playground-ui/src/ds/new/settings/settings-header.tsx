@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // On a settings page (`SettingsLayout`), section titles and descriptions sit 10px inside the card's edge, in line with
@@ -86,7 +86,10 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
           <span
             tabIndex={0}
             aria-describedby={infoId}
-            className={cn('group/title-info inline-flex cursor-help items-center gap-1 rounded-sm', focusRingOffset)}
+            className={cn(
+              'group/title-info -mx-1 inline-flex cursor-help items-center gap-1 rounded-sm px-1',
+              focusRing,
+            )}
           />
         }
       >
