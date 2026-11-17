@@ -263,13 +263,20 @@ function packageNameFor(dir, file) {
  * on (turbo's cache serves unchanged packages), one root vitest run over the unit, typecheck and
  * package E2E projects CI uses, so a file runs in whichever project owns it.
  */
-export function checkoutRunner(dir, { log = console.error, exec = sh } = {}) {
+export function checkoutRunner(dir, { log = console.error, exec = sh, deadline = Infinity } = {}) {
   return async (sha, files) => {
     const started = Date.now();
     const all = verdict => Object.fromEntries(files.map(f => [f, verdict]));
+    // Each command gets only the time left before the deadline, so a build started late can't run
+    // the job into its timeout and lose the files already attributed.
+    const opts = () => {
+      const left = deadline - Date.now();
+      if (left <= 0) throw new Error('ran out of time');
+      return { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'], timeout: Number.isFinite(left) ? left : undefined };
+    };
     const step = (label, cmd, args) => {
       const t = Date.now();
-      exec(cmd, args, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+      exec(cmd, args, opts());
       log(`  ${label}: ${((Date.now() - t) / 1000).toFixed(0)} s`);
     };
     const report = path.join(os.tmpdir(), `attribute-${sha}-${process.pid}-${Date.now()}.json`);
@@ -299,10 +306,12 @@ export function checkoutRunner(dir, { log = console.error, exec = sh } = {}) {
               `--outputFile=${report}`,
               ...present,
             ],
-            { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] },
+            opts(),
           );
-      } catch {
-        // vitest exits non-zero when a file fails; the report says which.
+      } catch (error) {
+        // vitest exits non-zero when a file fails; the report says which. A run that was cut off
+        // or never started has no report to trust.
+        if (error.code === 'ETIMEDOUT' || error.message === 'ran out of time') throw error;
       }
       log(`  vitest: ${((Date.now() - t) / 1000).toFixed(0)} s`);
       const results = fs.existsSync(report) ? JSON.parse(fs.readFileSync(report, 'utf8')).testResults : [];
@@ -353,12 +362,13 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
   if (range.commits && input.files.length) {
     const dir = workdir ?? path.join(os.tmpdir(), `attribute-${input.run_id}`);
     if (!fs.existsSync(dir)) git('worktree', 'add', '--detach', dir, bad);
+    const deadline = startedAt + Number(deadlineMinutes) * 60_000;
     results = await attribute({
       files: input.files,
       good,
       commits: range.commits,
-      runFileAt: checkoutRunner(dir),
-      deadline: startedAt + Number(deadlineMinutes) * 60_000,
+      runFileAt: checkoutRunner(dir, { deadline }),
+      deadline,
     });
   }
   const prs = {};

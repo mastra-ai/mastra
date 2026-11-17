@@ -476,3 +476,43 @@ test('a lookup that failed or was cut off is unknown: that rung is skipped, neve
   assert.deepEqual(standIns({ mergedBy: null, reviews: [], commits: capped }), { role: null, logins: [] });
   assert.deepEqual(standIns({ mergedBy: null, reviews: null, commits: null }), { role: null, logins: [] });
 });
+
+test('the runner gives every command only the time left, and runs nothing once it is gone', async () => {
+  const file = 'packages/core/src/a.test.ts';
+  const { dir, exec } = runnerFixture([file], [[file, 'passed']]);
+  const timeouts = [];
+  const timed = (cmd, args, opts) => {
+    timeouts.push(opts.timeout);
+    return exec(cmd, args, opts);
+  };
+  const deadline = Date.now() + 60_000;
+  assert.deepEqual(await checkoutRunner(dir, { exec: timed, log: () => {}, deadline })('c'.repeat(40), [file]), {
+    [file]: 'pass',
+  });
+  assert.equal(timeouts.length, 4);
+  for (const t of timeouts) assert.ok(t > 0 && t <= 60_000, String(t));
+
+  const late = [];
+  const got = await checkoutRunner(dir, {
+    exec: (...a) => late.push(a),
+    log: () => {},
+    deadline: Date.now() - 1,
+  })('c'.repeat(40), [file]);
+  assert.deepEqual(got, { [file]: 'error' });
+  assert.equal(late.length, 0);
+});
+
+test('a vitest run cut off by the deadline is an error, even if a partial report says pass', async () => {
+  const file = 'packages/core/src/a.test.ts';
+  const { dir, exec } = runnerFixture([file], [[file, 'passed']]);
+  const cutOff = (cmd, args, opts) => {
+    exec(cmd, args, opts);
+    if (args.includes('vitest')) throw Object.assign(new Error('spawnSync pnpm ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    return '';
+  };
+  const got = await checkoutRunner(dir, { exec: cutOff, log: () => {}, deadline: Date.now() + 60_000 })(
+    'c'.repeat(40),
+    [file],
+  );
+  assert.deepEqual(got, { [file]: 'error' });
+});
