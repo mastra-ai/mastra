@@ -53,19 +53,22 @@ async function listLinkedRepositories(args: {
   return linked;
 }
 
+const PROVIDER_REPOSITORY_IDS = new Map([
+  ['github', { key: 'githubRepositoryId', label: 'GitHub' }],
+  ['gitlab', { key: 'gitlabProjectId', label: 'GitLab' }],
+]);
+
 function getExternalRepositoryId(integrationId: string, metadata: Record<string, unknown>): string | undefined {
-  let id: unknown;
-  switch (integrationId) {
-    case 'github':
-      id = metadata.githubRepositoryId;
-      break;
-    case 'gitlab':
-      id = metadata.gitlabProjectId;
-      break;
-    default:
-      return undefined;
-  }
+  const provider = PROVIDER_REPOSITORY_IDS.get(integrationId);
+  const id = provider ? metadata[provider.key] : undefined;
   return id == null ? undefined : String(id);
+}
+
+function otherProviderLabel(integrationId: string, metadata: Record<string, unknown>): string | undefined {
+  for (const [id, provider] of PROVIDER_REPOSITORY_IDS) {
+    if (id !== integrationId && metadata[provider.key] != null) return provider.label;
+  }
+  return undefined;
 }
 
 /**
@@ -121,6 +124,14 @@ export async function resolveWorkItemRepository(args: {
     return {
       status: 'unlinked',
       hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
+    };
+  }
+
+  const otherProvider = otherProviderLabel(sourceControl.integrationId, metadata);
+  if (otherProvider !== undefined) {
+    return {
+      status: 'unlinked',
+      hint: `This card comes from ${otherProvider}, and no ${otherProvider} repository is linked to this Factory.`,
     };
   }
 

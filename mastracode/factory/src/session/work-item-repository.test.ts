@@ -156,6 +156,22 @@ describe('resolveWorkItemRepository', () => {
     },
   );
 
+  it("refuses a card from another provider instead of filing it under this Factory's only repository", async () => {
+    const { sourceControl, project } = await seedRepositories(['acme/only'], 'gitlab');
+
+    await expect(
+      resolveWorkItemRepository({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        item: { metadata: null, workItem: { metadata: { githubRepositoryId: 42 } } },
+      }),
+    ).resolves.toEqual({
+      status: 'unlinked',
+      hint: 'This card comes from GitHub, and no GitHub repository is linked to this Factory.',
+    });
+  });
+
   it('falls back to a linked slug for unmatched ids and reports an empty factory', async () => {
     const { sourceControl, project } = await seedRepositories(['acme/one']);
     await expect(
