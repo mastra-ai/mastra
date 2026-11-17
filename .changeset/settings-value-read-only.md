@@ -5,11 +5,11 @@
 Added `SettingsValue` (`@mastra/playground-ui/new/settings`) for settings values people read but don't change or copy, like a name, an email or a sign-in method. It shows the value as plain muted text that truncates, with the whole value on hover; `mono` sets it in monospace for values like versions.
 
 ```tsx
-import { SettingsRow, SettingsValue } from '@mastra/playground-ui/new/settings';
+import { SettingsItem, SettingsValue } from '@mastra/playground-ui/new/settings';
 
-<SettingsRow label="Email" description="From your sign-in provider.">
+<SettingsItem title="Email" description="From your sign-in provider.">
   <SettingsValue>{user.email}</SettingsValue>
-</SettingsRow>;
+</SettingsItem>;
 ```
 
-Pick a row's value by what the person does with it: the control when they can change it, `SettingsRow viewOnly` for a setting they can't change, `CopyField` for a value they'll paste elsewhere, and `SettingsValue` for information to read.
+A row that only shows a value is a `SettingsItem`: it holds a `CopyField` for a value the person will paste elsewhere, and a `SettingsValue` for one they only read.

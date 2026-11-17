@@ -1,7 +1,7 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
@@ -51,13 +51,13 @@ export function DebugSection() {
           )}
           <SettingsContainer>
             {query.data.packages.map(({ name, version }) => (
-              <SettingsRow key={name} label={name}>
+              <SettingsItem key={name} title={name}>
                 <SettingsValue mono>{version}</SettingsValue>
-              </SettingsRow>
+              </SettingsItem>
             ))}
-            <SettingsRow label="Node.js">
+            <SettingsItem title="Node.js">
               <SettingsValue mono>{query.data.nodeVersion}</SettingsValue>
-            </SettingsRow>
+            </SettingsItem>
           </SettingsContainer>
         </>
       )}

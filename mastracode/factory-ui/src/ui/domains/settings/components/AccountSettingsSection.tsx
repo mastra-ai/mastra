@@ -4,7 +4,13 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsRow, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsItem,
+  SettingsRow,
+  SettingsSkeleton,
+  SettingsValue,
+} from '@mastra/playground-ui/new/settings';
 
 import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -91,24 +97,24 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
       description="Your signed-in identity for this MastraCode deployment."
     >
       <SettingsContainer>
-        <SettingsRow label="Name" description="From your sign-in provider.">
+        <SettingsItem title="Name" description="From your sign-in provider.">
           <SettingsValue>{user?.name ?? 'Not provided'}</SettingsValue>
-        </SettingsRow>
-        <SettingsRow label="Email" description="From your sign-in provider.">
+        </SettingsItem>
+        <SettingsItem title="Email" description="From your sign-in provider.">
           <SettingsValue>{user?.email ?? 'Not provided'}</SettingsValue>
-        </SettingsRow>
-        <SettingsRow label="Authentication" description="How you signed in.">
+        </SettingsItem>
+        <SettingsItem title="Authentication" description="How you signed in.">
           <SettingsValue>{authProviderLabel(state.provider)}</SettingsValue>
-        </SettingsRow>
+        </SettingsItem>
         {user?.userId && (
-          <SettingsRow label="Account ID" description="Useful when contacting support.">
-            <CopyField value={user.userId} label="account ID" />
-          </SettingsRow>
+          <SettingsItem title="Account ID" description="Useful when contacting support.">
+            <CopyField value={user.userId} label="account ID" className="w-full sm:w-55" />
+          </SettingsItem>
         )}
         {user?.organizationId && (
-          <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
-            <CopyField value={user.organizationId} label="organization ID" />
-          </SettingsRow>
+          <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
+            <CopyField value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
+          </SettingsItem>
         )}
       </SettingsContainer>
     </SettingsSubsection>
