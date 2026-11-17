@@ -158,6 +158,7 @@ import type { SkillOverridesStorage } from './storage/domains/skill-overrides/ba
 import { createFactoryStorageForTests } from './storage/test-utils.js';
 import {
   createWorkspaceFactory,
+  FACTORY_SKILLS_MOUNT,
   FactorySkillSource,
   REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
@@ -1721,6 +1722,50 @@ describe('GitHub session workspace preparation', () => {
       const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
       await workspace.skills?.maybeRefresh();
       expect(await workspace.skills?.get('removed-app-skill')).toBeFalsy();
+    });
+
+    it('gives sessions in the project that created a skill that skill, and drops it once deleted', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addProject({ id: 'project-2', repoFullName: 'octocat/other' });
+      for (const id of ['session-reused', 'session-1', 'session-2']) addSession({ id });
+      addSession({ id: 'session-other', projectRepositoryId: 'project-2' });
+      const reusedContext = createGithubRequestContext('project-1', 'session-reused');
+      const reused = (await resolver({ requestContext: reusedContext }))!;
+      await reused.skills?.maybeRefresh();
+      // Prime the reuse record, as a session's first turn does.
+      await resolver({ requestContext: reusedContext });
+      const notesIn = async (workspace: Awaited<ReturnType<ReturnType<typeof createWorkspaceFactory>>>) => {
+        await workspace!.skills?.maybeRefresh();
+        return workspace!.skills?.get('release-notes');
+      };
+
+      const created = await skillOverrides.create({
+        orgId: 'org-1',
+        projectId: 'project-1',
+        skillName: 'release-notes',
+        content: '---\nname: release-notes\ndescription: Write release notes\n---\n\n# Release notes\n',
+        updatedBy: 'admin-1',
+      });
+      expect(created?.kind).toBe('created');
+
+      const session = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      const notes = await notesIn(session);
+      expect(notes?.description).toBe('Write release notes');
+      expect(notes?.instructions).toContain('# Release notes');
+      expect((await session!.skills?.list())?.map(skill => skill.name)).toContain('release-notes');
+      expect(await resolver({ requestContext: reusedContext })).toBe(reused);
+      expect((await reused.skills?.get('release-notes'))?.instructions).toContain('# Release notes');
+      const other = await resolver({ requestContext: createGithubRequestContext('project-2', 'session-other') });
+      expect(await notesIn(other)).toBeFalsy();
+
+      await skillOverrides.delete({ orgId: 'org-1', projectId: 'project-1', skillName: 'release-notes' });
+      expect(
+        await notesIn(await resolver({ requestContext: createGithubRequestContext('project-1', 'session-2') })),
+      ).toBeFalsy();
+      expect(await resolver({ requestContext: reusedContext })).toBe(reused);
+      expect(await reused.skills?.get('release-notes')).toBeFalsy();
     });
 
     it('serves the original skills while edits cannot be read, and the edit once they can', async () => {
@@ -3897,6 +3942,81 @@ describe('FactorySkillSource layering', () => {
       const names = (await source.readdir(repoRoot)).map(entry => entry.name);
       // README.md is a file in the local root, so it reserves nothing.
       expect(names).toEqual(['repo-only-skill', 'README.md']);
+    });
+
+    it("hides a repository skill named after a skill the project created, and not after another's edit", async () => {
+      const overrides = new Map([
+        [
+          'release-notes',
+          { content: '---\nname: release-notes\ndescription: notes\n---\n', updatedAt: new Date(), created: true },
+        ],
+        // An edit of an app skill the app no longer has serves nothing, so it reserves nothing.
+        [
+          'removed-app-skill',
+          { content: '---\nname: removed-app-skill\ndescription: gone\n---\n', updatedAt: new Date() },
+        ],
+      ]);
+      const source = new FactorySkillSource(
+        repoFallback(['release-notes', 'removed-app-skill', 'repo-only-skill']),
+        [repoRoot],
+        undefined,
+        async () => true,
+        [],
+        async () => overrides,
+      );
+
+      expect((await source.readdir(repoRoot)).map(entry => entry.name)).toEqual([
+        'removed-app-skill',
+        'repo-only-skill',
+      ]);
+      expect((await source.readdir(FACTORY_SKILLS_MOUNT)).map(entry => entry.name)).toContain('release-notes');
+      expect(String(await source.readFile(path.join(FACTORY_SKILLS_MOUNT, 'release-notes', 'SKILL.md')))).toContain(
+        'name: release-notes',
+      );
+    });
+
+    it('serves a created skill whose name only a folder without a SKILL.md uses', async () => {
+      const localRoot = await makeLocalRoot({});
+      // The app removed its release-notes skill but left the folder behind.
+      await fs.mkdir(path.join(localRoot, 'release-notes', 'references'), { recursive: true });
+      const content = '---\nname: release-notes\ndescription: notes\n---\n\n# Ours\n';
+      const source = new FactorySkillSource(
+        repoFallback([]),
+        [repoRoot],
+        localRoot,
+        async () => true,
+        [],
+        async () => new Map([['release-notes', { content, updatedAt: new Date(), created: true }]]),
+      );
+      const skillDir = path.join(FACTORY_SKILLS_MOUNT, 'release-notes');
+
+      expect((await source.readdir(FACTORY_SKILLS_MOUNT)).map(entry => entry.name)).toContain('release-notes');
+      expect((await source.readdir(skillDir)).map(entry => entry.name).sort()).toEqual(['SKILL.md', 'references']);
+      expect(await source.exists(path.join(skillDir, 'SKILL.md'))).toBe(true);
+      expect(String(await source.readFile(path.join(skillDir, 'SKILL.md')))).toBe(content);
+    });
+
+    it('serves a created skill whose name a stray file in the app skills folder uses', async () => {
+      const localRoot = await makeLocalRoot({});
+      await fs.writeFile(path.join(localRoot, 'release-notes'), 'not a skill');
+      const content = '---\nname: release-notes\ndescription: notes\n---\n\n# Ours\n';
+      const source = new FactorySkillSource(
+        repoFallback([]),
+        [repoRoot],
+        localRoot,
+        async () => true,
+        [],
+        async () => new Map([['release-notes', { content, updatedAt: new Date(), created: true }]]),
+      );
+      const skillDir = path.join(FACTORY_SKILLS_MOUNT, 'release-notes');
+
+      expect((await source.readdir(FACTORY_SKILLS_MOUNT)).find(entry => entry.name === 'release-notes')).toEqual({
+        name: 'release-notes',
+        type: 'directory',
+      });
+      expect(await source.readdir(skillDir)).toEqual([{ name: 'SKILL.md', type: 'file' }]);
+      expect((await source.stat(skillDir)).type).toBe('directory');
+      expect(String(await source.readFile(path.join(skillDir, 'SKILL.md')))).toBe(content);
     });
 
     it('picks up app-local skills added after the source was created', async () => {

@@ -91,7 +91,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     options: {
       auth?: RouteAuth;
       evaluator?: 'route-list' | 'intake-order';
-      evaluatorSource?: 'option' | 'env';
     } = {},
   ) {
     const cache = new ProjectBoardCache({
@@ -119,7 +118,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         storage: domains.boards,
         boards: cache,
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
-        ...(options.evaluatorSource ? { intakeEvaluatorSource: options.evaluatorSource } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -367,7 +365,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       [{ boardKey: 'review', phaseKey: 'review' }, 'unknown_board'],
       [{ boardKey: 'work', phaseKey: 'nope' }, 'unknown_phase'],
       [{ boardKey: 'work', phaseKey: 'done' }, 'terminal_phase'],
-      [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
       // Only a route moving existing cards sends them to another board.
       [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'reported' }, 'move_on_arrival'],
     ] as const;
@@ -394,6 +391,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       status: 201,
       body: { intakeRoute: { target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' } } },
     });
+    // A route filing new cards may target any non-terminal phase of its board, even one its first
+    // phase can't move to: the admin designing the rule designs the board too.
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'Opened pull requests go straight to Fixing',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'stepwise', phaseKey: 'fixing' },
+      }),
+    ).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { target: { boardKey: 'stepwise', phaseKey: 'fixing' }, problems: [] } },
+    });
     for (const [target, error] of cases) {
       expect(await replicaA.send('POST', base, { name: 'Bad', target })).toMatchObject({
         status: 422,
@@ -410,6 +419,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
     expect(await list(replicaA.send, base)).toEqual([
       expect.objectContaining({ name: 'Ship', revision: 1 }),
+      expect.objectContaining({ name: 'Opened pull requests go straight to Fixing', revision: 1 }),
       expect.objectContaining({ name: 'Ok', revision: 1 }),
     ]);
   });
@@ -581,6 +591,88 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       expectedRevision: route.revision + 1,
     });
     expect(undone).toMatchObject({ status: 200, body: { intakeRoute: moveOnly } });
+  });
+
+  it("keeps a rule stored before rules decided outsiders' pull requests gated through every edit, Undo and restore, until an explicit false clears it", async () => {
+    const { a, scope, base, replicaA } = await setup();
+    const id = randomUUID();
+    // As stored before the column existed: NULL, never backfilled, so the old gate holds.
+    await a.storage.ops.insertOne('factory_intake_routes', {
+      id,
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      name: 'Pushes go to Review',
+      enabled: true,
+      position: 0,
+      when_condition: null,
+      board_key: 'work',
+      phase_key: 'pr-review',
+      on_events: ['pull_request.synchronized'],
+      join_closed_issue: false,
+      revision: 1,
+      created_by: ADMIN,
+      created_at: new Date(),
+      updated_by: ADMIN,
+      updated_at: new Date(),
+    });
+    const gated = { outsiderPullRequestsGated: true };
+    expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ id, ...gated })]);
+
+    // Renamed, retargeted, its trigger changed and the change undone, it stays gated: no edit widens it.
+    const renamed = await replicaA.send('PATCH', `${base}/${id}`, {
+      name: 'Pushes are reviewed again',
+      target: { boardKey: 'work', phaseKey: 'done' },
+      expectedRevision: 1,
+    });
+    expect(renamed).toMatchObject({ status: 200, body: { intakeRoute: gated } });
+    const changed = await replicaA.send('PATCH', `${base}/${id}`, {
+      on: ['pull_request.synchronized', 'pull_request.review_requested'],
+      expectedRevision: 2,
+    });
+    expect(changed).toMatchObject({ status: 200, body: { intakeRoute: gated } });
+    const undone = await replicaA.send('PATCH', `${base}/${id}`, {
+      on: ['pull_request.synchronized'],
+      expectedRevision: 3,
+    });
+    expect(undone).toMatchObject({ status: 200, body: { intakeRoute: gated } });
+
+    // Deleted and restored as the settings page's Undo sends it, it comes back gated.
+    await replicaA.send('DELETE', `${base}/${id}?expectedRevision=4`);
+    const restored = await replicaA.send('POST', base, {
+      name: 'Pushes go to Review',
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      on: ['pull_request.synchronized'],
+      ...gated,
+    });
+    expect(restored).toMatchObject({ status: 201, body: { intakeRoute: gated } });
+    const route = restored.body.intakeRoute as Route;
+
+    // Only saying so lets outside authors match; a new rule never carries the gate at all.
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, {
+        outsiderPullRequestsGated: true,
+        expectedRevision: route.revision,
+      }),
+    ).toMatchObject({
+      status: 422,
+    });
+    const cleared = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      outsiderPullRequestsGated: false,
+      expectedRevision: route.revision,
+    });
+    expect(cleared.status).toBe(200);
+    expect(
+      (cleared.body.intakeRoute as Route & { outsiderPullRequestsGated?: true }).outsiderPullRequestsGated,
+    ).toBeUndefined();
+    const fresh = await replicaA.send('POST', base, {
+      name: 'New pushes go to Review',
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      on: ['pull_request.synchronized'],
+    });
+    expect(fresh.status).toBe(201);
+    expect(
+      (fresh.body.intakeRoute as Route & { outsiderPullRequestsGated?: true }).outsiderPullRequestsGated,
+    ).toBeUndefined();
   });
 
   it('refuses a new route that joins pull requests to their issue, but lets an admin switch off a stored one', async () => {
@@ -1118,8 +1210,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         evaluatorSource: 'project',
         projectEvaluator: 'intake-order',
       });
-      // A replica with FACTORY_INTAKE_EVALUATOR (or the option) set forces its evaluator on every project.
-      const forced = replica(a, orgId, { evaluator: 'route-list', evaluatorSource: 'env' });
+      // A replica with FACTORY_INTAKE_EVALUATOR set forces its evaluator on every project.
+      const forced = replica(a, orgId, { evaluator: 'route-list' });
       expect(await read(forced.send)).toMatchObject({
         evaluator: 'route-list',
         evaluatorSource: 'env',

@@ -76,7 +76,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "skillOverrideRevert",
     "method": "DELETE",
     "path": "/web/factory/projects/:id/skills/:name",
-    "description": "Revert a project's edited Factory skill to its original SKILL.md",
+    "description": "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     "pathParams": [
       "id",
       "name"
@@ -705,6 +705,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "expectedRevision",
       "name",
       "on",
+      "outsiderPullRequestsGated",
       "target",
       "when"
     ],
@@ -986,6 +987,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "enabled",
       "name",
       "on",
+      "outsiderPullRequestsGated",
       "pullRequestOpenedMovesOnly",
       "target",
       "when"
@@ -1111,6 +1113,25 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "POST /web/factory/projects/:id/skills": {
+    "contractKey": "skillCreate",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/skills",
+    "description": "Create a skill for one Factory project",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "content",
+      "name"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/work-items": {
     "contractKey": "workItemCreate",
     "method": "POST",
@@ -1226,7 +1247,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "skillOverrideSave",
     "method": "PUT",
     "path": "/web/factory/projects/:id/skills/:name",
-    "description": "Save a project's edited SKILL.md for a Factory skill",
+    "description": "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     "pathParams": [
       "id",
       "name"
@@ -1414,11 +1435,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "skill": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -3365,7 +3393,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"
@@ -3556,6 +3583,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 }
               },
               "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
+              },
+              "outsiderPullRequestsGated": {
                 "type": "boolean",
                 "const": true
               },
@@ -3896,6 +3927,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -7260,8 +7295,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "on": {
           "$ref": "#/$defs/__schema12"
         },
-        "expectedRevision": {
+        "outsiderPullRequestsGated": {
           "$ref": "#/$defs/__schema14"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema15"
         }
       },
       "required": [
@@ -7531,6 +7569,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema14": {
+          "type": "boolean",
+          "const": false
+        },
+        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -7640,6 +7682,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -9940,6 +9986,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "pullRequestOpenedMovesOnly": {
           "type": "boolean",
           "const": true
+        },
+        "outsiderPullRequestsGated": {
+          "type": "boolean",
+          "const": true
         }
       },
       "required": [
@@ -10233,6 +10283,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -10596,6 +10650,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 }
               },
               "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
+              },
+              "outsiderPullRequestsGated": {
                 "type": "boolean",
                 "const": true
               },
@@ -12538,6 +12596,66 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": {}
     }
   },
+  "POST /web/factory/projects/:id/skills": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "content": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "name",
+        "content"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/work-items": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -12990,7 +13108,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"
@@ -13359,6 +13476,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteAgain": "POST /web/factory/projects/:id/intake/not-routed/:decisionId/route-again",
   "intakeTest": "POST /web/factory/projects/:id/intake/test",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
+  "skillCreate": "POST /web/factory/projects/:id/skills",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",

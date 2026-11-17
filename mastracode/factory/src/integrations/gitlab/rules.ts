@@ -1102,7 +1102,10 @@ export class GitLabRules {
     }
     if (context.mergeRequest) {
       const trusted = gitlabMergeRequestTrusted(context);
-      decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
+      // An unknown actor — a polled or system delivery — vouches for nothing. Factory's own
+      // account counts by authorship, whatever its membership lookup says.
+      const actorTrusted = context.actor.type === 'gitlab' && (context.actor.trusted || context.actor.factoryAuthored);
+      decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
     }
 
     // The item's current labels and assignees go on its own card in the same write as the update,

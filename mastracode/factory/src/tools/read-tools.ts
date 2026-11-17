@@ -169,7 +169,6 @@ function workItemUrl(item: Card) {
   return (
     factoryWorkItemUrl({
       factoryProjectId: item.factoryProjectId,
-      board: boardForWorkItem(item),
       workItemId: item.id,
     }) ?? null
   );

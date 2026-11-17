@@ -1,5 +1,17 @@
 # mastra
 
+## 1.40.0-alpha.6
+
+### Patch Changes
+
+- The Factory sidebar now groups sessions by board and shows a second line under each session by default, with when it last changed and its pull request. Turn on **Compact view** or set **Group** to **None** in the sidebar's properties menu to get one line per session or a single list back. Settings you already changed keep their values; the rest follow the new defaults. ([#30656](https://github.com/mastra-ai/mastra/pull/30656))
+
+- Factory **Settings** now shows theme and completion sound on **My account**, next to your profile and log out, instead of on a separate **Preferences** page. Settings opens on **My account**, and old Preferences links go there. ([#30658](https://github.com/mastra-ai/mastra/pull/30658))
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/deployer@1.84.0-alpha.6
+
 ## 1.40.0-alpha.5
 
 ### Patch Changes
