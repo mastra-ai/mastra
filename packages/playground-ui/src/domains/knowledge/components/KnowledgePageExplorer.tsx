@@ -20,6 +20,7 @@ import type {
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
@@ -684,6 +685,8 @@ function SelectedPage({
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
+  const pageLinks = (source.usePageLinks ?? noLinkQuery<KnowledgeExplorerPageLinks>)(pageId).data;
+  const links = useMemo(() => (pageLinks ? linkLists(pageId, pageLinks) : undefined), [pageId, pageLinks]);
   const [moreNotes, setMoreNotes] = useState<{ pageId: string } | null>(null);
   const known = useMemo(
     () => (detail.data ? withPages(pagesById, [...detail.data.ancestors, ...detail.data.related]) : pagesById),
@@ -716,6 +719,7 @@ function SelectedPage({
       highlightMentionOf={highlightMentionOf}
       ancestors={detail.data.ancestors}
       mentionedBy={detail.data.mentionedBy}
+      links={links}
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
@@ -755,6 +759,23 @@ function Highlighted({ text, query }: { text: string; query: string }) {
       {text.slice(at + needle.length)}
     </>
   );
+}
+
+function linkLists(pageId: string, { edges, pages }: KnowledgeExplorerPageLinks): PageLinkLists {
+  const byId = new Map(pages.map(page => [page.id, page]));
+  const side = (end: 'fromPageId' | 'toPageId', other: 'fromPageId' | 'toPageId') => {
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      if (edge[end] === pageId && edge[other] !== pageId) {
+        counts.set(edge[other], (counts.get(edge[other]) ?? 0) + edge.count);
+      }
+    }
+    return [...counts].flatMap(([id, count]) => {
+      const page = byId.get(id);
+      return page ? [{ page, count }] : [];
+    });
+  };
+  return { out: side('fromPageId', 'toPageId'), in: side('toPageId', 'fromPageId') };
 }
 
 function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {

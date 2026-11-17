@@ -36,8 +36,12 @@ describe('scopeTitle', () => {
     expect(scopeTitle(scope('notion:Mastra:not_01', 'Engineering wiki'))).toBe('Engineering wiki');
   });
 
-  it('keeps the address of a scope from an unknown source', () => {
-    expect(scopeTitle(scope('org:team'))).toBe('org:team');
+  it('names a built-in scope by its kind instead of its address', () => {
+    expect(scopeTitle(scope('org:org_01KPRK1TA1J73YAV6ARRZYFM66'))).toBe('Organization');
+  });
+
+  it('keeps the address of a scope of an unknown kind', () => {
+    expect(scopeTitle(scope('region:eu'))).toBe('region:eu');
   });
 });
 

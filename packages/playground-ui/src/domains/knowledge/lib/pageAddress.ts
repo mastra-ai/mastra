@@ -25,9 +25,18 @@ export function scopeSource(page: KnowledgePagePayload) {
 }
 
 /** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */
+const SCOPE_KINDS: Record<string, string> = {
+  org: 'Organization',
+  project: 'Project',
+  user: 'User',
+  agent: 'Agent',
+  team: 'Team',
+};
+
 export function scopeTitle(page: KnowledgePagePayload): string {
-  const source = scopeSource(page);
-  return source && page.name === page.address ? source.label : page.name;
+  if (!page.address || page.name !== page.address) return page.name;
+  const kind = page.address.slice(0, page.address.indexOf(':'));
+  return scopeSource(page)?.label ?? SCOPE_KINDS[kind] ?? page.name;
 }
 
 /** The page's place from its root scope down, through the pages the graph holds. */
