@@ -8,7 +8,7 @@ import { getServerProjectEnv } from '../server/platform-api.js';
 import { wrapAction } from '../utils.js';
 import { serializeEnvFile } from './env-file.js';
 import type { Environment } from './platform-api.js';
-import { fetchEnvironmentList, isSecretPlaceholder } from './platform-api.js';
+import { fetchEnvironmentList, isSecretPlaceholder, updateEnvironmentVars } from './platform-api.js';
 import { resolveProject } from './resolve-project.js';
 
 /** Register the `mastra env vars ...` subcommands on the given `env` command. */
@@ -23,6 +23,20 @@ export function registerEnvVarsCommands(env: Command): void {
     .option('-o, --output <file>', 'File to write (default: .env)')
     .option('-f, --force', 'Overwrite an existing output file')
     .action(wrapAction(envVarsPullAction));
+
+  vars
+    .command('set')
+    .description('Set env vars on an environment and choose whether each is a secret or config')
+    .argument('[environment]', 'Environment name, slug, or ID (optional when the project has exactly one)')
+    .argument('[vars...]', 'Variables to set, as KEY=VALUE')
+    .option('--project <project>', 'Project name, slug, or ID (default: linked project)')
+    .option('--secret <key>', 'Store KEY as a secret: write-only, delivered at boot (repeatable)', collect, [])
+    .option('--config <key>', 'Store KEY as config: readable, stored on the provider (repeatable)', collect, [])
+    .action(wrapAction(envVarsSetAction));
+}
+
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 /** True when a filesystem error means the target path already exists (`EEXIST`). */
@@ -35,7 +49,7 @@ function isAlreadyExistsError(error: unknown): boolean {
  * given the project must have exactly one environment; otherwise the error
  * lists the available slugs.
  */
-function pickEnvironment(environments: Environment[], envArg: string | undefined): Environment {
+function pickEnvironment(environments: Environment[], envArg: string | undefined, command: string): Environment {
   if (environments.length === 0) {
     throw new Error('No environments found for this project. Deploy first with `mastra deploy`.');
   }
@@ -43,7 +57,7 @@ function pickEnvironment(environments: Environment[], envArg: string | undefined
   if (!envArg) {
     if (environments.length === 1) return environments[0]!;
     const slugs = environments.map(e => e.slug).join(', ');
-    throw new Error(`Multiple environments found (${slugs}). Specify one: mastra env vars pull <environment>`);
+    throw new Error(`Multiple environments found (${slugs}). Specify one: mastra env vars ${command} <environment>`);
   }
 
   const env = environments.find(e => e.id === envArg || e.name === envArg || e.slug === envArg);
@@ -82,7 +96,7 @@ export async function envVarsPullAction(
   const project = await resolveProject(token, orgId, options.project);
 
   const { environments, envVarsAuthority } = await fetchEnvironmentList(token, orgId, project.id);
-  const environment = pickEnvironment(environments, envArg);
+  const environment = pickEnvironment(environments, envArg, 'pull');
 
   const pulled =
     envVarsAuthority === 'project' ? await getServerProjectEnv(token, orgId, project.id) : (environment.envVars ?? {});
@@ -136,4 +150,105 @@ export async function envVarsPullAction(
       `  ${managedCount} managed variable name(s) listed as comments — values are injected at deploy time.\n`,
     );
   }
+}
+
+const ENV_VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Parse `KEY=VALUE` arguments. Values are never echoed back in errors. */
+function parseAssignments(args: string[]): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const arg of args) {
+    const eq = arg.indexOf('=');
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    if (eq === -1 || !ENV_VAR_NAME.test(name)) {
+      throw new Error(`Expected KEY=VALUE, got "${name.replace(/[^\w.-]/g, '?')}"`);
+    }
+    const value = arg.slice(eq + 1);
+    if (isSecretPlaceholder(value)) {
+      throw new Error(`${name} has a reserved placeholder value. Pass the real value.`);
+    }
+    vars[name] = value;
+  }
+  return vars;
+}
+
+/**
+ * Set env vars on an environment and/or choose their kind.
+ *
+ * Secrets are write-only: the platform encrypts them and only delivers them
+ * to the deployed service at boot. Config vars stay readable and are stored
+ * on the provider. `--secret`/`--config` send `envVarMeta` flags for the named
+ * vars; vars not named keep their stored kind.
+ *
+ * The platform replaces the whole env map on save, so the stored vars are
+ * sent back with the new values merged in. Write-only secrets come back as a
+ * placeholder, which the platform reads as "keep the stored value".
+ */
+export async function envVarsSetAction(
+  envArg: string | undefined,
+  assignments: string[],
+  options: { project?: string; secret?: string[]; config?: string[] },
+): Promise<void> {
+  // `[environment]` is optional, so a lone `KEY=VALUE` lands there.
+  const args = envArg?.includes('=') ? [envArg, ...assignments] : assignments;
+  const environmentArg = envArg?.includes('=') ? undefined : envArg;
+  const newVars = parseAssignments(args);
+  const secretNames = options.secret ?? [];
+  const configNames = options.config ?? [];
+
+  for (const name of [...secretNames, ...configNames]) {
+    if (!ENV_VAR_NAME.test(name)) {
+      throw new Error(`Invalid env var name: ${name.replace(/[^\w.-]/g, '?')}`);
+    }
+  }
+  const both = secretNames.filter(name => configNames.includes(name));
+  if (both.length > 0) {
+    throw new Error(`Cannot mark a var as both --secret and --config: ${both.join(', ')}`);
+  }
+  if (Object.keys(newVars).length === 0 && secretNames.length === 0 && configNames.length === 0) {
+    throw new Error('Nothing to set. Pass KEY=VALUE pairs and/or --secret <key> / --config <key>.');
+  }
+
+  const token = await getToken();
+  const { orgId } = await resolveCurrentOrg(token);
+  const project = await resolveProject(token, orgId, options.project);
+
+  const { environments, envVarsAuthority } = await fetchEnvironmentList(token, orgId, project.id);
+  const environment = pickEnvironment(environments, environmentArg, 'set');
+  if (envVarsAuthority === 'project') {
+    throw new Error(
+      `${environment.slug} still reads env vars from the legacy project settings. Set them in the Mastra dashboard.`,
+    );
+  }
+
+  const stored = environment.envVars ?? {};
+  for (const name of [...secretNames, ...configNames]) {
+    if (!Object.hasOwn(stored, name) && !Object.hasOwn(newVars, name)) {
+      throw new Error(`${name} is not set on ${environment.slug}. Pass a value: ${name}=...`);
+    }
+  }
+  for (const name of configNames) {
+    if (isSecretPlaceholder(stored[name]) && !Object.hasOwn(newVars, name)) {
+      throw new Error(
+        `${name} is a write-only secret, so its value can't be kept as config. Re-enter it: ${name}=... --config ${name}`,
+      );
+    }
+  }
+
+  const envVarMeta: Record<string, { secret: boolean }> = {};
+  for (const name of secretNames) envVarMeta[name] = { secret: true };
+  for (const name of configNames) envVarMeta[name] = { secret: false };
+
+  const changedNames = Object.keys(newVars);
+  await updateEnvironmentVars(token, orgId, project.id, environment.id, {
+    ...(changedNames.length > 0 ? { envVars: { ...stored, ...newVars } } : {}),
+    ...(Object.keys(envVarMeta).length > 0 ? { envVarMeta } : {}),
+  });
+
+  const parts: string[] = [];
+  if (changedNames.length > 0) parts.push(`set ${changedNames.sort().join(', ')}`);
+  if (secretNames.length > 0) parts.push(`secret: ${[...secretNames].sort().join(', ')}`);
+  if (configNames.length > 0) parts.push(`config: ${[...configNames].sort().join(', ')}`);
+  console.info(`\n  Updated ${environment.slug} (${parts.join('; ')}).`);
+  console.info('  Redeploy or run `mastra env restart` to apply.\n');
 }

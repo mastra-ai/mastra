@@ -21,9 +21,12 @@ vi.mock('./resolve-project.js', () => ({
 
 const mockFetchEnvironmentList = vi.fn();
 
+const mockUpdateEnvironmentVars = vi.fn();
+
 vi.mock('./platform-api.js', async importOriginal => ({
   ...(await importOriginal<typeof import('./platform-api.js')>()),
   fetchEnvironmentList: mockFetchEnvironmentList,
+  updateEnvironmentVars: mockUpdateEnvironmentVars,
 }));
 
 const mockGetServerProjectEnv = vi.fn();
@@ -301,5 +304,106 @@ describe('envVarsPullAction', () => {
     expect(content).not.toContain('bad-key=');
     expect(content).toContain('# Skipped unsafe key');
     spy.mockRestore();
+  });
+});
+
+describe('envVarsSetAction', () => {
+  beforeEach(() => {
+    mockUpdateEnvironmentVars.mockResolvedValue(environment({}));
+  });
+
+  async function runSet(envArg: string | undefined, assignments: string[], options = {}) {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const { envVarsSetAction } = await import('./vars.js');
+      await envVarsSetAction(envArg, assignments, options);
+      return spy.mock.calls.map(c => String(c[0])).join('\n');
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('sends the stored vars back with new values and kind flags merged in', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { OPENAI_API_KEY: '__mastra_secret__', LOG_LEVEL: 'info' } })],
+    });
+
+    const output = await runSet('my-app', ['LOG_LEVEL=debug', 'STRIPE_KEY=sk-new'], {
+      secret: ['STRIPE_KEY'],
+      config: ['LOG_LEVEL'],
+    });
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      // The placeholder tells the platform to keep the stored secret.
+      envVars: { OPENAI_API_KEY: '__mastra_secret__', LOG_LEVEL: 'debug', STRIPE_KEY: 'sk-new' },
+      envVarMeta: { STRIPE_KEY: { secret: true }, LOG_LEVEL: { secret: false } },
+    });
+    expect(output).toContain('set LOG_LEVEL, STRIPE_KEY');
+    expect(output).not.toContain('sk-new');
+    expect(output).not.toContain('debug');
+    expect(output).not.toContain('__mastra_secret__');
+  });
+
+  it('treats a lone KEY=VALUE as a var, not an environment name', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: {} })] });
+
+    await runSet('API_KEY=abc', []);
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { API_KEY: 'abc' },
+    });
+  });
+
+  it('changes only the kind when no values are passed', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { DATABASE_URL: 'x' } })] });
+
+    await runSet(undefined, [], { secret: ['DATABASE_URL'] });
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVarMeta: { DATABASE_URL: { secret: true } },
+    });
+  });
+
+  it('requires a new value to turn a write-only secret into config', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { LOG_LEVEL: '__mastra_secret__' } })],
+    });
+
+    await expect(runSet(undefined, [], { config: ['LOG_LEVEL'] })).rejects.toThrow(/write-only secret.*Re-enter it/);
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('rejects flags for vars that are not set', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: {} })] });
+
+    await expect(runSet(undefined, [], { secret: ['MISSING'] })).rejects.toThrow('MISSING is not set on my-app');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('rejects a var marked both --secret and --config', async () => {
+    await expect(runSet(undefined, ['A=1'], { secret: ['A'], config: ['A'] })).rejects.toThrow(
+      'both --secret and --config: A',
+    );
+    expect(mockFetchEnvironmentList).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed assignments without echoing the value', async () => {
+    await expect(runSet(undefined, ['NOT_AN_ASSIGNMENT'])).rejects.toThrow('Expected KEY=VALUE');
+    await expect(runSet(undefined, ['bad-key=s3cret'])).rejects.not.toThrow(/s3cret/);
+  });
+
+  it('refuses to send the placeholder as a value', async () => {
+    await expect(runSet(undefined, ['API_KEY=__mastra_secret__'])).rejects.toThrow('reserved placeholder');
+  });
+
+  it('requires something to set', async () => {
+    await expect(runSet('my-app', [])).rejects.toThrow('Nothing to set');
+  });
+
+  it('refuses legacy projects whose runtime reads the project settings', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ envVarsAuthority: 'project', environments: [environment({})] });
+
+    await expect(runSet(undefined, ['A=1'])).rejects.toThrow('legacy project settings');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
   });
 });

@@ -517,6 +517,26 @@ File to write. Defaults to `.env`.
 
 Replace an existing output file.
 
+### `mastra env vars set`
+
+Sets env vars on an environment and chooses whether each one is a [secret or config](/docs/mastra-platform/environments#secrets-and-config). Variables you don't name keep their stored values. The new values apply on the next deploy or `mastra env restart`.
+
+```bash
+mastra env vars set <env> API_KEY=sk-123 --secret API_KEY
+mastra env vars set <env> LOG_LEVEL=debug --config LOG_LEVEL
+mastra env vars set <env> --secret DATABASE_URL
+```
+
+`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. Values passed on the command line can end up in your shell history.
+
+#### `--secret`
+
+Store the named variable as a secret: write-only and delivered at boot. Repeat the flag to name several variables. The variable must be set on the environment or in the same command.
+
+#### `--config`
+
+Store the named variable as config: readable and stored on the hosting provider. Repeat the flag to name several variables. To turn an existing secret into config, pass its value in the same command, because the platform can't read the stored secret back.
+
 ### `mastra env db`
 
 Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
