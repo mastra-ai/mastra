@@ -260,8 +260,10 @@ jobs:
             echo "Only npm import runs; it installs from the E2E registry and needs no build."
           fi
 
+      # npm import needs only the registry, so fetch it even when Build failed.
       - name: Download E2E registry artifact
         id: registry
+        if: ${{ !cancelled() }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry

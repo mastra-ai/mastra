@@ -200,17 +200,47 @@ const NAMED_JOBS = {
   'Quality assurance\tValidate changeset packages': 'job:qa/changeset-check',
 };
 
+const MASTRACODE_E2E_STEPS = new Set([
+  'Build Mastra Code',
+  'Typecheck Code SDK',
+  'Run ACP unit tests',
+  'Check built SDK ACP conformance',
+  'Upload ACP conformance reports',
+  'Run Mastra Code E2E',
+]);
+
+/** Keys of a job that runs several tiered suites as steps: a suite ran when one of its steps ran. */
+function stepKeys(steps, keyOf) {
+  const ran = new Set();
+  const failed = new Set();
+  for (const step of steps) {
+    const key = keyOf(step.name);
+    if (!key || !step.conclusion || step.conclusion === 'skipped') continue;
+    ran.add(key);
+    if (step.conclusion === 'failure') failed.add(key);
+  }
+  return { ran: [...ran].sort(), failed: [...failed].sort() };
+}
+
 /**
  * The tier keys one CI job ran, and which of them failed. `log` is only read for the jobs that
  * run several packages with `pnpm -r` (light stores, workspace unit tests): a package whose
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
  * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
- * jobs API's) is only read for the merged light E2E job: each suite's install and test steps
- * are named `E2E <label>…`, so a suite ran when one of its steps ran and failed when one failed.
+ * jobs API's) is only read for the merged light E2E and Mastra Code jobs: each suite's install and test steps
+ * are named after it (`E2E <label>…`, `Mastra Code web host OM scenarios…`), so a suite ran when one of its steps ran and failed when one failed.
  * @returns {{ ran: string[], failed: string[] }}
  */
 export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
+  if (workflow === 'Prebuild' && name === 'Mastra Code E2E / Mastra Code E2E' && steps.length)
+    return stepKeys(steps, step =>
+      step.startsWith('Mastra Code web host OM scenarios')
+        ? 'job:mastracode-om'
+        : MASTRACODE_E2E_STEPS.has(step)
+          ? 'job:mastracode-e2e'
+          : null,
+    );
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
   let m;
@@ -220,17 +250,11 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   if ((m = /^Combined Store Tests \/ test \(([\w-]+)\)$/.exec(name))) return one(`job:store/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-unit \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-unit/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-docker \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-docker/${m[1]}`);
-  if (name === 'E2E Tests / E2E light suites') {
-    const ran = new Set();
-    const failed = new Set();
-    for (const step of steps) {
-      const key = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step.name)?.[1]];
-      if (!key || !step.conclusion || step.conclusion === 'skipped') continue;
-      ran.add(`job:e2e/${key}`);
-      if (step.conclusion === 'failure') failed.add(`job:e2e/${key}`);
-    }
-    return { ran: [...ran].sort(), failed: [...failed].sort() };
-  }
+  if (name === 'E2E Tests / E2E light suites')
+    return stepKeys(steps, step => {
+      const label = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step)?.[1]];
+      return label && `job:e2e/${label}`;
+    });
   if ((m = /^E2E Tests \/ E2E (.+?)(?: \(\d+\/\d+\)| \(optional\))?$/.exec(name)) && E2E_JOB_LABELS[m[1]])
     return one(`job:e2e/${E2E_JOB_LABELS[m[1]]}`);
   const folded =

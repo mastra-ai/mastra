@@ -360,6 +360,29 @@ test('the merged light E2E job fails only the suite whose step failed', () => {
   assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [] });
 });
 
+test('the merged Mastra Code job fails only the suite whose step failed', () => {
+  const steps = (e2e, om) => [
+    { name: 'Checkout repo', conclusion: 'success' },
+    { name: 'Build Mastra Code', conclusion: e2e },
+    { name: 'Run Mastra Code E2E', conclusion: e2e },
+    { name: 'Upload ACP conformance reports', conclusion: e2e },
+    { name: 'Mastra Code web host OM scenarios: install web host dependencies', conclusion: 'success' },
+    { name: 'Mastra Code web host OM scenarios', conclusion: om },
+  ];
+  const keys = s => jobKeysFor('Prebuild', 'Mastra Code E2E / Mastra Code E2E', () => '', s);
+  assert.deepEqual(keys(steps('success', 'failure')), {
+    ran: ['job:mastracode-e2e', 'job:mastracode-om'],
+    failed: ['job:mastracode-om'],
+  });
+  assert.deepEqual(keys(steps('failure', 'success')).failed, ['job:mastracode-e2e']);
+  // Runs from before the merge: the job held only the Mastra Code E2E steps.
+  assert.deepEqual(keys(steps('failure', 'skipped').slice(0, 4)), {
+    ran: ['job:mastracode-e2e'],
+    failed: ['job:mastracode-e2e'],
+  });
+  assert.deepEqual(keys(), { ran: ['job:mastracode-e2e'], failed: ['job:mastracode-e2e'] });
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [
