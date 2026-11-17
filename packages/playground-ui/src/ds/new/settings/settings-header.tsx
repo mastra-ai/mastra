@@ -53,9 +53,20 @@ export function SettingsTitle({
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
-    // Inset by 10px, so the title sits a little inside the card's edge below it.
-    <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5">
-      <Txt as="h2" id={titleId} variant="subheading" tone="muted" className={className} {...props}>
+    // Inset by 10px, so the title sits a little inside the card's edge below it. In a form outside a settings
+    // page it heads a group of fields, so it lines up with their labels and takes their color.
+    <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5 [:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:ps-0">
+      <Txt
+        as="h2"
+        id={titleId}
+        variant="subheading"
+        tone="muted"
+        className={cn(
+          '[:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:text-foreground',
+          className,
+        )}
+        {...props}
+      >
         {info == null ? children : <SettingsTitleInfo info={info}>{children}</SettingsTitleInfo>}
       </Txt>
       {accessory}
@@ -88,5 +99,13 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="caption" tone="muted" className={cn('ps-2.5', className)} {...props} />;
+  return (
+    <Txt
+      as="p"
+      variant="caption"
+      tone="muted"
+      className={cn('ps-2.5 [:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:ps-0', className)}
+      {...props}
+    />
+  );
 }
