@@ -56,7 +56,7 @@ import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 import { useVoiceDictation } from './useVoiceDictation';
 
-type ComposerProps = Pick<ComposerInputProps, 'variant' | 'autoFocus'> & {
+type ComposerProps = Pick<ComposerInputProps, 'variant'> & {
   /** Leads the status row above the composer, e.g. who is steering this session. */
   statusLead?: ReactNode;
 };
@@ -74,7 +74,7 @@ function sendTitleFor(state: {
   return undefined;
 }
 
-export function Composer({ variant = 'inline', statusLead, autoFocus }: ComposerProps) {
+export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
@@ -339,7 +339,6 @@ export function Composer({ variant = 'inline', statusLead, autoFocus }: Composer
               readOnly={preview !== undefined}
               style={preview ? { height: preview.height } : undefined}
               variant={variant}
-              autoFocus={autoFocus}
               aria-label="Message"
             />
             <ComposerActions>

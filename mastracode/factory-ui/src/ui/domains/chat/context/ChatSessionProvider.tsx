@@ -14,7 +14,7 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { handoffDraftModelId, opensWithPrompt } from '../hooks/useHandoffPrompt';
+import { opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -220,7 +220,7 @@ export function ChatSessionBoundary({
         isLoadingMoreHistory={messagesQuery.isLoadingMore}
         loadMoreHistory={messagesQuery.loadMore}
       >
-        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId ?? handoffDraftModelId(location.state)}>
+        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
             <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
               <ComposerImagesProvider initialImages={failedDraft?.files}>

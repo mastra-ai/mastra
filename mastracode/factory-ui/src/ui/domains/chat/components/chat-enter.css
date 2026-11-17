@@ -68,10 +68,6 @@
     composer-fade 180ms linear backwards;
 }
 
-.chat-surface-continues .composer-enter {
-  animation: none;
-}
-
 .starter-enter {
   animation:
     composer-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards,

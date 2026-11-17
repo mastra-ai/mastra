@@ -15,7 +15,6 @@ import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
 
 interface PromptHandoff {
   handoffPrompt: string;
-  handoffDraftModelId: string;
   handoffModelId?: string;
   handoffThinkingLevel?: ThinkingLevelSetting;
   handoffShownMessageId?: string;
@@ -33,11 +32,9 @@ export function startPromptHandoff(
   sessionId: string,
   prompt: string,
   {
-    draftModelId,
     shownMessageId,
     ...model
   }: HandoffModel & {
-    draftModelId: string;
     /** The draft's bubble for this prompt, which a thread that keeps the draft's transcript shows already. */
     shownMessageId?: string;
   },
@@ -46,15 +43,10 @@ export function startPromptHandoff(
   storePendingHandoff(sessionId, prompt);
   return {
     handoffPrompt: prompt,
-    handoffDraftModelId: draftModelId,
     handoffModelId: model.modelId,
     handoffThinkingLevel: model.thinkingLevel,
     handoffShownMessageId: shownMessageId,
   };
-}
-
-export function handoffDraftModelId(state: unknown): string | undefined {
-  return readHandoffField(state, 'handoffDraftModelId');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

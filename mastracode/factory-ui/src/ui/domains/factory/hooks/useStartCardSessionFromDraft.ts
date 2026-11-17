@@ -96,7 +96,6 @@ export function useStartCardSessionFromDraft(
     void navigate(threadPath(factoryId, { sessionId, threadId: sessionId }), {
       replace: true,
       state: startPromptHandoff(sessionId, prompt, {
-        draftModelId: activeModelId,
         shownMessageId,
         modelId: draftKeepsServerDefaults ? undefined : activeModelId,
         thinkingLevel: thinkingLevelOverride,

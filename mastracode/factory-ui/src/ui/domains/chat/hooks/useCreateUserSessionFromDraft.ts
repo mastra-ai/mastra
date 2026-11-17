@@ -82,7 +82,6 @@ export function useCreateUserSessionFromDraft() {
     void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
       replace: true,
       state: startPromptHandoff(draftSessionId, prompt, {
-        draftModelId: activeModelId,
         modelId: handoffModelId,
         thinkingLevel: thinkingLevelOverride,
       }),
