@@ -83,17 +83,16 @@ Expect around 150 people.
 
 ```bash
 (
-  set -e
-  cursor=""; : > "$work/slack-users.partial"
+  cursor=""; : > "$work/slack-users.partial" || exit 1
   while :; do
-    page=$(curl -sS --fail-with-body --retry 3 -H "Authorization: Bearer $SLACK_TOKEN" \
-      "https://slack.com/api/users.list?limit=200&cursor=$cursor")
+    page=$(curl -sS --fail-with-body --retry 3 -G -H "Authorization: Bearer $SLACK_TOKEN" \
+      --data-urlencode "cursor=$cursor" "https://slack.com/api/users.list?limit=200") || exit 1
     [ "$(jq -r .ok <<<"$page")" = true ] || { echo "users.list failed: $(jq -r .error <<<"$page")" >&2; exit 1; }
     jq -c '.members[] | select(.deleted|not) | select(.is_bot|not) | select(.is_app_user|not)
            | select(.id != "USLACKBOT")
            | {id, name, real_name: .profile.real_name, display_name: .profile.display_name}' \
-      <<<"$page" >> "$work/slack-users.partial"
-    cursor=$(jq -r '.response_metadata.next_cursor // ""' <<<"$page")
+      <<<"$page" >> "$work/slack-users.partial" || exit 1
+    cursor=$(jq -er '.response_metadata.next_cursor // ""' <<<"$page") || exit 1
     [ -n "$cursor" ] || break
   done
   mv "$work/slack-users.partial" "$work/slack-users.jsonl"
