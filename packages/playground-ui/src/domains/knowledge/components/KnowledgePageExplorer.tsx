@@ -735,6 +735,19 @@ function SelectedPage({
   );
 }
 
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const needle = query.trim().toLowerCase();
+  const at = needle ? text.toLowerCase().indexOf(needle) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-badge-blue-subtle text-foreground">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
+  );
+}
+
 function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {
   const [query, setQuery] = useState('');
   const search = source.useSearch(query);
@@ -767,7 +780,16 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
                       setQuery('');
                     }}
                   >
-                    <div className="line-clamp-2">{page.name}</div>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="line-clamp-2 wrap-anywhere">
+                        <Highlighted text={page.name} query={query} />
+                      </span>
+                      {page.description ? (
+                        <Txt as="span" variant="caption" tone="muted" className="line-clamp-1 wrap-anywhere">
+                          <Highlighted text={page.description} query={query} />
+                        </Txt>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               ))}
