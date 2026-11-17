@@ -17,7 +17,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::warning
 
-Give each agent only the scopes its pattern needs, and never give one agent two tenants at once. An agent with access to more than one scope can leak content between them. See [Keep scopes apart](/docs/knowledge/scopes-and-access#keep-scopes-apart).
+Give each agent only the scopes its pattern needs. Knowledge has no guardrails yet against an agent leaking content between scopes it can access, so give one agent more than one scope only when that's acceptable. See [Keep scopes apart](/docs/knowledge/scopes-and-access#keep-scopes-apart).
 
 :::
 
@@ -62,7 +62,7 @@ await agent.generate(message, {
 })
 ```
 
-A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). Never give one agent both `tenant:acme` and `tenant:globex`, because it could leak Acme's content into a Globex page.
+A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). An agent with both `tenant:acme` and `tenant:globex` could leak Acme's content into a Globex page, so use a separate agent for each tenant when they must stay apart.
 
 ## A policy every agent follows
 
