@@ -152,6 +152,20 @@ describe('describeRunError', () => {
     });
   });
 
+  it('points a refused memory model at Memory settings, since the session model picker cannot change it', () => {
+    const description = describeRunError({
+      name: 'Error',
+      message:
+        "Observational memory observation run failed: The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400",
+    });
+    expect(description).toMatchObject({
+      title: 'Memory model not available',
+      recoveries: ['memory_model'],
+    });
+    expect(description.message).toContain('Choose another memory model in Memory settings.');
+    expect(description.message).not.toContain('for this session');
+  });
+
   it('offers to continue, switch credential, or switch model when the provider throttles the run', () => {
     expect(describeRunError({ name: 'AI_APICallError', message: 'ThrottlingException' })).toMatchObject({
       title: 'Provider rate limit reached',

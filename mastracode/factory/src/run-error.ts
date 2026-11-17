@@ -7,7 +7,7 @@ import {
   providerModelId,
 } from '@mastra/core/error';
 
-export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'new_session';
+export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'memory_model' | 'new_session';
 
 export interface RunErrorDescription {
   title: string;
@@ -25,11 +25,21 @@ const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error de
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
+/** How `SessionRunEngine.abortForOmFailure` wraps an observer or reflector failure. */
+const MEMORY_MODEL_FAILURE = /^Observational memory \w+ \w+ failed: /;
+
 export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
-  return { ...explainRunError(error), model: providerModelId(error) };
+  const memoryFailure = MEMORY_MODEL_FAILURE.test(error.message);
+  const description = { ...explainRunError(error, memoryFailure), model: providerModelId(error) };
+  if (!memoryFailure) return description;
+  // The memory model failed, not the session's: changing the session model can't fix it.
+  return {
+    ...description,
+    recoveries: description.recoveries.map(recovery => (recovery === 'model' ? 'memory_model' : recovery)),
+  };
 }
 
-function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {
+function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<RunErrorDescription, 'model'> {
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recoveries: ['credentials', 'model'] };
   }
@@ -65,10 +75,10 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
       };
     case 'model_rejected':
       return {
-        title: 'Model not available',
+        title: memoryFailure ? 'Memory model not available' : 'Model not available',
         message: afterProviderReason(
           error,
-          'Choose another model for this session.',
+          memoryFailure ? 'Choose another memory model in Memory settings.' : 'Choose another model for this session.',
           'The provider rejected this model.',
         ),
         recoveries: ['model'],
