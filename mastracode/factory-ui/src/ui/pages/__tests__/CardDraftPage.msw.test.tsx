@@ -244,7 +244,7 @@ describe('a card without a session', () => {
   it("says why nothing can start when the card's repository is not linked, and leads to repository settings", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();
-    const hint = 'Source-control repository acme/elsewhere is not linked to this Factory.';
+    const hint = 'Repository acme/elsewhere is not linked to this Factory.';
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
         HttpResponse.json({ status: 'unlinked', hint }),

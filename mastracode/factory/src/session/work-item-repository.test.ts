@@ -175,6 +175,35 @@ describe('resolveWorkItemRepository', () => {
     });
   });
 
+  it.each([
+    {
+      integrationId: 'github',
+      metadata: { githubRepositoryId: 99 },
+      url: 'https://github.com/acme/docs/issues/12',
+      name: 'acme/docs',
+    },
+    {
+      integrationId: 'gitlab',
+      metadata: { gitlabProjectId: 99 },
+      url: 'https://gitlab.com/acme/platform/docs/-/issues/12',
+      name: 'acme/platform/docs',
+    },
+  ] as const)(
+    'names the $integrationId repository a card comes from when it is not linked',
+    async ({ integrationId, metadata, url, name }) => {
+      const { sourceControl, project } = await seedRepositories(['acme/app'], integrationId);
+
+      await expect(
+        resolveWorkItemRepository({
+          sourceControl,
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          item: { metadata: null, workItem: { metadata, url } },
+        }),
+      ).resolves.toEqual({ status: 'unlinked', hint: `Repository ${name} is not linked to this Factory.` });
+    },
+  );
+
   it('falls back to a linked slug for unmatched ids and reports an empty factory', async () => {
     const { sourceControl, project } = await seedRepositories(['acme/one']);
     await expect(

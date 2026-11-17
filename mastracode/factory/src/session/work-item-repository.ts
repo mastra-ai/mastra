@@ -92,11 +92,17 @@ function resolvedRepository(repository: LinkedRepository): WorkItemRepositoryRes
   return { status: 'resolved', projectRepositoryId: repository.projectRepositoryId, slug: repository.slug };
 }
 
+const PROVIDER_ITEM_URL = /^https?:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:issues|pull|merge_requests)\/\d+(?:[/?#]|$)/;
+
+function repositoryNameFromUrl(url: string | null | undefined): string | undefined {
+  return url ? PROVIDER_ITEM_URL.exec(url)?.[1] : undefined;
+}
+
 export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> };
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> & { url?: string | null } };
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;
@@ -130,9 +136,12 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (externalRepositorySignal !== undefined) {
+    const name = repositoryNameFromUrl(item.workItem.url);
     return {
       status: 'unlinked',
-      hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
+      hint: name
+        ? `Repository ${name} is not linked to this Factory.`
+        : `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
     };
   }
 
