@@ -96,7 +96,10 @@ describe('FactoryEnvironmentStateProcessor', () => {
       '1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7 (default main, setup ok)',
     );
     expect(contents).toContain('2. acme/mastra at /home/user/mastra on (detached) (default main, setup skipped)');
-    expect(contents).toContain("A directory's AGENTS.md loads when you open a file there with view or an edit tool");
+    expect(contents).toContain("A directory's AGENTS.md loads after you open a file there with view or an edit tool");
+    expect(contents).toContain(
+      'Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.',
+    );
   });
 
   it('names a one-repository environment by its checkout as the working directory, with no multi-repository advice', async () => {
@@ -118,7 +121,23 @@ describe('FactoryEnvironmentStateProcessor', () => {
     expect(contents).toContain('1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7');
     expect(contents).not.toContain('repositories under');
     expect(contents).not.toContain('Run git and project commands inside the repository directory');
-    expect(contents).toContain("A directory's AGENTS.md loads when you open a file there with view or an edit tool");
+    expect(contents).toContain("A directory's AGENTS.md loads after you open a file there with view or an edit tool");
+    expect(contents).toContain(
+      'Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.',
+    );
+  });
+
+  it('does not point an untrusted checkout at its working-tree AGENTS.md files', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+
+    const signal = await processor.computeStateSignal(
+      stateArgs(requestContext('sess-1', { factoryProjectId: PROJECT_ID, untrustedCheckout: true })),
+    );
+
+    const contents = (signal as { contents: string }).contents;
+    expect(contents).toContain('2 repositories under /home/user');
+    expect(contents).not.toContain('AGENTS.md');
   });
 
   it('is quiet while the snapshot in the window matches, and emits again when the set changes', async () => {

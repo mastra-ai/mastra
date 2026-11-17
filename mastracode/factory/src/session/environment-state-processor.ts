@@ -112,6 +112,15 @@ function sessionIdFromContext(requestContext: RequestContext | undefined): strin
   return typeof controller?.sessionId === 'string' && controller.sessionId ? controller.sessionId : null;
 }
 
+// An untrusted checkout (a pull request under review) can carry attacker-written
+// AGENTS.md files, which the SDK deliberately never loads from the working tree.
+function isUntrustedCheckout(requestContext: RequestContext | undefined): boolean {
+  const controller = requestContext?.get('controller') as
+    | { getState?: () => { untrustedCheckout?: unknown } }
+    | undefined;
+  return controller?.getState?.().untrustedCheckout === true;
+}
+
 function environmentCacheKey(state: SessionEnvironmentState): string {
   return `environment:${createHash('sha256').update(JSON.stringify(state)).digest('hex').slice(0, 16)}`;
 }
@@ -131,7 +140,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     if (!sessionId) return;
     const state = environments.get(sessionId)?.state;
     if (!state) return;
-    const cacheKey = environmentCacheKey(state);
+    const untrusted = isUntrustedCheckout(args.requestContext);
+    const cacheKey = environmentCacheKey(state) + (untrusted ? ':untrusted' : '');
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
@@ -147,7 +157,9 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
         : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
       lines.join('\n') +
       (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
-      "\nA directory's AGENTS.md loads when you open a file there with view or an edit tool, not through execute_command. Before changing files in a directory you only reached through shell commands, read any AGENTS.md in it or its parent directories." +
+      (untrusted
+        ? ''
+        : "\nA directory's AGENTS.md loads after you open a file there with view or an edit tool, not through execute_command. Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.") +
       (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,
