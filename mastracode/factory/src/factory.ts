@@ -301,10 +301,10 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
-   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * Host-owned Knowledge runtime. Factory registers this exact instance under its `id` and uses that
+   * key for its read surfaces. Omitted, Knowledge stays off.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: Knowledge;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -2341,7 +2341,7 @@ export class MastraFactory {
             mcpEnabled,
             deploymentModelProviders,
             skills: this.#skills,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey: this.#config.knowledge?.id,
             configVersion,
             boardRegistry: boards,
             intakeEvaluator: this.#forcedIntake,
