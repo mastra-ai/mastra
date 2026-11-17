@@ -39,7 +39,7 @@ describe('A notification that a followed card’s phase session waits on someone
     refusal = undefined;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-        HttpResponse.json({ workItems: [], runningSessionIds: [], parkedSessionIds }),
+        HttpResponse.json({ workItems: [], parkedSessionIds }),
       ),
       http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/parked-approval`, async ({ params, request }) => {
         if (refusal) return HttpResponse.json({ error: refusal.error }, { status: refusal.status });

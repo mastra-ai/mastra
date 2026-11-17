@@ -151,11 +151,26 @@ export async function create(args: CreateArgs): Promise<void> {
     const tag = args.versionTag;
     const pinSpinner = p.spinner();
     pinSpinner.start(`Resolving the "${tag}" Mastra packages...`);
-    const { pinned, unresolved } = await pinMastraPackages(projectPath, tag);
+    let pinResult: Awaited<ReturnType<typeof pinMastraPackages>>;
+    try {
+      pinResult = await pinMastraPackages(projectPath, tag);
+    } catch (err) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw err;
+    }
+    const { pinned, unresolved, failed } = pinResult;
+    // Run the check from the project so npm reads the same .npmrc as the lookup.
+    const checkTag = (name: string) => `${cdStep}npm view ${name} dist-tags`;
+    if (failed.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`${checkTag(failed[0]!)}\` to check that the registry is reachable and the tag exists.`,
+      );
+    }
     if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
       pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
       throw new Error(
-        `Could not resolve any Mastra package versions for the "${tag}" tag. Check your network connection and npm registry access.`,
+        `No Mastra packages are published under the "${tag}" tag. Run \`${checkTag(unresolved[0]!)}\` to see the available tags.`,
       );
     }
     // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease

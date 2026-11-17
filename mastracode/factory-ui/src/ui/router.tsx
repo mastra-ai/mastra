@@ -80,6 +80,10 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
+const BoardIntakePage = lazyPage(
+  () => import('./pages/BoardIntakePage').then(module => module.BoardIntakePage),
+  <AppPageLoader />,
+);
 const BoardRulesPage = lazyPage(
   () => import('./pages/BoardRulesPage').then(module => module.BoardRulesPage),
   <AppPageLoader />,
@@ -303,6 +307,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
+                        { path: 'boards/:boardId/intake', ...lazyRoute(BoardIntakePage) },
                         // Card moves became the board's Rules page.
                         { path: 'work/moves', element: <Navigate to="../rules" relative="path" replace /> },
                         { path: 'boards/:boardId/moves', element: <Navigate to="../rules" relative="path" replace /> },

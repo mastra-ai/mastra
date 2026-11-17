@@ -90,7 +90,8 @@ function renderApp(
       HttpResponse.json({
         runningSessionIds: [],
         parkedSessionIds: [],
-        initializingSessionIds: [],
+        cardStatuses: {},
+        sessionHeldCardIds: [],
         cards: { working: 0, waiting: 0 },
       }),
     ),

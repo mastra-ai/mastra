@@ -76,9 +76,11 @@ function parseRepositoryLinkInput(value: unknown): {
   branch: string | null;
   setupCommand: string | null;
   teardownCommand: string | null;
+  selectIntake: boolean;
 } | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
+  if (input.selectIntake !== undefined && typeof input.selectIntake !== 'boolean') return null;
   const repositoryId =
     typeof input.repositoryId === 'string' && UUID_RE.test(input.repositoryId) ? input.repositoryId : undefined;
   const repositoryInput = input.repository;
@@ -107,6 +109,7 @@ function parseRepositoryLinkInput(value: unknown): {
     branch: branch ?? null,
     setupCommand: setupCommand ?? null,
     teardownCommand: teardownCommand ?? null,
+    selectIntake: input.selectIntake !== false,
   };
 }
 
@@ -173,7 +176,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Environment builds, present only when the sandbox has a `builds` capability. */
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
-  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings' | 'addSources'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
   boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
@@ -875,13 +878,24 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               : null;
           if (!repository || repository.installationId !== found.connection.installationId)
             return context.json({ error: 'Source-control repository not found' }, 404);
-          const { repositoryId: _repositoryId, repository: _repository, ...linkInput } = input;
+          const { repositoryId: _repositoryId, repository: _repository, selectIntake, ...linkInput } = input;
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
             connectionId,
             repositoryId: repository.id,
             ...linkInput,
           });
+          if (selectIntake && found.connection.integrationId === 'github' && this.deps.intake) {
+            try {
+              await this.deps.intake.addSources({
+                orgId: tenant.orgId,
+                integrationId: 'github',
+                sourceIds: [repository.slug],
+              });
+            } catch (error) {
+              console.warn('[factory] Failed to add a linked repository to issue intake:', error);
+            }
+          }
           try {
             this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
           } catch (error) {
