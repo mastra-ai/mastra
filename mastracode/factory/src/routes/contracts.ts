@@ -1227,7 +1227,7 @@ export const sessionRowsResponseSchema = z.object({
 
 export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
-  /** Sessions of a card, or that the reader sees, whose run waits on a person's answer. */
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
   /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
   cardStatuses: z.record(z.string(), sessionRowStatusSchema),

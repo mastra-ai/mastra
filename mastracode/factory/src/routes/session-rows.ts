@@ -69,7 +69,9 @@ async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScop
       }),
       parkedSessionIds: new Set([
         ...sessionIdsWhere(cards, isParked),
-        ...seen.sessions.flatMap(({ sessionId }) => (isParked(sessionId) ? [sessionId] : [])),
+        ...seen.sessions.flatMap(({ sessionId, userId }) =>
+          userId === scope.userId && isParked(sessionId) ? [sessionId] : [],
+        ),
       ]),
     },
   };

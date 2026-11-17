@@ -321,6 +321,14 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(body, 'asking')).toMatchObject({ origin: 'user', status: 'waiting' });
   });
 
+  it("leaves a teammate's session waiting on its owner's answer off another reader's waiting", async () => {
+    await createSession('their-asking', { userId: 'u2' });
+    const live = { running: [{ threadId: 'their-asking', resourceId: 'u2' }], parked: new Set(['their-asking']) };
+
+    expect(rowOf(await readRows(buildApp('u1', live)), 'their-asking')?.status).toBe('idle');
+    expect(rowOf(await readRows(buildApp('u2', live)), 'their-asking')?.status).toBe('waiting');
+  });
+
   it('marks a never set up session initializing only while a run waits on its setup', async () => {
     await createSession('never-set-up', { materialized: false });
 
