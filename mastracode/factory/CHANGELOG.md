@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.29.0-alpha.7
+
+### Patch Changes
+
+- The **Activity** sort in the Factory sidebar now orders sessions that share a status by their last update instead of their creation date, the same as **Last updated** does. An older session that was updated since no longer sinks below a newer one that was left alone. ([#30656](https://github.com/mastra-ai/mastra/pull/30656))
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/code-sdk@1.19.1-alpha.7
+
 ## 0.29.0-alpha.6
 
 ### Minor Changes
