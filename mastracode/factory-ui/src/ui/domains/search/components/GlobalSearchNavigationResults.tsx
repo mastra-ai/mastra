@@ -81,7 +81,7 @@ export function GlobalSearchNavigationResults({
         icon={<IconSettingsGear5 />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake order not routed new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

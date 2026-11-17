@@ -40,7 +40,7 @@ function RecapButton({ period }: { period: ActivityPeriod }) {
         focusRing,
       )}
     >
-      <IconScript aria-hidden className="size-3.5" />
+      <IconScript aria-hidden className="size-icon-sm" />
       {label}
     </button>
   );
@@ -102,7 +102,7 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
             <IconChevronDownMedium
               aria-hidden
               className={cn(
-                'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
+                'text-muted-foreground duration-slow ease-out-custom size-icon-sm transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
                 open && 'rotate-180',
               )}
             />

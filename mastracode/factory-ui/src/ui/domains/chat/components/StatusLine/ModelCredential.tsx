@@ -54,7 +54,7 @@ export function ModelCredential() {
           />
         }
       >
-        <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
+        <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-icon-sm" />} />
         <span className="absolute -right-1 -bottom-1">
           <HolderBadge holder={holder} />
         </span>

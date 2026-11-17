@@ -219,6 +219,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         configVersion: 'factory-config-v1',
       }),
       factoryProjectExists,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'label-routing-test',
     });
     // A sweep proposes cards for every factory at once, more than one dispatcher pass files.

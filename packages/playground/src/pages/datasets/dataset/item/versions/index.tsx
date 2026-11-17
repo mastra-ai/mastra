@@ -272,7 +272,7 @@ function VersionSelect({
 }) {
   return (
     <div className="grid grid-cols-[auto_1fr] items-center gap-4">
-      <IconHistory className="size-4 opacity-50" />
+      <IconHistory className="size-icon-md opacity-50" />
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger aria-label={label} className="w-full">
           <SelectValue placeholder={placeholder} className="flex-1" />

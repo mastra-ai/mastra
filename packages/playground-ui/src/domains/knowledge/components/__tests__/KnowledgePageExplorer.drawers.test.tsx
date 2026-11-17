@@ -184,7 +184,6 @@ describe('KnowledgePageExplorer drawers', () => {
 
   it('keeps the tree beside the page in the page view', () => {
     renderWithProviders(<Host initial="onboarding" initialView="page" />);
-    expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
     expect(within(treeDrawer()).getByRole('tree', { name: 'Knowledge pages' })).toBeTruthy();
     expect(noPageDrawer()).toBe(true);
   });

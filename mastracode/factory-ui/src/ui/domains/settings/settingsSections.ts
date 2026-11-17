@@ -43,10 +43,7 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
 
 export const VOICE_INPUT_ANCHOR = 'voice-input';
 
-/** Work Intake's list of routes that decide where new cards land. */
-export const NEW_CARD_ROUTES_ANCHOR = 'new-cards';
-
-type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR | typeof NEW_CARD_ROUTES_ANCHOR;
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 

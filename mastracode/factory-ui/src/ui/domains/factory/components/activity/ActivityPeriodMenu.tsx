@@ -33,7 +33,7 @@ export function ActivityPeriodMenu({
         }
       >
         {ACTIVITY_PERIOD_LABELS[period]}
-        <IconChevronDownMedium aria-hidden className="size-3.5" />
+        <IconChevronDownMedium aria-hidden className="size-icon-sm" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end">
         <DropdownMenu.RadioOptions

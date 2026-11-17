@@ -11,7 +11,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
@@ -84,7 +84,7 @@ export function boardEventFor(context: Pick<FactoryIncidentioRuleContext, 'event
   if (context.event === 'followUpClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? undefined : { type: 'work_item.opened' };
 }
 
 const ingressIdFor = (issue: IncidentioIssueIngress) => `incidentio:${issue.id}:${issue.updatedAt}`;
@@ -120,12 +120,14 @@ export class IncidentioRules {
     const statuses: IngressStatus[] = [];
     const failures: unknown[] = [];
     for (const issue of input.issues) {
-      if (recorded.has(ingressIds.get(issue)!)) {
+      // One card per follow-up per project; other projects may file their own.
+      const relatedItem = itemsBySourceKey.get(issue.id);
+      // A sighting already evaluated runs no rules again, unless it has a card: then its label or
+      // assignee change may still be waiting to be queued, if queueing it failed the first time.
+      if (recorded.has(ingressIds.get(issue)!) && !relatedItem) {
         statuses.push('replayed');
         continue;
       }
-      // One card per follow-up per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
       try {
         statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
       } catch (error) {
@@ -257,6 +259,18 @@ export class IncidentioRules {
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
       return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
+    if (relatedItem && event === 'followUpObserved' && outcome.status === 'accepted' && !ownedByDeployment) {
+      await commitObservedChange(this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: relatedItem,
+        ingressId,
+        actor,
+        labels: issue.labels,
+        assignee: issue.assignee,
+        observedAt: issue.updatedAt,
+      });
     }
     return committed.status;
   }

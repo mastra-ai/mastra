@@ -19,6 +19,7 @@ import {
 } from '../session/run-audit.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createProjectSessionsReader } from './project-sessions.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -51,6 +52,7 @@ function buildApp(
       memorySettings,
       controller,
       users,
+      projectSessions: createProjectSessionsReader({ sourceControls, users }),
       audit,
       ...(workItems ? { workItems } : {}),
       ...(moveThread ? { moveThread } : {}),
@@ -1343,6 +1345,7 @@ describe('session sandbox recreate', () => {
         auth: fakeRouteAuth({ isOrganizationAdmin: options.isOrganizationAdmin ?? (async () => false) }),
         sourceControls: [sourceControl],
         projects: seed.projects,
+        projectSessions: createProjectSessionsReader({ sourceControls: [sourceControl] }),
         memorySettings: seed.memorySettings,
         ...(options.controller ? { controller: options.controller } : {}),
         ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),

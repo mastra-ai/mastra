@@ -63,7 +63,7 @@ function PersonalOMSection({
   threadId: string | undefined;
   resourceId: string | undefined;
 }) {
-  const modelsQuery = useAvailableModelsQuery();
+  const modelsQuery = useAvailableModelsQuery({ scope: 'user', sessionId, threadId, resourceId });
   return (
     <OMSection sessionId={sessionId} threadId={threadId} resourceId={resourceId} models={modelsQuery.data ?? []} />
   );

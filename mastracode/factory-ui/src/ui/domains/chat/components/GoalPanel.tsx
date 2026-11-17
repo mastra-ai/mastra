@@ -32,7 +32,7 @@ export function GoalPanel() {
   return (
     <div className={goalBar}>
       <span className="text-badge-pink-indicator inline-flex">
-        <IconTarget size={15} />
+        <IconTarget className="size-icon-md" />
       </span>
       <Txt as="span" variant="column" className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
         {goal.objective}

@@ -5,34 +5,38 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { eventMovesCard, isPullRequestEvent } from '../boards/board-events.js';
+import { isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
-  cardRuleFacts,
   hasPullRequest,
-  intakeTarget,
   isPullRequestCard,
   isTerminalWorkItem,
+  isOpenPullRequestSource,
+  pullRequestSources,
+  pullRequestTrustKey,
   resolvePhaseSemantics,
   REVIEW_CONTEXT,
   reviewsPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import {
+  arrivalRuleFacts,
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
-  resolveEventRoute,
-  resolveIntakePlacement,
-  resolveIntakeRoute,
-  routesHandleEvent,
+  planEventMove,
+  resolveIntake,
+  projectIntakeEvaluator,
+  ROUTE_AGAIN_KEY_PREFIX,
 } from '../boards/intake-routing.js';
-import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -50,6 +54,7 @@ import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvo
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -78,6 +83,7 @@ import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
+import { eventRouteIngress, foldUpdate, updateGroup } from './update-fold.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -150,7 +156,17 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
-class FactoryDecisionPostponed extends Error {}
+class FactoryDecisionPostponed extends Error {
+  constructor(readonly availableAt?: Date) {
+    super();
+  }
+}
+
+/**
+ * How long an update waits for more updates to the same card before its routes run: a burst of
+ * label or assignee changes within this window becomes one event.
+ */
+export const UPDATE_BURST_MS = 5_000;
 
 // How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
 const POSTPONE_MS = 10_000;
@@ -515,6 +531,8 @@ export interface FactoryDecisionDispatcherOptions {
   boards?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
+  intakeEvaluator?: IntakeEvaluator;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
   reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
@@ -727,12 +745,45 @@ async function awaitNotification(
   }
 }
 
+/** Card metadata key: the facts each linked pull request joined the card with, by its trust key. */
+const LINKED_PULL_REQUESTS_KEY = 'linkedPullRequests';
+
+interface LinkFacts {
+  trusted: boolean;
+  phase: string | null;
+  hasPullRequest: boolean;
+}
+
+function linkedPullRequests(metadata: Record<string, unknown> | null | undefined): Record<string, LinkFacts> {
+  const links = metadata?.[LINKED_PULL_REQUESTS_KEY];
+  return links && typeof links === 'object' && !Array.isArray(links) ? (links as Record<string, LinkFacts>) : {};
+}
+
+/**
+ * A pull request's link to `card`, read off the card it joins. Only another trusted, open pull
+ * request counts as one the card already has: an outsider's can't keep a maintainer's from Review.
+ */
+function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
+  return {
+    trusted,
+    phase: card.stages.length === 1 ? card.stages[0]! : null,
+    hasPullRequest: pullRequestSources(card).some(
+      source =>
+        pullRequestTrustKey(source) !== trustKey &&
+        isOpenPullRequestSource(source) &&
+        trustedPullRequestSource(card, source),
+    ),
+  };
+}
+
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: ProjectBoardSource;
   readonly #intakeRoutes?: IntakeRoutesReader;
+  /** Forced on every project; undefined: each project's own setting. */
+  readonly #intakeEvaluator: IntakeEvaluator | undefined;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #autoApproving = new Set<string>();
@@ -795,6 +846,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
+    this.#intakeEvaluator = options.intakeEvaluator;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -1153,7 +1205,7 @@ export class FactoryDecisionDispatcher {
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
-        async () => this.#executeDecision(record, decision),
+        async () => this.#executeDecision(record, decision, now),
       );
       executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
@@ -1176,7 +1228,7 @@ export class FactoryDecisionDispatcher {
       if (error instanceof FactoryDecisionPostponed) {
         await this.#storage.postponeDeferredDecision(
           leaseIdentity(record, this.#ownerId),
-          new Date(now.getTime() + POSTPONE_MS),
+          error.availableAt ?? new Date(now.getTime() + POSTPONE_MS),
           new Date(),
         );
         return;
@@ -1481,7 +1533,11 @@ export class FactoryDecisionDispatcher {
     return !startsInAutoPhase(boards, item, decision);
   }
 
-  async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
+  async #executeDecision(
+    record: FactoryDeferredDecisionRecord,
+    decision: FactoryCommitDecision,
+    now: Date,
+  ): Promise<void> {
     const nextChain: FactoryRuleCausalEntry[] = [
       ...(record.causalChain as FactoryRuleCausalEntry[]),
       { ingressId: record.idempotencyKey, decisionType: decision.type },
@@ -1495,6 +1551,11 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'routeEvent': {
+        if (isUpdateEvent(decision.event.type)) {
+          const combined = await this.#foldUpdates(record, decision, now);
+          if (combined) await this.#routeEvent(record, combined, nextChain);
+          return;
+        }
         await this.#routeEvent(record, decision.event, nextChain);
         return;
       }
@@ -1913,6 +1974,11 @@ export class FactoryDecisionDispatcher {
     ) {
       const source = externalSourceForDecision(requested);
       const facts = workItemProviderAdapter(source).toSource(source, requested.metadata ?? null);
+      // The card a pull request linked to may not have had its event yet (the delivery that
+      // linked it lost a race); the event's key makes this a no-op once it has.
+      if (requested.closesIssue?.workItemId === existing.id && record.workItemId === null) {
+        await this.#queueLinkedPullRequestOpened(record, requested, existing, causalChain);
+      }
       if (facts?.state === 'open') {
         await this.#storage.syncWorkItemSource({
           orgId: record.orgId,
@@ -1939,7 +2005,7 @@ export class FactoryDecisionDispatcher {
         return;
       }
     }
-    if (!existing && requested.closesIssue && (await this.#joinClosedIssue(record, requested, causalChain))) return;
+    if (!existing && requested.closesIssue && (await this.#linkClosedIssue(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     // Filing the card *was* the placement, so a retry of the same decision has
     // nothing left to apply — and must not drag a card that has since moved
@@ -1957,6 +2023,8 @@ export class FactoryDecisionDispatcher {
       : materializedHere
         ? await this.#resumeRoutedCard(record, current, requested, boards)
         : this.#keepRoutedCard(current, requested, boards);
+    // No board took it: logged Not routed, and filed only once a rule takes it (Route again).
+    if (!decision) return;
     if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
@@ -1964,7 +2032,10 @@ export class FactoryDecisionDispatcher {
           record.factoryProjectId,
           `decision:${record.idempotencyKey}:${existing.id}:${suffix}`,
         );
-        if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
+        if (replay?.status === 'accepted' && replay.stage === decision.stage) {
+          await this.#resolveNotRouted(record, decision.sourceKey);
+          return;
+        }
       }
     }
     assertFactoryDecisionTarget(decision, boards);
@@ -2007,6 +2078,8 @@ export class FactoryDecisionDispatcher {
           },
           reuseMode: 'preserve',
         });
+    // The item is filed once its card stands past initial entry; a retry of this decision resolves it too.
+    const filed = () => this.#resolveNotRouted(record, decision.sourceKey);
     const itemBoard = boardForWorkItem(result.item);
     // A pull request's own card already on another board that reviews pull requests (the retired
     // Review board, for a project still using it) stays there: filing its pull request again acts
@@ -2083,11 +2156,14 @@ export class FactoryDecisionDispatcher {
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
         item = fresh && fresh.revision !== item.revision ? fresh : null;
       }
+      await filed();
       return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
+    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase))) {
+      await filed();
       return;
+    }
 
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
@@ -2111,6 +2187,7 @@ export class FactoryDecisionDispatcher {
       }
       expectedRevision = initial.revision;
     }
+    await filed();
     if (decision.stage === initialPhase) return;
 
     const moved = await this.#transitionService.transition({
@@ -2141,6 +2218,8 @@ export class FactoryDecisionDispatcher {
     workItemId: string,
     causalChain: FactoryRuleCausalEntry[],
     admit: (card: Card) => { phase: string | null } | undefined,
+    cardMetadata?: (metadata: Record<string, unknown>, card: Card) => Record<string, unknown>,
+    afterAttach?: (card: Card) => Promise<void>,
   ): Promise<boolean> {
     // A dry run of the work item split has no sources table to attach to: the pull request
     // gets its own card, as before.
@@ -2168,6 +2247,10 @@ export class FactoryDecisionDispatcher {
           source: externalSourceForDecision(decision),
           metadata: decision.metadata ?? null,
           expectedRevision: card.revision,
+          // The card as `admit` read it: the attach commits at that revision.
+          ...(cardMetadata
+            ? { cardMetadata: (metadata: Record<string, unknown>) => cardMetadata(metadata, card) }
+            : {}),
         });
         if (!result) return false;
         attached = { card: result.item, phase: admitted.phase };
@@ -2179,6 +2262,7 @@ export class FactoryDecisionDispatcher {
     }
     if (!attached) return false;
     const { card, phase } = attached;
+    await afterAttach?.(card);
     const stage = card.stages.length === 1 ? card.stages[0] : undefined;
     const board = boards.get(boardForWorkItem(card));
     if (!phase || !stage || stage === phase) return true;
@@ -2210,83 +2294,204 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Joins a pull or merge request to the card of the issue it closes when the project's intake
-   * routes say so: the first route matching the arrival, with the facts of that card as it is now,
-   * is a joining one. Only an arrival the routes would place qualifies, and only from an author
-   * with write access: no route can put an outsider's pull request on someone else's card.
+   * Links a pull or merge request to the card of the issue it closes, whoever opened it: Factory
+   * does this itself, before intake, wherever the card sits, so long as it is unfinished. Linking
+   * runs nothing. An outsider's pull request is recorded as untrusted on the card, so it never
+   * becomes the card's working pull request on its own; a person picks it. The card then gets the
+   * pull request's `pull_request.opened`, so its board's own card-move rules decide whether it moves.
    */
-  async #joinClosedIssue(
+  async #linkClosedIssue(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<boolean> {
-    if (!authorTrusted(decision.metadata) || !this.#intakeRoutes || decision.skipRules === true) return false;
-    if (record.workItemId !== null) return false;
-    const boards = await this.#boards.load(record);
-    const routes = await this.#intakeRoutes.listIntakeRoutes({
-      orgId: record.orgId,
-      factoryProjectId: record.factoryProjectId,
-    });
-    if (routes.length === 0) return false;
-    const arrival = cardRuleFacts({
-      title: decision.title,
-      metadata: decision.metadata ?? {},
-      externalSource: externalSourceForDecision(decision),
-    });
-    return this.#attachLinkedItem(record, decision, decision.closesIssue!.workItemId, causalChain, card => {
-      const route = resolveIntakeRoute(routes, { ...arrival, ...closedIssueRuleFacts(card) }, boards, card);
-      return route?.type === 'join' ? { phase: route.phase } : undefined;
-    });
+    if (decision.skipRules === true || record.workItemId !== null) return false;
+    const trusted = authorTrusted(decision.metadata);
+    const trustKey = this.#pullRequestTrustKey(decision);
+    return this.#attachLinkedItem(
+      record,
+      decision,
+      decision.closesIssue!.workItemId,
+      causalChain,
+      () => ({ phase: null }),
+      (metadata, card) => {
+        const links = linkedPullRequests(metadata);
+        const withLink = {
+          ...metadata,
+          [LINKED_PULL_REQUESTS_KEY]: { ...links, [trustKey]: links[trustKey] ?? linkFacts(card, trusted, trustKey) },
+        };
+        if (trusted) return withLink;
+        const listed = metadata[UNTRUSTED_PULL_REQUESTS_KEY];
+        const untrusted = Array.isArray(listed) ? listed.filter(entry => typeof entry === 'string') : [];
+        return untrusted.includes(trustKey)
+          ? withLink
+          : { ...withLink, [UNTRUSTED_PULL_REQUESTS_KEY]: [...untrusted, trustKey] };
+      },
+      card => this.#queueLinkedPullRequestOpened(record, decision, card, causalChain),
+    );
+  }
+
+  /** The key a card lists an untrusted attached pull request under (see `UNTRUSTED_PULL_REQUESTS_KEY`). */
+  #pullRequestTrustKey(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>): string {
+    const source = externalSourceForDecision(decision);
+    return pullRequestTrustKey(workItemProviderAdapter(source).toSource(source, decision.metadata ?? null)!);
   }
 
   /**
-   * Places an arrival where the project's intake routes say: the first enabled route matching it,
-   * else the default board's first phase. The board and phase an integration's rule named don't
-   * count; only a decision placing the card outright (`skipRules`) keeps its own.
+   * Hands the card a linked pull request's `pull_request.opened`, with the facts saved when it
+   * joined (the card's phase then, and whether a trusted open pull request was already on it), so
+   * a retry after the card changed still describes the link as it happened. Keyed by the card and
+   * the pull request, so whichever delivery files the pull request, and however often, the card
+   * gets the event once.
+   */
+  async #queueLinkedPullRequestOpened(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    card: Card,
+    causalChain: FactoryRuleCausalEntry[],
+  ): Promise<void> {
+    const sourceKey = externalSourceKey(externalSourceForDecision(decision));
+    const key = `linked-pull-request:${card.id}:${sourceKey}`;
+    const trustKey = this.#pullRequestTrustKey(decision);
+    // A link from before the facts were saved with it reads them off the card as it is now.
+    const link =
+      linkedPullRequests(card.metadata)[trustKey] ?? linkFacts(card, authorTrusted(decision.metadata), trustKey);
+    const queued = await this.#storage.commitRuleEvaluation({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: card.id,
+      ingress: { identity: `decision:${key}` },
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'routeEvent',
+          idempotencyKey: key,
+          event: {
+            type: 'pull_request.opened',
+            pullRequestTrusted: link.trusted,
+            closedIssue: { phase: link.phase, hasPullRequest: link.hasPullRequest },
+          },
+        },
+      ],
+      causalChain,
+      now: new Date(),
+    });
+    if (queued.status === 'stale') {
+      throw new Error('Factory linked pull request event was not queued: the work item changed concurrently.');
+    }
+  }
+
+  /**
+   * Leaves a warning in the decision log for each card-move rule that matched but whose target
+   * couldn't take the card; a redelivery of the same event replaces it.
+   */
+  async #logSkippedRoutes(
+    record: FactoryDeferredDecisionRecord,
+    item: Card,
+    event: BoardEventFacts,
+    skipped: readonly SkippedEventRoute[],
+  ): Promise<void> {
+    if (!this.#intakeRoutes || skipped.length === 0) return;
+    const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
+    const evaluator = await projectIntakeEvaluator(this.#intakeEvaluator, this.#intakeRoutes, scope);
+    for (const skip of skipped) {
+      await this.#intakeRoutes.recordIntakeDecision(scope, {
+        idempotencyKey: `rule-skipped:${record.idempotencyKey}:${skip.routeId}`,
+        outcome: 'rule_skipped',
+        evaluator,
+        boardKey: skip.boardKey,
+        routeId: skip.routeId,
+        reason: `The card-move rule matched ${event.type} but was skipped: ${skip.reason}.`,
+        sourceKey: item.externalSource?.externalId ?? null,
+        title: item.title,
+        url: item.externalSource?.url ?? null,
+      });
+    }
+  }
+
+  /** Marks the item's Not routed record, if any, resolved: its card is filed. */
+  async #resolveNotRouted(record: FactoryDeferredDecisionRecord, sourceKey: string): Promise<void> {
+    await this.#intakeRoutes?.resolveNotRouted(
+      { orgId: record.orgId, factoryProjectId: record.factoryProjectId },
+      sourceKey,
+      'factory-rule-dispatcher',
+    );
+  }
+
+  /**
+   * Places an arrival where intake says (see `resolveIntake`). The board and phase an
+   * integration's rule named don't count; only a decision placing the card outright (`skipRules`)
+   * keeps its own. Undefined when no board takes it: it is logged Not routed and no card is filed.
+   * Every decision is logged, keyed by the arrival's decision so a redelivery replaces its row.
    */
   async #routeArrival(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
-  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
-    if (!this.#intakeRoutes || decision.skipRules === true) return decision;
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> | undefined> {
+    if (decision.skipRules === true) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
-    const routes = await this.#intakeRoutes.listIntakeRoutes({
-      orgId: record.orgId,
-      factoryProjectId: record.factoryProjectId,
-    });
-    // A route can also test the issue a pull request closes, as it is now.
-    const closedIssue = decision.closesIssue
-      ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
-      : null;
-    const facts = {
-      ...cardRuleFacts({
-        title: decision.title,
-        metadata: decision.metadata ?? {},
-        externalSource: externalSourceForDecision(decision),
-      }),
-      ...(decision.closesIssue
-        ? closedIssueRuleFacts(
-            closedIssue &&
-              closedIssue.factoryProjectId === record.factoryProjectId &&
-              !isTerminalWorkItem(boards, closedIssue)
-              ? closedIssue
-              : undefined,
-          )
-        : {}),
-    };
-    const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) {
-      const fallback = intakeTarget(boards);
-      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
+    if (!this.#intakeRoutes) {
+      // Only a forced route list may file without the rules: unread, the project's setting could be
+      // intake order, which has no board to fall back on. The arrival waits for the rules.
+      if (this.#intakeEvaluator !== 'route-list') throw new Error('Intake rules are unavailable right now.');
+      return decision;
     }
+    const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
+    const evaluator = decision.idempotencyKey.startsWith(ROUTE_AGAIN_KEY_PREFIX)
+      ? 'intake-order'
+      : await projectIntakeEvaluator(this.#intakeEvaluator, this.#intakeRoutes, scope);
+    const [routes, order] = await Promise.all([
+      this.#intakeRoutes.listIntakeRoutes(scope),
+      evaluator === 'intake-order'
+        ? this.#intakeRoutes.readIntakeOrder(scope, { boards: [...boards.keys()] })
+        : undefined,
+    ]);
+    const facts = await arrivalRuleFacts(decision, {
+      factoryProjectId: record.factoryProjectId,
+      registry: boards,
+      card: id => this.#storage.get({ orgId: record.orgId, id }),
+    });
+    const resolution = resolveIntake({
+      evaluator,
+      routes,
+      order: order?.boardKeys ?? [],
+      facts,
+      registry: boards,
+    });
+    const logged = {
+      idempotencyKey: record.idempotencyKey,
+      evaluator,
+      sourceKey: decision.sourceKey,
+      title: decision.title,
+      url: decision.url,
+    };
+    if (resolution.outcome === 'not_routed') {
+      await this.#intakeRoutes.recordIntakeDecision(scope, {
+        ...logged,
+        outcome: 'not_routed',
+        reason: resolution.reason,
+        arrival: { ...decision },
+      });
+      return undefined;
+    }
+    await this.#intakeRoutes.recordIntakeDecision(scope, {
+      ...logged,
+      outcome: 'placed',
+      boardKey: resolution.board,
+      routeId: resolution.routeId,
+    });
     return {
       ...decision,
-      board: placement.board,
-      stage: placement.phase,
-      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+      board: resolution.board,
+      stage: resolution.phase,
+      ...(resolution.routeId !== null && {
+        metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: resolution.routeId },
+      }),
     };
   }
 
@@ -2422,32 +2627,30 @@ export class FactoryDecisionDispatcher {
     causalChain: FactoryRuleCausalEntry[],
     fallback?: Extract<FactoryCommitDecision, { type: 'transition' }>,
   ): Promise<void> {
-    const identity = `event-route:${record.idempotencyKey}`;
+    const identity = eventRouteIngress(record.idempotencyKey);
     if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
     if (await this.#statusEventOvertaken(record)) throw new FactoryDecisionSuperseded();
     const resolve = async () => {
       const item = await this.#requireItem(record);
-      const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
+      const boards = await this.#boards.load(record);
+      const board = boards.get(boardForWorkItem(item));
       if (!board) return undefined;
-      const stage = item.stages.length === 1 ? item.stages[0] : undefined;
-      const finished = stage !== undefined && board.isTerminal(stage);
-      if (!eventMovesCard(event.type, finished)) return undefined;
       const routes = this.#intakeRoutes
         ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
         : [];
-      if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
-      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board, hasPullRequest(item));
-      // A pull request event the rules already decided keeps that decision when no enabled route
-      // takes the card: disabling or narrowing a route must not strand a merged card in review.
-      if (!route)
-        return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
-      // A route that agrees with the rule's own pull request move keeps it whole: its message, and
-      // the re-entry that restarts a review in the phase the card already sits in.
-      if (fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
-        return { item, board, fallback: true as const };
-      }
-      if (stage === route.phase) return undefined;
-      return { item, board, route };
+      const skipped: SkippedEventRoute[] = [];
+      const plan = planEventMove({
+        routes,
+        event,
+        item,
+        registry: boards,
+        ...(fallback && { fallback: { stage: fallback.stage } }),
+        onSkip: skip => skipped.push(skip),
+      });
+      await this.#logSkippedRoutes(record, item, event, skipped);
+      if (plan.outcome === 'rule_default') return { item, board, fallback: true as const };
+      if (plan.outcome !== 'moves') return undefined;
+      return { item, board, route: plan.move, target: boards.get(plan.move.board)! };
     };
     const first = await resolve();
     if (!first) return;
@@ -2455,24 +2658,18 @@ export class FactoryDecisionDispatcher {
       if (fallback) await this.#applyTransition(record, fallback, causalChain);
       return;
     }
-    if (!first.board.isTerminal(first.route.phase)) {
-      const binding = await this.#findBinding(record);
-      // A binding with no recorded owner never started a run, so it has none in flight.
-      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
-      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-      const session =
-        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
-      // Checked again on the next claim: the card may have moved, or the routes changed, by then.
-      if (binding && session && (await this.#hasRunInFlight(session, binding))) {
-        throw new FactoryDecisionPostponed();
-      }
+    // Checked again on the next claim: the card may have moved, or the routes changed, by then.
+    if (!first.target.isTerminal(first.route.phase) && (await this.#cardRunInFlight(record, first.item))) {
+      throw new FactoryDecisionPostponed();
     }
     const { item, board, route } = first;
+    const crossesBoards = route.board !== board.id;
     const result = await this.#transitionService.transition({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
       board: board.id,
+      ...(crossesBoards ? { toBoard: route.board } : {}),
       stage: route.phase,
       expectedRevision: item.revision,
       actor: { type: 'system', id: `intake-route:${route.routeId}` },
@@ -2483,6 +2680,78 @@ export class FactoryDecisionDispatcher {
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+    // Work the old board proposed for the card is not the new board's to run; what the move queued
+    // for the new board stays, even once another worker has parked it as a proposal.
+    if (result.status === 'accepted' && crossesBoards) {
+      await this.#storage.supersedeDecisionsForWorkItem({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: item.id,
+        except: result.decisions.map(decision => String(decision.idempotencyKey)),
+        supersededAt: new Date(),
+      });
+    }
+  }
+
+  /**
+   * Whether the card's session has a run in flight. A binding with no recorded owner never
+   * started a run, so it has none.
+   */
+  async #cardRunInFlight(record: FactoryDeferredDecisionRecord, item: Pick<Card, 'sessions'>): Promise<boolean> {
+    const binding = await this.#findBinding(record);
+    const startedBy = binding ? item.sessions[binding.role]?.startedBy : undefined;
+    if (!binding || !startedBy) return false;
+    await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+    const session = await this.#findSession(binding, { userId: startedBy, orgId: record.orgId });
+    return session !== undefined && (await this.#hasRunInFlight(session, binding));
+  }
+
+  /**
+   * The one update event an update decision stands for, or undefined when it has nothing to do.
+   * Updates to the same card of the same kind (work item or pull request, the card's own session
+   * or anyone else) and to the same pull request fold into the newest one: an older one gives way to it, and the newest carries
+   * the net change of every one since the group last moved the card, so a label added then removed
+   * nets out. The newest waits until no update has arrived for {@link UPDATE_BURST_MS}, and one
+   * from the card's own session also until the session's run ends.
+   */
+  async #foldUpdates(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>,
+    now: Date,
+  ): Promise<BoardEventFacts | undefined> {
+    if (!record.workItemId) return undefined;
+    const group = updateGroup(
+      await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
+        workItemId: record.workItemId,
+      }),
+      decision,
+    );
+    const { superseded, since, event } = await foldUpdate(group, record.id, other =>
+      this.#moveCommitted(record, other),
+    );
+    // A newer update not given up on carries this one's change: it folded it, or will.
+    if (superseded) throw new FactoryDecisionSuperseded();
+    // An older one still leased may be moving the card right now, so wait for it. One claimed in
+    // the same batch as this one (same owner, same lease, before any renewal) sees this one and
+    // gives way. Lease renewal rewrites `updatedAt`, so it can't tell when the older one was claimed.
+    const sameClaim = (other: FactoryDeferredDecisionRecord) =>
+      other.leaseOwner === record.leaseOwner && other.leaseExpiresAt?.getTime() === record.leaseExpiresAt?.getTime();
+    if (since.some(other => other.status === 'leased' && !sameClaim(other))) {
+      throw new FactoryDecisionPostponed();
+    }
+    const quietAt = record.createdAt.getTime() + UPDATE_BURST_MS;
+    if (now.getTime() < quietAt) throw new FactoryDecisionPostponed(new Date(quietAt));
+    if (decision.fromCardSession) {
+      const item = await this.#requireItem(record);
+      if (await this.#cardRunInFlight(record, item)) throw new FactoryDecisionPostponed();
+    }
+    return event;
+  }
+
+  /** Whether `other`'s card move committed, even if its decision never finished. */
+  async #moveCommitted(record: FactoryDeferredDecisionRecord, other: FactoryDeferredDecisionRecord): Promise<boolean> {
+    const identity = eventRouteIngress(other.idempotencyKey);
+    return Boolean(await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity));
   }
 
   /**
@@ -2776,8 +3045,8 @@ export class FactoryDecisionDispatcher {
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
     const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
-    if (open.length === 0) return false;
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
+    // A run with no ledger entry (one the dispatcher didn't record) is still live here.
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
   }
 
