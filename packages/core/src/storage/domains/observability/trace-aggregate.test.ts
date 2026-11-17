@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { planSpanAggregate } from './span-aggregate';
 import {
   getTraceAggregateCountDistinctField,
   isTraceAggregateCountDistinctMeasure,
@@ -10,7 +9,6 @@ import {
   TRACE_AGGREGATE_MAX_LIMIT,
   traceAggregateResponseSchema,
 } from './trace-aggregate';
-import { planTraceAggregate } from './trace-aggregate-planner';
 import { TRACE_QUERY_MAX_NODES, TRACE_QUERY_MAX_PATH_BYTES, TraceQueryValidationError } from './trace-query';
 import type { TraceQueryScalarPredicate } from './trace-query';
 

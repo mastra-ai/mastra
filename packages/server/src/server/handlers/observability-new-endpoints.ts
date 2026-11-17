@@ -90,6 +90,7 @@ import { handleError } from './error';
 import { exportPersistedEvent, persistedFeedbackEvent, persistedScoreEvent } from './observability-export';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
+  isTraceQueryUnsupportedError,
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanDurationSortSupported,
@@ -437,10 +438,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       return await observabilityStore.queryTraces(plan);
     } catch (error) {
-      if (
-        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
-        error instanceof coreStorage.TraceQueryUnsupportedError
-      ) {
+      if (isTraceQueryUnsupportedError(error)) {
         throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
       }
       if (error instanceof coreStorage.TraceQueryCursorError) {
@@ -596,10 +594,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       return await observabilityStore.aggregateTraces(plan);
     } catch (error) {
-      if (
-        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
-        error instanceof coreStorage.TraceQueryUnsupportedError
-      ) {
+      if (isTraceQueryUnsupportedError(error)) {
         throwTraceQueryError(501, { code: 'TRACE_AGGREGATE_UNSUPPORTED', message: error.message });
       }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
@@ -746,10 +741,7 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       return await observabilityStore.aggregateSpans(plan);
     } catch (error) {
-      if (
-        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
-        error instanceof coreStorage.TraceQueryUnsupportedError
-      ) {
+      if (isTraceQueryUnsupportedError(error)) {
         throwTraceQueryError(501, { code: 'SPAN_AGGREGATE_UNSUPPORTED', message: error.message });
       }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
@@ -889,10 +881,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       return await observabilityStore.querySpans(plan);
     } catch (error) {
-      if (
-        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
-        error instanceof coreStorage.TraceQueryUnsupportedError
-      ) {
+      if (isTraceQueryUnsupportedError(error)) {
         throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
       }
       if (error instanceof coreStorage.TraceQueryCursorError) {

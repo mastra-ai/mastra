@@ -219,3 +219,14 @@ it.each(['selection', 'related trace'])('explains that thread queries cannot use
     }),
   );
 });
+
+describe('aggregate having token predicates', () => {
+  it.each(['traces', 'spans'])('rejects token operators explicitly for %s', kind => {
+    const request = { timeRange, measures: ['count'], having: token('all', 'needle') };
+    const run = () =>
+      kind === 'traces'
+        ? planTraceAggregate(parseTraceAggregateRequest(request), options)
+        : planSpanAggregate(request, options);
+    expect(run).toThrow(issue('operator_not_allowed', ['having', 'op']));
+  });
+});

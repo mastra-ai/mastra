@@ -1,5 +1,6 @@
+import { TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH, spanQueryRequestSchema } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
-import { hasTokenSearchFilter, withTokenSearchFields } from './token-search-predicate';
+import { hasTokenSearchFilter, tokenSearchValue, withTokenSearchFields } from './token-search-predicate';
 
 describe('trace content filters', () => {
   it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
@@ -34,5 +35,23 @@ describe('trace content filters', () => {
       'hasAllTokens',
     ]);
     expect(withTokenSearchFields([], true)[0]?.label).toBe('Any Content');
+  });
+});
+
+describe('token search length contract', () => {
+  it.each(['a', '😀'])('matches Core at the Unicode length boundary for %s', character => {
+    for (const length of [
+      TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH - 1,
+      TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH,
+      TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH + 1,
+    ]) {
+      const literal = character.repeat(length);
+      const accepted = spanQueryRequestSchema.safeParse({
+        timeRange: { from: '2026-11-01T00:00:00Z', to: '2026-11-02T00:00:00Z' },
+        where: { op: 'hasAllTokens', left: { path: 'input' }, right: { literal } },
+      }).success;
+      expect(tokenSearchValue(literal) !== undefined).toBe(accepted);
+      expect(accepted).toBe(length <= TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH);
+    }
   });
 });

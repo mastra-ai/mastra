@@ -1,3 +1,4 @@
+import { TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH } from '@mastra/core/storage';
 import type { TraceQueryScalarPredicate, TraceQueryTokenField } from '@mastra/core/storage';
 import type { TraceFilterNode } from '@/domains/traces/trace-query-filters';
 import type { FilterBarField } from '@/ds/components/FilterBar/types';
@@ -20,8 +21,9 @@ export const isTokenSearchField = (path: string): path is TraceQueryTokenField =
 export function tokenSearchValue(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.trim();
-  // splitByNonAlpha keeps non-ASCII sequences, including symbols, as tokens.
-  if (!/[a-zA-Z0-9\u0080-\uFFFF]/.test(text) || Array.from(text).length > 256) return undefined;
+  // UX heuristic for likely searchable input; the supporting store defines actual tokenization.
+  if (!/[a-zA-Z0-9\u0080-\uFFFF]/.test(text) || Array.from(text).length > TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH)
+    return undefined;
   return text || undefined;
 }
 
@@ -42,7 +44,10 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
         path === 'error' || path === 'errorPreview' ? IconExclamationTriangle : (existing?.icon ?? IconMagnifyingGlass),
       operators: [...(existing?.operators ?? []), 'hasAllTokens'],
       alwaysShowOperator: true,
-      validateInput: value => (tokenSearchValue(value) ? undefined : 'Enter words to search (up to 256 characters)'),
+      validateInput: value =>
+        tokenSearchValue(value)
+          ? undefined
+          : `Enter words to search (up to ${TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH} characters)`,
     };
   });
   return [...searchable, ...fields.filter(field => !searchable.some(search => search.id === field.id))];

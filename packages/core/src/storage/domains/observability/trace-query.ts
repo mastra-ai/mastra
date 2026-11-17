@@ -64,6 +64,9 @@ const collectionMemberSchema = literalStringSchema.refine(
   'Collection predicates require a non-empty string value',
 );
 const timestampLiteralSchema = z.string().datetime({ offset: true });
+/** Maximum Unicode code points in a token-search literal, before store tokenization. */
+export const TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH = 256;
+
 export const TRACE_QUERY_TOKEN_FIELDS = [
   'input',
   'output',
@@ -92,8 +95,11 @@ const tokenPredicateSchema = z
           .string()
           .trim()
           .min(1)
-          .refine(value => Array.from(value).length <= 256, 'Token search must contain at most 256 characters')
-          .meta({ maxLength: 256 }),
+          .refine(
+            value => Array.from(value).length <= TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH,
+            `Token search must contain at most ${TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH} characters`,
+          )
+          .meta({ maxLength: TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH }),
       })
       .strict(),
   })

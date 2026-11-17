@@ -127,7 +127,7 @@ export function TracesExplorerRoot({
     withQueryTrace &&
     !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
 
-  // Entries the server can't query are ignored, never written back: the host keeps its raw value.
+  // Sanitize for display/query without rewriting host state. A later filter edit replaces the displayed token list.
   const filters = useMemo(() => {
     return sanitizeTracesFilters(rawFilters, {
       withTokenSearch,

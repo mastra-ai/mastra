@@ -18,7 +18,7 @@ import {
   emptyTracesPage,
   idleDeltaBatch,
   traceAggregateCapabilities,
-  traceTextSearchCapabilities,
+  traceTokenSearchCapabilities,
   traceAggregateError,
   traceCountsAggregate,
   traceQueryCapabilities,
@@ -505,8 +505,8 @@ describe('TracesExplorer.Histogram', () => {
       async capability => {
         setHandlers({
           capabilities: {
-            ...traceTextSearchCapabilities,
-            capabilities: { ...traceTextSearchCapabilities.capabilities, [capability]: false },
+            ...traceTokenSearchCapabilities,
+            capabilities: { ...traceTokenSearchCapabilities.capabilities, [capability]: false },
           },
         });
         await renderExplorer({
@@ -533,7 +533,7 @@ describe('TracesExplorer.Histogram', () => {
       ['outputPreview', 'Span output preview'],
       ['errorPreview', 'Span error preview'],
     ] as const)('uses the same %s search for lists and histograms', async (field, label) => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       await renderExplorer({
         initialFilters: {
           ...DEFAULT_TRACES_FILTERS,
@@ -549,7 +549,7 @@ describe('TracesExplorer.Histogram', () => {
       expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
     });
     it('requires input and output conditions on the same span', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       await renderExplorer({
         initialFilters: {
           ...DEFAULT_TRACES_FILTERS,
@@ -577,7 +577,7 @@ describe('TracesExplorer.Histogram', () => {
       });
     });
     it('keeps Any Content search and histogram filters in sync through removal', async () => {
-      setHandlers({ capabilities: traceTextSearchCapabilities });
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
       const result = await renderExplorer();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);

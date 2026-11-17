@@ -869,7 +869,7 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
-    // OSS Server never opts into token search; the same scalar-field walker prerequisite applies here.
+    // OSS Server never opts into indexed token search.
     spanAggregateTokenSearch: false,
     spanQueryTokenSearch: false,
     spanQueryDurationSort:
@@ -1357,4 +1357,12 @@ export function createObservabilityListQuerySchema<
       });
     }
   });
+}
+
+/** Older Core versions do not export this error class. */
+export function isTraceQueryUnsupportedError(error: unknown): error is coreStorage.TraceQueryUnsupportedError {
+  return (
+    typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+    error instanceof coreStorage.TraceQueryUnsupportedError
+  );
 }

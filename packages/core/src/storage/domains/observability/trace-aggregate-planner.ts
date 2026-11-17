@@ -452,7 +452,7 @@ function planHaving<M extends string>(
     return { type: 'membership', measure, operator: predicate.op, values: values as number[] };
   }
 
-  if (predicate.op === 'matches' || predicate.op === 'notMatches') {
+  if (predicate.op === 'matches' || predicate.op === 'notMatches' || predicate.op === 'hasAllTokens') {
     state.issues.push({
       code: 'operator_not_allowed',
       path: [...path, 'op'],

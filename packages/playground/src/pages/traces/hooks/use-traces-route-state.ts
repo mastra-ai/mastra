@@ -94,7 +94,6 @@ function setOrDelete(params: URLSearchParams, key: string, value: string | undef
 
 function encodeFilters(base: URLSearchParams, filters: TracesFilters): URLSearchParams {
   const next = new URLSearchParams(base);
-  // An empty value preserves an editable chip after changing its field; absence removes it.
   setOrDelete(
     next,
     TRACE_DATE_PRESET_PARAM,

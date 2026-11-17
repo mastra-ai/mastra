@@ -107,7 +107,7 @@ export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceAggregate: true },
 };
 
-export const traceTextSearchCapabilities: GetObservabilityCapabilitiesResponse = {
+export const traceTokenSearchCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceAggregateCapabilities,
   capabilities: {
     ...traceAggregateCapabilities.capabilities,
