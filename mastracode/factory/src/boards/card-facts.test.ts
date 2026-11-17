@@ -40,7 +40,7 @@ describe('provider facts', () => {
     expect(facts).toMatchObject({
       'item.labels': ['docs'],
       'item.author': 'writer',
-      'author.trusted': true,
+      'item.trusted': true,
     });
   });
 
@@ -56,7 +56,7 @@ describe('provider facts', () => {
       expect(facts).toMatchObject({
         'item.labels': labels,
         'item.author': 'provider-author',
-        'author.trusted': false,
+        'item.trusted': false,
       });
     },
   );
@@ -70,7 +70,7 @@ describe('provider facts', () => {
     expect(facts).toMatchObject({
       'item.labels': ['bug'],
       'item.author': 'provider-author',
-      'author.trusted': true,
+      'item.trusted': true,
     });
   });
 });
@@ -217,9 +217,89 @@ describe('item.pullRequest', () => {
 
     expect(cardRuleFacts(issueCard([], { openPullRequestNumber: 21 }))['item.pullRequest']).toBe(21);
   });
+
+  it('describes one pull request, the one the card falls back to, once the one it points at closes unmerged', () => {
+    const outsider = { ...pullRequest(18, 'open'), provider: 'github', externalId: 'github-pr:18' };
+    const fellBack = cardRuleFacts(
+      issueCard([pullRequest(17, 'closed'), pullRequest(18, 'open')], { openPullRequestNumber: 17 }),
+    );
+    expect(fellBack).toMatchObject({ 'item.pullRequest': 18, 'item.hasPullRequest': true });
+    const none = cardRuleFacts(
+      issueCard([pullRequest(17, 'closed'), outsider], {
+        openPullRequestNumber: 17,
+        untrustedPullRequests: ['github:github-pr:18'],
+      }),
+    );
+    expect(none).not.toHaveProperty('item.pullRequest');
+    expect(none).not.toHaveProperty('pullRequest.trusted');
+    expect(none['item.hasPullRequest']).toBe(false);
+  });
+
+  const outsider18 = { ...pullRequest(18, 'open'), provider: 'github', externalId: 'github-pr:18' };
+  it.each([
+    ['no pull request linked', [], {}],
+    ["an outsider's linked", [outsider18], { untrustedPullRequests: ['github:github-pr:18'] }],
+    ['a trusted one linked', [pullRequest(18, 'open')], {}],
+  ])("trusts the pull request the card's session opened, with %s", (_, sources, metadata) => {
+    const facts = cardRuleFacts(issueCard(sources as never, { ...metadata, openPullRequestNumber: 21 }));
+    expect(facts).toMatchObject({ 'item.pullRequest': 21, 'pullRequest.trusted': true, 'item.hasPullRequest': true });
+  });
 });
 
-describe('author.trusted', () => {
+describe('item.hasPullRequest and item.hasIssue', () => {
+  const source = (sourceType: string, state: string, metadata: Record<string, unknown> = {}) =>
+    ({ sourceType, state, metadata }) as unknown as Card['workItem']['sources'][number];
+  const card = (kind: 'github issue' | 'github pull request', sources: Card['workItem']['sources']) => ({
+    title: 'Fix',
+    externalSource: SOURCES[kind]!,
+    metadata: {},
+    workItem: { labels: [], author: null, sources },
+  });
+  const openPullRequest = source('pull-request', 'open', { githubPullRequestNumber: 7 });
+  const merged = source('pull-request', 'merged', { githubPullRequestNumber: 7 });
+  const openIssue = source('issue', 'open');
+
+  // An issue has a pull request while one is open and attached; a pull request's own card is the pull request.
+  it.each([
+    {
+      case: 'issue with an open pull request',
+      kind: 'github issue',
+      sources: [openIssue, openPullRequest],
+      pr: true,
+      issue: true,
+    },
+    {
+      case: 'issue whose pull request merged',
+      kind: 'github issue',
+      sources: [openIssue, merged],
+      pr: false,
+      issue: true,
+    },
+    { case: 'issue alone', kind: 'github issue', sources: [openIssue], pr: false, issue: false },
+    {
+      case: 'pull request on its own card',
+      kind: 'github pull request',
+      sources: [openPullRequest],
+      pr: false,
+      issue: false,
+    },
+    {
+      case: 'pull request linking an issue',
+      kind: 'github pull request',
+      sources: [openPullRequest, openIssue],
+      pr: false,
+      issue: true,
+    },
+    { case: 'pull request still arriving', kind: 'github pull request', sources: undefined, pr: false, issue: false },
+  ] as const)('$case', ({ kind, sources, pr, issue }) => {
+    const facts = cardRuleFacts(
+      sources ? card(kind, [...sources]) : { title: 'Fix', externalSource: SOURCES[kind]!, metadata: {} },
+    );
+    expect({ pr: facts['item.hasPullRequest'], issue: facts['item.hasIssue'] }).toEqual({ pr, issue });
+  });
+});
+
+describe('item.trusted', () => {
   it.each([
     ['authorTrusted true', true],
     ['factoryAuthored true', true],
@@ -229,7 +309,8 @@ describe('author.trusted', () => {
     ['no metadata', false],
   ])('is %s → %s', (stamps, trusted) => {
     const facts = cardRuleFacts({ title: 'Fix', metadata: STAMPS[stamps]!, externalSource: SOURCES['github issue']! });
-    expect(facts['author.trusted']).toBe(trusted);
+    expect(facts['item.trusted']).toBe(trusted);
+    expect(facts).not.toHaveProperty('author.trusted');
   });
 
   it('only counts a literal true stamp, not a truthy one', () => {
@@ -238,7 +319,7 @@ describe('author.trusted', () => {
       metadata: { authorTrusted: 'true', factoryAuthored: 1 },
       externalSource: SOURCES['github issue']!,
     });
-    expect(facts['author.trusted']).toBe(false);
+    expect(facts['item.trusted']).toBe(false);
   });
 });
 

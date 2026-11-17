@@ -1,5 +1,122 @@
 # @mastra/core
 
+## 1.84.0-alpha.5
+
+### Minor Changes
+
+- Added `knowledge.movePage()` to move a page, with its child pages, to a new parent or scope from your app. The page keeps its ID, notes, pins and embeddings, and links by path follow it, so a sync that sees a page move at its source no longer has to remove and re-create it. ([#30631](https://github.com/mastra-ai/mastra/pull/30631))
+
+  ```ts
+  await knowledge.movePage({ scope: 'docs:acme', path: 'inbox/plan', parent: 'projects/q4' });
+  ```
+
+  Links by name now stay correct when a page moves or a new page takes a name. A page moved to another scope, and every page under it, re-resolves its `[[Name]]` links in the new scope. A link that pointed at one page by name stops resolving once a second page answers to that name. When more than 99 pages share that name, the write logs a warning and `knowledge.reindexLinks()` repairs the rest.
+
+- Added `knowledge.reembed()` to embed Knowledge pages and notes that already exist, such as content written before `vector` and `embedder` were configured or after switching embedders. It runs in batches with a resumable cursor, doesn't change the pages, lists failures and pages over the chunk cap, and stops early with a cursor when the embedder keeps rate limiting. ([#30603](https://github.com/mastra-ai/mastra/pull/30603))
+
+  ```ts
+  let cursor: string | undefined;
+  do {
+    const result = await knowledge.reembed({ scope: 'org:acme', cursor });
+    if (result.rateLimited) await new Promise(resolve => setTimeout(resolve, 60_000));
+    cursor = result.nextCursor;
+  } while (cursor);
+  ```
+
+### Patch Changes
+
+- Fixed slow handling of Gateway base URLs and Supabase URLs that contain very long runs of `/`. The resulting URLs are unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
+- Fixed `run.restart()` running a step again when the workflow run finished or suspended after `restart()` read it but before `restart()` took it over from the process running it. Restarting a run that finished now returns its stored result, and restarting a run that suspended fails with the usual "This workflow run was not active" error. ([#30399](https://github.com/mastra-ai/mastra/pull/30399))
+
+- Fixed workflow `.sleep()` and `.sleepUntil()` waits longer than about 24.8 days ending almost immediately. The next step now runs only after the full wait, on the default and evented engines. ([#30395](https://github.com/mastra-ai/mastra/pull/30395))
+
+## 1.84.0-alpha.4
+
+### Minor Changes
+
+- Evented workflows from `@mastra/core/workflows/evented` now accept the experimental `storageVersion: 2` option. Before, setting it on an evented workflow threw. On version 2, each step's message carries only the previous step's result and the state changes, and the engine loads the rest from storage. In an `EventedAgent` run with 16 tool calls on `@mastra/pg`, published messages fell from 98 MB to 11 MB, storage writes from 75 MB to 3.1 MB, and run time from 3.9 s to 2.7 s. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+  ```ts
+  const workflow = createEventedWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: { storageVersion: 2 },
+  });
+  ```
+
+  As on the default engine, `steps` on a version 2 run's result is an async function, which `onFinish` and `onError` receive too:
+
+  ```ts
+  const result = await run.start({ inputData });
+  const steps = await result.steps();
+  ```
+
+  On both storage versions, a nested run's messages no longer carry a copy of the parent run's step graph. On version 1, this cut the messages an agent run with 16 tool calls publishes by more than a quarter.
+
+- Added `updateState` to workflow steps, workflow tools, `.map()` functions, loop and branch conditions, and sleep functions. It merges the top-level keys it's given into the workflow state, validates the merged state against the step's `stateSchema`, and leaves keys it wasn't given alone, including changes parallel steps made. A key set to `undefined` is removed. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+  `setState` keeps its existing contract: pass the full state, the value is validated on its own, and a second call in the same step replaces the first.
+
+  ```ts
+  // Before: copy the whole state so the other keys survive
+  await setState({ ...state, count: state.count + 1 });
+
+  // After: pass only the keys that change
+  await updateState({ count: state.count + 1 });
+  ```
+
+- Added `getState()` to workflow steps, tools that run inside workflows, `.map()` functions, loop and branch conditions, and sleep functions. It resolves to the current workflow state, including the step's own `setState` changes. Pass top-level keys to get only those keys. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+  Reading `state` in a run stored with the experimental `storageVersion: 2` option now throws, on both the default and evented engines. Use `getState()` instead:
+
+  ```ts
+  // Before
+  execute: async ({ state }) => state.count;
+
+  // After
+  execute: async ({ getState }) => (await getState(['count'])).count;
+  ```
+
+- Added an experimental `storageVersion` option to `createDurableAgent` and `createEventedAgent`. Set it to `2` to store new runs as a run header plus one row per step, so each save writes only what changed instead of rewriting the whole run. This keeps storage writes small for long agent runs. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+  ```ts
+  const durableAgent = createDurableAgent({ agent, storageVersion: 2 });
+  ```
+
+  Storage version 2 works with in-memory storage, `@mastra/pg`, and `@mastra/libsql`. On other adapters, the agent logs a warning and stores new runs as version 1. The default stays `1`, and runs stored before you change the option keep their version.
+
+### Patch Changes
+
+- Updated the bundled AI SDK provider utilities to the latest patch releases of each supported version (`@ai-sdk/provider-utils` 4.0.66 and 5.0.81, `@ai-sdk/provider` 4.0.38). ([#30518](https://github.com/mastra-ai/mastra/pull/30518))
+
+- Fixed Gateway v2 deployments showing models they cannot use. Studio now lists chat models from the connected Gateway's live model catalog. ([#29445](https://github.com/mastra-ai/mastra/pull/29445))
+
+- Fixed evented workflows ending a run twice when two `foreach` iterations failed at the same time. The run now fails once, with the first failure's error, and a result saved after the failure no longer marks the step as running again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed durable agents sending the model a background tool's placeholder instead of its result. When a background tool finished while its `toModelOutput` was still running, or while a durable agent ran on storage version 2, the next model call saw the placeholder and the final save could write the placeholder over the stored result. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed durable agents ignoring an agent-level pubsub for run streams. Durable execution now shares the wrapped Agent's stream bus, including after registration and forks, while evented runs keep using Mastra's shared transport. ([#30229](https://github.com/mastra-ai/mastra/pull/30229))
+
+  **Upgrade note:** If the wrapped `Agent` has a `pubsub` that differs from `Mastra.pubsub` and no `pubsub` is passed to `createDurableAgent`, durable run streams and remote Stop now use the wrapped Agent's transport instead of Mastra's. Mastra-only configurations are unchanged. To keep old and new workers on the same transport during an upgrade, align the Agent's pubsub with Mastra's, or pass the previous transport explicitly as `createDurableAgent({ agent, pubsub: mastraPubsub })`. Wrapper overrides apply only to the wrapper's runs; direct calls on the wrapped Agent keep their own stream configuration.
+
+  Wrapping preserves the native Agent's existing bus and in-flight publishers and observers. Explicit stream settings use a wrapper-only bus, and evented routing is selected per execution rather than changing the native Agent's routing.
+
+- Fixed a `.foreach()` run staying stuck as running when the first failed item's failure could not be sent. The run now fails with the first item's error once that failure is delivered again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- `execute_command` now resolves relative paths against the workspace directory, not the sandbox's own default working directory. ([#30210](https://github.com/mastra-ai/mastra/pull/30210))
+
+  On a SandboxFilesystem the file tools resolve paths against the workspace root, but shell commands started wherever the sandbox was rooted, so a file written by a relative shell path (`cat > .artifacts/plans/x.md`) landed in a different directory than the same path passed to `write_file` — in a Factory session the plan card then could not load the plan the shell had written.
+
+  `@mastra/core` adds an optional `WorkspaceFilesystem.getCommandCwd()` that reports the sandbox directory shell commands should default to, and `execute_command` uses it for both foreground and background commands: an omitted `cwd` now starts in that directory, and a relative `cwd` is resolved against it. Filesystems that do not report a root (host or in-memory filesystems, CompositeFilesystem mounts, third-party implementations) keep the previous behaviour exactly, and an explicit absolute `cwd` still wins.
+
+- Fixed time travel hanging on evented workflows whose `shouldPersistSnapshot` skips running snapshots, when replaying from a step that comes before a failed `foreach` step. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed a `.foreach()` over a nested workflow on a run stored with the experimental `storageVersion: 2` option only keeping the last item's run. Restarting the run could give an item another item's result. Every item's run is kept again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed evented workflows storing the wrong workflow state after parallel branches changed a state that has a top-level `output` array. The stored state kept items from the old array, so a run restarted after a crash continued with the wrong state. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
 ## 1.84.0-alpha.3
 
 ### Minor Changes

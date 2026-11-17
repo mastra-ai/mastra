@@ -26,7 +26,10 @@ export class MastraAuthSupabase extends MastraAuthProvider<User> {
       );
     }
 
-    this.url = supabaseUrl.replace(/\/+$/, '');
+    // Trim trailing slashes with a loop; the equivalent /\/+$/ regex is quadratic on long runs of '/'.
+    let end = supabaseUrl.length;
+    while (end > 0 && supabaseUrl[end - 1] === '/') end--;
+    this.url = supabaseUrl.slice(0, end);
     this.supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     this.registerOptions(options);

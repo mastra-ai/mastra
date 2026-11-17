@@ -9,7 +9,9 @@ import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSessionParked } from '../../../../hooks/useWorkItems';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -115,13 +117,16 @@ function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
 function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const parked = useSessionParked(factoryId, waiting.sessionId);
+  const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
   const { toolCallId } = waiting;
   const answer = useMutation({
     mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
     mutationFn: (decision: 'approve' | 'decline') =>
       answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
+    },
   });
   const outcome = answer.isSuccess
     ? answer.variables === 'approve'
@@ -150,11 +155,7 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
           {outcome}
         </Txt>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        render={<Link to={`/factories/${factoryId}/workspaces/${waiting.sessionId}/threads/${waiting.threadId}`} />}
-      >
+      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
         Open session
       </Button>
     </div>

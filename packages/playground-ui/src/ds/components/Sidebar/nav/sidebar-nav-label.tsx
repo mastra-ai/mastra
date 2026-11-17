@@ -38,7 +38,7 @@ export function SidebarNavLabel({ children, className, description, state: state
         {/* The slot attribute both grows the row and out-ranks its 16px svg rule. */}
         <span
           data-slot="sidebar-nav-description"
-          className="flex min-w-0 items-center gap-1.5 truncate text-meta text-muted-foreground data-[slot=sidebar-nav-description]:[&_svg]:size-3"
+          className="flex min-w-0 items-center gap-1.5 truncate text-meta text-muted-foreground data-[slot=sidebar-nav-description]:[&_svg]:size-icon-xs"
         >
           {description}
         </span>

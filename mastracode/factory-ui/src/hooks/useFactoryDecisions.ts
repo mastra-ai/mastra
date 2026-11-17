@@ -60,6 +60,7 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
       return actOnFactoryDecision(baseUrl, githubProjectId, decisionId, action);
     },
     onSuccess: async () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(githubProjectId) });
       await queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) });
     },
   });

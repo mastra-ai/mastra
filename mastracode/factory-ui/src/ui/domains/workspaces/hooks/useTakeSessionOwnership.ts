@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { takeUserSessionOwnership } from '../services/user-sessions';
 
@@ -23,7 +24,7 @@ export function useTakeSessionOwnership(factoryId: string | undefined) {
     // A refusal means the owner moved under the viewer, and the model catalog follows the owner's credentials.
     onSettled: (_session, _error, { sessionId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() });
     },
   });

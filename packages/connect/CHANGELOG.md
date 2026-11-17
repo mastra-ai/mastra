@@ -1,5 +1,14 @@
 # @mastra/connect
 
+## 1.4.1-alpha.2
+
+### Patch Changes
+
+- Fixed `posthog_run_query` failing provider-response validation whenever PostHog returned column types, which it does for every query with columns, even `select 1`. PostHog returns column types as `[columnName, clickhouseType]` pairs, such as `[["count()", "UInt64"]]`, and the tool now accepts them and returns them in that shape. The inferred type of `types` in the tool's output changes from `string[]` to `[string, string][]`, and a plain string entry, which PostHog never sends, is now rejected. Fixes [#30528](https://github.com/mastra-ai/mastra/issues/30528). ([#30541](https://github.com/mastra-ai/mastra/pull/30541))
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+
 ## 1.4.1-alpha.1
 
 ### Patch Changes
