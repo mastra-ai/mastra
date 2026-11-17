@@ -43,7 +43,6 @@ function buildApp(viewer: string, { running = [], parked = new Set(), authEnable
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
       liveSessions: {
-        isRunning: sessionId => running.some(run => run.threadId === sessionId),
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
       },
@@ -321,9 +320,9 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
 });
 
 describe('GET /web/factory/projects/:id/session-activity', () => {
-  it("counts the project's working and waiting cards and the sessions still coming up", async () => {
-    await createCardSession('working-run', 'Working');
-    await createCardSession('parked-run', 'Parked');
+  it("answers each live card's status and counts the working and waiting cards", async () => {
+    const working = await createCardSession('working-run', 'Working');
+    const parked = await createCardSession('parked-run', 'Parked');
     await createCardSession('quiet-run', 'Quiet');
     await createSession('starting', { materialized: false });
 
@@ -337,24 +336,61 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     expect(body).toEqual({
       runningSessionIds: ['working-run'],
       parkedSessionIds: ['parked-run'],
-      initializingSessionIds: ['starting'],
+      cardStatuses: { [working.id]: 'working', [parked.id]: 'waiting' },
+      sessionHeldCardIds: [working.id, parked.id].toSorted((a, b) => a.localeCompare(b)),
       cards: { working: 1, waiting: 1 },
     });
   });
 
+  it("answers each card the status of its sidebar row, whatever its sessions' own statuses", async () => {
+    const proposed = await createCardSession('proposed-run', 'Proposed while running');
+    await proposeRunFor(proposed);
+    const proposedIdle = await createCardSession('idle-run', 'Proposed while idle');
+    await proposeRunFor(proposedIdle);
+    await createSession('lead-run', { branch: 'factory/lead-run' });
+    await createSession('coming-up', { branch: 'factory/coming-up', materialized: false });
+    const { item: twoSessions } = await seed.workItems.upsert({
+      orgId: ORG,
+      userId: 'u1',
+      factoryProjectId: projectId,
+      input: {
+        title: 'One working, one coming up',
+        stages: ['intake'],
+        sessions: {
+          work: { sessionId: 'lead-run', branch: 'factory/lead-run', threadId: 'lead-run' },
+          review: { sessionId: 'coming-up', branch: 'factory/coming-up', threadId: 'coming-up' },
+        },
+      },
+    });
+    const app = buildApp('u1', {
+      running: [
+        { threadId: 'proposed-run', resourceId: 'u1' },
+        { threadId: 'lead-run', resourceId: 'u1' },
+      ],
+    });
+
+    const [rows, activity] = await Promise.all([readRows(app), readActivity(app)]);
+    const cardRow = (cardId: string) =>
+      rows.groups.flatMap(group => group.rows).find(row => row.itemId === cardId)?.status;
+
+    expect(cardRow(proposed.id)).toBe('waiting');
+    expect(cardRow(proposedIdle.id)).toBe('waiting');
+    expect(cardRow(twoSessions.id)).toBe('working');
+    expect(activity.cardStatuses).toEqual({
+      [proposed.id]: 'waiting',
+      [proposedIdle.id]: 'waiting',
+      [twoSessions.id]: 'working',
+    });
+    expect(activity.cards).toEqual({ working: 1, waiting: 2 });
+    expect(activity.sessionHeldCardIds).toEqual([proposed.id, twoSessions.id].toSorted((a, b) => a.localeCompare(b)));
+  });
+
   it("leaves another person's private sessions out", async () => {
-    await createSession('their-starting', { userId: 'u2', visibility: 'private', materialized: false });
     await createSession('their-running', { userId: 'u2', visibility: 'private' });
     const running = [{ threadId: 'their-running', resourceId: 'their-running' }];
 
-    expect(await readActivity(buildApp('u1', { running }))).toMatchObject({
-      runningSessionIds: [],
-      initializingSessionIds: [],
-    });
-    expect(await readActivity(buildApp('u2', { running }))).toMatchObject({
-      runningSessionIds: ['their-running'],
-      initializingSessionIds: ['their-starting'],
-    });
+    expect((await readActivity(buildApp('u1', { running }))).runningSessionIds).toEqual([]);
+    expect((await readActivity(buildApp('u2', { running }))).runningSessionIds).toEqual(['their-running']);
   });
 });
 
@@ -386,7 +422,6 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
       expect(JSON.parse(activity ?? '')).toMatchObject({
         runningSessionIds: ['their-card-run', 'their-draft'],
         parkedSessionIds: ['their-card-run'],
-        initializingSessionIds: ['their-starting'],
       });
 
       for (const viewer of ['u1', 'u3']) {
@@ -398,7 +433,8 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
         expect(JSON.parse(activitySeen ?? ''), viewer).toMatchObject({
           runningSessionIds: ['their-card-run'],
           parkedSessionIds: ['their-card-run'],
-          initializingSessionIds: [],
+          cardStatuses: {},
+          sessionHeldCardIds: [],
         });
       }
     });
