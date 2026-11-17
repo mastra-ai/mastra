@@ -17,6 +17,7 @@ import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/typ
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type { DurableAgent } from '../durable-agent';
 
 function makeSnapshot(
@@ -65,8 +66,12 @@ function makeMockModel(): LanguageModelV2 {
   }) as unknown as LanguageModelV2;
 }
 
-function createDurableWithStore(agentId: string): {
+function createDurableWithStore(
+  agentId: string,
+  engine: 'durable' | 'evented',
+): {
   agent: DurableAgent;
+  baseAgent: Agent;
   store: InMemoryStore;
 } {
   const baseAgent = new Agent({
@@ -76,7 +81,8 @@ function createDurableWithStore(agentId: string): {
     model: makeMockModel(),
   });
   const store = new InMemoryStore();
-  const agent = createDurableAgent({ agent: baseAgent });
+  const agent =
+    engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
   // Registering the durable wrapper directly on Mastra invokes
   // __registerMastra, which wires storage and pubsub. This mirrors the
   // server bootstrap path used by `no-double-wrap-pubsub.test.ts`.
@@ -84,7 +90,7 @@ function createDurableWithStore(agentId: string): {
     agents: { [agentId]: agent as any },
     storage: store,
   });
-  return { agent, store };
+  return { agent, baseAgent, store };
 }
 
 async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId?: string) {
@@ -97,17 +103,40 @@ async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId
   });
 }
 
-describe('DurableAgent.listActiveRuns', () => {
+describe.each(['durable', 'evented'] as const)('Agent.listActiveRuns (%s)', engine => {
   let agent: DurableAgent;
+  let baseAgent: Agent;
   let store: InMemoryStore;
 
   beforeEach(() => {
-    ({ agent, store } = createDurableWithStore('agent-A'));
+    ({ agent, baseAgent, store } = createDurableWithStore('agent-A', engine));
+  });
+
+  it('does not give the wrapped plain agent durable discovery capability', async () => {
+    await seed(store, makeSnapshot('owned', 'running', { agentId: 'agent-A' }));
+    expect((await agent.listActiveRuns()).total).toBe(1);
+    for (const options of [undefined, { page: -1 }, { perPage: 0 }]) {
+      await expect(baseAgent.listActiveRuns(options)).rejects.toMatchObject({
+        id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+        details: { agentId: 'agent-A', method: 'listActiveRuns' },
+      });
+    }
   });
 
   it('returns an empty result when no runs are persisted', async () => {
     const result = await agent.listActiveRuns();
     expect(result).toEqual({ runs: [], total: 0 });
+  });
+
+  it('discovers owned runs through the base Agent entry point', async () => {
+    await seed(store, makeSnapshot('owned', 'running', { agentId: 'agent-A', threadId: 'thread' }));
+    await seed(store, makeSnapshot('foreign', 'running', { agentId: 'agent-B', threadId: 'thread' }));
+
+    const result = await Agent.prototype.listActiveRuns.call(agent, { threadId: 'thread', page: 0, perPage: 1 });
+    expect(result.total).toBe(1);
+    expect(result.runs).toEqual([
+      { runId: 'owned', status: 'running', threadId: 'thread', resourceId: undefined, updatedAt: expect.any(Date) },
+    ]);
   });
 
   it('discovers running snapshots owned by this agent', async () => {
@@ -387,7 +416,8 @@ describe('DurableAgent.listActiveRuns', () => {
       instructions: 'x',
       model: makeMockModel(),
     });
-    const unboundAgent = createDurableAgent({ agent: baseAgent });
+    const unboundAgent =
+      engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
     await expect(unboundAgent.listActiveRuns()).rejects.toThrow(/requires storage/);
   });
 });
