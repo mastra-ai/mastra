@@ -21,7 +21,7 @@ function OrganizationName({
       <AutosaveInput
         label="Organization name"
         value={name}
-        validate={value => (value.trim() ? null : "Name can't be empty.")}
+        validate={value => (value.trim() ? undefined : "Name can't be empty.")}
         onSave={async next => {
           await Promise.resolve();
           if (fail) throw new Error(fail);

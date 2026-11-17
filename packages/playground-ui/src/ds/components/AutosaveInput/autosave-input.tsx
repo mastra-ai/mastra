@@ -1,14 +1,9 @@
 import { useId, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import { InputGroup, InputGroupInput } from '../InputGroup';
 import type { InputGroupInputProps } from '../InputGroup';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
-import './autosave-input.css';
+import { AutosaveInputStatus } from './autosave-input-status';
+import type { AutosaveInputStatusValue } from './autosave-input-status';
 
 export type AutosaveInputProps = Omit<
   InputGroupInputProps,
@@ -20,24 +15,35 @@ export type AutosaveInputProps = Omit<
   onSave: (next: string) => Promise<void>;
   /** Names the input, e.g. "Organization name". */
   label: string;
-  /** Checks the draft before saving. Return the message to show, or `null` when it's fine. */
-  validate?: (value: string) => string | null;
+  /** Checks the draft before saving. Return the message to show, or `undefined` when it's fine. */
+  validate?: (value: string) => string | undefined;
 };
 
 /** How long the check stays after a save. */
 const SAVED_CHECK_MS = 1600;
 
-/**
- * The loader, check and alert are icons from one set at one icon size, so they read as the same size, and they share
- * one slot at the end of the field, so swapping them moves nothing.
- */
-const glyphClassName = 'size-icon-md shrink-0';
+const FALLBACK_ERROR = "Couldn't save. Try again.";
 
-export type AutosaveInputStatusValue = 'idle' | 'saving' | 'saved' | 'error';
+/**
+ * Local state that belongs to one saved value. Each piece remembers the `value` it was made against, so a new value
+ * from outside (a refetch, another tab) makes it stale, without syncing state in render or an effect.
+ */
+type Stamped<T> = { data: T; value: string };
+
+function current<T>(stamped: Stamped<T> | undefined, value: string): T | undefined {
+  return stamped?.value === value ? stamped.data : undefined;
+}
+
+function statusOf(saving: boolean, error: string | undefined, justSaved: boolean): AutosaveInputStatusValue {
+  if (saving) return 'saving';
+  if (error) return 'error';
+  if (justSaved) return 'saved';
+  return 'idle';
+}
 
 /**
  * A settings text field that saves itself: leaving it or pressing Enter saves a changed value, Escape puts the
- * saved one back. A spinner shows while it saves, then a check; a failed save or an invalid value shows an alert
+ * saved one back. A loader shows while it saves, then a check; a failed save or an invalid value shows an alert
  * whose tooltip says why, and the draft stays so it can be fixed.
  */
 export function AutosaveInput({
@@ -50,51 +56,53 @@ export function AutosaveInput({
   onKeyDown,
   ...props
 }: AutosaveInputProps) {
-  const [draft, setDraft] = useState(value);
-  const [saved, setSaved] = useState(value);
+  // What this field last saved, until the parent's `value` changes (usually to that same value).
+  const [lastSave, setLastSave] = useState<Stamped<string>>();
+  const saved = current(lastSave, value) ?? value;
+  const [draftState, setDraftState] = useState<Stamped<string>>();
+  const draft = current(draftState, saved) ?? saved;
+  const [errorState, setErrorState] = useState<Stamped<string>>();
+  const error = current(errorState, saved);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // A save in flight, read synchronously so Enter followed by blur saves once.
   const savingRef = useRef(false);
   const checkTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const errorId = useId();
 
-  // A new saved value from outside (a refetch, another tab) replaces the draft.
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    setDraft(value);
-    setSaved(value);
-    setError(null);
-  }
-
   const dirty = draft !== saved;
 
-  function hideCheck() {
+  function edit(next: string) {
+    setDraftState({ data: next, value: saved });
+    setErrorState(undefined);
     clearTimeout(checkTimerRef.current);
     setJustSaved(false);
   }
 
+  function revert() {
+    setDraftState(undefined);
+    setErrorState(undefined);
+  }
+
   async function save() {
     if (savingRef.current || !dirty) return;
-    const invalid = validate?.(draft) ?? null;
+    const invalid = validate?.(draft);
     if (invalid) {
-      setError(invalid);
+      setErrorState({ data: invalid, value: saved });
       return;
     }
-    setError(null);
+    setErrorState(undefined);
     savingRef.current = true;
     setSaving(true);
-    const submitted = draft;
     try {
-      await onSave(submitted);
-      setSaved(submitted);
+      await onSave(draft);
+      setLastSave({ data: draft, value });
+      setDraftState(undefined);
       setJustSaved(true);
       clearTimeout(checkTimerRef.current);
       checkTimerRef.current = setTimeout(() => setJustSaved(false), SAVED_CHECK_MS);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "Couldn't save. Try again.");
+      setErrorState({ data: err instanceof Error && err.message ? err.message : FALLBACK_ERROR, value: saved });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -110,15 +118,15 @@ export function AutosaveInput({
     } else if (event.key === 'Escape' && (dirty || error)) {
       // Revert, and stay in the field. A clean field lets Escape through (to blur it or close a dialog).
       event.preventDefault();
-      setDraft(saved);
-      setError(null);
+      revert();
     }
   }
 
   function handleBlur(event: FocusEvent<HTMLInputElement>) {
     onBlur?.(event);
     // Focus moving to the alert, to read the error, isn't leaving the field.
-    if (event.currentTarget.closest('[data-slot=input-group]')?.contains(event.relatedTarget)) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.closest('[data-slot=input-group]')?.contains(next)) return;
     void save();
   }
 
@@ -131,79 +139,11 @@ export function AutosaveInput({
         readOnly={saving}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        onChange={event => {
-          setDraft(event.target.value);
-          setError(null);
-          hideCheck();
-        }}
+        onChange={event => edit(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
       />
-      <AutosaveInputStatus
-        status={saving ? 'saving' : error ? 'error' : justSaved ? 'saved' : 'idle'}
-        label={label}
-        error={error}
-        errorId={errorId}
-      />
+      <AutosaveInputStatus status={statusOf(saving, error, justSaved)} label={label} error={error} errorId={errorId} />
     </InputGroup>
-  );
-}
-
-/**
- * The end of an `AutosaveInput`: empty while idle, then a loader, a check, or an alert whose tooltip shows `error`.
- * Always rendered, so the field's width never changes. Exported for stories that pin each state.
- */
-export function AutosaveInputStatus({
-  status,
-  label,
-  error,
-  errorId,
-}: {
-  status: AutosaveInputStatusValue;
-  label: string;
-  error?: string | null;
-  errorId: string;
-}) {
-  return (
-    <>
-      <InputGroupAddon
-        align="inline-end"
-        className={cn(
-          // The addon colours its glyphs through --control-icon.
-          status === 'error' && '[--control-icon:var(--color-destructive-foreground)]',
-          status === 'saved' && '[--control-icon:var(--color-success-indicator)]',
-        )}
-      >
-        <span className="flex size-icon-md items-center justify-center">
-          {status === 'saving' ? (
-            <IconLoadingCircle className={cn(glyphClassName, 'motion-safe:animate-spin')} aria-hidden />
-          ) : status === 'error' ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={`${label} error`}
-                    aria-describedby={errorId}
-                    className={cn('autosave-input-glyph flex cursor-help rounded-full', focusRing)}
-                  />
-                }
-              >
-                <IconExclamationCircle className={glyphClassName} aria-hidden />
-              </TooltipTrigger>
-              {/* Kept mounted (hidden) while closed, so the input and the alert can point screen readers at it. */}
-              <TooltipContent id={errorId} keepMounted side="top" className="max-w-64">
-                {error}
-              </TooltipContent>
-            </Tooltip>
-          ) : status === 'saved' ? (
-            <IconCheckmark2Medium className={cn('autosave-input-glyph', glyphClassName)} aria-hidden />
-          ) : null}
-        </span>
-      </InputGroupAddon>
-      <span className="sr-only" role="status">
-        {status === 'saving' ? `Saving ${label}` : status === 'saved' ? `${label} saved` : ''}
-      </span>
-    </>
   );
 }

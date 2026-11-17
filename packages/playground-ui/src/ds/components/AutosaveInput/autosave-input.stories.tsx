@@ -24,12 +24,12 @@ type Story = StoryObj<typeof AutosaveInput>;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 function nameError(value: string) {
-  return value.trim() ? null : "Name can't be empty.";
+  return value.trim() ? undefined : "Name can't be empty.";
 }
 
 function avatarError(value: string) {
-  if (!value) return null;
-  return /^https:\/\/\S+$/.test(value) ? null : 'Use an https link to an image.';
+  if (!value) return undefined;
+  return /^https:\/\/\S+$/.test(value) ? undefined : 'Use an https link to an image.';
 }
 
 function SavedField({
@@ -42,7 +42,7 @@ function SavedField({
   initial: string;
   failWith?: string;
   placeholder?: string;
-  validate?: (value: string) => string | null;
+  validate?: (value: string) => string | undefined;
 }) {
   const [value, setValue] = useState(initial);
   return (
