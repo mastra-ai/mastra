@@ -412,7 +412,7 @@ it.each([
   ['discovered instances of different project tokens', {}, { accessToken: 'other-token' }, false],
   // Not detectable without a lookup: the token may name the same project.
   ['a projectId lookup and a project token lookup', { projectId: 'project-1' }, {}, false],
-])('a host rejects two PlatformKnowledge that share a backend: %s', (_name, first, second, rejected) => {
+])('shared-backend guard on two PlatformKnowledge: %s', (_name, first, second, rejected) => {
   vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
   vi.stubEnv('MASTRA_PROJECT_ID', '');
   onTestFinished(() => vi.unstubAllEnvs());
