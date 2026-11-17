@@ -21,7 +21,25 @@ let released = false;
 class PausingPubSub extends RedisStreamsPubSub {
   override async subscribe(...args: Parameters<RedisStreamsPubSub['subscribe']>) {
     if (process.env.PUBLISHER_NO_WORKERS === '1' && args[0] === 'workflows') return;
-    await super.subscribe(...args);
+    const [topic, callback, ...options] = args;
+    if (topic !== 'workflows') return super.subscribe(...args);
+    await super.subscribe(
+      topic,
+      async (event, ack, nack, extend) => {
+        await callback(
+          event,
+          async () => {
+            await ack?.();
+            if (event.type === 'workflow.end' && event.runId === runId) {
+              console.info('publisher-worker-settled');
+            }
+          },
+          nack,
+          extend,
+        );
+      },
+      ...options,
+    );
   }
 
   override async publish(...args: Parameters<RedisStreamsPubSub['publish']>) {
