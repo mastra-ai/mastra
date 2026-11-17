@@ -1,4 +1,3 @@
-import { Braces } from 'lucide-react';
 import type { WorkflowConditionCardViewProps } from '../../types';
 import { getConditionIndicator } from '../workflow-card-badge-utils';
 import { conditionExpression } from './workflow-condition-expression';
@@ -6,6 +5,7 @@ import { WorkflowConditionSource } from './workflow-condition-source';
 import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-card text-meta';
@@ -17,7 +17,7 @@ export function WorkflowConditionCardView({
   actionBar,
 }: WorkflowConditionCardViewProps) {
   const indicator = getConditionIndicator(type);
-  const Icon = indicator?.icon ?? Braces;
+  const Icon = indicator?.icon ?? IconCodeBrackets;
   const label = indicator?.label.replace(/ condition$/, '') ?? 'Condition';
   const occurrences = new Map<string, number>();
   const sources = conditions.map(condition => {

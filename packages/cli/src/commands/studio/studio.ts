@@ -151,8 +151,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     // Let static assets be served by serve-handler
     const isAssetsPath = /(^|\/)assets\//.test(pathWithoutBase);
     const isDistAssetsPath = /(^|\/)dist\/assets\//.test(pathWithoutBase);
-    const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
-    const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
+    // Studio's favicon (`packages/playground/index.html`)
+    const isFavicon = pathWithoutBase.endsWith('/mastra-dark-tile.svg');
+    const isStaticAsset = isAssetsPath || isDistAssetsPath || isFavicon;
 
     const rawEncoding = req.headers['accept-encoding'] ?? '';
     const encodingValues = Array.isArray(rawEncoding) ? rawEncoding : [rawEncoding];

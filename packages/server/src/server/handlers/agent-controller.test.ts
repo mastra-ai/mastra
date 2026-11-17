@@ -9,6 +9,8 @@ import { z } from 'zod';
 
 import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { redactStreamChunk } from '../server-adapter/redact';
+import { serializeStreamChunk } from '../server-adapter/serialize';
 import {
   LIST_AGENT_CONTROLLERS_ROUTE,
   CREATE_AGENT_CONTROLLER_SESSION_ROUTE,
@@ -1196,6 +1198,33 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
+    // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
+    // stream, which a client that already left never does. (#28480)
+    it('ends the stream when the client left before the stream started', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-gone-early',
+        id: 'user-gone-early',
+        ownerId: 'code',
+      });
+      const client = new AbortController();
+      client.abort();
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-gone-early',
+        abortSignal: client.signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      const frames: unknown[] = [];
+      for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
+
+      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+    });
+
     it('still sends live display state changes by default', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -1530,6 +1559,238 @@ describe('agent-controller routes', () => {
       expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
         toolName: 'edit_file',
         args: { path: 'b.ts' },
+      });
+    });
+
+    describe('display-state frames on the wire', () => {
+      async function openStream(sessionId: string) {
+        const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<unknown>;
+        return stream.getReader();
+      }
+
+      /**
+       * Drain a stream the way a server adapter writes it (redact, serialize, then
+       * parsed back as a client sees it), through the snapshot that follows `agent_end`.
+       */
+      async function readWire(reader: ReadableStreamDefaultReader<unknown>): Promise<any[]> {
+        const frames: any[] = [];
+        let ended = false;
+        for (let next = await reader.read(); !next.done; next = await reader.read()) {
+          if (typeof next.value === 'string') continue;
+          const serialized = serializeStreamChunk(redactStreamChunk(next.value as any));
+          if (!serialized.ok) throw serialized.error;
+          const frame = JSON.parse(serialized.json);
+          frames.push(frame);
+          if (ended && frame.type === 'display_state_changed') break;
+          if (frame.type === 'agent_end') ended = true;
+        }
+        await reader.cancel();
+        return frames;
+      }
+
+      /** The display state a client renders right after the `nth` frame of `type`. */
+      function displayAfter(frames: any[], type: string, nth = 0) {
+        let seen = -1;
+        for (let i = 0; i < frames.length; i++) {
+          if (frames[i].type === type && ++seen === nth) {
+            return frames.slice(i + 1).find(frame => frame.type === 'display_state_changed')!.displayState;
+          }
+        }
+        throw new Error(`no ${type} frame #${nth}`);
+      }
+
+      // A client that reads slower than the session emits has frames queued in
+      // its stream. The reducer keeps updating the live display state in place
+      // (tool status and results, input buffers, file operations), so a queued
+      // frame must carry the state from when it was emitted, not a later one.
+      it('a slow client still sees each step of a turn, not the state from after later steps', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-slow', id: 'user-slow', ownerId: 'code' });
+        const reader = await openStream('user-slow');
+
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({
+          type: 'message_start',
+          message: {
+            id: 'assistant-slow',
+            role: 'assistant',
+            createdAt: new Date('2026-01-02T03:04:05.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: '' },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'call',
+                    toolCallId: 'call-1',
+                    toolName: 'write_file',
+                    args: { path: 'a.ts' },
+                  },
+                },
+              ],
+            },
+          } as any,
+        });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: { written: true }, isError: false });
+        session.emit({ type: 'tool_input_start', toolCallId: 'call-2', toolName: 'write_file' });
+        session.emit({ type: 'tool_input_delta', toolCallId: 'call-2', argsTextDelta: '{"path":' });
+        session.emit({ type: 'tool_input_end', toolCallId: 'call-2' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-2', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-2', result: { written: true }, isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+
+        expect(displayAfter(frames, 'tool_start').activeTools['call-1']).toEqual({
+          name: 'write_file',
+          args: { path: 'a.ts' },
+          status: 'running',
+        });
+        expect(displayAfter(frames, 'message_start').currentMessage).toEqual({
+          id: 'assistant-slow',
+          role: 'assistant',
+          createdAt: '2026-01-02T03:04:05.000Z',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: '' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } },
+              },
+            ],
+          },
+        });
+        const afterFirstWrite = displayAfter(frames, 'tool_end');
+        expect(afterFirstWrite.activeTools['call-1']).toMatchObject({ status: 'completed', result: { written: true } });
+        expect(afterFirstWrite.modifiedFiles['a.ts'].operations).toEqual(['write_file']);
+        expect(displayAfter(frames, 'tool_input_start').toolInputBuffers['call-2']).toEqual({
+          text: '',
+          toolName: 'write_file',
+        });
+        expect(displayAfter(frames, 'tool_input_delta').toolInputBuffers['call-2'].text).toBe('{"path":');
+        expect(displayAfter(frames, 'tool_end', 1).modifiedFiles['a.ts'].operations).toEqual([
+          'write_file',
+          'write_file',
+        ]);
+        expect(displayAfter(frames, 'agent_end').isRunning).toBe(false);
+      });
+
+      it('every client of a session gets the same frames, and only that session state', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const sessionA = await controller.createSession({
+          resourceId: 'user-fan-a',
+          id: 'user-fan-a',
+          ownerId: 'code',
+        });
+        const sessionB = await controller.createSession({
+          resourceId: 'user-fan-b',
+          id: 'user-fan-b',
+          ownerId: 'code',
+        });
+        const readersA = [await openStream('user-fan-a'), await openStream('user-fan-a')];
+        const readerB = await openStream('user-fan-b');
+
+        for (const [session, tool] of [
+          [sessionA, 'read_file'],
+          [sessionB, 'grep'],
+        ] as const) {
+          session.emit({ type: 'agent_start' });
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: tool, args: { query: tool } });
+          session.emit({ type: 'tool_end', toolCallId: 'call-1', result: `${tool} output`, isError: false });
+          session.emit({ type: 'agent_end', reason: 'complete' });
+        }
+
+        const [framesA1, framesA2, framesB] = await Promise.all([...readersA, readerB].map(readWire));
+
+        expect(framesA2).toEqual(framesA1);
+        expect(displayAfter(framesA1, 'tool_end').activeTools['call-1']).toMatchObject({
+          name: 'read_file',
+          result: 'read_file output',
+        });
+        expect(displayAfter(framesB, 'tool_end').activeTools['call-1']).toMatchObject({
+          name: 'grep',
+          result: 'grep output',
+        });
+      });
+
+      // Tool results are often parsed JSON from files or web pages, which can
+      // carry an own `__proto__` key; the client must still receive it.
+      it('a tool result with a __proto__ key reaches the client unchanged', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-proto', id: 'user-proto', ownerId: 'code' });
+        const reader = await openStream('user-proto');
+
+        const resultJson = '{"before":1,"__proto__":{"injected":true},"after":2}';
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read_json', args: { path: 'a.json' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: JSON.parse(resultJson), isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.findIndex(frame => frame.type === 'tool_end');
+        const snapshot = frames.slice(toolEnd + 1).find(frame => frame.type === 'display_state_changed')!;
+        const wire = serializeStreamChunk(snapshot);
+        expect(wire.ok && wire.json).toContain(`"result":${resultJson}`);
+      });
+
+      // `JSON.stringify` unwraps boxed numbers, strings and booleans, so the
+      // display snapshot must agree with the `tool_end` event before it.
+      it('a tool result holding boxed primitives reads the same in the event and the display state', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-boxed', id: 'user-boxed', ownerId: 'code' });
+        const reader = await openStream('user-boxed');
+
+        const result = { count: new Number(7), label: new String('seven'), done: new Boolean(false) };
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'count', args: {} });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result, isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.find(frame => frame.type === 'tool_end')!;
+        expect(toolEnd.result).toEqual({ count: 7, label: 'seven', done: false });
+        expect(displayAfter(frames, 'tool_end').activeTools['call-1'].result).toEqual(toolEnd.result);
+      });
+
+      it('re-emitting a held display_state_changed event sends the state as it is now', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-held', id: 'user-held', ownerId: 'code' });
+        const readers = [await openStream('user-held'), await openStream('user-held')];
+
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: 'ok', isError: false });
+        const held = { type: 'display_state_changed', displayState: session.displayState.get() } as const;
+        session.emit(held);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        session.displayState.clearModifiedFiles();
+        session.emit(held);
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        for (const frames of await Promise.all(readers.map(readWire))) {
+          const snapshots = frames.filter(frame => frame.type === 'display_state_changed');
+          // Seed, tool_start, tool_end, the held event twice, agent_end.
+          expect(snapshots.map(frame => Object.keys(frame.displayState.modifiedFiles))).toEqual([
+            [],
+            [],
+            ['a.ts'],
+            ['a.ts'],
+            [],
+            [],
+          ]);
+        }
       });
     });
   });
@@ -2075,6 +2336,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -2091,6 +2354,28 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {
@@ -2164,6 +2449,43 @@ describe('agent-controller routes', () => {
       const thread = res.threads.find(t => t.title === 'p1');
       expect(thread?.tags).toEqual({ projectPath: '/repo' });
     });
+
+    it.each([
+      { key: 'projectPath', storageFilter: { resourceId: 'user-tags', metadata: { projectPath: '/repo/a' } } },
+      { key: 'project-path', storageFilter: { resourceId: 'user-tags' } },
+    ])(
+      'lists only the threads tagged $key, filtering in storage when it accepts the key',
+      async ({ key, storageFilter }) => {
+        const memory = (await mastra.getStorage()!.getStore('memory'))!;
+        const now = new Date();
+        for (const [id, path] of [
+          ['a1', '/repo/a'],
+          ['b1', '/repo/b'],
+        ] as const) {
+          await memory.saveThread({
+            thread: {
+              id,
+              resourceId: 'user-tags',
+              title: id,
+              metadata: { [key]: path },
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+        const listThreads = vi.spyOn(memory, 'listThreads');
+
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-tags',
+          tags: { [key]: '/repo/a' },
+        } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+        expect(listThreads).toHaveBeenCalledWith(expect.objectContaining({ filter: storageFilter }));
+        expect(res.threads).toEqual([expect.objectContaining({ title: 'a1', tags: { [key]: '/repo/a' } })]);
+      },
+    );
 
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same

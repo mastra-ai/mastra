@@ -1,5 +1,5 @@
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
-import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
+import { MASTRACODE_GATEWAY_ID, MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
@@ -8,9 +8,9 @@ import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/o
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
-import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import { MASTRA_GATEWAY_PREFIX, normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { getModelReasoningOptions, MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -22,38 +22,45 @@ import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/cr
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
+  CredentialScope as StoredCredentialScope,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
-import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import type {
+  CustomProviderOwner,
+  CustomProviderRecord,
+  CustomProvidersStorage,
+} from '../storage/domains/custom-providers/base.js';
 import type {
   MemorySettingsPatch,
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
+import { customEndpointUrlProblem } from './custom-endpoint-url.js';
+import { customProviderOwner } from './custom-provider-source.js';
+import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
+  MASTRA_GATEWAY_CATALOG_PROVIDER,
   resolveCredentialContext,
+  runScopeFor,
+  storedScopeFor,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { readRunningPackages } from './running-packages.js';
+import type { RunningPackage } from './running-packages.js';
 import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
-
-/** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 /**
  * Server-side configuration routes for the web app.
@@ -113,6 +120,14 @@ export interface ProviderInfo {
   oauth?: { supported: true; modes: LoginSessionKind[] };
   /** The provider is a stored custom OpenAI-compatible endpoint. */
   custom?: true;
+  /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
+  connectWithMastraAccount?: true;
+  /**
+   * Tenant mode: the server has its own key for this provider (the Mastra Gateway), which serves
+   * any scope that has no stored credential. Reported apart from `source`, which names only the
+   * credential that wins for the caller.
+   */
+  serverKey?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -134,9 +149,60 @@ export interface ModelCatalog {
       releaseDate?: string;
     }>
   >;
+  /** Drops cached auth so the next `listAvailableModels` call sees a credential change. */
+  invalidateAvailableModelsCache?: () => void;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
+}
+
+type CatalogModel = Awaited<ReturnType<ModelCatalog['listAvailableModels']>>[number];
+
+/**
+ * Whether a custom provider may not take `providerId`, because it already
+ * means something to model resolution or to the provider pickers: a provider
+ * Factory ships with (even if its catalog failed to load or this server does
+ * not enable it), the id its
+ * credentials are saved under, an older id rewritten before lookup, or a
+ * gateway's own namespace. A custom provider there would be shadowed,
+ * rerouted, or shown to others as that provider.
+ */
+async function isReservedProviderId(controller: ModelCatalog, providerId: string): Promise<boolean> {
+  if (normalizeLegacyProviderId(providerId) !== providerId) return true;
+  const catalog = await controller.listAvailableModels();
+  const knownIds = [
+    MASTRA_GATEWAY_CATALOG_PROVIDER,
+    MASTRA_GATEWAY_PROVIDER,
+    MASTRACODE_GATEWAY_ID,
+    AMAZON_BEDROCK_GATEWAY_ID,
+    GOOGLE_VERTEX_GATEWAY_ID,
+    ...Object.keys(WEB_OAUTH_PROVIDERS),
+    ...Object.keys(PROVIDER_REGISTRY),
+    ...catalog.map(model => model.provider),
+  ];
+  return knownIds.some(id => id === providerId || getAuthProviderId(id) === providerId);
+}
+
+/**
+ * The controller's model catalog, plus the Mastra Gateway's models for tenant
+ * callers. The boot-time catalog lists `mastra/...` models only when the server
+ * itself has a gateway key; tenants bring their own (connected in one click).
+ */
+async function listCatalogModels(
+  controller: ModelCatalog,
+  tenantCredentials: CredentialRecord[] | undefined,
+): Promise<CatalogModel[]> {
+  const models = await controller.listAvailableModels();
+  if (!tenantCredentials || models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
+  const gateway = (await new MastraGateway().fetchProviders())[MASTRA_GATEWAY_CATALOG_PROVIDER];
+  const gatewayModels = (gateway?.models ?? []).map(modelName => ({
+    id: `${MASTRA_GATEWAY_CATALOG_PROVIDER}/${modelName}`,
+    provider: MASTRA_GATEWAY_CATALOG_PROVIDER,
+    modelName,
+    hasApiKey: false,
+    releaseDate: gateway?.modelReleaseDates?.[modelName],
+  }));
+  return [...models, ...gatewayModels];
 }
 
 /**
@@ -154,14 +220,17 @@ export async function listProviders({
   tenantCredentials,
   deploymentProviders,
   listCustomProviders,
+  connectWithMastraAccount,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
-  listCustomProviders?: () => Promise<CustomProviderRecord[]>;
+  listCustomProviders?: () => Promise<ScopedCustomProvider[]>;
+  /** The auth provider can act on the Mastra platform as the caller. */
+  connectWithMastraAccount?: boolean;
 }): Promise<ProviderInfo[]> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
@@ -178,6 +247,9 @@ export async function listProviders({
     }
 
     const authProviderId = getAuthProviderId(model.provider);
+    // The server has its own gateway key, such as the one the Mastra platform adds to a deploy.
+    const serverGatewayKey =
+      model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER && Boolean(MastraCodeGateway.getMastraGatewayApiKey());
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
     let userCredential: ProviderInfo['userCredential'];
@@ -201,6 +273,10 @@ export async function listProviders({
         source = 'oauth-org';
       } else if (orgRec?.credential.type === 'api_key') {
         source = 'stored-org';
+      } else if (serverGatewayKey) {
+        // Model resolution already falls back to the server's key, so the shared
+        // account is connected without a key of its own.
+        source = 'deployment';
       }
     } else if (authStorage?.isLoggedIn(authProviderId)) {
       source = 'oauth';
@@ -223,18 +299,41 @@ export async function listProviders({
       ...(orgCredential ? { orgCredential } : {}),
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+      // A server that already has a gateway key needs no key minted, so the one-click connect is not offered.
+      ...(tenantCredentials &&
+      connectWithMastraAccount &&
+      model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER &&
+      !serverGatewayKey
+        ? { connectWithMastraAccount: true as const }
+        : {}),
+      ...(tenantCredentials && serverGatewayKey ? { serverKey: true as const } : {}),
     });
   }
 
   if (listCustomProviders) {
     try {
-      for (const record of await listCustomProviders()) {
-        if (seen.has(record.providerId)) continue;
-        seen.set(record.providerId, {
-          provider: record.providerId,
-          source: tenantCredentials ? 'stored-org' : 'stored',
-          custom: true,
-        });
+      // A custom endpoint is reported at the scope it is saved at, through the
+      // fields a saved key uses, so every scope-aware reader treats it like a
+      // provider connected there.
+      for (const { record, scope } of await listCustomProviders()) {
+        const listed = seen.get(record.providerId);
+        // A built-in provider keeps its row: a custom endpoint is never
+        // reported as that provider's credential.
+        if (listed && !listed.custom) continue;
+        // Gateway alias of this same endpoint, not a separate provider.
+        seen.delete(`${MASTRACODE_GATEWAY_ID}/${record.providerId}`);
+        const info: ProviderInfo = listed ?? { provider: record.providerId, source: 'none', custom: true };
+        if (!tenantCredentials) {
+          info.source = 'stored';
+        } else if (scope === 'user') {
+          info.userCredential = 'api_key';
+          info.source = 'stored-user';
+        } else {
+          info.orgCredential = 'api_key';
+          info.orgKey = true;
+          if (info.source === 'none') info.source = 'stored-org';
+        }
+        seen.set(record.providerId, info);
       }
     } catch {
       // Keep the built-in provider catalog available if custom-provider storage is unavailable.
@@ -251,24 +350,42 @@ export interface CustomProviderInfo {
   url: string;
   hasApiKey: boolean;
   models: string[];
+  /** Saved for the caller (`user`) or for their organization (`org`), like a provider key. */
+  scope: StoredCredentialScope;
+  /** Why this server refuses to call the endpoint. Its models are not offered until the URL is fixed. */
+  urlProblem?: string;
+}
+
+/** A stored custom provider and the settings scope it is saved at. */
+export interface ScopedCustomProvider {
+  record: CustomProviderRecord;
+  scope: StoredCredentialScope;
 }
 
 /** Redact a stored custom-provider row for the client (key presence only). */
-function toCustomProviderInfo(record: CustomProviderRecord): CustomProviderInfo {
+function toCustomProviderInfo({ record, scope }: ScopedCustomProvider): CustomProviderInfo {
   return {
     id: record.providerId,
     name: record.name,
     url: record.url,
     hasApiKey: Boolean(record.apiKey),
     models: record.models,
+    scope,
+    urlProblem: customEndpointUrlProblem(record.url),
   };
 }
 
-/** The resolved custom-providers storage scope for a request. */
+function isCallable(record: CustomProviderRecord): boolean {
+  return !customEndpointUrlProblem(record.url);
+}
+
+/** The custom provider lists a request can reach. */
 interface CustomProvidersContext {
   storage: CustomProvidersStorage;
-  orgId: string;
+  /** The account making the request, recorded as the creator of what it adds. */
   userId: string;
+  /** The list behind each Settings scope. No-auth mode has only the one shared list, under `user`. */
+  lists: { user: CustomProviderOwner; org?: CustomProviderOwner };
 }
 
 /**
@@ -287,13 +404,18 @@ async function resolveCustomProvidersContext({
 }): Promise<CustomProvidersContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
-  if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+  const listAt = (scope: StoredCredentialScope) =>
+    customProviderOwner(tenant && { ...tenant, credentialScope: runScopeFor(scope) }, auth.enabled());
+  const user = listAt('user');
+  if (!user) return { response: c.json({ error: 'unauthorized' }, 401) };
   if (customProviders) {
     try {
       await customProviders.ensureReady();
-      return tenant
-        ? { storage: customProviders, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: customProviders, orgId: 'local', userId: 'local' };
+      return {
+        storage: customProviders,
+        userId: tenant?.userId ?? 'local',
+        lists: auth.enabled() ? { user, org: listAt('org') } : { user },
+      };
     } catch {
       // fall through to the unavailable response
     }
@@ -309,10 +431,54 @@ async function resolveCustomProvidersContext({
   };
 }
 
-/** Validate + coerce a request body into a CustomProviderSetting. */
-function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error: string } {
+/** Every custom provider the caller can reach in Settings, with the scope each is saved at. */
+async function listScopedCustomProviders(ctx: CustomProvidersContext): Promise<ScopedCustomProvider[]> {
+  const [user, org] = await Promise.all([
+    ctx.storage.list(ctx.lists.user),
+    ctx.lists.org ? ctx.storage.list(ctx.lists.org) : [],
+  ]);
+  return [
+    ...user.map(record => ({ record, scope: 'user' as const })),
+    ...org.map(record => ({ record, scope: 'org' as const })),
+  ];
+}
+
+/**
+ * The custom providers model resolution uses for `tenant`, so a catalog never
+ * offers a model its session cannot run. Without a tenant the route applies no
+ * credential scope, and every list the caller can reach counts — the same rule
+ * those routes apply to saved keys.
+ */
+async function listCustomProvidersInEffect({
+  c,
+  auth,
+  customProviders,
+  tenant,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  customProviders: CustomProvidersStorage;
+  tenant: CredentialTenant | undefined;
+}): Promise<CustomProviderRecord[]> {
+  const ctx = await resolveCustomProvidersContext({ c, auth, customProviders });
+  if ('response' in ctx) return [];
+  if (!tenant) return (await listScopedCustomProviders(ctx)).map(({ record }) => record).filter(isCallable);
+  const owner = customProviderOwner(tenant, auth.enabled());
+  return owner ? (await ctx.storage.list(owner)).filter(isCallable) : [];
+}
+
+/** A validated custom-provider save request. */
+interface CustomProviderSave extends CustomProviderSetting {
+  /** The id of the provider being edited. Absent when adding one. */
+  previousId?: string;
+  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
+  scope: StoredCredentialScope;
+}
+
+/** Validate + coerce a request body into a custom-provider save. */
+function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: string } {
   if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b = body as Record<string, unknown>;
+  const b: Record<string, unknown> = { ...body };
   const name = typeof b.name === 'string' ? b.name.trim() : '';
   if (!name) return { error: 'Missing required field: name' };
   const url = typeof b.url === 'string' ? b.url.trim() : '';
@@ -329,8 +495,24 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   const models = Array.isArray(b.models)
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
-  return { name, url, apiKey, models };
+  const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
+  return { name, url, apiKey, models, previousId, scope: b.scope === 'org' ? 'org' : 'user' };
 }
+
+/** What each storage refusal tells the client. */
+const CUSTOM_PROVIDER_REFUSALS = {
+  name_taken: {
+    status: 409,
+    error: 'provider_name_taken',
+    message: 'A provider with this name already exists here. Choose another name.',
+  },
+  not_found: { status: 404, error: 'custom_provider_not_found', message: 'This provider no longer exists.' },
+  api_key_required: {
+    status: 400,
+    error: 'api_key_required',
+    message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
+  },
+} as const;
 
 /**
  * Providers whose credentials can only come from the server process. Amazon
@@ -403,7 +585,7 @@ export async function buildProviderAccess({
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderAccess> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
@@ -416,6 +598,8 @@ export async function buildProviderAccess({
       const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
+      // Model resolution falls back to the server's own gateway key, if it has one.
+      if (provider === MASTRA_GATEWAY_CATALOG_PROVIDER && MastraCodeGateway.getMastraGatewayApiKey()) return 'apikey';
       return false;
     }
 
@@ -480,7 +664,7 @@ export async function buildModelCatalog({
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ModelCatalogEntry[]> {
   const [models, access] = await Promise.all([
-    controller.listAvailableModels(),
+    listCatalogModels(controller, tenantCredentials),
     buildProviderAccess({
       controller,
       authStorage: tenantCredentials ? undefined : authStorage,
@@ -504,14 +688,13 @@ export async function buildModelCatalog({
       : [],
   );
   // The boot-time gateway catalog only carries the local custom providers, so
-  // tenant callers get their org's rows here. Dedupe against ids already present.
+  // tenant callers get the rows in effect for them here. Dedupe against ids
+  // already present.
   if (listCustomProviders) {
     try {
       const known = new Set(catalog.map(m => m.id));
-      const customProviderCredential: { credentialHolder?: ModelCredentialHolder } = tenantCredentials
-        ? { credentialHolder: 'organization' }
-        : {};
       for (const record of await listCustomProviders()) {
+        const credentialHolder: ModelCredentialHolder = record.userId === null ? 'organization' : 'personal';
         for (const model of record.models) {
           const id = `${record.providerId}/${model}`;
           if (known.has(id)) continue;
@@ -521,7 +704,7 @@ export async function buildModelCatalog({
             provider: record.providerId,
             modelName: model,
             hasApiKey: true,
-            ...customProviderCredential,
+            ...(tenantCredentials ? { credentialHolder } : {}),
           });
         }
       }
@@ -549,8 +732,8 @@ export async function listSessionScopedCredentials({
   userId: string;
   modelScope: 'factory' | 'user';
 }): Promise<CredentialRecord[]> {
-  const storageScope = modelScope === 'factory' ? 'org' : 'user';
-  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storageScope);
+  const storedScope = storedScopeFor(modelScope);
+  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storedScope);
 }
 
 /** Per-user default model context for the current request. */
@@ -721,7 +904,7 @@ async function resolveMemorySettingsContext({
   if (memorySettings) {
     try {
       await memorySettings.ensureReady();
-      const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
+      const factoryUserId = factoryProjectId ? factoryProjectSettingsUserId(factoryProjectId) : undefined;
       return tenant
         ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
         : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };
@@ -750,6 +933,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
   /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
   features?: { knowledge: boolean; mcp?: boolean };
+  /** Reads the Mastra packages this server runs; defaults to the build manifest. */
+  readPackages?: () => Promise<RunningPackage[]>;
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -780,6 +965,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 /**
  * The web config routes as Mastra `apiRoutes`:
  *   - `GET    /web/config/features`               — list server-enabled product features
+ *   - `GET    /web/config/versions`               — list the Mastra packages and Node version this server runs
  *   - `GET    /web/config/providers`              — list providers + key source
  *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
  *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
@@ -797,7 +983,41 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const options = this.deps;
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
+    const connectWithMastraAccount = auth.fetchPlatformAsUser !== undefined;
+    const listTenantProviders = (records: CredentialRecord[]) =>
+      listProviders({ controller, tenantCredentials: records, deploymentProviders, connectWithMastraAccount });
+    const gatewayFailure = (c: Context, error: unknown) =>
+      error instanceof MastraGatewayError
+        ? c.json({ error: error.message }, error.status)
+        : c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+    // Model resolution reads the per-org snapshot; the model catalog reads custom
+    // providers through the gateway and caches them. Refresh both after a write.
+    const customProvidersChanged = (orgId: string) => {
+      onCustomProvidersChanged({ orgId });
+      controller.invalidateAvailableModelsCache?.();
+    };
+
+    /**
+     * The list a custom-provider write addresses. Changing the organization's
+     * list takes an admin, as org-wide keys do. No-auth mode has one list,
+     * whatever scope the request names.
+     */
+    const resolveCustomProviderWrite = async (c: Context, ctx: CustomProvidersContext, scope: unknown) => {
+      if (scope !== 'org' || !ctx.lists.org) return { owner: ctx.lists.user, scope: 'user' as const };
+      if (!(await auth.isOrganizationAdmin(c, ctx.lists.org.orgId))) {
+        return {
+          response: c.json(
+            {
+              error: 'organization_admin_required',
+              message: 'Only organization admins can change org-wide providers.',
+            },
+            403,
+          ),
+        };
+      }
+      return { owner: ctx.lists.org, scope: 'org' as const };
+    };
 
     const resolveSessionModelContext = async (
       c: Context,
@@ -847,7 +1067,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         defaultModelId = ownerDefaults?.modelId ?? null;
         personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
       }
-      return { tenantCredentials, modelScope, defaultModelId, personalThinkingLevel };
+      const credentialTenant: CredentialTenant = { orgId, userId: policy.tenant.userId, credentialScope: modelScope };
+      return { tenantCredentials, modelScope, defaultModelId, personalThinkingLevel, credentialTenant };
     };
 
     const resolveOMResponseContext = async (
@@ -870,6 +1091,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         credentials: options.modelCredentials,
       });
       const tenant = auth.tenant(c);
+      // Custom providers follow the same scope as the credentials below.
+      let customProviderTenant: CredentialTenant | undefined = tenant && { ...tenant, credentialScope: 'user' };
       if (sessionId !== undefined && threadId !== undefined) {
         const address = z
           .object({
@@ -883,6 +1106,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         const sessionContext = await resolveSessionModelContext(c, address.data, false);
         if (sessionContext && 'response' in sessionContext) return { response: sessionContext.response };
         tenantCredentials = sessionContext?.tenantCredentials;
+        customProviderTenant = sessionContext?.credentialTenant;
       } else if (threadId !== undefined) {
         return { response: c.json({ error: 'invalid_session_context' }, 400) };
       } else if (tenantCredentials && factoryProjectId && tenant) {
@@ -890,8 +1114,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         await options.factoryProjects.ensureReady();
         const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
         if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
-        const scope = effectiveModelScope(project.modelScope, 'run') === 'factory' ? 'org' : 'user';
-        tenantCredentials = tenantCredentials.filter(record => record.scope === scope);
+        const credentialScope = effectiveModelScope(project.modelScope, 'run');
+        tenantCredentials = tenantCredentials.filter(record => record.scope === storedScopeFor(credentialScope));
+        customProviderTenant = { ...tenant, credentialScope };
       } else if (tenantCredentials) {
         tenantCredentials = tenantCredentials.filter(record => record.scope === 'user');
       }
@@ -905,19 +1130,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       const availableProviders = new Set(
         Object.entries(access).flatMap(([providerId, configured]) => (configured ? [providerId] : [])),
       );
-      // `mastra/` routes run through the Mastra gateway whenever its key is configured.
-      if (MastraCodeGateway.getMastraGatewayApiKey()) availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      // `mastra/` routes run through the Mastra gateway whenever a key is configured:
+      // the caller's own (tenant mode) or the server's.
+      if (access[MASTRA_GATEWAY_CATALOG_PROVIDER] || MastraCodeGateway.getMastraGatewayApiKey()) {
+        availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      }
       if (options.customProviders) {
-        const context = await resolveCustomProvidersContext({
+        const customProviders = await listCustomProvidersInEffect({
           c: loose(c),
           auth,
           customProviders: options.customProviders,
+          tenant: customProviderTenant,
         });
-        if (!('response' in context)) {
-          for (const provider of await context.storage.list({ orgId: context.orgId })) {
-            availableProviders.add(provider.providerId);
-          }
-        }
+        for (const provider of customProviders) availableProviders.add(provider.providerId);
       }
       return { availableProviders };
     };
@@ -945,6 +1170,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
       }),
 
+      registerApiRoute('/web/config/versions', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          await auth.ensureUser(loose(c));
+          if (!auth.tenant(loose(c)) && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+          const packages = await (options.readPackages ?? readRunningPackages)();
+          return c.json({ packages, nodeVersion: process.version });
+        },
+      }),
+
       registerApiRoute('/web/config/providers', {
         method: 'GET',
         requiresAuth: false,
@@ -965,7 +1201,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const listCustomProviders = customProviders
               ? async () => {
                   const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
-                  return 'response' in ctx ? [] : ctx.storage.list({ orgId: ctx.orgId });
+                  if ('response' in ctx) return [];
+                  return (await listScopedCustomProviders(ctx)).filter(({ record }) => isCallable(record));
                 }
               : undefined;
             return c.json({
@@ -975,6 +1212,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 tenantCredentials,
                 deploymentProviders,
                 listCustomProviders,
+                connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -1024,16 +1262,67 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(records);
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
             // Local mode is single-user: scope is meaningless and ignored.
             authStorage.setStoredApiKey(provider, key, envVar);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
+          let body: { scope?: unknown };
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const scope = body.scope === 'org' ? 'org' : 'user';
+          if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+            return c.json({ error: 'organization_admin_required' }, 403);
+          }
+          const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+          try {
+            // A server with its own gateway key does not offer this connect. Never mint a
+            // second key there, even for a client that still calls the route.
+            const serverHasKey = Boolean(MastraCodeGateway.getMastraGatewayApiKey());
+            if (!serverHasKey && !(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
+              const apiKey = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey });
+              onCredentialsChanged(tenant);
+            }
+            const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
+            return c.json({ ok: true, provider: providers.find(p => p.provider === MASTRA_GATEWAY_CATALOG_PROVIDER) });
+          } catch (error) {
+            return gatewayFailure(loose(c), error);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
+          try {
+            return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
+          } catch (error) {
+            return gatewayFailure(loose(c), error);
           }
         },
       }),
@@ -1055,12 +1344,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
               await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
               onCredentialsChanged(tenant);
-              const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-            authStorage.remove(`apikey:${provider}`);
+            authStorage.removeStoredApiKey(provider);
+            controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
@@ -1070,8 +1359,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       // Mirrors the TUI's /custom-providers command, but backed by the
-      // `custom-providers` domain (org rows in tenant mode, a sentinel `local`
-      // org in no-auth mode) — the server never reads settings.json for these.
+      // `custom-providers` domain — the server never reads settings.json for
+      // these. Like provider keys, each one is saved at a scope: the caller's
+      // own (`user`, the default) or their organization's (`org`).
 
       registerApiRoute('/web/config/custom-providers', {
         method: 'GET',
@@ -1084,8 +1374,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in ctx) return ctx.response;
           try {
-            const records = await ctx.storage.list({ orgId: ctx.orgId });
-            return c.json({ providers: records.map(toCustomProviderInfo) });
+            return c.json({ providers: (await listScopedCustomProviders(ctx)).map(toCustomProviderInfo) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1110,26 +1399,39 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const parsed = parseCustomProviderBody(body);
           if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-          // `previousId` lets a rename remove the old entry as well as any name clash.
-          const previousId =
-            body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
-              ? ((body as Record<string, unknown>).previousId as string)
-              : undefined;
+          const urlProblem = customEndpointUrlProblem(parsed.url);
+          if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
+          const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
+          if ('response' in target) return target.response;
+          const input = {
+            providerId: getCustomProviderId(parsed.name),
+            name: parsed.name,
+            url: parsed.url,
+            apiKey: parsed.apiKey,
+            models: parsed.models,
+          };
           try {
-            const record = await ctx.storage.upsert({
-              orgId: ctx.orgId,
-              userId: ctx.userId,
-              input: {
-                providerId: getCustomProviderId(parsed.name),
-                name: parsed.name,
-                url: parsed.url,
-                apiKey: parsed.apiKey,
-                models: parsed.models,
-              },
-              previousProviderId: previousId,
-            });
-            onCustomProvidersChanged({ orgId: ctx.orgId });
-            return c.json({ ok: true, provider: toCustomProviderInfo(record) });
+            // A custom provider that took a built-in provider's id would
+            // silently replace it for everyone using this list. No-auth mode
+            // is single-user and its catalog already lists these providers.
+            if (auth.enabled() && (await isReservedProviderId(controller, input.providerId))) {
+              return c.json(
+                {
+                  error: 'provider_name_taken',
+                  message: `"${parsed.name}" is reserved for a built-in provider. Choose another name.`,
+                },
+                409,
+              );
+            }
+            const write = parsed.previousId
+              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input })
+              : await ctx.storage.create({ owner: target.owner, createdBy: ctx.userId, input });
+            if ('refused' in write) {
+              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[write.refused];
+              return c.json({ error, message }, status);
+            }
+            customProvidersChanged(target.owner.orgId);
+            return c.json({ ok: true, provider: toCustomProviderInfo({ record: write.saved, scope: target.scope }) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1147,9 +1449,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in ctx) return ctx.response;
           const id = c.req.param('id');
+          const target = await resolveCustomProviderWrite(loose(c), ctx, c.req.query('scope'));
+          if ('response' in target) return target.response;
           try {
-            await ctx.storage.delete({ orgId: ctx.orgId, providerId: id });
-            onCustomProvidersChanged({ orgId: ctx.orgId });
+            if (!(await ctx.storage.delete({ owner: target.owner, providerId: id }))) {
+              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS.not_found;
+              return c.json({ error, message }, status);
+            }
+            customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1182,6 +1489,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 }
               | undefined;
             let credentialTenant: CredentialTenant | undefined;
+            let sessionTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1201,6 +1509,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               if (context && 'response' in context) return context.response;
               if (context) {
                 tenantCredentials = context.tenantCredentials;
+                sessionTenant = context.credentialTenant;
                 sessionPolicy = {
                   modelScope: context.modelScope,
                   defaultModelId: context.defaultModelId,
@@ -1216,7 +1525,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 credentialTenant = {
                   orgId: tenantOrgId(tenant),
                   userId: tenant.userId,
-                  credentialScope: scope.data === 'user' ? 'user' : 'factory',
+                  credentialScope: runScopeFor(scope.data),
                 };
               }
             } else if (allTenantCredentials && factoryProjectId && tenant) {
@@ -1224,20 +1533,23 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await options.factoryProjects.ensureReady();
               const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
               if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
-              const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
-              tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+              const storedScope = project.modelScope === 'user' ? 'user' : 'org';
+              tenantCredentials = allTenantCredentials.filter(record => record.scope === storedScope);
               credentialTenant = {
                 orgId: tenantOrgId(tenant),
                 userId: tenant.userId,
-                credentialScope: credentialScope === 'user' ? 'user' : 'factory',
+                credentialScope: runScopeFor(storedScope),
               };
             }
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
-              ? async () => {
-                  const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
-                  return 'response' in ctx ? [] : ctx.storage.list({ orgId: ctx.orgId });
-                }
+              ? () =>
+                  listCustomProvidersInEffect({
+                    c: loose(c),
+                    auth,
+                    customProviders,
+                    tenant: sessionTenant ?? credentialTenant,
+                  })
               : undefined;
             const models = await buildModelCatalog({
               controller,

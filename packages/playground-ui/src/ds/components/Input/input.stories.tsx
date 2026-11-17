@@ -138,6 +138,29 @@ export const Number: Story = {
   },
 };
 
+export const Time: Story = {
+  render: () => (
+    <div className="grid w-80 grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
+      <Txt variant="caption" tone="muted">
+        Empty
+      </Txt>
+      <Input type="time" aria-label="Empty time" />
+      <Txt variant="caption" tone="muted">
+        Filled
+      </Txt>
+      <Input type="time" aria-label="Filled time" defaultValue="12:00" />
+      <Txt variant="caption" tone="muted">
+        Small, w-24
+      </Txt>
+      <Input type="time" size="sm" aria-label="Narrow time" defaultValue="00:00" className="w-24" />
+      <Txt variant="caption" tone="muted">
+        Disabled
+      </Txt>
+      <Input type="time" aria-label="Disabled time" defaultValue="12:00" disabled />
+    </div>
+  ),
+};
+
 export const SizesWithButton: Story = {
   render: () => (
     <div className="grid grid-cols-[200px_auto] items-center gap-3">

@@ -63,6 +63,56 @@ describe('describeRunError', () => {
     });
   });
 
+  it('names the Mastra Gateway and offers to add credits when its credits run out', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      statusCode: 402,
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway by the host it called when its reply names no gateway', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      requestBodyValues: { model: 'anthropic/claude-opus-5-5' },
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway host on a provider error the run wrapped', () => {
+    const wrapped = {
+      name: 'Error',
+      message: "You don't have inference credits left.",
+      cause: {
+        name: 'AI_APICallError',
+        message: "You don't have inference credits left.",
+        statusCode: 402,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      },
+    };
+    expect(describeRunError(wrapped)).toMatchObject({ title: 'Out of Mastra Gateway credits' });
+  });
+
+  it('keeps a look-alike host a provider quota error', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai.example.com/v1/chat/completions',
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({ title: 'Provider quota exhausted' });
+  });
+
   it('quotes a plain-text body the provider sent instead of JSON', () => {
     const textBody = {
       name: 'AI_APICallError',
@@ -100,6 +150,25 @@ describe('describeRunError', () => {
         "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account. Choose another model for this session.",
       recoveries: ['model'],
     });
+  });
+
+  it.each([
+    ['model_rejected', "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400"],
+    ['quota', 'You exceeded your current quota, please check your plan and billing details: HTTP 429'],
+    ['gateway credits', 'Insufficient credits. Add more at https://gateway.mastra.ai'],
+    ['auth', 'Incorrect API key provided: HTTP 401'],
+    ['context_overflow', 'prompt is too long: 250000 tokens > 200000 maximum'],
+    ['rate_limited', 'Rate limit reached for requests: HTTP 429'],
+    ['unavailable', 'Service Unavailable: HTTP 503'],
+  ])('points a %s memory model failure at Memory settings, not the session model', (_kind, reason) => {
+    const { message, recoveries } = describeRunError({
+      name: 'Error',
+      message: `Observational memory observation run failed: ${reason}`,
+    });
+    expect(recoveries).toContain('memory_model');
+    expect(recoveries).not.toContain('model');
+    expect(message).toContain('Memory settings');
+    expect(message).not.toMatch(/this session|choose another model|use another credential or model/i);
   });
 
   it('offers to continue, switch credential, or switch model when the provider throttles the run', () => {

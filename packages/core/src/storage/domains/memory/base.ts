@@ -62,6 +62,9 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
 
+  /** Whether `listThreads` loads and sorts all matching threads before slicing a page. */
+  readonly listThreadsPaginatesInMemory?: boolean = false;
+
   /**
    * Whether this adapter implements `mergeResourceWorkingMemory` as an atomic
    * read-merge-write that is safe across processes.

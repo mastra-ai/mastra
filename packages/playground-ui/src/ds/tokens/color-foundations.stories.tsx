@@ -8,6 +8,7 @@ import themeCss from '../../../theme.css?raw';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/Popover';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection } from './foundations-layout';
+import { SERIES_HUES } from '@/domains/metrics/lib/series-colors';
 import { cn } from '@/lib/utils';
 
 const meta = {
@@ -361,6 +362,11 @@ const chartRows: TokenRow[] = [
     use: step === 1 ? 'Share list rows, in rank order: green, sky, violet, teal, indigo' : '',
   })),
   { token: 'chart-share-rest', use: 'Share list rows past the colored ones, folded into one gray' },
+  ...SERIES_HUES.map((hue, i) => ({
+    token: `chart-series-${hue}`,
+    use: i === 0 ? 'Series by model, provider or key: each lab reserves one hue (seriesColors)' : '',
+  })),
+  { token: 'chart-series-neutral', use: 'xAI, and a white series in dark mode (black in light)' },
 ];
 
 const spanRows: TokenRow[] = [

@@ -11,7 +11,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { groupSessionsByBoard, pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
+import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const viewerUserId = 'user-me';
@@ -90,7 +90,6 @@ describe('Sessions sidebar owner filter', () => {
   ];
 
   it("narrows every group to the viewer's own sessions", async () => {
-    groupSessionsByBoard();
     stubSessions(mixedSessions());
     const user = userEvent.setup();
 
@@ -107,7 +106,26 @@ describe('Sessions sidebar owner filter', () => {
     expect(within(userGroup).getByRole('link', { name: 'task-20002' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'task-20005' })).not.toBeInTheDocument();
-    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+  });
+
+  it('keeps the owner filter after a reload', async () => {
+    stubSessions(mixedSessions());
+    const user = userEvent.setup();
+
+    const first = renderSection();
+    await waitForMutationsIdle(first.client);
+    await screen.findByRole('link', { name: 'factory/pr-20004' });
+    await pickSessionProperty(user, 'Owner', 'Mine');
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'factory/pr-20004' })).not.toBeInTheDocument());
+
+    first.unmount();
+    const second = renderSection();
+    await waitForMutationsIdle(second.client);
+
+    await screen.findByRole('link', { name: 'factory/issue-20001' });
+    expect(screen.queryByRole('link', { name: 'factory/pr-20004' })).not.toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });
 
   it('keeps the Properties menu reachable when the sidebar is collapsed', async () => {

@@ -123,7 +123,9 @@ if (action === 'persist') {
 
 Only idle threads persist here. An active thread still delivers to the running run, so `persisted` is set only when the action is `persist`.
 
-Every send returns an `accepted` promise. It resolves when Mastra decides what to do, not when a run finishes:
+Message and signal sends return an `accepted` promise. It resolves when Mastra decides what to do, not when a run finishes. `sendNotificationSignal()` includes `accepted` only when its delivery policy emits a signal, so check `decision` first. `sendStateSignal()` omits it when it skips an unchanged snapshot.
+
+The `accepted` promise resolves with one of these actions:
 
 - `wake`: this process started a run for the input.
 - `deliver`: the input was sent to a run, or another process accepted responsibility for starting one.

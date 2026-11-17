@@ -53,7 +53,7 @@ function scalarPreview(value: unknown, limit: number): string | undefined {
     .filter(entry => isPrimitive(entry[1]))
     .slice(0, limit)
     .map(([label, field]) => `${label}: ${String(field)}`);
-  return fields.length > 0 ? fields.join(' · ') : undefined;
+  return fields.length > 0 ? fields.join(', ') : undefined;
 }
 
 /** Get the outcome of a span, or `undefined` for spans that have nothing to lead with. */

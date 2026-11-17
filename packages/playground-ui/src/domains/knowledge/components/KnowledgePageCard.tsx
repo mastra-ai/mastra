@@ -1,4 +1,5 @@
 import { linkCountsText } from '../lib/linkCountsText';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 export interface KnowledgePageCardProps {
@@ -31,7 +32,10 @@ export function KnowledgePageCard({ name, kind, pageRef, path, childCount, links
         {name}
       </Txt>
       <Txt as="span" variant="meta" tone="muted">
-        {pageRef ? `${kind} · ${pageRef}` : kind}
+        <Metadata>
+          <Metadata.Item>{kind}</Metadata.Item>
+          {pageRef && <Metadata.Item>{pageRef}</Metadata.Item>}
+        </Metadata>
       </Txt>
       {path ? (
         <Txt as="span" variant="meta" tone="muted">

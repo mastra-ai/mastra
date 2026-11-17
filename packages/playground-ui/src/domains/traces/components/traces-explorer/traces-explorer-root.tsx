@@ -1,7 +1,9 @@
 import { EntityType } from '@mastra/core/observability';
+import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
   applyDatePreset,
@@ -44,6 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
@@ -60,6 +63,10 @@ export type TracesExplorerRootProps = {
   metricsSupport: TracesMetricsSupport;
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
+  /** Host-selected root projection. Hosts should offer aggregated roots only when the server advertises support. */
+  rootSource?: TraceQueryArgs['rootSource'];
+  /** Write context and action support for feedback in trace, span and thread panels. */
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
   children: ReactNode;
@@ -90,6 +97,8 @@ export function TracesExplorerRoot({
   scope,
   metricsSupport,
   features,
+  rootSource,
+  feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
@@ -114,17 +123,20 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
-  // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(
-    () =>
-      sanitizeTracesFilters(rawFilters, {
-        withRootDuration,
-        withTimeToFirstChunk,
-        withTimeToFirstToken,
-        withOutcomeFields,
-      }),
-    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
-  );
+  const withTokenSearch =
+    withQueryTrace &&
+    !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
+
+  // Sanitize for display/query without rewriting host state. A later filter edit replaces the displayed token list.
+  const filters = useMemo(() => {
+    return sanitizeTracesFilters(rawFilters, {
+      withTokenSearch,
+      withRootDuration,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+    });
+  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTokenSearch]);
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -206,7 +218,11 @@ export function TracesExplorerRoot({
         const base = latest.current.filters;
         const before = rangeBeforeZoom(zoomMemory.current, base);
         zoomMemory.current = undefined;
-        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+        updateFilters({
+          tokens: base.tokens,
+          groups: base.groups,
+          ...(before ?? { datePreset: defaultPreset }),
+        });
       },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
@@ -223,13 +239,18 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTokenSearch,
       withFeedback,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -246,10 +267,17 @@ export function TracesExplorerRoot({
     }),
     [
       listId,
+      rootSource,
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTokenSearch,
       withFeedback,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -266,6 +294,7 @@ export function TracesExplorerRoot({
     ],
   );
 
+  const tokenSearchApplied = withTokenSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
@@ -273,13 +302,23 @@ export function TracesExplorerRoot({
     () => ({
       ...filtersActions,
       filters,
+      hasTokenSearch: tokenSearchApplied,
       dateFrom,
       dateTo,
       filtersApplied,
       contentFiltersApplied,
       runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
+    [
+      filtersActions,
+      filters,
+      tokenSearchApplied,
+      dateFrom,
+      dateTo,
+      filtersApplied,
+      contentFiltersApplied,
+      runningSelected,
+    ],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list
@@ -295,7 +334,7 @@ export function TracesExplorerRoot({
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
           <TracesColumnsProvider>
-            <TracesListProvider sort={sort} onSortChange={onSortChange}>
+            <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
               {children}
             </TracesListProvider>
           </TracesColumnsProvider>

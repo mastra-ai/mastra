@@ -2,6 +2,13 @@
   "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
+    "lint": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/oxlint.config.ts", "$TURBO_ROOT$/packages/playground-ui/oxlint/**"]
+    },
+    "lint:fix": {
+      "dependsOn": ["^build"]
+    },
     "build:lib": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/docs/**"],

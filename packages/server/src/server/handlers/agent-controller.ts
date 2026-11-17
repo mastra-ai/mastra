@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
+import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.(), never a
@@ -23,6 +24,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { shareStreamChunk } from '../server-adapter/serialize';
 import { handleError } from './error';
 import { enforceThreadAccess } from './utils';
 
@@ -64,10 +66,19 @@ const RESERVED_THREAD_METADATA_KEYS = {
   createdBy: true,
   thinkingLevel: true,
   notifications: true,
+  permissionRules: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
   return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+}
+
+function storageTagFilter(tags: Record<string, string>) {
+  try {
+    return validateStorageMetadataFilter(tags);
+  } catch {
+    return undefined;
+  }
 }
 
 function getRequestMessageAuthor(requestContext?: RequestContext): { id: string } | undefined {
@@ -606,20 +617,93 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
- * before converting its Maps so queued wire events retain point-in-time state.
+ * Copy a display-state value as `JSON.stringify` would read it now: `toJSON` is
+ * resolved and every object and array is copied, so the reducer's in-place
+ * updates (tool status and results, input buffers, file operations, subagent
+ * progress) cannot reach a queued frame. Primitives are immutable and shared, so
+ * message text and large tool results are not duplicated per snapshot the way
+ * `structuredClone` duplicates them. `copies` preserves shared and circular
+ * references.
+ */
+function snapshotForWire(value: unknown, key: string, copies: Map<object, unknown>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (copies.has(value)) return copies.get(value);
+  if (ArrayBuffer.isView(value)) {
+    const copy = structuredClone(value);
+    copies.set(value, copy);
+    return copy;
+  }
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  let source: unknown = typeof toJSON === 'function' ? toJSON.call(value, key) : value;
+  // `JSON.stringify` writes a boxed number, string or boolean as its primitive.
+  if (source instanceof Number || source instanceof String || source instanceof Boolean) source = source.valueOf();
+  if (source === null || typeof source !== 'object') {
+    copies.set(value, source);
+    return source;
+  }
+  if (Array.isArray(source)) {
+    const copy: unknown[] = new Array(source.length);
+    copies.set(value, copy);
+    for (let index = 0; index < source.length; index++) {
+      copy[index] = snapshotForWire(source[index], String(index), copies);
+    }
+    return copy;
+  }
+  const copy: Record<string, unknown> = {};
+  copies.set(value, copy);
+  for (const field of Object.keys(source)) {
+    const fieldCopy = snapshotForWire((source as Record<string, unknown>)[field], field, copies);
+    if (field === '__proto__') {
+      // Parsed JSON can hold an own `__proto__` key; assigning it would set the
+      // copy's prototype and drop the key from the wire.
+      Object.defineProperty(copy, field, { value: fieldCopy, enumerable: true, writable: true, configurable: true });
+    } else {
+      copy[field] = fieldCopy;
+    }
+  }
+  return copy;
+}
+
+/**
+ * `display_state_changed` Maps JSON-serialize to `{}`, so convert them to
+ * records, and snapshot the live display state so queued wire events retain
+ * point-in-time state.
  */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
-  const snapshot = structuredClone(displayState);
-  return {
-    ...snapshot,
-    activeTools: Object.fromEntries(snapshot.activeTools),
-    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
-    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
-    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
-    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
-  };
+  const copies = new Map<object, unknown>();
+  const wire: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(displayState)) {
+    wire[field] =
+      value instanceof Map
+        ? Object.fromEntries(Array.from(value, ([id, entry]) => [id, snapshotForWire(entry, String(id), copies)]))
+        : snapshotForWire(value, field, copies);
+  }
+  return wire as WireDisplayState;
+}
+
+/**
+ * The frame of the display-state event being dispatched. Every stream of a
+ * session receives the same event object in one synchronous dispatch, so they
+ * share one snapshot, and its JSON, rather than each building its own.
+ */
+let dispatchedDisplayFrame: { event: AgentControllerEvent; frame: JsonReadyAgentControllerEvent } | undefined;
+
+function toWireDisplayEvent(
+  event: Extract<AgentControllerEvent, { displayState: AgentControllerDisplayState }>,
+): JsonReadyAgentControllerEvent {
+  if (dispatchedDisplayFrame?.event === event) {
+    // A second stream of the session: from here on the frame is fanned out, so
+    // serialize it once. A lone stream never pays for the shared-JSON entry.
+    return shareStreamChunk(dispatchedDisplayFrame.frame);
+  }
+  const frame = { ...event, displayState: toWireDisplayState(event.displayState) };
+  dispatchedDisplayFrame = { event, frame };
+  // The live state may change after this dispatch, so a later emit of the same
+  // event object must snapshot again.
+  queueMicrotask(() => {
+    if (dispatchedDisplayFrame?.event === event) dispatchedDisplayFrame = undefined;
+  });
+  return frame;
 }
 
 function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
@@ -634,7 +718,7 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
-    return { ...event, displayState: toWireDisplayState(event.displayState) };
+    return toWireDisplayEvent(event);
   }
   if (carriesError(event)) {
     return { ...event, error: toPersistedErrorIdentity(event.error) };
@@ -737,6 +821,10 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           });
 
           const abortCleanup = () => cleanup(controller);
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();
         },
@@ -894,6 +982,11 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
+      // A run parked by a process that has since gone away is only in storage.
+      // Older @mastra/core peers lack it; they only claim in-memory suspensions.
+      if (typeof session.restoreStoredToolSuspension === 'function') {
+        await session.restoreStoredToolSuspension(toolCallId, runId);
+      }
       const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
       ackBackgroundSessionWork({
@@ -1208,12 +1301,30 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
+      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       // Read-only route: query storage directly instead of constructing a
       // Session. `createSession` triggers workspace/sandbox initialization
       // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
       // shouldn't pay that. Session creation happens on the write path.
       // `queryThreads` lazily initializes storage (not workspace) on its own.
-      const threads = await controller.queryThreads({ resourceId });
+      const storageTags = storageTagFilter(Object.fromEntries(tagEntries));
+      const max = Number(limit);
+      const capped = Number.isFinite(max) && max > 0;
+      const normalizedLimit = capped ? Math.floor(max) : undefined;
+      // Only page in storage when it applies every tag; otherwise the tag filter
+      // below runs in memory and needs the whole resource.
+      const threads = await controller.queryThreads({
+        resourceId,
+        metadata: storageTags,
+        limit: normalizedLimit !== undefined && (tagEntries.length === 0 || storageTags) ? normalizedLimit : undefined,
+        matchesScope:
+          tagEntries.length === 0
+            ? undefined
+            : thread => {
+                const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+                return tagEntries.every(([key, value]) => values[key] === value);
+              },
+      });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -1234,7 +1345,6 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // never shows worktree B's threads. Mirrors the controller's tag-aware
       // selection and the TUI's worktree-strict listing. Reserved internal keys
       // are ignored as filter tags so callers can't match on session bookkeeping.
-      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
           ? threads.filter(t => {
@@ -1244,8 +1354,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
-      const max = Number(limit);
-      const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
+      const limited = normalizedLimit !== undefined ? sorted.slice(0, normalizedLimit) : sorted;
       // Thread run state comes from the controller-wide active-run registry,
       // which unions per-agent active thread runs across all backing agents.
       // Keyed by resourceId + threadId so it covers runs started by any session

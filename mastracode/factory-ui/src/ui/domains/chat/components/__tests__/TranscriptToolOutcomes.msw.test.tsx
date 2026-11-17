@@ -22,7 +22,10 @@ function ran(toolCallId: string, toolName: string, args: unknown, result: string
   return { type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId, toolName, args, result } };
 }
 
-function exited(toolCallId: string, exit: { exitCode: number; success: boolean; killed?: boolean }): MessagePart {
+function exited(
+  toolCallId: string,
+  exit: { exitCode: number; success: boolean; killed?: boolean; error?: string },
+): MessagePart {
   return { type: 'data-sandbox-exit', data: { ...exit, toolCallId } };
 }
 
@@ -108,6 +111,25 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
+    it('says on its row which code it exited with, and nothing on the clean one beside it', async () => {
+      const { entries } = createInitialTranscript({
+        messages: [
+          assistant('step', [
+            ran('ls', 'execute_command', { command: 'ls' }, 'README.md\n\nExit code: 0'),
+            exited('ls', { exitCode: 0, success: true }),
+            gitStatus,
+            gitStatusExit,
+          ]),
+        ],
+      });
+      renderEntries(entries);
+
+      await userEvent.click(within(screen.getByRole('group', { name: 'Ran commands' })).getAllByRole('button')[0]);
+
+      const rows = screen.getAllByRole('group', { name: 'Tool: execute_command' });
+      expect(rows.map(row => within(row).queryByText(/^exit /)?.textContent)).toEqual([undefined, 'exit 128']);
+    });
+
     const survivingStart = {
       type: 'tool_start',
       toolCallId: 'git',
@@ -165,6 +187,50 @@ describe('Transcript tool outcomes', () => {
       renderEntries(entries);
 
       expect(screen.queryByRole('img', { name: 'Failed' })).not.toBeInTheDocument();
+    });
+  });
+  describe('when the sandbox could not run a command after it printed output', () => {
+    const error = 'Request failed with status 502\n\n<html>Bad Gateway</html>';
+    const result = `building\n\nError: ${error}\nExit code: -1`;
+
+    it('shows the whole error after what it printed, even one with blank lines in it', async () => {
+      const events = [
+        { type: 'message_start', message: assistant('turn', []) },
+        { type: 'tool_start', toolCallId: 'build', toolName: 'execute_command', args: { command: 'pnpm build' } },
+        { type: 'shell_output', toolCallId: 'build', output: 'building\n', stream: 'stdout' },
+        { type: 'command_exit', toolCallId: 'build', exitCode: -1, success: false, error },
+        { type: 'tool_end', toolCallId: 'build', result, isError: false },
+        { type: 'message_end', id: 'turn' },
+      ] as const;
+      const state = events.reduce(
+        (next, event) => transcriptReducer(next, { type: 'event', event }),
+        initialTranscript,
+      );
+      renderEntries(state.entries);
+
+      const line = screen.getByRole('group', { name: 'Ran pnpm build' });
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
+      await userEvent.click(within(line).getAllByRole('button')[0]);
+      expect(within(line).getByText(/Error: Request failed with status 502/)).toBeVisible();
+    });
+
+    it('says on its row that it errored, not that it exited -1, once the thread reloads', async () => {
+      const { entries } = createInitialTranscript({
+        messages: [
+          assistant('step', [
+            ran('ls', 'execute_command', { command: 'ls' }, 'README.md'),
+            exited('ls', { exitCode: 0, success: true }),
+            ran('build', 'execute_command', { command: 'pnpm build' }, result),
+            exited('build', { exitCode: -1, success: false, error }),
+          ]),
+        ],
+      });
+      renderEntries(entries);
+
+      await userEvent.click(within(screen.getByRole('group', { name: 'Ran commands' })).getAllByRole('button')[0]);
+
+      const rows = screen.getAllByRole('group', { name: 'Tool: execute_command' });
+      expect(rows.map(row => within(row).queryByText(/^(exit |error$)/)?.textContent)).toEqual([undefined, 'error']);
     });
   });
 });

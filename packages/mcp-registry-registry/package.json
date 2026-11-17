@@ -46,6 +46,7 @@
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
     "hono": "^4.13.13",
+    "msw": "^2.15.0",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

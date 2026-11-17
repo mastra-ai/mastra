@@ -1,6 +1,7 @@
 import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { ProviderMetadata } from '../../../stream/types';
 import { normalizeModelOutput } from '../normalize-model-output';
 
@@ -77,6 +78,135 @@ export async function computeModelOutputProviderMetadata(deps: {
     ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
   };
   return Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+}
+
+/** The mapped `toModelOutput` value carried in `providerMetadata.mastra.modelOutput`, if any. */
+export function readModelOutput(providerMetadata: Record<string, unknown> | undefined): unknown {
+  return (providerMetadata as { mastra?: { modelOutput?: unknown } } | undefined)?.mastra?.modelOutput;
+}
+
+/** Whether any output processor (or processor workflow) can run `processToolResult`. */
+export function hasToolResultProcessor(processors: readonly unknown[] | undefined): boolean {
+  return (
+    processors?.some(
+      processor =>
+        isProcessorWorkflow(processor) ||
+        typeof (processor as { processToolResult?: unknown } | null)?.processToolResult === 'function',
+    ) ?? false
+  );
+}
+
+/**
+ * A content snapshot of a tool result taken before `processToolResult` runs, so a
+ * processor that edits the result in place (same object, new contents) is still
+ * seen as having changed it. Undefined when the result can't be serialized; then
+ * only a replaced object counts as a change.
+ */
+export function snapshotToolResult(result: unknown): string | undefined {
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The mapped output the next `processToolResult` should see: the one an earlier
+ * processor committed in `providerMetadata.mastra.modelOutput` (undefined when it
+ * cleared it), otherwise `fallback`, the output mapped before the hook.
+ */
+export function latestProcessedModelOutput(messageList: MessageList, toolCallId: string, fallback: unknown): unknown {
+  const mastra = (
+    findCommittedToolInvocationPart(messageList, toolCallId)?.providerMetadata as
+      | { mastra?: Record<string, unknown> }
+      | undefined
+  )?.mastra;
+  if (!mastra || !('modelOutput' in mastra)) return fallback;
+  return normalizeModelOutput(mastra.modelOutput) ?? undefined;
+}
+
+/**
+ * Resolve the model output after `processToolResult` ran.
+ *
+ * Processors rewrite a tool result by committing a `result`-state part through
+ * `messageList.updateToolInvocation`. That part may carry a replacement
+ * `providerMetadata.mastra.modelOutput` (e.g. resized or removed images); it
+ * then replaces the mapped output. A processor that only replaces the raw
+ * `result` gets it re-mapped through `toModelOutput`, so the model never sees
+ * the mapping of the value the processor replaced. Without either, the output
+ * mapped before the hook stands and `toModelOutput` is not called again. A
+ * result edited in place counts as replaced when its contents differ from
+ * `resultSnapshotBeforeProcessors`.
+ */
+export async function resolveModelOutputAfterToolResultProcessors(deps: {
+  messageList: MessageList;
+  tool: { toModelOutput?: (output: unknown) => unknown } | undefined;
+  toolName: string;
+  toolCallId: string;
+  /** The result the processors were given. */
+  resultBeforeProcessors: unknown;
+  /** `snapshotToolResult(resultBeforeProcessors)`, taken before the processors ran. */
+  resultSnapshotBeforeProcessors?: string;
+  /** Metadata computed before the processors ran, including the mapped output. */
+  providerMetadata: Record<string, unknown> | undefined;
+  parentSpan?: ToolMappingParentSpan;
+}): Promise<Record<string, unknown> | undefined> {
+  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
+
+  const processorMastra = (part?.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  const { mastra: previousMastra, ...otherNamespaces } = deps.providerMetadata ?? {};
+  const { modelOutput: _previous, ...mastraWithoutModelOutput } = (previousMastra as Record<string, unknown>) ?? {};
+  const withoutModelOutput: Record<string, unknown> = Object.keys(mastraWithoutModelOutput).length
+    ? { ...otherNamespaces, mastra: mastraWithoutModelOutput }
+    : otherNamespaces;
+
+  if (processorMastra && 'modelOutput' in processorMastra) {
+    const modelOutput = normalizeModelOutput(processorMastra.modelOutput);
+    if (modelOutput == null) {
+      // Cleared: the model reads the (processed) raw result. Drop the key from the
+      // part too, since the commit merges metadata and would otherwise keep it.
+      delete processorMastra.modelOutput;
+      return Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined;
+    }
+    return { ...withoutModelOutput, mastra: { ...mastraWithoutModelOutput, modelOutput } };
+  }
+
+  // Without a committed part, a processor can only have edited the result in place.
+  const resultAfterProcessors = part ? part.toolInvocation.result : deps.resultBeforeProcessors;
+  const resultChanged =
+    resultAfterProcessors !== deps.resultBeforeProcessors ||
+    (deps.resultSnapshotBeforeProcessors !== undefined &&
+      snapshotToolResult(resultAfterProcessors) !== deps.resultSnapshotBeforeProcessors);
+  if (!resultChanged || !deps.tool?.toModelOutput) {
+    return deps.providerMetadata;
+  }
+
+  return computeModelOutputProviderMetadata({
+    tool: deps.tool,
+    toolName: deps.toolName,
+    toolCallId: deps.toolCallId,
+    result: resultAfterProcessors,
+    existingProviderMetadata: Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined,
+    parentSpan: deps.parentSpan,
+  });
+}
+
+function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string) {
+  const messages = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation.state === 'result'
+      ) {
+        return part as typeof part & { toolInvocation: { result?: unknown } };
+      }
+    }
+  }
+  return undefined;
 }
 
 /** Resolved terminal state for one tool call, as recorded to the transcript. */

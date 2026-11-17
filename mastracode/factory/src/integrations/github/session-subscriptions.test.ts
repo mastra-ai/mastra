@@ -285,7 +285,7 @@ describe('GitHub subscription entry points', () => {
     const inject = vi.fn();
     await expect(refreshGithubToken(refreshableRequestContext(inject), githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_org_pat');
+    expect(inject).toHaveBeenCalledWith('ghp_org_pat', true);
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
@@ -297,7 +297,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_reviewer');
+    expect(inject).toHaveBeenCalledWith('ghp_reviewer', true);
   });
 
   it('falls back from an absent reviewer PAT to the worker PAT', async () => {
@@ -308,7 +308,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_worker');
+    expect(inject).toHaveBeenCalledWith('ghp_worker', true);
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 

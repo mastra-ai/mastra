@@ -952,7 +952,31 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
+    // Stop (or a newer send) aborts this controller on purpose; that ends the send, it doesn't fail it.
+    // A caller-supplied signal keeps normal fetch semantics and still rejects.
+    const stoppedHere = (error: unknown) => isAbortError(error) && internalAbort.signal.aborted && !signal?.aborted;
+    const releaseRunning = () => {
+      // A newer send owns the running state once it has replaced this controller.
+      if (!_streamAbortRef.current || _streamAbortRef.current === internalAbort) setIsRunning(false);
+    };
+    const settleStopped = () => {
+      releaseRunning();
+      // The server never confirmed this turn, so its optimistic bubble must not stay pending.
+      if (signalId) {
+        setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
+      }
+    };
+
     const streamWithLegacyRoute = async () => {
+      try {
+        await runLegacyRoute();
+      } catch (error) {
+        if (!stoppedHere(error)) throw error;
+        settleStopped();
+      }
+    };
+
+    const runLegacyRoute = async () => {
       const runId = uuid();
       _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
@@ -990,7 +1014,7 @@ export const useChat = ({
       if (_streamAbortRef.current === internalAbort) {
         _streamAbortRef.current = null;
       }
-      setIsRunning(false);
+      releaseRunning();
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
@@ -1092,6 +1116,10 @@ export const useChat = ({
         setIsRunning(false);
       }
     } catch (error) {
+      if (stoppedHere(error)) {
+        settleStopped();
+        return;
+      }
       if (isThreadSignalUnsupportedError(error)) {
         try {
           await agent.sendSignal({
@@ -1109,6 +1137,10 @@ export const useChat = ({
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
+          if (stoppedHere(signalError)) {
+            settleStopped();
+            return;
+          }
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
             setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);

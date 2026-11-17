@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { registerApiRoute } from '../server';
 import { Mastra } from './index';
 
 describe('Mastra.setServer()', () => {
@@ -32,5 +33,19 @@ describe('Mastra.setServer()', () => {
     mastra.setServer({ ...mastra.getServer(), port: 8080 } as any);
 
     expect(mastra.getServer()).toEqual({ port: 8080, timeout: 5000 });
+  });
+
+  it('should normalize route arrays during construction and updates', () => {
+    const handler = async () => new Response();
+    const postRoute = registerApiRoute('/chat', { method: 'POST', handler });
+    const reconnectRoute = registerApiRoute('/chat/runs/:runId', { method: 'GET', handler });
+    const statusRoute = registerApiRoute('/status', { method: 'GET', handler });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [[postRoute, reconnectRoute]] } });
+
+    expect(mastra.getServer()?.apiRoutes).toEqual([postRoute, reconnectRoute]);
+
+    mastra.setServer({ apiRoutes: [[postRoute, reconnectRoute], statusRoute] });
+
+    expect(mastra.getServer()?.apiRoutes).toEqual([postRoute, reconnectRoute, statusRoute]);
   });
 });

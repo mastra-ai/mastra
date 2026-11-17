@@ -141,7 +141,7 @@ describe('Prompt Blocks page', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       await screen.findByText('Prompt Block 51');
 
-      fireEvent.change(screen.getByPlaceholderText('Filter by name or description'), {
+      fireEvent.change(screen.getByPlaceholderText('Search by name or description'), {
         target: { value: 'Prompt Block 2' },
       });
 

@@ -16,6 +16,7 @@ import type {
   SavedViewSort,
   SavedViewState,
 } from '@mastra/core/storage';
+import { withTokenSearchFields } from './lib/token-search-predicate';
 import {
   readObservabilityListFilters,
   writeObservabilityListFilters,
@@ -125,27 +126,36 @@ const splitNodes = (nodes: TraceFilterNode[]) => ({
 
 // The widest field set each page can offer (every server capability on); the page's own query
 // builder still leaves out what the connected server can't run.
-const TRACE_FIELD_OPERATORS = operatorsByField([
-  ...createTraceFilterBarFields({
-    availableRootEntityNames: [],
-    availableEnvironments: [],
-    withRootDuration: true,
-    withTimeToFirstChunk: true,
-    withTimeToFirstToken: true,
-  }),
-  { id: 'tags', operators: TRACE_TAGS_OPERATORS },
-]);
+const TRACE_FIELD_OPERATORS = operatorsByField(
+  withTokenSearchFields(
+    [
+      ...createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        withRootDuration: true,
+        withTimeToFirstChunk: true,
+        withTimeToFirstToken: true,
+      }),
+      { id: 'tags', label: 'Tags', operators: TRACE_TAGS_OPERATORS },
+    ],
+    true,
+    'spans.',
+  ),
+);
 const TRACE_URL_FIELD_IDS = new Set<string>([...TRACE_SYNTHETIC_FILTER_FIELD_IDS, ...TRACE_PROPERTY_FILTER_FIELD_IDS]);
 
 const SPAN_FIELD_IDS = new Set<string>([...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]);
 const SPAN_FIELD_OPERATORS = operatorsByField(
-  createSpanFilterBarFields({
-    withContextFields: true,
-    withTimeToFirstChunk: true,
-    withTimeToFirstToken: true,
-    entityNames: [],
-    environments: [],
-  }),
+  withTokenSearchFields(
+    createSpanFilterBarFields({
+      withContextFields: true,
+      withTimeToFirstChunk: true,
+      withTimeToFirstToken: true,
+      entityNames: [],
+      environments: [],
+    }),
+    true,
+  ),
 );
 
 const THREAD_FIELD_IDS = new Set<string>(THREAD_FILTER_FIELD_IDS);
@@ -191,7 +201,9 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
     columns: 'traces',
     readOptions: params => {
       const listMode = params.get(TRACE_LIST_MODE_PARAM);
-      return listMode && TRACE_LIST_MODE_VALUES.has(listMode as TraceListMode) ? { listMode } : {};
+      return {
+        ...(listMode && TRACE_LIST_MODE_VALUES.has(listMode as TraceListMode) ? { listMode } : {}),
+      };
     },
     writeOptions: (params, options) => {
       const { listMode } = options;
@@ -207,7 +219,7 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
     ...noOptions,
     sortFields: SPAN_LIST_SORT_FIELDS,
     acceptsToken: acceptsWith(
-      fieldId => SPAN_FIELD_IDS.has(fieldId),
+      fieldId => SPAN_FIELD_IDS.has(fieldId) || SPAN_FIELD_OPERATORS.has(fieldId),
       fieldId => SPAN_FIELD_OPERATORS.get(fieldId),
     ),
     columns: 'spans',

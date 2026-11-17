@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -199,19 +200,23 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
       break;
     case 'ready':
       message = (
-        <>
-          <Txt as="b" variant="label" tone="ink">
-            {validation.total}
-          </Txt>{' '}
-          item{validation.total !== 1 ? 's' : ''} ready
-          {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
-        </>
+        <Metadata singleLine>
+          <Metadata.Item className="shrink-0">
+            <Txt as="b" variant="label" tone="ink">
+              {validation.total}
+            </Txt>{' '}
+            item{validation.total !== 1 ? 's' : ''} ready
+          </Metadata.Item>
+          {validation.missingGroundTruthCount > 0 && (
+            <Metadata.Item>{validation.missingGroundTruthCount} without groundTruth</Metadata.Item>
+          )}
+        </Metadata>
       );
       break;
     case 'error':
       switch (validation.kind) {
         case 'parse':
-          message = `Not valid JSON — ${validation.message}`;
+          message = `Not valid JSON: ${validation.message}`;
           break;
         case 'not-array':
           message = 'Top level must be an array of items';

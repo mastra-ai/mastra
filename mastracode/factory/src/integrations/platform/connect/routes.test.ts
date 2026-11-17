@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { PlatformApiClient } from '../api-client.js';
-import { buildPlatformConnectRoutes } from './routes.js';
+import { buildConnectToolListRoute, buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
+import type { ConnectToolsSetupMissing, ConnectToolsSource } from './routes.js';
 
 const SESSION = {
   connectionId: 'conn-new',
@@ -22,29 +23,208 @@ function connection(id: string, integrationId: string, status: 'active' | 'needs
   return { id, integrationId, status, accountLabel: `${integrationId}-account`, displayName: null };
 }
 
-function buildApp(user: TestAuthUser | null, fetchImpl: typeof fetch, options: { authEnabled?: boolean } = {}): Hono {
+function buildApp(
+  user: TestAuthUser | null,
+  fetchImpl: typeof fetch,
+  options: {
+    authEnabled?: boolean;
+    connectToolsProjectId?: string;
+    toolsSource?: 'default' | 'custom';
+    missing?: ConnectToolsSetupMissing;
+    resolveTools?: ConnectToolsSource['resolveTools'];
+  } = {},
+): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(
-    app,
-    buildPlatformConnectRoutes({
-      auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
-      client: new PlatformApiClient({
-        baseUrl: 'https://integrations.example.com',
-        accessToken: 'platform-secret',
-        fetchImpl,
-      }),
-    }),
-  );
+  const auth = fakeRouteAuth({ enabled: options.authEnabled ?? true });
+  const client = new PlatformApiClient({
+    baseUrl: 'https://integrations.example.com',
+    accessToken: 'platform-secret',
+    fetchImpl,
+  });
+  const projectId = options.connectToolsProjectId;
+  const source: ConnectToolsSource | { missing: ConnectToolsSetupMissing } = projectId
+    ? {
+        client,
+        projectId,
+        toolsSource: options.toolsSource ?? 'default',
+        resolveTools: options.resolveTools ?? (async () => ({})),
+      }
+    : { missing: options.missing ?? 'no_credentials' };
+  mountApiRoutes(app, [
+    ...buildPlatformConnectRoutes({ auth, client }),
+    buildConnectToolsRoute(auth, source),
+    buildConnectToolListRoute(auth, source),
+  ]);
   return app;
 }
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
+  it("lists the project's connections that sessions use, not the organization's or GitHub's", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/v2/projects/proj_1/connections')) {
+        return json({
+          connections: [
+            connection('conn-mcp', 'neon-mcp', 'needs_reauth'),
+            connection('conn-linear', 'linear'),
+            connection('conn-github', 'github'),
+          ],
+        });
+      }
+      if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-snowflake', 'snowflake')] });
+      if (url.endsWith('/v2/integrations')) {
+        return json({
+          integrations: [
+            { id: 'neon-mcp', displayName: 'Neon MCP', logoUrl: 'https://logos.example.com/neon.svg' },
+            { id: 'linear', displayName: 'Linear', logoUrl: null },
+          ],
+        });
+      }
+      return json({ detail: 'not found' }, 404);
+    });
+    const app = buildApp({ workosId: 'u1' }, fetchImpl, { connectToolsProjectId: 'proj_1' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
+      toolsSource: 'default',
+      connections: [
+        {
+          id: 'conn-linear',
+          integrationId: 'linear',
+          providerName: 'Linear',
+          logoUrl: null,
+          accountLabel: 'linear-account',
+          status: 'active',
+        },
+        {
+          id: 'conn-mcp',
+          integrationId: 'neon-mcp',
+          providerName: 'Neon MCP',
+          logoUrl: 'https://logos.example.com/neon.svg',
+          accountLabel: 'neon-mcp-account',
+          status: 'needs_reauth',
+        },
+      ],
+    });
+  });
+
+  it('still lists the attached connections on a local Factory without auth when the catalog is down', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-linear', 'linear')] })
+          : json({ detail: 'catalog unavailable' }, 503),
+      );
+    const app = buildApp(null, fetchImpl, { authEnabled: false, connectToolsProjectId: 'proj_1' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
+      toolsSource: 'default',
+      connections: [expect.objectContaining({ id: 'conn-linear', providerName: 'linear', logoUrl: null })],
+    });
+  });
+
+  // #30579: a Factory whose `tools` option narrows Connect tools still uses the project's connections.
+  it('lists the connections and says session tools come from code when the Factory sets tools', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-posthog', 'posthog')] })
+          : json({ integrations: [{ id: 'posthog', displayName: 'PostHog', logoUrl: null }] }),
+      );
+    const app = buildApp(org1(), fetchImpl, { connectToolsProjectId: 'proj_1', toolsSource: 'custom' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      projectId: 'proj_1',
+      toolsSource: 'custom',
+      connections: [expect.objectContaining({ id: 'conn-posthog', providerName: 'PostHog' })],
+    });
+  });
+
+  it.each([
+    ['no_credentials', /MASTRA_PLATFORM_SECRET_KEY or MASTRA_PLATFORM_ACCESS_TOKEN/],
+    ['no_project_id', /no MASTRA_PROJECT_ID/],
+  ] as const)('names the one missing setup piece (%s) without calling the Platform', async (missing, message) => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const app = buildApp(org1(), fetchImpl, { missing });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: 'connect_tools_off',
+      reason: missing,
+      message: expect.stringMatching(message),
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("doesn't tell signed-out callers how the Factory is set up", async () => {
+    const app = buildApp(null, vi.fn<typeof fetch>(), { missing: 'no_project_id' });
+
+    const response = await app.request('/web/integrations/platform/connect-tools');
+    expect(response.status).toBe(401);
+  });
+
+  it("lists a tools option's tools as written, flagging the ones that ask for approval", async () => {
+    const app = buildApp(org1(), vi.fn<typeof fetch>(), {
+      connectToolsProjectId: 'proj_1',
+      toolsSource: 'custom',
+      resolveTools: async () => ({
+        posthog_list_dashboards: { id: 'posthog_list_dashboards', description: '  List dashboards.\n' },
+        posthog_delete_insight: {
+          id: 'posthog_delete_insight',
+          description: 'Delete an insight.',
+          requireApproval: true,
+        },
+        tickets_lookup: { id: 'tickets_lookup' },
+      }),
+    });
+
+    const response = await app.request('/web/integrations/platform/connect-tools/tools');
+    expect(response.status).toBe(200);
+    // Factory doesn't filter a tools option, so nothing is marked as left out.
+    await expect(response.json()).resolves.toEqual({
+      toolsSource: 'custom',
+      tools: [
+        { name: 'posthog_delete_insight', description: 'Delete an insight.', requiresApproval: true },
+        { name: 'posthog_list_dashboards', description: 'List dashboards.', requiresApproval: false },
+        { name: 'tickets_lookup', description: null, requiresApproval: false },
+      ],
+    });
+  });
+
+  it('names the missing setup piece and hides setup from signed-out callers on the tool list too', async () => {
+    const missing = await buildApp(org1(), vi.fn<typeof fetch>(), { missing: 'no_project_id' }).request(
+      '/web/integrations/platform/connect-tools/tools',
+    );
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toMatchObject({ error: 'connect_tools_off', reason: 'no_project_id' });
+
+    const resolveTools = vi.fn<ConnectToolsSource['resolveTools']>(async () => ({}));
+    const signedOut = await buildApp(null, vi.fn<typeof fetch>(), {
+      connectToolsProjectId: 'proj_1',
+      resolveTools,
+    }).request('/web/integrations/platform/connect-tools/tools');
+    expect(signedOut.status).toBe(401);
+    expect(resolveTools).not.toHaveBeenCalled();
+  });
+
   it('lists Jira connections and hides other providers', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       json({

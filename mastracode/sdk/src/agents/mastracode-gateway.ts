@@ -60,6 +60,8 @@ import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
+const PROVIDERS: Record<string, ProviderConfig> = PROVIDER_REGISTRY;
+
 export {
   MASTRA_GATEWAY_PREFIX,
   OPENAI_PREFIX,
@@ -263,7 +265,7 @@ async function resolveGatewayProviderAuth(
 async function getMastraCodeProviderConfigs(
   gateway: MastraModelGatewayInterface,
 ): Promise<Record<string, ProviderConfig>> {
-  const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+  const providers: Record<string, ProviderConfig> = { ...PROVIDERS };
 
   try {
     const gatewayProviders = await gateway.fetchProviders();
@@ -285,16 +287,23 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+export function providerApiKeyEnvVar(providerId: string): string | undefined {
+  return getApiKeyEnvVar(PROVIDERS[providerId]);
+}
+
 /**
  * Whether the process environment has a key for a models.dev provider. Checks every
  * env var the registry lists, as the models.dev gateway does when `resolveModel`
  * gets no gateway credential (e.g. `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
  */
 export function hasProviderEnvironmentKey(providerId: string): boolean {
-  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]?.apiKeyEnvVar;
+  const envVars = PROVIDERS[providerId]?.apiKeyEnvVar;
   if (!envVars) return false;
   return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
 }
+
+/** Servers call custom endpoints too: a redirect could aim that call at an address the saved URL never named. */
+const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
 
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
@@ -351,10 +360,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     const parsed = parseGatewayRouterId(modelId, this);
     if (!parsed.providerId || !parsed.modelId) return false;
     if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
-    const customProvider = this.#getCustomProviders().find(
-      provider => parsed.providerId === getCustomProviderId(provider.name),
-    );
-    if (customProvider?.apiKey) return true;
+    if (this.#customProvider(parsed.providerId)) return true;
     return hasResolvedAuth(
       MastraCodeGateway.resolveProviderAuth(
         {
@@ -430,6 +436,18 @@ export class MastraCodeGateway extends MastraModelGateway {
     return this.#customProviders ?? resolveCustomProviders() ?? loadSettings(this.#settingsPath).customProviders;
   }
 
+  /**
+   * The custom provider a provider id refers to, if any. Every method that
+   * resolves a model or its credentials goes through this lookup, so a custom
+   * endpoint only ever authenticates with its own key: it is never handed a
+   * credential saved for another provider, even when the ids collide. A model
+   * routed through the Mastra gateway is never a custom provider.
+   */
+  #customProvider(providerId: string): MastraCodeCustomProvider | undefined {
+    if (this.#routeThroughMastraGateway) return undefined;
+    return this.#getCustomProviders().find(provider => providerId === getCustomProviderId(provider.name));
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     // Catalog auth (`handlesModel`, `resolveAuth`) reads this store, while
     // `/api-keys` and logins write through other AuthStorage instances. Pick
@@ -461,9 +479,13 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async getApiKey(modelId: string): Promise<string> {
-    const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
+    // The model router passes its gateway-qualified id (`mastracode/<provider>/<model>`).
+    const { providerId } = parseGatewayRouterId(stripMastraGatewayPrefix(modelId), this);
     if (this.#routeThroughMastraGateway) return this.#mastraGatewayApiKey ?? '';
-    return providerId ? (getProviderAuthKey(providerId, this.#credentials) ?? '') : '';
+    if (!providerId) return '';
+    const customProvider = this.#customProvider(providerId);
+    if (customProvider) return customProvider.apiKey ?? '';
+    return getProviderAuthKey(providerId, this.#credentials) ?? '';
   }
 
   resolveAuth(request: GatewayAuthRequest): GatewayAuthResult | undefined {
@@ -471,11 +493,9 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: this.#mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const customProvider = this.#getCustomProviders().find(
-      provider => request.providerId === getCustomProviderId(provider.name),
-    );
-    if (customProvider?.apiKey) {
-      return { apiKey: customProvider.apiKey, source: 'gateway' };
+    const customProvider = this.#customProvider(request.providerId);
+    if (customProvider) {
+      return customProvider.apiKey ? { apiKey: customProvider.apiKey, source: 'gateway' } : { source: 'gateway' };
     }
 
     return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);
@@ -489,15 +509,14 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const customProvider = this.#getCustomProviders().find(
-      provider => args.providerId === getCustomProviderId(provider.name),
-    );
+    const customProvider = this.#customProvider(args.providerId);
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
         baseURL: customProvider.url,
         apiKey: args.apiKey,
         headers: args.headers,
+        fetch: fetchWithoutRedirects,
       });
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
@@ -517,7 +536,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    if (args.providerId === 'moonshotai') {
+    // A gateway model's key is the gateway's: it must not go to Moonshot's own API.
+    if (args.providerId === 'moonshotai' && !this.#routeThroughMastraGateway) {
       // Prefer the gateway-resolved key (stored credentials), then the canonical
       // registry env var. Keep the legacy typo name as a fallback for anyone who
       // set it because of the previous error message.

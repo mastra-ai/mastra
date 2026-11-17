@@ -1,20 +1,35 @@
 ---
 title: "Clerk | Auth"
-description: "Authenticate Mastra server requests with Clerk, configure the @mastra/auth-clerk provider, retrieve access tokens, and connect MastraClient securely."
+description: "Give Mastra agents Clerk tools through Mastra Connect, and authenticate Mastra server requests with the @mastra/auth-clerk provider and MastraClient."
 packages:
   - "@mastra/auth-clerk"
   - "@mastra/client-js"
+  - "@mastra/connect"
   - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import ClerkConnectTools from "@site/src/components/connect/generated/clerk.mdx";
 
 # Clerk
 
+Use Clerk with Mastra in two ways:
+
+- **Agent tools** let an agent manage Clerk users, organizations, and sessions through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Server authentication](#server-authentication)** verifies requests to your Mastra server with Clerk, using the `@mastra/auth-clerk` package.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<ClerkConnectTools />
+
+## Server authentication
+
 The `@mastra/auth-clerk` package provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `auth` option.
 
-## Prerequisites
+### Prerequisites
 
 This example uses Clerk authentication. Make sure to add your Clerk credentials to your `.env` file and ensure your Clerk project is properly configured.
 
@@ -30,7 +45,7 @@ You can find these keys in your Clerk Dashboard under "API Keys".
 
 :::
 
-## Installation
+### Installation
 
 Before you can use the `MastraAuthClerk` class you have to install the `@mastra/auth-clerk` package.
 
@@ -38,7 +53,7 @@ Before you can use the `MastraAuthClerk` class you have to install the `@mastra/
 npm install @mastra/auth-clerk@latest
 ```
 
-## Usage example
+### Usage example
 
 ```typescript {2,6-10} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -63,11 +78,11 @@ Visit [MastraAuthClerk](/reference/auth/clerk) for all available configuration o
 
 :::
 
-## Client-side setup
+### Client-side setup
 
 When using Clerk auth, you'll need to retrieve the access token from Clerk on the client side and pass it to your Mastra requests.
 
-### Retrieving the access token
+#### Retrieving the access token
 
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
@@ -88,7 +103,7 @@ export const useClerkAuth = () => {
 
 Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
 
-## Configuring `MastraClient`
+### Configuring `MastraClient`
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
@@ -111,7 +126,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 :::
 
-### Making authenticated requests
+#### Making authenticated requests
 
 Once `MastraClient` is configured with the Clerk access token, you can send authenticated requests:
 

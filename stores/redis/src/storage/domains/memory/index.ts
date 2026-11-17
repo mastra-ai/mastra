@@ -41,6 +41,7 @@ import type { RunFenceCheck } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
 export class StoreMemoryRedis extends MemoryStorage {
+  override readonly listThreadsPaginatesInMemory = true;
   override readonly supportsPartialThreadUpdate = true;
   private client: RedisClient;
   private db: RedisDB;

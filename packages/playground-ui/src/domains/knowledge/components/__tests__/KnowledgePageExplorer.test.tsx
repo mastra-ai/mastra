@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgePagePayload } from '../../pageTypes';
@@ -77,14 +77,6 @@ beforeAll(() => {
 });
 
 describe('KnowledgePageExplorer', () => {
-  it('opens the page selected in the tree', () => {
-    renderWithProviders(<Host />);
-    expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
-    fireEvent.click(within(screen.getByRole('tree')).getByText('Refunds'));
-    const detail = screen.getByRole('region', { name: 'Selected page' });
-    expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
-  });
-
   it('selects a search hit outside the loaded graph, listing each page once', () => {
     renderWithProviders(<Host />);
     fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'arch' } });
@@ -92,7 +84,9 @@ describe('KnowledgePageExplorer', () => {
     expect(results.getAllByRole('option')).toHaveLength(1);
     fireEvent.click(results.getByRole('button', { name: 'Archived' }));
     expect(screen.queryByRole('listbox')).toBeNull();
-    expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Archived')).toBeTruthy();
+    expect(
+      within(screen.getByRole('region', { name: 'Selected page' })).getByRole('heading', { name: 'Archived' }),
+    ).toBeTruthy();
   });
 
   it('says when a selected page is gone', () => {
@@ -119,25 +113,43 @@ describe('KnowledgePageExplorer', () => {
         onViewChange={() => {}}
       />,
     );
-    const tree = screen.getByRole('tree');
+    const tree = screen.getByRole('tree', { name: 'Knowledge pages' });
     const pinned = within(tree)
       .getAllByRole('treeitem')
       .filter(row => within(row).queryByLabelText('Pinned'));
     expect(pinned.map(row => row.textContent)).toEqual(['Refunds']);
   });
 
-  it('toggles between tree and graph and notes a truncated graph', () => {
-    renderWithProviders(<Host />);
-    expect(
-      screen.getByText('The graph shows the first 2 pages. Open the tree or search to reach the rest.'),
-    ).toBeTruthy();
-    const graphButton = screen.getByRole('button', { name: 'Graph' });
-    const container = screen.getByTestId('knowledge-graph-container');
-    expect(graphButton.getAttribute('aria-pressed')).toBe('false');
-    expect(container.classList.contains('hidden')).toBe(true);
-    fireEvent.click(graphButton);
-    expect(graphButton.getAttribute('aria-pressed')).toBe('true');
-    expect(container.classList.contains('block')).toBe(true);
-    expect(container.classList.contains('hidden')).toBe(false);
+  describe('on a narrow screen', () => {
+    const wideMatchMedia = window.matchMedia;
+    beforeEach(() => {
+      window.matchMedia = query => ({ ...wideMatchMedia(query), matches: query.includes('max-width') });
+    });
+    afterEach(() => {
+      window.matchMedia = wideMatchMedia;
+    });
+
+    it('opens the page selected in the tree', () => {
+      renderWithProviders(<Host />);
+      expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+      fireEvent.click(within(screen.getByRole('tree', { name: 'Knowledge pages' })).getByText('Refunds'));
+      const detail = screen.getByRole('region', { name: 'Selected page' });
+      expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
+    });
+
+    it('toggles between tree and graph and notes a truncated graph', () => {
+      renderWithProviders(<Host />);
+      expect(
+        screen.getByText('The graph shows the first 2 pages. Open the tree or search to reach the rest.'),
+      ).toBeTruthy();
+      const graphButton = screen.getByRole('tab', { name: 'Graph' });
+      const container = screen.getByTestId('knowledge-graph-container');
+      expect(graphButton.getAttribute('aria-selected')).toBe('false');
+      expect(container.classList.contains('hidden')).toBe(true);
+      fireEvent.click(graphButton);
+      expect(graphButton.getAttribute('aria-selected')).toBe('true');
+      expect(container.classList.contains('block')).toBe(true);
+      expect(container.classList.contains('hidden')).toBe(false);
+    });
   });
 });

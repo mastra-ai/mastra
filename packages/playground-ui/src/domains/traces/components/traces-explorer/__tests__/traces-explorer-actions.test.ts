@@ -227,6 +227,18 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'drops unsupported %s content chips and preserves supported chips',
+    field => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+      };
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([]);
+      expect(sanitizeTracesFilters(filters, { withTokenSearch: true })).toBe(filters);
+    },
+  );
+
   describe('when the filters hold entries the query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {

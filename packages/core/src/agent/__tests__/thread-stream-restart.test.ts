@@ -11,6 +11,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { Agent } from '../agent';
 import { Agent as AgentClass } from '../agent';
+import { AGENT_STREAM_TOPIC } from '../streams/constants';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
@@ -94,8 +95,12 @@ function backend() {
       return boot();
     },
     executed,
+    // Agent run topics keep their replay window for cleanupTimeoutMs by design; this checks the thread stream.
     runEntries: () =>
-      [...topics].flatMap(topic => pubsub.retainedEvents(topic)).filter(event => event.runId !== undefined),
+      [...topics]
+        .filter(topic => !topic.startsWith(AGENT_STREAM_TOPIC('')))
+        .flatMap(topic => pubsub.retainedEvents(topic))
+        .filter(event => event.runId !== undefined),
   };
 }
 

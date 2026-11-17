@@ -362,6 +362,68 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
     workflows['schema-zod-cause'] = { workflow, mocks: {} };
   }
 
+  // #29424: the workflow inputSchema must see the caller's real input. An omitted value
+  // (undefined) lets a top-level default apply; an explicit null reaches a nullable schema.
+  // Each workflow records what its first step received and what getInitData() returned.
+  {
+    const createInputPassthroughWorkflow = (id: string, schema: z.ZodType) => {
+      const observeInput = vi.fn();
+      const step = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData, getInitData }) => {
+          observeInput({ inputData, initData: getInitData() });
+          return { received: inputData };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [step],
+        options: { validateInputs: true },
+      });
+      workflow.then(step).commit();
+
+      workflows[id] = { workflow, mocks: { observeInput }, resetMocks: () => observeInput.mockClear() };
+    };
+
+    createInputPassthroughWorkflow(
+      'schema-omitted-input-object-default',
+      z.object({ count: z.number() }).default({ count: 5 }),
+    );
+    createInputPassthroughWorkflow('schema-omitted-input-scalar-default', z.number().default(7));
+    createInputPassthroughWorkflow('schema-nullable-input', z.string().nullable());
+    createInputPassthroughWorkflow('schema-omitted-input-required', z.object({ count: z.number() }));
+
+    // With validateInputs off, the first step receives inputData exactly as the caller passed it.
+    const observeUnvalidatedInput = vi.fn();
+    const unvalidatedStep = createStep({
+      id: 'observe',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ receivedUndefined: z.boolean() }),
+      execute: async ({ inputData }) => {
+        observeUnvalidatedInput(inputData);
+        return { receivedUndefined: inputData === undefined };
+      },
+    });
+    const unvalidatedWorkflow = createWorkflow({
+      id: 'schema-omitted-input-unvalidated',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ receivedUndefined: z.boolean() }),
+      steps: [unvalidatedStep],
+      options: { validateInputs: false },
+    });
+    unvalidatedWorkflow.then(unvalidatedStep).commit();
+    workflows['schema-omitted-input-unvalidated'] = {
+      workflow: unvalidatedWorkflow,
+      mocks: { observeUnvalidatedInput },
+      resetMocks: () => observeUnvalidatedInput.mockClear(),
+    };
+  }
+
   return workflows;
 }
 
@@ -536,6 +598,93 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
       } catch (error) {
         expect((error as any).message).toContain('waitForEvent has been removed');
       }
+    });
+
+    describe('workflow input passed to inputSchema as given (#29424)', () => {
+      // A case an engine fails deterministically stays visible: it runs as it.fails there.
+      const itFailsIf = (knownFailure: boolean | undefined) => (knownFailure ? it.fails : it);
+      const firstObserved = (mocks: Record<string, any>) => mocks.observeInput.mock.calls[0]?.[0];
+
+      it('applies a top-level object default when inputData is omitted', async () => {
+        const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-object-default']!;
+        resetMocks?.();
+
+        const result = await execute(workflow, undefined);
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ received: { count: 5 } });
+        expect(mocks.observeInput).toHaveBeenCalledTimes(1);
+        expect(firstObserved(mocks).inputData).toEqual({ count: 5 });
+      });
+
+      itFailsIf(skipTests.schemaInitDataDefaultFails)(
+        'returns the defaulted input from getInitData() when inputData is omitted',
+        async () => {
+          const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-object-default']!;
+          resetMocks?.();
+
+          const result = await execute(workflow, undefined);
+
+          expect(result.status).toBe('success');
+          expect(firstObserved(mocks).initData).toEqual({ count: 5 });
+        },
+      );
+
+      it('uses an explicit value over the inputSchema default', async () => {
+        const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-object-default']!;
+        resetMocks?.();
+
+        const result = await execute(workflow, { count: 2 });
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ received: { count: 2 } });
+        expect(firstObserved(mocks)).toEqual({ inputData: { count: 2 }, initData: { count: 2 } });
+      });
+
+      it('applies a scalar inputSchema default when inputData is omitted', async () => {
+        const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-scalar-default']!;
+        resetMocks?.();
+
+        const result = await execute(workflow, undefined);
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ received: 7 });
+        expect(firstObserved(mocks).inputData).toBe(7);
+      });
+
+      it('accepts explicit null for a nullable inputSchema', async () => {
+        const { workflow, mocks, resetMocks } = registry!['schema-nullable-input']!;
+        resetMocks?.();
+
+        const result = await execute(workflow, null);
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ received: null });
+        expect(firstObserved(mocks)).toEqual({ inputData: null, initData: null });
+      });
+
+      it('passes omitted inputData to the first step as undefined when validateInputs is off', async () => {
+        const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-unvalidated']!;
+        resetMocks?.();
+
+        const result = await execute(workflow, undefined);
+
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ receivedUndefined: true });
+        expect(mocks.observeUnvalidatedInput).toHaveBeenCalledTimes(1);
+        expect(mocks.observeUnvalidatedInput).toHaveBeenCalledWith(undefined);
+      });
+
+      it.skipIf(skipTests.schemaValidationThrows)(
+        'still rejects omitted inputData when the inputSchema has no default',
+        async () => {
+          const { workflow, mocks, resetMocks } = registry!['schema-omitted-input-required']!;
+          resetMocks?.();
+
+          await expect(execute(workflow, undefined)).rejects.toThrow('Invalid input data');
+          expect(mocks.observeInput).not.toHaveBeenCalled();
+        },
+      );
     });
   });
 }

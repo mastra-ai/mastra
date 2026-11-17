@@ -619,7 +619,7 @@ describe('FilterBar', () => {
         await screen.findByRole('option', { name: 'Running' });
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         key('Enter');
         expect(onChange).not.toHaveBeenCalled();
         const custom = await screen.findByRole('option', { name: 'custom' });
@@ -640,7 +640,7 @@ describe('FilterBar', () => {
         fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
         expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
       });
@@ -1362,15 +1362,17 @@ describe('FilterBar', () => {
       initial,
       onChange,
       maxDepth,
+      fields = FIELDS,
     }: {
       initial: FilterBarExpression;
       onChange?: (expression: FilterBarExpression) => void;
       maxDepth?: number;
+      fields?: FilterBarField[];
     }) {
       const [value, setValue] = useState<FilterBarExpression>(initial);
       return (
         <FilterBar
-          fields={FIELDS}
+          fields={fields}
           operators={OPERATORS}
           value={value}
           maxDepth={maxDepth}
@@ -1401,6 +1403,47 @@ describe('FilterBar', () => {
         { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
       ],
     };
+
+    describe('when a field is restricted to the root', () => {
+      it('offers the field in the root picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        getInput().focus();
+        expect(await screen.findByRole('option', { name: 'Contains text' })).toBeTruthy();
+      });
+
+      it('omits the field from the nested field editor', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('combobox', { name: 'Field: Tags' })[0]);
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+
+      it('omits the field from the nested condition picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+        const add = within(editor).getByPlaceholderText('Add condition');
+        fireEvent.focus(add);
+        fireEvent.change(add, { target: { value: 'Contains text' } });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+    });
 
     describe('when the value is a flat list', () => {
       it('offers no advanced filter option and no chip', async () => {
@@ -1500,7 +1543,7 @@ describe('FilterBar', () => {
         // The new group's input opens its typeahead, which aria-hides the rest of the popover.
         key('Escape');
         const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
-        await waitFor(() => expect(within(card).getByText('· 0 conditions')).toBeTruthy());
+        await waitFor(() => expect(within(card).getByText('0 conditions')).toBeTruthy());
 
         fireEvent.click(within(card).getByRole('radio', { name: 'Join with or' }));
         expect(onChange.mock.lastCall?.[0].nodes[1].nodes[2]).toMatchObject({ kind: 'group', logic: 'or' });

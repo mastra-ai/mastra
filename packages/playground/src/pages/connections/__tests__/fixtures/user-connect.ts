@@ -35,6 +35,33 @@ export const providersResponse: UserConnectProvidersResponse = {
   ],
 };
 
+/**
+ * A provider whose API key is only asked for in the EU region: the key field
+ * carries `visibleWhen` on the region connection param.
+ */
+export const regionalProvidersResponse: UserConnectProvidersResponse = {
+  providers: [
+    {
+      id: 'regional',
+      displayName: 'Regional',
+      logoUrl: null,
+      authType: 'API_KEY',
+      authFields: [
+        { name: 'region', target: 'params', label: 'Region', required: true, order: 0 },
+        {
+          name: 'apiKey',
+          target: 'credentials',
+          label: 'API key',
+          secret: true,
+          required: true,
+          order: 1,
+          visibleWhen: { field: 'region', equals: 'eu' },
+        },
+      ],
+    },
+  ],
+};
+
 /** Session minted for the Airtable credentials flow. */
 export const airtableSessionResponse: UserConnectSessionResponse = {
   connectionId: 'conn-user-3',

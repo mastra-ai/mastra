@@ -517,6 +517,49 @@ describe('chat runtime status', () => {
     expect(partialSnapshot.omProgress).toEqual(updated.omProgress);
   });
 
+  it('keeps the same state when a snapshot repeats what the chat already shows', () => {
+    // Technical: snapshots stream in many times a second while a reply is written, each one a
+    // fresh parse. Handing React the state it already has lets it skip re-rendering the chat.
+    const snapshot = (totalTokens = 55) => ({
+      type: 'display_state_changed' as const,
+      displayState: {
+        isRunning: true,
+        queuedFollowUps: 0,
+        bufferingObservations: true,
+        omProgress: {
+          status: 'idle' as const,
+          pendingTokens: 320,
+          threshold: 1000,
+          thresholdPercent: 32,
+          observationTokens: 0,
+          reflectionThreshold: 2000,
+          reflectionThresholdPercent: 0,
+          projectedMessageRemoval: 0,
+          projectedReflectionSavings: 0,
+        },
+        tokenUsage: { promptTokens: 21, completionTokens: totalTokens - 21, totalTokens },
+      },
+    });
+    const shown = runtimeReducer(initialChatRuntime, { type: 'event', event: snapshot() });
+
+    expect(runtimeReducer(shown, { type: 'event', event: snapshot() })).toBe(shown);
+    expect(
+      runtimeReducer(shown, {
+        type: 'event',
+        event: { type: 'display_state_changed', displayState: { bufferingObservations: true } },
+      }),
+    ).toBe(shown);
+
+    const grown = runtimeReducer(shown, { type: 'event', event: snapshot(80) });
+
+    expect(grown).not.toBe(shown);
+    expect(grown.usage).toEqual({ promptTokens: 21, completionTokens: 59, totalTokens: 80 });
+    expect(grown.omProgress).toBe(shown.omProgress);
+    expect(
+      runtimeReducer(grown, { type: 'event', event: { type: 'display_state_changed', displayState: {} } }),
+    ).toMatchObject({ bufferingObservations: false, usage: grown.usage });
+  });
+
   it('measures generation across steps, retains the last rate, and clears it on reset or a new turn', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-10T15:00:00Z'));

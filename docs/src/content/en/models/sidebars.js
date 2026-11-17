@@ -60,6 +60,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/requesty',
+          label: 'Requesty',
+        },
+        {
+          type: 'doc',
           id: 'gateways/vercel',
           label: 'Vercel',
         },
@@ -898,11 +903,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
-        },
-        {
-          type: 'doc',
-          id: 'providers/requesty',
-          label: 'Requesty',
         },
         {
           type: 'doc',

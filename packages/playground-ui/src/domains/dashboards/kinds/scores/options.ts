@@ -8,6 +8,7 @@ export const scoresOptionsSchema = z
     average: queryRefSchema,
     /** Id of the scores time series giving each scorer's line. */
     series: queryRefSchema,
+    /** @deprecated Accepted so saved definitions still parse; every empty chart shows the same message. */
     emptyMessage: z.string().optional(),
   })
   .strict();

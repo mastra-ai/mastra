@@ -14,6 +14,7 @@ import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
+import type { AgentStreamPublisher } from '../../streams/publisher';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import { LOOP_OPTIONS_KEY } from './run-scope-keys';
@@ -26,6 +27,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  streamPublisher?: AgentStreamPublisher;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -66,6 +68,7 @@ export function createStreamStep<OUTPUT = undefined>({
   requireToolApproval,
   toolCallConcurrency,
   eagerToolExecution,
+  streamPublisher,
   resumeContext,
   getResumeSnapshot,
   agentId,
@@ -122,6 +125,7 @@ export function createStreamStep<OUTPUT = undefined>({
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
+        streamPublisher,
         resumeContext: resumeContext && { ...resumeContext, snapshot: resumeSnapshot },
         _internal: {
           generateId: capabilities.generateMessageId,

@@ -174,6 +174,15 @@ function resolveEstimatorId(): string {
   return 'tokenx';
 }
 
+const ATTACHMENT_CONTENT_PART_TYPES = new Set(['image', 'image-data', 'media', 'audio', 'file-data']);
+
+/** Mirrors the parts countMultimodalToolResultContent counts as attachments. */
+function isAttachmentContentPart(item: unknown): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const contentPart = item as Record<string, unknown>;
+  return ATTACHMENT_CONTENT_PART_TYPES.has(contentPart.type as string) && typeof contentPart.data === 'string';
+}
+
 function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TokenEstimateCacheEntry>;
@@ -1329,16 +1338,18 @@ export class TokenCounter {
       return undefined;
     }
 
+    const output = toolResult as Record<string, unknown>;
+    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
+    // Only results carrying attachment data are counted here. Check the shape before hashing so
+    // plain JSON results don't pay a full serialization on every count just to be ruled out.
+    if (!Array.isArray(content) || !content.some(isAttachmentContentPart)) {
+      return undefined;
+    }
+
     const resultKey = buildEstimateKey('tool-result-multimodal-content-source', JSON.stringify(toolResult));
     const cached = this.multimodalToolResultCounts.get(part);
     if (cached?.resultKey === resultKey) {
       return cached.tokens;
-    }
-
-    const output = toolResult as Record<string, unknown>;
-    const content = output.type === 'content' && Array.isArray(output.value) ? output.value : output.content;
-    if (!Array.isArray(content)) {
-      return undefined;
     }
 
     let hasAttachment = false;

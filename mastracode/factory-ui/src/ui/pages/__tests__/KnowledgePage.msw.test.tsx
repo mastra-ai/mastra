@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type {
   KnowledgeExplorerGraph,
   KnowledgeExplorerPageDetail,
@@ -6,7 +7,7 @@ import type {
 import type { KnowledgePagePayload } from '@mastra/playground-ui/domains/knowledge/pageTypes';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -123,6 +124,31 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 }
 
 describe('KnowledgePage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the mobile drawer trigger in the header while feature flags load', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    stubFactory();
+    server.use(http.get(`${TEST_BASE_URL}/web/config/features`, () => new Promise<Response>(() => {})));
+    renderRoute();
+
+    expect(await screen.findByLabelText('Loading page')).toBeInTheDocument();
+    const header = screen.getByRole('banner');
+    await userEvent.click(within(header).getByRole('button', { name: 'Open navigation menu' }));
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeInTheDocument();
+  });
+
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
     stubFactory({ knowledge: false });
     const { router } = renderRoute();
@@ -137,12 +163,25 @@ describe('KnowledgePage', () => {
     expect(screen.getByTestId('knowledge-graph-container')).toBeInTheDocument();
   });
 
-  it('opens the selected page from the tree and keeps it in the URL', async () => {
+  it('frames a tree page in the graph on the first click, opens it on the second, and keeps it in the URL', async () => {
     stubKnowledge();
     const { router } = renderRoute();
     const tree = await screen.findByRole('tree');
     fireEvent.click(await within(tree).findByRole('button', { name: 'Expand Acme Factory' }));
     fireEvent.click(await within(tree).findByText('Deploy runbook'));
+    await waitFor(() => expect(router.state.location.search).toContain('page=runbook'));
+    expect(router.state.location.search).toContain('view=graph');
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByTestId('knowledge-page-node')
+          .find(node => node.dataset.pageId === 'runbook')
+          ?.querySelector('.knowledge-circle'),
+      ).toHaveAttribute('data-selected'),
+    );
+    expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+
+    fireEvent.click(within(tree).getByText('Deploy runbook'));
     const pane = await screen.findByRole('region', { name: 'Selected page' });
     expect(await within(pane).findByText('Deploys run nightly.')).toBeInTheDocument();
     expect(router.state.location.search).toContain('page=runbook');
@@ -237,7 +276,9 @@ describe('KnowledgePage', () => {
     fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'arch' } });
     fireEvent.click(await screen.findByRole('button', { name: 'Archived runbook' }));
     expect(
-      await within(screen.getByRole('region', { name: 'Selected page' })).findByText('Archived runbook'),
+      await within(screen.getByRole('region', { name: 'Selected page' })).findByRole('heading', {
+        name: 'Archived runbook',
+      }),
     ).toBeInTheDocument();
   });
 
@@ -247,12 +288,16 @@ describe('KnowledgePage', () => {
   ])('selects a graph page on the first click and opens it on the second (%s)', async (_, query) => {
     stubKnowledge();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge${query}`);
-    const runbookNode = async () => {
-      const nodes = await screen.findAllByTestId('knowledge-page-node');
-      const node = nodes.find(n => n.dataset.pageId === 'runbook');
-      if (!node) throw new Error('runbook not drawn');
-      return node;
-    };
+    const graphNode = (pageId: string) =>
+      waitFor(() => {
+        const node = screen.getAllByTestId('knowledge-page-node').find(n => n.dataset.pageId === pageId);
+        if (!node) throw new Error(`${pageId} not drawn`);
+        return node;
+      });
+    const runbookNode = () => graphNode('runbook');
+    // The graph loads a level at a time: focusing the project scope draws the pages inside it.
+    fireEvent.click(await graphNode('project'));
+    await waitFor(() => expect(router.state.location.search).toContain('page=project'));
     fireEvent.click(await runbookNode());
     await waitFor(() => expect(router.state.location.search).toContain('page=runbook'));
     expect(router.state.location.search).toContain('view=graph');

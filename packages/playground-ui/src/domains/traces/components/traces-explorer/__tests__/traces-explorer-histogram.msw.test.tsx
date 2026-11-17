@@ -18,6 +18,7 @@ import {
   emptyTracesPage,
   idleDeltaBatch,
   traceAggregateCapabilities,
+  traceTokenSearchCapabilities,
   traceAggregateError,
   traceCountsAggregate,
   traceQueryCapabilities,
@@ -71,7 +72,7 @@ const setHandlers = ({
       const parsed = traceAggregateRequestSchema.safeParse(body);
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
       try {
-        planTraceAggregate(parsed.data);
+        planTraceAggregate(parsed.data, { allowTokenSearch: capabilities.capabilities.traceAggregateTokenSearch });
       } catch (error) {
         return HttpResponse.json({ error: String(error) }, { status: 400 });
       }
@@ -93,9 +94,11 @@ const METRICS_SUPPORTED = { supported: true, isLoading: false };
 function Harness({
   initialFilters = DEFAULT_TRACES_FILTERS,
   features,
+  rootSource,
 }: {
   initialFilters?: TracesFilters;
   features?: TracesExplorerFeatures;
+  rootSource?: 'legacy' | 'aggregated';
 }) {
   const [selection, setSelection] = useState(EMPTY_TRACES_SELECTION);
   const [filters, setFilters] = useState(initialFilters);
@@ -116,6 +119,7 @@ function Harness({
         onSortChange={setSort}
         metricsSupport={METRICS_SUPPORTED}
         features={features}
+        rootSource={rootSource}
       >
         <TracesExplorer.FilterBar />
         <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
@@ -185,6 +189,14 @@ beforeEach(() => {
 describe('TracesExplorer.Histogram', () => {
   useFixedChartSize(1200, 800);
 
+  it('does not show legacy histogram counts for aggregated roots', async () => {
+    setHandlers();
+    await renderExplorer({ rootSource: 'aggregated' });
+    expect(screen.getByText('What is the weather in Paris?')).toBeTruthy();
+    expect(chart()).toBeNull();
+    expect(onAggregate).not.toHaveBeenCalled();
+  });
+
   describe('when the server cannot aggregate traces', () => {
     it('does not render the chart', async () => {
       setHandlers({ capabilities: traceQueryCapabilities });
@@ -218,7 +230,7 @@ describe('TracesExplorer.Histogram', () => {
       await renderExplorer();
 
       const region = await screen.findByRole('region', { name: 'Traces over time' });
-      await waitFor(() => expect(within(region).getByText('8 traces · 2 errors')).toBeTruthy());
+      await waitFor(() => expect(within(region).getByText('8 traces, 2 errors')).toBeTruthy());
     });
 
     it('sends the same time range and filters as the list query', async () => {
@@ -361,16 +373,6 @@ describe('TracesExplorer.Histogram', () => {
 
     describe('when the user picked a range by hand after zooming', () => {
       const openRangeEditor = () => fireEvent.click(screen.getByRole('button', { name: /^Oct 21/, hidden: true }));
-      const pickTimePart = async (time: string, part: string, value: string) => {
-        const group = screen.getByRole('group', { name: time, hidden: true });
-        const select = within(group).getByRole('combobox', { name: part, hidden: true });
-        fireEvent.click(select);
-        // Base UI only commits a pick on a real press: pointerdown followed by click.
-        const option = await screen.findByRole('option', { name: value, hidden: true });
-        fireEvent.pointerDown(option);
-        fireEvent.click(option);
-        await waitFor(() => expect(select.textContent).toBe(value));
-      };
       const apply = () => fireEvent.click(screen.getByRole('button', { name: /apply/i, hidden: true }));
 
       it('resets to the default preset even when that range matches the zoom', async () => {
@@ -380,17 +382,16 @@ describe('TracesExplorer.Histogram', () => {
         await dragAcross(12, 23);
         await settle(queryClient);
 
-        // The editor opens on the zoomed days, ending at 11:59 PM: another range.
+        // Ending the zoomed days at 11:59 PM: another range.
         openRangeEditor();
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '23:59' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual({ ...zoomed, to: '2026-10-22T23:59:00.000Z' });
 
         // Ending at 12:00 AM instead picks the zoomed bounds again.
         openRangeEditor();
-        await pickTimePart('End time', 'Hour', '12');
-        await pickTimePart('End time', 'Minute', '00');
-        await pickTimePart('End time', 'AM or PM', 'AM');
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '00:00' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
@@ -498,4 +499,142 @@ describe('TracesExplorer.Histogram', () => {
       expect(chart()).toBeNull();
     });
   });
+  describe('indexed content filters', () => {
+    it.each(['traceQueryTokenSearch', 'traceAggregateTokenSearch'] as const)(
+      'disables search for the whole page without %s',
+      async capability => {
+        setHandlers({
+          capabilities: {
+            ...traceTokenSearchCapabilities,
+            capabilities: { ...traceTokenSearchCapabilities.capabilities, [capability]: false },
+          },
+        });
+        await renderExplorer({
+          initialFilters: {
+            ...DEFAULT_TRACES_FILTERS,
+            tokens: [{ fieldId: 'spans.all', operatorId: 'hasAllTokens', value: 'needle' }],
+          },
+        });
+        expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(tokenTerms(onAggregate.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(chart()).not.toBeNull();
+        const input = screen.getByRole('combobox', { name: 'Add filter' });
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: 'Any span content' } });
+        expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
+      },
+    );
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('uses the same %s search for lists and histograms', async (field, label) => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'id' }],
+        },
+      });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [{ spans: { some: { op: 'hasAllTokens', left: { path: field }, right: { literal: 'id' } } } }],
+      });
+      expect(screen.getByRole('button', { name: `Remove ${label} filter` })).toBeTruthy();
+      expect(screen.getByText('contains words')).toBeTruthy();
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
+    });
+    it('requires input and output conditions on the same span', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [
+            { fieldId: 'spans.input', operatorId: 'hasAllTokens', value: 'payment' },
+            { fieldId: 'spans.output', operatorId: 'hasAllTokens', value: 'declined' },
+          ],
+        },
+      });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [
+          {
+            spans: {
+              some: {
+                op: 'and',
+                args: [
+                  { op: 'hasAllTokens', left: { path: 'input' }, right: { literal: 'payment' } },
+                  { op: 'hasAllTokens', left: { path: 'output' }, right: { literal: 'declined' } },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    });
+    it('keeps Any Content search and histogram filters in sync through removal', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      const result = await renderExplorer();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Any span content' }));
+      onAggregate.mockClear();
+      fireEvent.change(input, { target: { value: 'ok' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['ok']));
+      fireEvent.keyDown(input, { key: 'Escape' });
+      await settle(result.queryClient);
+      await waitFor(() => expect(chart()).not.toBeNull());
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Any span content filter' }));
+      await waitFor(() => expect(chart()).not.toBeNull());
+    });
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('does not send %s token predicates without the trace capability', async field => {
+      setHandlers({
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, spanQueryTokenSearch: true },
+        },
+      });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+        },
+      });
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+      expect(chart()).not.toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
+    });
+  });
 });
+
+function tokenTerms(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object') return [];
+  if (
+    'op' in value &&
+    value.op === 'hasAllTokens' &&
+    'right' in value &&
+    value.right &&
+    typeof value.right === 'object' &&
+    'literal' in value.right
+  )
+    return [value.right.literal];
+  return Object.values(value).flatMap(child => (Array.isArray(child) ? child.flatMap(tokenTerms) : tokenTerms(child)));
+}

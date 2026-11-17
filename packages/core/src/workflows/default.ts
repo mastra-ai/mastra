@@ -8,6 +8,8 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, getResumeTracingContext } from '../observability';
+import { withSpanErrorAttempt } from '../observability/context-storage';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -65,6 +67,7 @@ import type {
 // to build a runnable step from a declarative entry.
 import {
   abortableSleep,
+  applyStateDelta,
   getRestartStartIndex,
   getSingleStepEntryId,
   omitPriorCompletionFields,
@@ -431,6 +434,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -496,6 +500,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -544,7 +549,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
-        const result = await retryCountStorage.run(i, () => this.wrapDurableOperation(stepId, runStep));
+        const result = await retryCountStorage.run(i, () =>
+          withSpanErrorAttempt(`${params.stepSpan?.id ?? stepId}:attempt:${i}`, async () => {
+            try {
+              return await this.wrapDurableOperation(stepId, runStep);
+            } catch (error) {
+              const failure = getErrorFromUnknown(error, { supportSerialization: false });
+              const origin = getSpanErrorOrigin(error);
+              if (origin) setSpanErrorOrigin(failure, origin);
+              params.stepSpan?.recordError?.(failure, { occurrenceId: `${params.stepSpan.id}:attempt:${i}` });
+              throw failure;
+            }
+          }),
+        );
         return { ok: true, result };
       } catch (e) {
         const isNonRetryable = e instanceof MastraNonRetryableError;
@@ -617,7 +634,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance.toJSON();
+    const serialized = errorInstance.toJSON();
+    const origin = getSpanErrorOrigin(errorSource);
+    if (origin) setSpanErrorOrigin(serialized, origin);
+    return serialized;
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -834,6 +854,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ? rebaseNestedState(executionContext.state, mutableContext.stateBase, mutableContext.state)
         : mutableContext.state,
     );
+    if (mutableContext.stateDelta) applyStateDelta(executionContext.state, mutableContext.stateDelta);
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }
@@ -884,7 +905,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @experimental */
     storageVersion?: 1 | 2;
     /** @internal */
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */

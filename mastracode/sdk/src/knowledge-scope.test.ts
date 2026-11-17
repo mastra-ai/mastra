@@ -24,6 +24,17 @@ describe('resolveKnowledgeSessionScopes', () => {
     });
   });
 
+  it('encodes Factory org and project ids into one canonical segment', () => {
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'acme:eu', factoryProjectId: 'p/1' } as never)).toEqual({
+      resolved: true,
+      scopes: ['org:acme%3Aeu', 'project:p%2F1'],
+    });
+    expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'acme:eu' } as never, ['org:acme%3Aeu'])).toEqual({
+      resolved: true,
+      scopes: ['org:acme%3Aeu'],
+    });
+  });
+
   it('keeps two Factory projects apart and refuses a host tag that names another org or project', () => {
     const a = resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'a' } as never);
     const b = resolveKnowledgeSessionScopes({ factoryOrgId: 'o', factoryProjectId: 'b' } as never);

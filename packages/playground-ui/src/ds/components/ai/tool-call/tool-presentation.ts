@@ -110,6 +110,11 @@ export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+export function exitedWithFailure(toolName: string, exitCode: number | undefined): boolean {
+  return resolveToolStyle(toolName)?.isCommand === true && exitCode !== undefined && exitCode !== 0;
+}
+
 /** Task tools draw in the docked task list, never as a transcript row. */
 const TASK_TOOLS = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 

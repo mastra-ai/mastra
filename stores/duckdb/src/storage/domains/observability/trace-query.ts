@@ -22,7 +22,7 @@ import type {
 
 import type { DuckDBConnection } from '../../db/index';
 import { timeToFirstChunkSupported, timeToFirstTokenSupported, traceQueryOutcomeFieldsSupported } from '../../features';
-import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload, timeRangeOf } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { needsPreview } from './preview-compat';
 
@@ -197,6 +197,8 @@ function compileScalarPredicate<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens')
+    throw new coreStorage.TraceQueryUnsupportedError('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
@@ -439,7 +441,7 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
 ]);
 
 function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
-  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'relation' || predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
   if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
   return ROOT_PUSHDOWN_FIELDS.has(predicate.field);
@@ -953,7 +955,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
   );
   if (flagged.length === 0) return;
 
-  const values: unknown[] = [];
+  const values: unknown[] = timeRangeOf(flagged.map(row => row.rootTimestamp as Date));
   const where = flagged
     .map(row => {
       values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
@@ -966,7 +968,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
       ${payloadColumnSql('output')} AS output,
       error
     FROM span_events
-    WHERE parentSpanId IS NULL AND (${where})`,
+    WHERE parentSpanId IS NULL AND timestamp BETWEEN ? AND ? AND (${where})`,
     values,
   );
   const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));

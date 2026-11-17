@@ -54,8 +54,9 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
   {
     sortFields,
+    withTokenSearch = false,
     defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
-  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
+  }: { sortFields?: readonly F[]; withTokenSearch?: boolean; defaultDatePreset?: TraceDatePreset } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
@@ -68,9 +69,14 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     [datesKey],
   );
   const { tokens, groups } = useMemo(
-    () => readObservabilityListFilters(searchParams),
+    () => {
+      const filters = readObservabilityListFilters(searchParams);
+      return withTokenSearch
+        ? filters
+        : { ...filters, tokens: filters.tokens.filter(token => token.operatorId !== 'hasAllTokens') };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the filter params change
-    [filtersKey],
+    [filtersKey, withTokenSearch],
   );
   const urlSort = readObservabilityListSort<F | 'startedAt'>(
     searchParams,
@@ -84,14 +90,17 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const fromMs = dateFrom?.getTime();
   const toMs = dateTo?.getTime();
   // Rolling presets are resolved against "now" only when the range changes, so the query key
-  // (and the cursors issued for it) stays stable while the list scrolls.
+  // (and the cursors issued for it) stays stable while the list scrolls. Both ends share one `now`
+  // so a rolling preset spans exactly its length.
   const timeRange = useMemo(() => {
+    const now = new Date();
     const window = resolveTracesDateWindow(
       datePreset,
       fromMs === undefined ? undefined : new Date(fromMs),
       toMs === undefined ? undefined : new Date(toMs),
+      now,
     );
-    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, new Date());
+    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, now);
   }, [datePreset, fromMs, toMs]);
 
   // react-router resolves even a functional update against the params of the last render, so writes

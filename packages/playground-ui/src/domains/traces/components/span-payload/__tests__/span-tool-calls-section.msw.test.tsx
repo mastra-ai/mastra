@@ -62,7 +62,11 @@ const LAYOUTS = [
     renderSpan: (span: SpanRecord) => <DataPanelOnOutput span={span} />,
     toolCallsSection: () => screen.getByRole('region', { name: 'Tool calls' }),
     showOfferedTools: () => fireEvent.click(screen.getByRole('tab', { name: /input/i })),
-    offeredToolsHeading: (count: number) => `Available tools · ${count}`,
+    offeredToolsHeading: (count: number) => {
+      const tools = screen.getByRole('region', { name: 'Available tools' });
+      const heading = within(tools).getByText('Available tools');
+      return within(heading).getByText(String(count));
+    },
     outputSection: () => screen.getByRole('group', { name: 'Output' }),
     viewToggle: (output: HTMLElement) => within(output).queryByRole('button', { name: /^Show output/ }),
   },
@@ -79,7 +83,7 @@ const LAYOUTS = [
       return found;
     },
     showOfferedTools: () => {},
-    offeredToolsHeading: (count: number) => `Available tools (${count})`,
+    offeredToolsHeading: (count: number) => screen.getByText(`Available tools (${count})`),
     outputSection: payloadSectionStartingWith('Output'),
     viewToggle: (output: HTMLElement) => output.querySelector('[data-slot="span-payload-view-toggle"]'),
   },
@@ -100,7 +104,8 @@ describe('Tool calls in the data panel', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     const section = screen.getByRole('region', { name: 'Tool calls' });
-    expect(section.textContent).toContain('Tool calls · 3');
+    const heading = within(section).getByText('Tool calls');
+    expect(within(heading).getByText('3')).toBeTruthy();
     expect(document.querySelectorAll('[data-slot="span-tool-calls"]')).toHaveLength(1);
   });
 });
@@ -131,7 +136,7 @@ describe.each(LAYOUTS)(
         // task_write is a task tool the chat never draws, so it is not listed.
         expect(within(toolCallsSection()).getAllByTestId('tool-badge')).toHaveLength(3);
         showOfferedTools();
-        expect(document.body.textContent).toContain(offeredToolsHeading(2));
+        expect(offeredToolsHeading(2)).toBeTruthy();
       });
 
       it('opens a call on its input and the result its tool span recorded', async () => {
@@ -170,7 +175,7 @@ describe.each(LAYOUTS)(
 
         expect(screen.queryByText(/^Tool calls/)).toBeNull();
         showOfferedTools();
-        expect(document.body.textContent).toContain(offeredToolsHeading(1));
+        expect(offeredToolsHeading(1)).toBeTruthy();
       });
     });
   },
