@@ -19,6 +19,8 @@ Severity:
 - `minor`: The page remains usable, but accuracy, clarity, completeness, or maintainability suffers.
 - `nit`: Small localized consistency issue with no material effect.
 
+A changed line that breaks `STYLEGUIDE.md` or the page guide is at least `minor`, never `nit`. Rate it `major` when the prose obscures what the reader must do, when a constraint or failure mode is hard to find, or when the same violation runs through the page.
+
 ## Required canonical-guidance coverage
 
 For every page apply and record:
@@ -60,7 +62,7 @@ Apply `REFERENCE.md` and compare the page's declared public surface with package
 
 Type: judgment against `mastra-docs`.
 
-Check information architecture, page shape, writing, links, components, diagrams, accessibility, and applicable authoring workflow. Cite the specific canonical guide rather than copying its rule into this rubric.
+Check information architecture, page shape, links, components, diagrams, accessibility, and applicable authoring workflow. Assess writing under Prose quality. Cite the specific canonical guide rather than copying its rule into this rubric.
 
 - `pass`: The page follows all applicable canonical guidance.
 - `warn`: A localized issue reduces clarity or maintainability.
@@ -107,6 +109,16 @@ Derive the tasks promised by the page without asking the user to select them. Ch
 - `pass`: A reader can complete the promised task or understand the promised surface from the page and its explicit prerequisites.
 - `warn`: Minor friction remains, but the task is reasonably followable.
 - `fail`: Missing or incorrect instructions block the promised task or create an unsafe result.
+
+### 6. Prose quality
+
+Type: judgment against `STYLEGUIDE.md` and the applicable page guide.
+
+Review every changed passage against each section of `STYLEGUIDE.md`, starting with its plain-language principles. Review from the point of view of a rushed reader or one reading in a non-native language. Vale warnings and suggestions on changed lines count as evidence. A clean Vale run doesn't mean this dimension passes. Technical accuracy doesn't excuse a prose finding.
+
+- `pass`: Every changed passage follows `STYLEGUIDE.md` and the page guide.
+- `warn`: Localized violations remain, but the reader can still find and act on the content.
+- `fail`: Violations obscure the task, a constraint, or a failure mode, or a violation pattern runs through the page.
 
 ## Finding quality
 

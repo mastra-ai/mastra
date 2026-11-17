@@ -9,9 +9,10 @@ Use this format for every autonomous docs-audit review. Produce one report and s
 3. Source verification
 4. Contextual code-block outcomes
 5. Reference completeness
-6. Deterministic checks
-7. Findings
-8. Overall verdict
+6. Prose quality
+7. Deterministic checks
+8. Findings
+9. Overall verdict
 
 ## Template
 
@@ -55,6 +56,14 @@ Include every changed page with code. Explicitly record valid intentional omissi
 
 Write `Not applicable` when no reference page is in scope. Do not apply reference-level enumeration to guides or overviews.
 
+## Prose quality
+
+| Page        | Changed lines reviewed | `STYLEGUIDE.md` sections applied | Vale warnings and suggestions on changed lines | Outcome                       |
+| ----------- | ---------------------- | -------------------------------- | ---------------------------------------------- | ----------------------------- |
+| `$DOC_PATH` | `$LINE_RANGES`         | `$SECTIONS`                      | `$NONE_OR_RULE_IDS_AND_LINES`                  | `$PASS_WARN_FAIL_AND_SUMMARY` |
+
+Include every changed page. List each violation as a finding. Don't summarize prose problems only in this table.
+
 ## Deterministic checks
 
 - Command: `$EXACT_RUN_CHECKS_COMMAND`
@@ -73,7 +82,7 @@ Include only actionable audited-page diagnostics. Never count proven unrelated r
 ### `$UNIQUE_FINDING_ID`: `$SHORT_TITLE`
 
 - Severity: `$blocker_major_minor_nit`
-- Dimension: `$canonical_guidance_deterministic_code_source_completeness_followability`
+- Dimension: `$canonical_guidance_deterministic_code_source_completeness_followability_prose`
 - Evidence:
   - Changed doc: `$DOC_PATH:$LINE`
   - Source: `$SOURCE_PATH:$LINE` (when accuracy or completeness is involved)
