@@ -936,6 +936,23 @@ describe("a card's work requested from a chat", () => {
     ).toEqual([{ sessionId: 'session-1', threadId: 'thread-1' }]);
   });
 
+  // The run is approved before the card is read: a failed read must not report the approval as failed.
+  it('still reports the approved run when reading its card fails afterwards', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+    const [held] = await env.runs(card.id);
+    vi.spyOn(env.workItems, 'getForProject').mockRejectedValueOnce(new Error('storage is away'));
+
+    await expect(env.run('factory_resolve_proposal', { decisionId: held!.id, action: 'approve' })).resolves.toEqual({
+      decisionId: held!.id,
+      status: 'pending',
+      workItemId: card.id,
+      url: null,
+      warnings: ['This session does not follow it yet: storage is away'],
+    });
+    expect((await env.runs(card.id)).map(record => record.status)).toEqual(['pending']);
+  });
+
   it('does not follow a card whose held run it dismisses', async () => {
     const env = await boardSetup();
     const card = await heldReviewCard(env);

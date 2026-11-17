@@ -157,17 +157,17 @@ export function createFactoryWorkItemTools(
    * The run has started by now: a failed follow is reported with it, not instead of it.
    */
   const followStartedRun = async (result: ReturnType<typeof settled>) => {
-    const item = result.workItemId
-      ? await deps.workItems.getForProject(scope.orgId, scope.factoryProjectId, result.workItemId)
-      : null;
-    if (!item) return result;
-    const url =
-      factoryWorkItemUrl({
-        factoryProjectId: item.factoryProjectId,
-        board: boardForWorkItem(item),
-        workItemId: item.id,
-      }) ?? null;
+    if (!result.workItemId) return result;
+    let url: string | null = null;
     try {
+      const item = await deps.workItems.getForProject(scope.orgId, scope.factoryProjectId, result.workItemId);
+      if (!item) return result;
+      url =
+        factoryWorkItemUrl({
+          factoryProjectId: item.factoryProjectId,
+          board: boardForWorkItem(item),
+          workItemId: item.id,
+        }) ?? null;
       await follow(item, 'started');
       return { ...result, url };
     } catch (error) {
