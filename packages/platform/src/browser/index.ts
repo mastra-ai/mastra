@@ -18,6 +18,12 @@ export interface PlatformBrowserOptions extends Omit<
 
 const DEFAULT_API_URL = 'https://platform.mastra.ai';
 
+function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 /** A Stagehand browser connected to a Platform-provisioned Browserbase session. */
 export class PlatformBrowser extends StagehandBrowser {
   constructor(options: PlatformBrowserOptions = {}) {
@@ -38,7 +44,7 @@ export class PlatformBrowser extends StagehandBrowser {
       cdpUrl:
         cdpUrl ||
         (async () => {
-          const response = await fetchImpl(`${apiUrl.replace(/\/+$/, '')}/v1/browsers/sessions`, {
+          const response = await fetchImpl(`${trimTrailingSlashes(apiUrl)}/v1/browsers/sessions`, {
             method: 'POST',
             headers: {
               authorization: `Bearer ${accessToken}`,

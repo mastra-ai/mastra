@@ -40,6 +40,18 @@ describe('PlatformBrowser provisioning', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('drops trailing slashes from the API URL before adding the sessions path', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => Response.json({ connectUrl: 'wss://connect.browserbase.com/s' }));
+    const browser = new PlatformBrowser({
+      accessToken: 'org-secret',
+      projectId: 'project-1',
+      apiUrl: 'https://platform.staging.mastra.ai///',
+      fetch: fetchImpl,
+    });
+    await browser.ensureReady();
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://platform.staging.mastra.ai/v1/browsers/sessions');
+  });
+
   it('reports provisioning errors without exposing the access token', async () => {
     const browser = new PlatformBrowser({
       accessToken: 'org-secret',
