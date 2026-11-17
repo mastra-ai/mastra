@@ -20,7 +20,7 @@ new BraintrustExporter(config: BraintrustExporterConfig)
 ## `BraintrustExporterConfig`
 
 ```typescript
-interface BraintrustExporterConfig extends BaseExporterConfig {
+interface BraintrustExporterConfig extends TrackingExporterConfig {
   apiKey?: string
   endpoint?: string
   projectName?: string
@@ -30,10 +30,15 @@ interface BraintrustExporterConfig extends BaseExporterConfig {
 }
 ```
 
-Extends `BaseExporterConfig`, which includes:
+Extends `TrackingExporterConfig`, which builds on `BaseExporterConfig` and includes:
 
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+- `earlyQueueMaxAttempts?: number` - Attempts to process a queued event before dropping it (default: 5)
+- `earlyQueueTTLMs?: number` - Milliseconds a queued event is kept before it is dropped (default: 30000)
+- `traceCleanupDelayMs?: number` - Milliseconds to keep trace data after all its spans end, so late data can still be processed (default: 30000)
+- `maxPendingCleanupTraces?: number` - Soft cap on finished traces awaiting cleanup; the oldest are cleaned first when exceeded (default: 100)
+- `maxTotalTraces?: number` - Hard cap on tracked traces, including active ones; the oldest are aborted when exceeded (default: 500)
 
 <PropertiesTable
   props={[
@@ -71,7 +76,7 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'logLevel',
     type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
+    description: "Logger level (default: 'info')",
     required: false,
   },
   {
