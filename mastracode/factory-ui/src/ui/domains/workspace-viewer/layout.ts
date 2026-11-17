@@ -86,6 +86,7 @@ export const reservedSpaceClass = {
   viewport: `${panelRevealClass} pe-[calc(var(--chat-edge)+var(--chat-inset-end)+var(--panel-reveal)*var(--workspace-files-inset))]`,
   header: `${panelRevealClass} pe-[calc(--spacing(3)+var(--panel-reveal)*var(--workspace-files-header-inset))]`,
   dock: `${panelRevealClass} left-[calc(var(--panel-reveal)*var(--workspace-files-header-inset))]`,
+  page: `${panelRevealClass} pe-[calc(var(--panel-reveal)*var(--workspace-files-inset))]`,
 };
 
 export const cardMotionClass = `${motionClock} data-resized:duration-(--resize-dur)`;
