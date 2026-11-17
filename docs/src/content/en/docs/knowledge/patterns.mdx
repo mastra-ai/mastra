@@ -17,7 +17,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::warning
 
-Access is checked on every tool call, and a run only reads the scopes it holds. A run that holds more than one scope can still have its model copy content from one scope into another, so give each run only the scopes these patterns need, and never put two tenants in one run.
+Give each run only the scopes its pattern needs, and never put two tenants in one run. A run can copy what it reads in one of its scopes into another. See [Keep scopes apart](/docs/knowledge/scopes-and-access#keep-scopes-apart).
 
 :::
 
@@ -62,7 +62,7 @@ await agent.generate(message, {
 })
 ```
 
-A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). Keep one tenant per run: a run that holds both `tenant:acme` and `tenant:globex` could copy what it read for one into a note for the other.
+A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). Never give one run both `tenant:acme` and `tenant:globex`, because it could copy Acme's content into a Globex page.
 
 ## A policy every agent follows
 

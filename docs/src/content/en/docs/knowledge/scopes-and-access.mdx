@@ -11,7 +11,7 @@ Scopes control what an agent can see and change in Knowledge. You decide what ea
 
 :::alpha
 
-Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call and on every storage read those tools make, and a run only sees the scopes it holds, so runs for different users or tenants are kept apart. The remaining risk is a single run that holds more than one scope: its model can copy what it read in one scope into a page or note in another. Give each run only the scopes it needs, and don't mix tenants in one run.
+Knowledge is in alpha. Its API may change between releases. To keep one customer's data away from another's, read [Keep scopes apart](#keep-scopes-apart).
 
 :::
 
@@ -216,6 +216,14 @@ describe('team access', () => {
 Use `explainAccess()` only in server code. It shows whether a page is missing or hidden, and a run must never learn that. Don't expose it through an agent tool, or through a server route without admin-level auth.
 
 :::
+
+## Keep scopes apart
+
+Give each run only the scopes its task needs, and never put two tenants or customers in the same run.
+
+Knowledge keeps each scope's data separate. Every time a tool reads or writes, Knowledge checks the run's scopes. A run never sees pages or notes in scopes it can't reach. Runs for different customers can't see each other's data.
+
+What Knowledge can't stop is a run moving content between scopes it does hold. Suppose a run holds `team:acme:support` and `resource:dana`. Its model can read a page in Dana's private scope and quote it in a team page, because the run is allowed to do both. Knowledge sees two allowed actions, not a leak.
 
 ## Next steps
 

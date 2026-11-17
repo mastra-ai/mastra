@@ -16,7 +16,7 @@ Knowledge gives agents a shared, organized place for information that lives outs
 
 :::alpha
 
-Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call and on every storage read those tools make, and a run only sees the scopes it holds, so runs for different users or tenants are kept apart. The remaining risk is a single run that holds more than one scope: its model can copy what it read in one scope into a page or note in another. Give each run only the scopes it needs, and don't mix tenants in one run. Knowledge also has no built-in importers or retention yet.
+Knowledge is in alpha. Its API may change between releases. Each scope's data is kept separate, but a run that holds several scopes can copy content between them. Give each run only the scopes it needs, as [Keep scopes apart](/docs/knowledge/scopes-and-access#keep-scopes-apart) explains. Knowledge also has no built-in importers or retention yet.
 
 :::
 
