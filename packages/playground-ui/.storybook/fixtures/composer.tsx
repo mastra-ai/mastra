@@ -1,4 +1,3 @@
-import { Map } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -14,6 +13,7 @@ import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { IconHammer } from '@/ds/icons/central/IconHammer';
+import { IconMap } from '@/ds/icons/central/IconMap';
 import { IconMicrophone } from '@/ds/icons/central/IconMicrophone';
 import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
 import { IconStop } from '@/ds/icons/central/IconStop';
@@ -21,7 +21,7 @@ import { IconZap } from '@/ds/icons/central/IconZap';
 
 const modes = [
   { id: 'build', label: 'Build', Icon: IconHammer, tone: 'green' },
-  { id: 'plan', label: 'Plan', Icon: Map, tone: 'purple' },
+  { id: 'plan', label: 'Plan', Icon: IconMap, tone: 'purple' },
   { id: 'fast', label: 'Fast', Icon: IconZap, tone: 'orange' },
 ] satisfies { id: string; label: string; Icon: typeof IconHammer; tone: ComposerTone }[];
 

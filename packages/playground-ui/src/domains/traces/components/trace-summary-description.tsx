@@ -6,7 +6,7 @@ import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
 import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconDollar } from '@/ds/icons/central/IconDollar';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -113,7 +113,7 @@ export function TraceSummaryDescription({
       {showEntity && <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />}
       {showStatus && <TraceStatusMeta rootSpan={rootSpan} />}
       {startedAtTimestamp && exactStartedAtTimestamp && (
-        <DataPanel.Meta icon={<IconCalendarClock />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
+        <DataPanel.Meta icon={<IconCalendarClock4 />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
           {startedAtTimestamp}
         </DataPanel.Meta>
       )}

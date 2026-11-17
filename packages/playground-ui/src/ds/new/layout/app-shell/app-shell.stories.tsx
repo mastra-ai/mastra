@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
@@ -12,7 +11,8 @@ import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -26,12 +26,12 @@ function DemoSidebar() {
       <Sidebar.Nav>
         <Sidebar.NavList>
           <Sidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <IconRobot /> }} isActive />
-          <Sidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
+          <Sidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <WorkflowIcon /> }} />
         </Sidebar.NavList>
       </Sidebar.Nav>
       <Sidebar.Footer>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <IconSettingsGear1 /> }} />
+          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <IconSettingsGear5 /> }} />
         </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
@@ -148,7 +148,15 @@ export const CollapsedSidebar: Story = {
 };
 
 export const Mobile: Story = {
-  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  parameters: {
+    viewport: { defaultViewport: 'mobile1' },
+    docs: {
+      description: {
+        story:
+          'Below `lg` the sidebar sits under the page. Swipe the page right or tap the menu button to slide the page aside; swipe left, tap the tinted strip, or press Escape to close.',
+      },
+    },
+  },
   render: () => (
     <TooltipProvider>
       <SidebarProvider>

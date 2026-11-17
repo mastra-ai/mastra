@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Workflow } from 'lucide-react';
 import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 const meta: Meta<typeof Entity> = {
   title: 'Composite/Entity',
@@ -33,7 +33,7 @@ export const Clickable: Story = {
   render: () => (
     <Entity className="w-75" onClick={() => console.log('Entity clicked')}>
       <EntityIcon>
-        <Workflow />
+        <WorkflowIcon />
       </EntityIcon>
       <EntityContent>
         <EntityName>Data Pipeline</EntityName>

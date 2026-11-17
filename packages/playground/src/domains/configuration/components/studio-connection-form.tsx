@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { SettingsContainer, SettingsListHeader, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef, useState } from 'react';
@@ -112,7 +112,7 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
             <Button
               type="button"
               size="sm"
-              icon={<IconPlusLarge />}
+              icon={<IconPlusMedium />}
               onClick={() =>
                 setDraft(current => ({
                   ...current,
@@ -152,7 +152,7 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
                 setDraft(current => ({ ...current, headers: current.headers.filter(other => other.id !== row.id) }))
               }
             >
-              <IconTrashCan />
+              <TrashIcon />
             </Button>
           </div>
         ))}

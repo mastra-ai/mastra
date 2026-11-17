@@ -7,7 +7,7 @@ import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '@/d
 import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
@@ -117,7 +117,7 @@ export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
       aria-label="Copy plan"
       onClick={handleCopy}
     >
-      {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
+      {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
     </Button>
   );
 }

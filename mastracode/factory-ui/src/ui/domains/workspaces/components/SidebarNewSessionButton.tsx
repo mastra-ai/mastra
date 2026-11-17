@@ -3,7 +3,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function SidebarNewSessionButton() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -18,7 +18,7 @@ export function SidebarNewSessionButton() {
       <Sidebar.NavLink
         render={
           <button type="button" onClick={() => openNewUserSession(factoryId)}>
-            <IconPlusLarge />
+            <IconPlusMedium />
             <Sidebar.NavLabel>New session</Sidebar.NavLabel>
           </button>
         }

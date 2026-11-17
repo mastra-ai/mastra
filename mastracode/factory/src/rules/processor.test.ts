@@ -7,7 +7,7 @@ import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/ind
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -589,6 +589,7 @@ describe('FactoryPhaseStateProcessor', () => {
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
       for (const stage of ['execute', 'planning']) {
+        await finishQueuedRunsForTests(storage);
         const current = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
         await expect(
           transitionService.transition({
@@ -1059,7 +1060,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ decision: expect.objectContaining({ board: 'release', stage: 'shipped' }) }),
     ]);
     expect(await storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).toMatchObject({
-      lastMessageId: message.id,
+      lastMessageCreatedAt: message.createdAt,
     });
     expect((await processor.computeStateSignal(stateArgs(requestContext())))?.contents).toContain(
       'Publishing release (shipping)',
@@ -1883,7 +1884,7 @@ describe('FactoryPhaseStateProcessor', () => {
     );
     expect(onResult).toHaveBeenCalledTimes(2);
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
-      lastMessageId: trailing.id,
+      lastMessageCreatedAt: trailing.createdAt,
     });
   });
 
@@ -1932,7 +1933,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ filter: { dateRange: { start: new Date('2026-07-18T10:01:00Z') } } }),
     );
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
-      lastMessageId: 'assistant-aborted',
+      lastMessageCreatedAt: new Date('2026-07-18T10:01:00Z'),
     });
   });
 

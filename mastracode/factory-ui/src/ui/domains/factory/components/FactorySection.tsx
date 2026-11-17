@@ -14,8 +14,8 @@ import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -81,23 +81,21 @@ export function FactorySection() {
                 icon={IconKanbanView}
                 label={board.title}
                 action={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
+                  <Sidebar.NavAction
                     aria-label={`Configure ${board.title}`}
                     tooltip="Configure board"
-                    className="group-focus-within/board:flex group-hover/board:flex pointer-fine:hidden"
+                    className="group-focus-within/nav-row:flex group-hover/nav-row:flex pointer-fine:hidden"
                     render={
                       <NavLink to={boardConfigPath(factoryId, board.id)} onClick={() => overlays.close('sidebar')} />
                     }
                   >
                     <IconSettingsSliderHor aria-hidden />
-                  </Button>
+                  </Sidebar.NavAction>
                 }
               />
             ))
           )}
-          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={IconPlusLarge} label="New board" />}
+          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={IconPlusMedium} label="New board" />}
         </Sidebar.NavList>
       </section>
       {features.data?.knowledge ? (
@@ -130,7 +128,6 @@ function FactoryLink({
     <Sidebar.NavLink
       link={{ name: label, url: to }}
       isActive={isActive}
-      className={action ? 'group/board' : undefined}
       action={action}
       render={
         <NavLink to={to} onClick={() => overlays.close('sidebar')}>

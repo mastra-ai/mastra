@@ -1,7 +1,7 @@
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorAddButtonProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorAddButton({
@@ -22,7 +22,7 @@ export function EnvironmentVariablesEditorAddButton({
         size="sm"
         disabled={disabled}
         onClick={() => editor.appendRow()}
-        icon={<IconPlusLarge />}
+        icon={<IconPlusMedium />}
       >
         {children ?? 'Add variable'}
       </Button>

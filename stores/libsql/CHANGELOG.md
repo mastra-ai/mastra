@@ -1,5 +1,45 @@
 # @mastra/libsql
 
+## 1.31.0-alpha.2
+
+### Minor Changes
+
+- Runs stored with the experimental workflow `storageVersion: 2` option can now be written by several workers at once, as evented workflows and `createEventedAgent` do. Concurrent `foreach` iterations all save their results, and the store writes a full copy of the workflow state after 100 changes so loading a long run stays fast. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+  If you stored version 2 runs with `@mastra/pg` 1.36.0-alpha.0 or `@mastra/libsql` 1.30.0-alpha.0, the store adds the columns this needs to the `mastra_workflow_runs` table on startup, and those runs keep working.
+
+### Patch Changes
+
+- Fixed workers failing to start when several of them upgrade the same libSQL database at once. A worker that finds a missing column already added by another worker now continues instead of failing `init` with `duplicate column name`. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed a `.foreach()` run staying stuck as running when the first failed item's failure could not be sent. The run now fails with the first item's error once that failure is delivered again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Fixed a `.foreach()` over a nested workflow on a run stored with the experimental `storageVersion: 2` option only keeping the last item's run. Restarting the run could give an item another item's result. Every item's run is kept again. ([#29370](https://github.com/mastra-ai/mastra/pull/29370))
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+
+## 1.31.0-alpha.1
+
+### Minor Changes
+
+- Added `collectionExists(name)` to Factory storage so a domain can tell whether a table already exists before registering it. Supported by `LibSQLFactoryStorage` and `PgFactoryStorage`; it is an optional capability, so other backends keep working unchanged. ([#30488](https://github.com/mastra-ai/mastra/pull/30488))
+
+  ```ts
+  if (!storage.collectionExists || (await storage.collectionExists('work_items'))) {
+    await storage.ensureCollections([WORK_ITEMS_SCHEMA]);
+  }
+  ```
+
+### Patch Changes
+
+- Fixed factory storage on existing databases after a column is removed from a collection schema. The column is no longer required, so new rows that leave it out are accepted, and the values already stored in it are kept. Previously, LibSQL could also discard such a column's data while rebuilding a table. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+- Fixed background task updates and deletes on a local LibSQL file database stalling for up to five seconds (and sometimes failing with `SQLITE_BUSY: database is locked`) when they ran alongside workflow run writes, for example while shutting down Mastra with background tasks still running. ([#30504](https://github.com/mastra-ai/mastra/pull/30504))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.30.1-alpha.0
 
 ### Patch Changes

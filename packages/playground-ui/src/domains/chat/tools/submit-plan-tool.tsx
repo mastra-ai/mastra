@@ -21,8 +21,8 @@ import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface SubmitPlanToolProps {
@@ -220,7 +220,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                   Reject
                 </Button>
                 <Button
-                  icon={<IconBubbleText />}
+                  icon={<IconChatBubble7 />}
                   type="button"
                   size="sm"
                   variant="ghost"
@@ -232,7 +232,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                   Request changes
                 </Button>
                 <Button
-                  icon={<IconCheckmark1 />}
+                  icon={<IconCheckmark2Medium />}
                   type="button"
                   size="sm"
                   variant="primary"

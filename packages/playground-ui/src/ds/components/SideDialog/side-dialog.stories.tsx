@@ -11,7 +11,7 @@ import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
 import { IconHashtag } from '@/ds/icons/central/IconHashtag';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
 import { IconTag } from '@/ds/icons/central/IconTag';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const meta: Meta<typeof SideDialog> = {
   title: 'Layout/SideDialog',
@@ -90,7 +90,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
             </Button>
             <Button size="sm">
               <Icon>
-                <IconTrashCan />
+                <TrashIcon />
               </Icon>
               Delete
             </Button>

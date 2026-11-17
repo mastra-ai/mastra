@@ -69,12 +69,15 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     // Null lands the card in the board's first phase.
     phase_key: { type: 'text', nullable: true },
     // The status events the route handles (`StatusEvent`s). Null on rows written before routes named
-    // events: those place new cards, as `['work_item.created']`.
+    // events: those place new cards, as `['work_item.opened']`.
     on_events: { type: 'json', nullable: true },
-    // No longer read or written: a route moves a card into any phase. Kept so existing tables match.
-    allow_working_phase: { type: 'boolean', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },
+    // True on rows written since `pull_request.opened` files pull requests with no card. Null on rows
+    // written before (0.28): there `pull_request.opened` only moves a card. Never backfilled.
+    opened_files_pull_requests: { type: 'boolean', nullable: true },
+    // A card-move route on `board_key` that sends the card to this other board (at `phase_key`). Null keeps it on `board_key`.
+    move_to_board_key: { type: 'text', nullable: true },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },
@@ -103,8 +106,52 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // Keys of the default routes Factory added to the project (`DEFAULT_INTAKE_ROUTES`), so each is
     // added once. Null on rows written before the list: those projects got `outside-authors`.
     seeded_defaults: { type: 'json', nullable: true },
+    // Board keys in the order intake checks them, separate from the sidebar's `position`. Null
+    // until first derived from the route list (`deriveIntakeOrder`).
+    intake_order: { type: 'json', nullable: true },
+    // 'explicit' once an admin set the order; null while it is derived from the route list, which
+    // re-derives it on every rule write.
+    intake_order_origin: { type: 'text', nullable: true },
+    // Which evaluator places the project's new items: 'intake-order' for projects created since it
+    // shipped (stamped with the project), or set by an admin. Null on older projects: 'route-list'.
+    intake_evaluator: { type: 'text', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
+};
+
+/**
+ * One row per arrival intake decided on, keyed by the arrival's decision, so a redelivery updates
+ * it instead of adding another. A `not_routed` row is an item no board took; it holds the arrival
+ * so Route again can file it, and is resolved once a card is filed for its source.
+ */
+export const FACTORY_INTAKE_DECISIONS_SCHEMA: CollectionSchema = {
+  name: 'factory_intake_decisions',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    idempotency_key: { type: 'text' },
+    outcome: { type: 'text' },
+    evaluator: { type: 'text' },
+    board_key: { type: 'text', nullable: true },
+    route_id: { type: 'text', nullable: true },
+    reason: { type: 'text', nullable: true },
+    source_key: { type: 'text', nullable: true },
+    title: { type: 'text' },
+    url: { type: 'text', nullable: true },
+    // The `upsertLinkedWorkItem` decision as it arrived; Route again files it.
+    arrival: { type: 'json', nullable: true },
+    decided_at: { type: 'timestamp' },
+    resolved_at: { type: 'timestamp', nullable: true },
+    resolved_by: { type: 'text', nullable: true },
+  },
+  uniqueIndexes: [
+    { name: 'factory_intake_decisions_key', columns: ['org_id', 'factory_project_id', 'idempotency_key'] },
+  ],
+  indexes: [
+    { name: 'factory_intake_decisions_project', columns: ['org_id', 'factory_project_id', 'outcome', 'decided_at'] },
+    { name: 'factory_intake_decisions_source', columns: ['org_id', 'factory_project_id', 'source_key'] },
+  ],
 };
 
 /**

@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export type HeaderListFormItem = {
   /** A stable key for the row; without it rows are keyed by position, so removing one shifts the inputs below it. */
@@ -42,7 +42,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}
             size={headers.length === 0 ? 'md' : 'sm'}
-            icon={<IconPlusLarge />}
+            icon={<IconPlusMedium />}
           >
             {headers.length === 0 ? 'Add header' : 'Add another header'}
           </Button>
@@ -84,7 +84,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
       tooltip="Remove header"
       className="col-start-3 row-start-2"
     >
-      <IconTrashCan />
+      <TrashIcon />
     </Button>
   </div>
 );

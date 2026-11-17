@@ -1,5 +1,14 @@
 # @mastra/pinecone
 
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- Fixed Pinecone queries ignoring the other conditions in a filter that also uses `$all`. A filter such as `{ resource_id: "alice", topic: { $all: ["x", "y"] } }` now matches only records where every condition holds, instead of only the `$all` part. This includes other operators on the same field, such as `{ tags: { $all: ["a"], $nin: ["b"] } }`. `$all` on nested fields now uses the full field path. ([#30468](https://github.com/mastra-ai/mastra/pull/30468))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 1.1.3
 
 ### Patch Changes

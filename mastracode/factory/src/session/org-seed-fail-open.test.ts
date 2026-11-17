@@ -25,7 +25,13 @@ import { seedSessionOrg } from './org-seed.js';
 // intercept the deep import `@mastra/code-sdk/knowledge-scope` (vitest mocks by
 // specifier), so `resolveKnowledgeSessionScopes` stays real — which is the point.
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
-  base: { controller: { onSessionCreated: vi.fn(), setChannels: vi.fn() } },
+  base: {
+    controller: {
+      onSessionCreated: vi.fn(() => () => {}),
+      onSessionDeleted: vi.fn(() => () => {}),
+      setChannels: vi.fn(),
+    },
+  },
   mastraArgs: {},
   finalize: vi.fn(async () => {}),
 }));

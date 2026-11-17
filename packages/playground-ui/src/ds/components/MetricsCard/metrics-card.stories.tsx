@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { LogsIcon, StarIcon } from 'lucide-react';
 import { useState } from 'react';
 import { MetricsLineChart } from '../MetricsLineChart';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
@@ -11,6 +10,8 @@ import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statu
 import type { RouteStat } from './metrics-story-data';
 import { onCardHover } from './on-card-hover';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconStar } from '@/ds/icons/central/IconStar';
+import { LogsIcon } from '@/ds/icons/LogsIcon';
 
 const meta: Meta<typeof MetricsCard> = {
   title: 'Metrics/MetricsCard',
@@ -260,7 +261,7 @@ function ActionsOnHoverCard() {
               className={starred ? undefined : onCardHover}
               onClick={() => setStarred(!starred)}
             >
-              <StarIcon className={starred ? 'fill-current' : undefined} />
+              <IconStar className={starred ? 'fill-current' : undefined} />
             </MetricsCard.Action>
           </MetricsCard.Actions>
           <MetricsCard.Total value="2.6s" />

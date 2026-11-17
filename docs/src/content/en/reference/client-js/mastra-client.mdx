@@ -55,9 +55,10 @@ You can also pass `requestContext` as a `Record<string, any>`.
   {
     name: 'retries',
     type: 'number',
-    description: 'The number of times a request will be retried on failure before throwing an error.',
+    description:
+      "The number of times a request will be retried on failure before throwing an error. Retries apply to read requests (GET, HEAD, OPTIONS) by default, and to the observability queries that read server state even though they are sent as POST (aggregateTraces, aggregateSpans, queryTraceThreads, querySpans). Write requests (POST, PUT, PATCH, DELETE) are sent once unless you set this explicitly, so a server error can't repeat a state-changing request.",
     isOptional: true,
-    defaultValue: '3',
+    defaultValue: '3 for read requests, 0 for write requests',
   },
   {
     name: 'backoffMs',

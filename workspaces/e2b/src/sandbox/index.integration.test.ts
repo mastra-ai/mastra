@@ -176,6 +176,29 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
     const statResult = await sandbox.executeCommand('stat', ['-c', '%U', '/data/s3-ownership']);
     expect(statResult.stdout.trim()).not.toBe('root');
   }, 180000);
+
+  it('S3 mount honors an explicit owner for file ownership', async () => {
+    await sandbox._start();
+
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-explicit-owner',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        ...s3Config,
+        owner: { uid: 1234, gid: 1234 },
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-explicit-owner');
+    expect(result.success).toBe(true);
+
+    // Files should be owned by the configured uid/gid, not the sandbox default user
+    const statResult = await sandbox.executeCommand('stat', ['-c', '%u:%g', '/data/s3-explicit-owner']);
+    expect(statResult.stdout.trim()).toBe('1234:1234');
+  }, 180000);
 });
 
 /**

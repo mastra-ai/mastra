@@ -25,7 +25,9 @@ function modelOption(id: string, provider: string): ComboboxOption {
     label: name,
     // The full id tells apart models that share a name across providers (e.g. OpenAI and OpenAI Codex).
     description: id,
-    start: <ProviderBrandIcon provider={provider} fallback={<IconBox className="text-muted-foreground size-4" />} />,
+    start: (
+      <ProviderBrandIcon provider={provider} fallback={<IconBox className="text-muted-foreground size-icon-md" />} />
+    ),
     keywords: provider ? [id, providerDisplayName(provider)] : [id],
   };
 }
@@ -39,7 +41,7 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
     displayLabel: effectiveName ? `Auto (${effectiveName})` : 'Auto',
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-        <IconSparklesTwo className="text-muted-foreground size-4" />
+        <IconSparklesTwo className="text-muted-foreground size-icon-md" />
       </span>
     ),
     keywords: ['automatic', 'default', ...(effectiveModelId ? [effectiveModelId] : [])],

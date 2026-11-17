@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
-import { Loader2 } from 'lucide-react';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
@@ -74,7 +74,7 @@ export const ChatComposer = ({
             disabled={!canSubmit}
             data-testid={submitTestId}
           >
-            {isRunning ? <Loader2 className="animate-spin" /> : <IconArrowUp />}
+            {isRunning ? <IconLoadingCircle className="animate-spin" /> : <IconArrowUp />}
           </Button>
         </div>
       </div>

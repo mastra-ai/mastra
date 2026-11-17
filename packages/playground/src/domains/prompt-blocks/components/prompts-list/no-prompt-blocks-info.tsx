@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
@@ -32,7 +32,7 @@ export const NoPromptBlocksInfo = () => {
             <Button
               render={<Link href={paths.cmsPromptBlockCreateLink()} />}
               variant="primary"
-              icon={<IconPlusLarge />}
+              icon={<IconPlusMedium />}
             >
               Create prompt
             </Button>

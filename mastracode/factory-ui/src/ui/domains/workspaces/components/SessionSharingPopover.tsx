@@ -43,7 +43,7 @@ export function SessionSharingPopover({
           )
         }
       />
-      <PopoverContent align="end" aria-labelledby={titleId}>
+      <PopoverContent align={inHeader ? 'start' : 'end'} aria-labelledby={titleId}>
         <EmptyState
           iconSlot={<EmptyStateIllustration name="locked" />}
           titleSlot={<span id={titleId}>This session is private</span>}

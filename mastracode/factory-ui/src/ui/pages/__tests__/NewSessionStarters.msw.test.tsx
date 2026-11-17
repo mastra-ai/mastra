@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { isStubbedProjectRead } from '../../../../e2e/ui/board-reads';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { queryKeys } from '../../../api/keys';
@@ -35,7 +36,9 @@ function recordCardReads() {
   const reads: string[] = [];
   const listener = ({ request }: { request: Request }) => {
     const { pathname, search } = new URL(request.url);
-    if (request.method === 'GET' && pathname.startsWith(WORK_ITEMS_URL)) reads.push(`${pathname}${search}`);
+    if (request.method === 'GET' && pathname.startsWith(WORK_ITEMS_URL) && !isStubbedProjectRead(request)) {
+      reads.push(`${pathname}${search}`);
+    }
   };
   server.events.on('request:start', listener);
   onTestFinished(() => server.events.removeListener('request:start', listener));
@@ -72,7 +75,7 @@ describe('the new session page', () => {
     );
     renderDraft();
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
   });
 
   it('suggests triaging the cards waiting in Intake, previews the prompt while hovered, gives my draft back after, and sends it on click', async () => {
@@ -183,7 +186,7 @@ describe('the new session page', () => {
     expect(message).toHaveValue(previewed);
   });
 
-  it('asks the server for the counts and dates it shows and for the cards holding a session, never for the whole board', async () => {
+  it('asks the server for the counts and dates it shows, never for the whole board', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const now = new Date(2026, 9, 27, 12, 25);
     vi.setSystemTime(now);
@@ -201,7 +204,7 @@ describe('the new session page', () => {
 
     const activityRead = `${WORK_ITEMS_URL}/activity?since=`;
     expect(reads.map(read => (read.startsWith(activityRead) ? activityRead : read)).toSorted()).toEqual(
-      [`${WORK_ITEMS_URL}?scope=sessions`, `${WORK_ITEMS_URL}/starters`, activityRead].toSorted(),
+      [`${WORK_ITEMS_URL}/starters`, activityRead].toSorted(),
     );
     // The browser can only revalidate an address it has asked before: the instant is the hour's, not the millisecond's.
     const sent = reads.find(read => read.startsWith(activityRead)) ?? '';
@@ -271,7 +274,7 @@ describe('the new session page', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await waitFor(() => expect(reads).toHaveLength(3));
+    await waitFor(() => expect(reads).toHaveLength(2));
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.queryByRole('list', { name: 'Start from the board' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'This week' })).not.toBeInTheDocument();

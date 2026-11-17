@@ -9,10 +9,9 @@ import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
 import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
 import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
 import { IconImages1 } from '@mastra/playground-ui/icons/central/IconImages1';
-import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -35,7 +34,7 @@ function getFileIcon(name: string): ReactNode {
     case 'jsx':
       return <IconScript className="text-badge-blue-indicator" />;
     case 'json':
-      return <IconJson className="text-badge-amber-indicator" />;
+      return <IconFileText className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
       return <IconFileText className="text-muted-foreground" />;
@@ -105,7 +104,7 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
   return (
     <span className="opacity-0 group-hover:opacity-100">
       <Button size="icon-sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
-        <IconPlusLarge />
+        <IconPlusMedium />
       </Button>
     </span>
   );
@@ -115,7 +114,7 @@ function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAd
   return (
     <span className="flex opacity-0 group-hover:opacity-100">
       <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
-        <IconPlusLarge />
+        <IconPlusMedium />
       </Button>
       <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
         <IconFolderAddRight />
@@ -136,7 +135,7 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
           onRemove(nodeId);
         }}
       >
-        <IconTrashCan />
+        <TrashIcon />
       </Button>
     </span>
   );
@@ -177,7 +176,7 @@ function UserNodeList({
                 !readOnly && (
                   <span className="flex opacity-0 group-hover:opacity-100">
                     <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
-                      <IconPlusLarge />
+                      <IconPlusMedium />
                     </Button>
                     <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
                       <IconFolderAddRight />
@@ -191,7 +190,7 @@ function UserNodeList({
                         onRemove(node.id);
                       }}
                     >
-                      <IconTrashCan />
+                      <TrashIcon />
                     </Button>
                   </span>
                 )

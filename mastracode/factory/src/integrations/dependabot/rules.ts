@@ -50,7 +50,7 @@ export function boardEventFor(
   if (context.event === 'alertClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.alert.state !== 'fixed') };
   }
-  return context.item ? { type: 'work_item.reopened' } : { type: 'work_item.created' };
+  return context.item ? { type: 'work_item.reopened' } : { type: 'work_item.opened' };
 }
 
 export class DependabotRules {
@@ -171,8 +171,7 @@ export class DependabotRules {
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
-      ingress: { identity: ingressId, triggerType: `dependabot.${event}` },
-      configVersion: this.options.configVersion,
+      ingress: { identity: ingressId },
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,

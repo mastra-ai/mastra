@@ -7,13 +7,13 @@ import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
-import { IconLightBulb } from '@/ds/icons/central/IconLightBulb';
+import { IconLightBulbSimple } from '@/ds/icons/central/IconLightBulbSimple';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 
 const variantConfig: Record<NoticeVariant, { icon: ReactNode; iconClass: string }> = {
-  success: { icon: <IconLightBulb />, iconClass: 'text-success-indicator' },
+  success: { icon: <IconLightBulbSimple />, iconClass: 'text-success-indicator' },
   destructive: { icon: <IconExclamationCircle />, iconClass: 'text-destructive-indicator' },
   warning: { icon: <IconExclamationTriangle />, iconClass: 'text-warning-foreground' },
   info: { icon: <IconCircleInfo />, iconClass: 'text-info-indicator' },

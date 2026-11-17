@@ -4,7 +4,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
@@ -185,7 +185,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
           Cancel
         </Button>
         <Button
-          icon={<IconCheckmark1 />}
+          icon={<IconCheckmark2Medium />}
           type="submit"
           variant="primary"
           disabled={updateDataset.isPending || !formState.name.trim()}

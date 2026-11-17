@@ -1,5 +1,4 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { LayersPlus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
@@ -11,11 +10,12 @@ import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField } from './boardFilterFields';
 import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
-import { IconSortArrowUpDown } from '@mastra/playground-ui/icons/central/IconSortArrowUpDown';
 import { IconFilter1 } from '@mastra/playground-ui/icons/central/IconFilter1';
 import { IconFilterAsc } from '@mastra/playground-ui/icons/central/IconFilterAsc';
 import { IconFilterDesc } from '@mastra/playground-ui/icons/central/IconFilterDesc';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
+import { IconLayersThree } from '@mastra/playground-ui/icons/central/IconLayersThree';
+import { IconArrowsUpDown } from '@mastra/playground-ui/icons/central/IconArrowsUpDown';
 
 const SORT_ICONS: Record<BoardSort, LucideIcon> = {
   recent: IconHistory,
@@ -45,14 +45,14 @@ export function BoardPropertiesMenu({
     <PropertiesMenu
       label="Board properties"
       variant="default"
-      icon={<IconFilter1 size={15} aria-hidden />}
+      icon={<IconFilter1 aria-hidden />}
       changedCount={changes.length}
       changes={changes}
       onReset={view.resetProperties}
     >
       <DropdownMenu.RadioSub
         label="Sort"
-        icon={<IconSortArrowUpDown aria-hidden />}
+        icon={<IconArrowsUpDown aria-hidden />}
         options={boardSortOptions(currentUserId).map(option => {
           const Icon = SORT_ICONS[option.value];
           return { ...option, icon: <Icon aria-hidden /> };
@@ -74,7 +74,7 @@ export function BoardPropertiesMenu({
         <>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onClick={view.saveAsView}>
-            <LayersPlus aria-hidden />
+            <IconLayersThree aria-hidden />
             <span>Save as view</span>
           </DropdownMenu.Item>
         </>

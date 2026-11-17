@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '../Button';
 import { Txt } from '../Txt';
 import { Header, HeaderTitle, HeaderAction, HeaderGroup } from './Header';
-import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 
 const meta: Meta<typeof Header> = {
@@ -60,7 +60,7 @@ export const WithActions: Story = {
           <IconMagnifyingGlass className="size-4" />
         </Button>
         <Button size="md">
-          <IconPlusLarge className="size-4" />
+          <IconPlusMedium className="size-4" />
           New agent
         </Button>
       </HeaderAction>
@@ -77,7 +77,7 @@ export const WithGroup: Story = {
       </HeaderGroup>
       <HeaderAction>
         <Button size="icon-md">
-          <IconSettingsGear1 className="size-4" />
+          <IconSettingsGear5 className="size-4" />
         </Button>
       </HeaderAction>
     </Header>
@@ -100,13 +100,13 @@ export const ComplexHeader: Story = {
       </HeaderGroup>
       <HeaderAction>
         <Button variant="ghost" size="icon-md">
-          <IconBell className="size-4" />
+          <IconBell2 className="size-4" />
         </Button>
         <Button variant="ghost" size="icon-md">
-          <IconSettingsGear1 className="size-4" />
+          <IconSettingsGear5 className="size-4" />
         </Button>
         <Button size="md">
-          <IconPlusLarge className="size-4" />
+          <IconPlusMedium className="size-4" />
           Create
         </Button>
       </HeaderAction>

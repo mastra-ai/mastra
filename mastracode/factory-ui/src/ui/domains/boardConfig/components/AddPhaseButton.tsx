@@ -19,7 +19,7 @@ import { useOverlays } from '../../../lib/overlays';
 import { useBoardDraft } from '../BoardDraftProvider';
 import { boardConfigPath } from '../boardConfigPaths';
 import { keyFromName, keyProblem } from '../boardDraft';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * Adds a phase to the end of the board's draft and opens its page. New phases are resting; their kind changes on
@@ -43,7 +43,7 @@ export function AddPhaseButton({
       <Button
         size="sm"
         variant="ghost"
-        icon={<IconPlusLarge />}
+        icon={<IconPlusMedium />}
         className="justify-start"
         disabled={disabled}
         onClick={() => setOpen(true)}

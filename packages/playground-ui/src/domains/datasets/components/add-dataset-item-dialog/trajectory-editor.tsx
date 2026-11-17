@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const ORDERING_HINTS = {
   strict: 'Steps must run exactly in this order, with nothing in between.',
@@ -100,7 +100,7 @@ export function TrajectoryEditor({
       <div>
         <Button
           size="sm"
-          icon={<IconPlusLarge />}
+          icon={<IconPlusMedium />}
           onClick={() => onStepsChange(current => [...current, newTrajectoryStep()])}
         >
           Add step
@@ -210,7 +210,7 @@ function TrajectoryStepItem({
             <IconArrowDown />
           </Button>
           <Button variant="ghost" size="icon-sm" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         </div>
       </div>

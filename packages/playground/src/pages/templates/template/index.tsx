@@ -4,6 +4,7 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import {
   useTemplateRepo,
   useTemplateRepoEnvVars,
@@ -13,7 +14,6 @@ import {
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
 } from '@mastra/react/hooks/templates';
-import { WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';

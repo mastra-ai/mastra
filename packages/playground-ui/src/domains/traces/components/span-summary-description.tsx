@@ -1,6 +1,6 @@
 import { getSpanDurationMs } from '../utils/span-utils';
 import { DataPanel } from '@/ds/components/DataPanel';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,7 @@ export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
   return (
     <DataPanel.Metadata>
       {startedAt && exactStartedAt && (
-        <DataPanel.Meta icon={<IconCalendarClock />} tooltip={`Started at ${exactStartedAt}`}>
+        <DataPanel.Meta icon={<IconCalendarClock4 />} tooltip={`Started at ${exactStartedAt}`}>
           {startedAt}
         </DataPanel.Meta>
       )}

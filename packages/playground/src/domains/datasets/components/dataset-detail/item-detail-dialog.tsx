@@ -7,7 +7,7 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
@@ -17,7 +17,7 @@ import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconF
 import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
@@ -225,7 +225,7 @@ export function ItemDetailDialog({
             <Button size="sm" onClick={handleEdit} icon={<IconPencil />}>
               Edit
             </Button>
-            <Button size="sm" onClick={handleDelete} icon={<IconTrashCan />}>
+            <Button size="sm" onClick={handleDelete} icon={<TrashIcon />}>
               Delete
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<IconEraser />}>
@@ -290,7 +290,7 @@ export function ItemDetailDialog({
                 preventDefault, which would hide the pending state and a failed
                 purge behind a toast. */}
             <Button
-              icon={<IconTrashCan />}
+              icon={<TrashIcon />}
               variant="primary"
               size="lg"
               onClick={() => void handlePurgeConfirm()}
@@ -464,7 +464,7 @@ function EditModeContent({
           <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button icon={<IconCheckmark1 />} variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>

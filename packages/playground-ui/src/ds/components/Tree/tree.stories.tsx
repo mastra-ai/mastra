@@ -8,10 +8,9 @@ import { IconFileBend } from '@/ds/icons/central/IconFileBend';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
-import { IconJson } from '@/ds/icons/central/IconJson';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconScript } from '@/ds/icons/central/IconScript';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const meta: Meta<typeof Tree> = {
   title: 'DataDisplay/Tree',
@@ -68,7 +67,7 @@ export const Default: Story = {
         </Tree.Folder>
         <Tree.File id="package.json">
           <Tree.Icon className="text-muted-foreground">
-            <IconJson />
+            <IconFileText />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
         </Tree.File>
@@ -119,7 +118,7 @@ function WithSelectionExample() {
         </Tree.Folder>
         <Tree.File id="package.json">
           <Tree.Icon className="text-muted-foreground">
-            <IconJson />
+            <IconFileText />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
         </Tree.File>
@@ -160,7 +159,7 @@ export const WithActions: Story = {
                 <Tree.Label>index.ts</Tree.Label>
                 <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
                   <Button size="icon-sm" variant="ghost" tooltip="Delete file" onClick={e => e.stopPropagation()}>
-                    <IconTrashCan />
+                    <TrashIcon />
                   </Button>
                 </span>
               </Tree.File>
@@ -169,7 +168,7 @@ export const WithActions: Story = {
                   actions={
                     <span className="opacity-0 group-hover:opacity-100">
                       <Button size="icon-sm" variant="ghost" tooltip="Add file">
-                        <IconPlusLarge />
+                        <IconPlusMedium />
                       </Button>
                     </span>
                   }
@@ -265,7 +264,7 @@ function WithInlineCreationExample() {
               actions={
                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
                   <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
-                    <IconPlusLarge />
+                    <IconPlusMedium />
                   </Button>
                   <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
                     <IconFolderAddRight />

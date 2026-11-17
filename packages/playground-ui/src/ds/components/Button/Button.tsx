@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { Icon } from '@/ds/icons/Icon';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import type { IconSize } from '@/ds/icons/icon-size-classes';
@@ -242,7 +242,7 @@ export function ButtonIcon({ size, children }: { size: ButtonSize; children: Rea
  * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
  */
 export function TriggerChevron() {
-  return <IconChevronBottom aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+  return <IconChevronDownMedium aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
 }
 
 /** The trigger chevron in a Button's end slot. */
@@ -413,6 +413,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         ref,
         ...sharedProps,
         disabled: undefined,
+        type: undefined,
         ...disabledLinkProps,
         className: cn(sharedProps.className, renderedLink.props.className),
         children: content,

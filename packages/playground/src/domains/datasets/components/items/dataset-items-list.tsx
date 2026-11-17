@@ -4,7 +4,7 @@ import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
-import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -266,7 +266,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
               </Button>
             )}
             {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} icon={<IconJson />}>
+              <Button onClick={onImportJsonClick} icon={<IconFileText />}>
                 Import JSON
               </Button>
             )}

@@ -13,7 +13,7 @@ import { Txt } from '../Txt';
 import { Breadcrumb, Crumb } from './Breadcrumb';
 import { crumbSwitcherTriggerProps } from './crumb-switcher';
 import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
-import { IconLoader } from '@/ds/icons/central/IconLoader';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -196,7 +196,7 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/experiments/nightly" icon={<IconCircleCheck className="text-success-indicator" />}>
           Nightly regression
         </Crumb>
-        <Crumb as="span" isCurrent icon={<IconLoader className="animate-spin" />}>
+        <Crumb as="span" isCurrent icon={<IconLoadingCircle className="animate-spin" />}>
           item-0042
         </Crumb>
       </Usage>

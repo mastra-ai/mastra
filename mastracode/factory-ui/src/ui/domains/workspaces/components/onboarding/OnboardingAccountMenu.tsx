@@ -3,12 +3,12 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SunMoon } from 'lucide-react';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { useApiConfig } from '../../../../../api/config';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { accountName } from '../../../auth/services/accountName';
 import { signOutOfOnboarding } from '../../services/onboardingSignOut';
+import { IconAppearanceDarkMode } from '@mastra/playground-ui/icons/central/IconAppearanceDarkMode';
 
 /**
  * Who is setting up this Factory, the theme, and a way out. With sign-in off there is no account, so the
@@ -25,7 +25,7 @@ export function OnboardingAccountMenu() {
     return (
       <DropdownMenu>
         <DropdownMenu.Trigger variant="ghost" size="icon-md" aria-label="Theme">
-          <SunMoon aria-hidden />
+          <IconAppearanceDarkMode aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           <DropdownMenu.RadioOptions options={THEME_OPTIONS} value={theme} onValueChange={setTheme} closeOnSelect />
@@ -45,7 +45,7 @@ export function OnboardingAccountMenu() {
         {user.email && <DropdownMenu.Label>{user.email}</DropdownMenu.Label>}
         <DropdownMenu.RadioSub
           label="Theme"
-          icon={<SunMoon aria-hidden />}
+          icon={<IconAppearanceDarkMode aria-hidden />}
           options={THEME_OPTIONS}
           value={theme}
           onValueChange={setTheme}

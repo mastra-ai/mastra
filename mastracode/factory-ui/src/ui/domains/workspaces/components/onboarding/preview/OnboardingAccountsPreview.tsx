@@ -6,9 +6,9 @@ import { SketchLabel } from './SketchLabel';
 import { OnboardingModelLabel } from './OnboardingModelLabel';
 import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function workAccountLabel(personalWork: boolean, local: boolean) {
   if (personalWork) return 'Work owner’s account';
@@ -39,11 +39,11 @@ export function OnboardingAccountsPreview({
   const sourceLabel = workSourceLabel(personalWork, local);
   return (
     <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
-      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <IconKey1 /> : <IconBuildings />} />
+      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <IconKey2 /> : <IconBuildings />} />
       {!shared && (
         <>
-          <AccountSource x={148} label="Personal" icon={<IconKey1 />} />
-          <AccountSource x={268} label="Personal" icon={<IconKey1 />} />
+          <AccountSource x={148} label="Personal" icon={<IconKey2 />} />
+          <AccountSource x={268} label="Personal" icon={<IconKey2 />} />
         </>
       )}
       <SessionIllustration x={148} label="Team" />
@@ -107,7 +107,9 @@ function AccountSource({ x, label, icon }: { x: number; label: string; icon: Rea
   return (
     <SketchLabel x={x + 10} y={62} width={84}>
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:inline [&>svg]:size-3">{icon}</span>
+        <span className="text-muted-foreground size-icon-xs [&>svg]:size-icon-xs hidden shrink-0 min-[900px]:inline">
+          {icon}
+        </span>
         <Txt variant="meta">{label}</Txt>
       </div>
     </SketchLabel>
@@ -118,12 +120,12 @@ function SessionIllustration({ x, label }: { x: number; label: string }) {
   return (
     <SketchLabel x={x + 10} y={169} width={84}>
       <div className="flex items-center gap-2">
-        <IconUser className="text-muted-foreground hidden size-3 shrink-0 min-[900px]:block" />
+        <IconUser className="text-muted-foreground size-icon-xs hidden shrink-0 min-[900px]:block" />
         <Txt variant="meta">{label}</Txt>
       </div>
       <div className="bg-fill mt-3 h-1 rounded-full min-[900px]:mt-4 min-[900px]:h-3" />
       <div className="text-muted-foreground mt-3 hidden items-center gap-2 min-[900px]:flex">
-        <IconSparklesTwo className="size-3 shrink-0" />
+        <IconSparklesTwo className="size-icon-xs shrink-0" />
         <div className="bg-fill h-1 w-full rounded-full" />
       </div>
     </SketchLabel>

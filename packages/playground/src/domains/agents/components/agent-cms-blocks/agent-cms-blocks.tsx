@@ -2,7 +2,7 @@ import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconPencilLine } from '@mastra/playground-ui/icons/central/IconPencilLine';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -44,7 +44,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
             )}
           >
             <Icon>
-              <IconPlusLarge />
+              <IconPlusMedium />
             </Icon>
           </button>
         </DropdownMenu.Trigger>

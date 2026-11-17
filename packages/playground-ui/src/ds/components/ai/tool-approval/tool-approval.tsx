@@ -6,7 +6,7 @@ import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconShieldCheck } from '@/ds/icons/central/IconShieldCheck';
 
@@ -14,7 +14,7 @@ type ToolApprovalDecision = 'approved' | 'declined';
 
 const approvalStates = {
   pending: { label: 'Approval required', variant: 'warning', icon: IconShieldCheck },
-  approved: { label: 'Approved', variant: 'success', icon: IconCheckmark1 },
+  approved: { label: 'Approved', variant: 'success', icon: IconCheckmark2Medium },
   declined: { label: 'Declined', variant: 'neutral', icon: IconCrossMedium },
 } satisfies Record<'pending' | ToolApprovalDecision, { label: string; variant: BadgeVariant; icon: LucideIcon }>;
 
@@ -54,7 +54,7 @@ export function ToolApprovalActions({
         type="button"
         variant="primary"
         size="sm"
-        icon={<IconCheckmark1 aria-hidden />}
+        icon={<IconCheckmark2Medium aria-hidden />}
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={disabled}

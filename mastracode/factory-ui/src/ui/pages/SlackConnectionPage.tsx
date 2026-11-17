@@ -30,7 +30,7 @@ import { SettingsSubsection } from '../domains/settings/components/SettingsSubse
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
-import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'long',
@@ -153,7 +153,7 @@ export function SlackConnectionSettings() {
                   className="group-hover:text-foreground flex items-center gap-2"
                 >
                   Connect Slack
-                  <IconChevronRight aria-hidden="true" />
+                  <IconChevronRightMedium aria-hidden="true" />
                 </Txt>
               </SettingsRow>
             </button>

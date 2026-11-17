@@ -1,5 +1,4 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { CirclePause } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
 import { panelSurfaceStyle } from '../../components/workflow-layout';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
@@ -12,8 +11,9 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
 import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconPause } from '@/ds/icons/central/IconPause';
 
 const DIRECTION_ICONS = { input: IconArrowWallDown, output: IconArrowUpWall };
 const DIRECTION_LABELS = { input: 'Input', output: 'Output' };
@@ -72,9 +72,9 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
       {result?.status === 'suspended' && (
         <div className="shrink-0 border-t border-border p-2">
           <Button variant="ghost" className="w-full justify-start text-warning-foreground" onClick={closeStepDetail}>
-            <CirclePause />
+            <IconPause />
             Return to suspended step
-            <IconChevronRight className="ml-auto" />
+            <IconChevronRightMedium className="ml-auto" />
           </Button>
         </div>
       )}

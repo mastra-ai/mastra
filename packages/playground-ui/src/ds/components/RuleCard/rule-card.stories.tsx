@@ -16,7 +16,7 @@ import { RuleAddButton, RuleLine, RuleLineContent, RuleLineKeyword, RuleLines } 
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const meta: Meta<typeof RuleCard> = {
   title: 'Elements/RuleCard',
@@ -86,7 +86,7 @@ export const Default: Story = {
         <Route step="Else if" initialName="Features" />
       </li>
       <li className="pl-4">
-        <RuleAddButton icon={<IconPlusLarge />}>Add route</RuleAddButton>
+        <RuleAddButton icon={<IconPlusMedium />}>Add route</RuleAddButton>
       </li>
     </ol>
   ),

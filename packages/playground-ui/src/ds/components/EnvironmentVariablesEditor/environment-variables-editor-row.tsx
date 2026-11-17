@@ -5,7 +5,7 @@ import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '@/lib/env-file';
 import { cn } from '@/lib/utils';
 
@@ -103,7 +103,7 @@ export function EnvironmentVariablesEditorRow({
             tooltip="Remove variable"
             onClick={() => editor.removeRow(index)}
           >
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         </div>
       )}

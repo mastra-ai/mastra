@@ -3,7 +3,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { useState } from 'react';
@@ -86,7 +86,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
               size="md"
               onClick={() => setCopyOpen(true)}
               data-testid="skill-view-copy-button"
-              icon={<IconPlusLarge />}
+              icon={<IconPlusMedium />}
             >
               Copy to my skills
             </Button>

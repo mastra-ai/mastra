@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelPicker } from '../../../domains/llm/model-picker';
 import type { ModelPickerProvider } from '../../../domains/llm/model-picker-types';
 import { ComposerAttachMenu } from './composer-attach-menu';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 
 const PHONE_QUERY = '(max-width: 639px)';
 
@@ -72,7 +72,7 @@ describe('composer sheets on phones', () => {
     render(
       <ComposerAttachMenu
         onFiles={() => {}}
-        actions={[{ label: 'From a URL…', icon: <IconChainLink1 />, onSelect: onUrl }]}
+        actions={[{ label: 'From a URL…', icon: <IconChainLink3 />, onSelect: onUrl }]}
       />,
     );
 

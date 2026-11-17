@@ -4,7 +4,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { textStyle } from '@/ds/primitives/text';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -119,7 +119,7 @@ export function RuleLineGroupRemove({
 }: Omit<ButtonProps, 'variant' | 'size'> & { children: ReactNode }) {
   return (
     <Button variant="ghost" size="sm" className={cn('ml-auto', className)} {...props}>
-      <IconTrashCan />
+      <TrashIcon />
       {children}
     </Button>
   );
@@ -149,7 +149,7 @@ export function RuleAddButton({ icon, className, children, ...props }: RuleAddBu
       data-slot="rule-add-button"
       className={cn(
         textStyle({ variant: 'caption', tone: 'muted' }),
-        'inline-flex h-control-sm items-center gap-1.5 rounded-full border border-dashed border-border px-3 hover:border-border-strong hover:text-foreground [&_svg]:size-3.5',
+        'inline-flex h-control-sm items-center gap-1.5 rounded-full border border-dashed border-border px-3 hover:border-border-strong hover:text-foreground [&_svg]:size-icon-sm',
         focusRing,
         className,
       )}

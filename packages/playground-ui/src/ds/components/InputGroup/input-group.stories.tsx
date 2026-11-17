@@ -10,9 +10,9 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
-import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconSend } from '@/ds/icons/central/IconSend';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -87,7 +87,7 @@ export const WithLeadingAndTrailing: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <IconEmail1 />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="you@example.com" />
         <InputGroupAddon align="inline-end">
@@ -149,7 +149,7 @@ export const BlockEndAddon: Story = {
         <InputGroupTextarea placeholder="Type a message" />
         <InputGroupAddon align="block-end">
           <InputGroupButton aria-label="Submit">
-            <IconCheckmark1 />
+            <IconCheckmark2Medium />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -187,7 +187,7 @@ export const Disabled: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupAddon>
-          <IconEmail1 />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="Disabled" disabled value="locked@example.com" />
       </InputGroup>
@@ -201,7 +201,7 @@ export const Invalid: Story = {
       <FieldLabel>Email</FieldLabel>
       <InputGroup>
         <InputGroupAddon>
-          <IconEmail1 />
+          <IconEmail2 />
         </InputGroupAddon>
         <InputGroupInput placeholder="Invalid" defaultValue="not an email" />
       </InputGroup>

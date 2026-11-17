@@ -1,15 +1,18 @@
-import { Network, Repeat1, Workflow } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Network } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
 import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
-import { IconArrowsRepeat } from '@/ds/icons/central/IconArrowsRepeat';
+import { IconArrowsRepeatRightLeft } from '@/ds/icons/central/IconArrowsRepeatRightLeft';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconClock } from '@/ds/icons/central/IconClock';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
 import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { IconPlayCircle } from '@/ds/icons/central/IconPlayCircle';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+
+export type WorkflowCardIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
 export const BADGE_COLORS = {
   sleep: 'var(--badge-purple-indicator)',
@@ -30,16 +33,16 @@ export const BADGE_COLORS = {
 
 export const BADGE_ICONS = {
   sleep: IconStopwatch,
-  sleepUntil: IconCalendarClock,
+  sleepUntil: IconCalendarClock4,
   forEach: IconListBullets,
   map: IconListBullets,
-  parallel: Workflow,
+  parallel: WorkflowIcon,
   suspend: IconPlayCircle,
   after: IconClock,
   workflow: IconLayersTwo,
   when: Network,
-  dountil: Repeat1,
-  dowhile: IconArrowsRepeat,
+  dountil: IconArrowsRepeatRightLeft,
+  dowhile: IconArrowsRepeatRightLeft,
   until: IconStopwatch,
   while: IconArrowRotateClockwise,
   if: IconBranch,
@@ -47,14 +50,14 @@ export const BADGE_ICONS = {
 } as const;
 
 export interface ConditionIconConfig {
-  icon: LucideIcon | undefined;
+  icon: WorkflowCardIcon | undefined;
   color: string | undefined;
 }
 
 export interface WorkflowCardIndicator {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: WorkflowCardIcon;
   color: string;
 }
 

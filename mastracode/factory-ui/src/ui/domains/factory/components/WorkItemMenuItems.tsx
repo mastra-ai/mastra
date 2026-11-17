@@ -15,7 +15,7 @@ import type { BoardStageId } from '../stages';
 import { BoardStageIcon, actionIcon } from './BoardIcons';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export interface WorkItemMenuProps {
   item: WorkItem;
@@ -25,6 +25,8 @@ export interface WorkItemMenuProps {
   proposedRunLabel?: string;
   approvingDecisionId?: string;
   owner: BoardCardOwner;
+  /** Whether `owner` is what the board read, not a guess: a suggested run starts only then. */
+  ownerCurrent?: boolean;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
@@ -49,6 +51,7 @@ export function WorkItemMenuItems({
   proposedRunLabel,
   approvingDecisionId,
   owner,
+  ownerCurrent = true,
   onApproveProposal,
   onDismissProposal,
   onMove,
@@ -64,7 +67,7 @@ export function WorkItemMenuItems({
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
-        .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
+        .map(phase => ({ id: phase.id, label: phase.name ?? phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
   const decisions = triageDecisions(board);
@@ -88,7 +91,10 @@ export function WorkItemMenuItems({
         ))}
       {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
       {suggestionForThisBoard !== undefined && !awaitsTriage && (
-        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
+        <DropdownMenu.Item
+          disabled={runsBlocked || !ownerCurrent}
+          onClick={() => onApproveProposal(suggestionForThisBoard.id)}
+        >
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
@@ -121,7 +127,7 @@ export function WorkItemMenuItems({
           </DropdownMenu.Item>
         ))}
       <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
-        <IconTrashCan aria-hidden />
+        <TrashIcon aria-hidden />
         <span>Remove</span>
       </DropdownMenu.Item>
     </>

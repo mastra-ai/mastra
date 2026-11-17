@@ -9,7 +9,7 @@ export default defineConfig({
           name: 'unit:packages/schema-compat:v4',
           environment: 'node',
           include: ['src/**/*.test.ts'],
-          exclude: ['src/**/*-v3.test.ts'],
+          exclude: ['src/**/*-v3.test.ts', 'src/**/*.e2e.test.ts'],
           isolate: false,
         },
       },
@@ -31,6 +31,15 @@ export default defineConfig({
             // Alias 'zod' to 'zod-v4' so all imports resolve to the same v4 package
             zod: 'zod-v3',
           },
+        },
+      },
+      {
+        test: {
+          // Provider round-trips replayed from __recordings__; they run in the e2e job, not the unit shards.
+          name: 'e2e:packages/schema-compat',
+          environment: 'node',
+          include: ['src/**/*.e2e.test.ts'],
+          isolate: false,
         },
       },
     ],

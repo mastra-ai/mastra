@@ -3,7 +3,7 @@ import type { KeyboardEvent } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { Field, FieldError } from '@/ds/components/Field';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,7 @@ export function CommentEditor({
           >
             Cancel
           </Button>
-          <Button icon={<IconCheckmark1 />} type="button" size="sm" disabled={!canSave} onClick={save}>
+          <Button icon={<IconCheckmark2Medium />} type="button" size="sm" disabled={!canSave} onClick={save}>
             {isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>

@@ -1,16 +1,16 @@
-import { Workflow } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import type { WorkflowStepCardViewProps } from '../types';
+import type { WorkflowCardIcon } from './workflow-card-badge-utils';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { IconArrowRightLeft } from '@/ds/icons/central/IconArrowRightLeft';
 import { IconArrowsRepeat } from '@/ds/icons/central/IconArrowsRepeat';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconFork } from '@/ds/icons/central/IconFork';
 import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export type WorkflowTypeBadgeProps = Pick<
   WorkflowStepCardViewProps,
@@ -19,19 +19,19 @@ export type WorkflowTypeBadgeProps = Pick<
 
 export function getWorkflowCardBadge(props: WorkflowTypeBadgeProps): {
   label: string;
-  Icon: LucideIcon;
+  Icon: WorkflowCardIcon;
   tone: BadgeVariant;
   indicator?: string;
 } {
   if (props.isForEach) return { label: 'For each', tone: 'orange', Icon: IconArrowsRepeat, indicator: 'foreach' };
   if (props.isNestedWorkflowStep || props.stepGraph)
-    return { label: 'Workflow', tone: 'purple', Icon: Workflow, indicator: 'workflow' };
+    return { label: 'Workflow', tone: 'purple', Icon: WorkflowIcon, indicator: 'workflow' };
   if (props.isParallel && !props.nodeKind)
     return { label: 'Parallel', tone: 'blue', Icon: IconFork, indicator: 'parallel' };
   if (props.nodeKind === 'map' || props.mapConfig)
     return { label: 'Map', tone: 'orange', Icon: IconArrowRightLeft, indicator: 'map' };
   if (props.nodeKind === 'wait-until' || props.date)
-    return { label: 'Wait until', tone: 'purple', Icon: IconCalendarClock, indicator: 'sleep-until' };
+    return { label: 'Wait until', tone: 'purple', Icon: IconCalendarClock4, indicator: 'sleep-until' };
   if (props.nodeKind === 'delay' || props.duration !== undefined)
     return { label: 'Delay', tone: 'purple', Icon: IconStopwatch, indicator: 'sleep' };
   if (props.nodeKind === 'agent') return { label: 'Agent', tone: 'cyan', Icon: IconRobot };

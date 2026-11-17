@@ -6,8 +6,8 @@ import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
 import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
 import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
@@ -15,6 +15,7 @@ import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
 import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
 import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -22,7 +23,6 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { Star } from 'lucide-react';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { ComparisonRole } from './build-comparison-rows';
@@ -88,13 +88,13 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
             render={
               <Button size="sm" className="max-w-full min-w-0">
                 <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-                <IconChevronBottom aria-hidden />
+                <IconChevronDownMedium aria-hidden />
               </Button>
             }
           />
           <DropdownMenu.Content align="start" className="min-w-48">
             <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
-              <IconChainLink1 /> View experiment
+              <IconChainLink3 /> View experiment
             </DropdownMenu.Item>
             {canRename && (
               <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
@@ -119,7 +119,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
                 />
               }
             >
-              <Badge variant={sideVariant[role]} size="md" icon={<Star />}>
+              <Badge variant={sideVariant[role]} size="md" icon={<IconStar />}>
                 {label}
               </Badge>
             </TooltipTrigger>
@@ -129,7 +129,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
           <Badge
             variant={sideVariant[role]}
             size="md"
-            icon={role === 'baseline' ? <Star className="fill-current" /> : <Star />}
+            icon={role === 'baseline' ? <IconStar className="fill-current" /> : <IconStar />}
           >
             {label}
           </Badge>

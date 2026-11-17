@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
@@ -8,6 +7,7 @@ import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFormCircle } from '@/ds/icons/central/IconFormCircle';
 import { IconGlobe } from '@/ds/icons/central/IconGlobe';
 import { IconHashtag } from '@/ds/icons/central/IconHashtag';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
@@ -21,7 +21,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
-    icon: CircleIcon,
+    icon: IconFormCircle,
     color: hueAccentColor('orange'),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [

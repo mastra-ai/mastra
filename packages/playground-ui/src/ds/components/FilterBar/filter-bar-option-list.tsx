@@ -3,7 +3,7 @@ import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { cn } from '@/lib/utils';
 
@@ -88,10 +88,10 @@ export function FilterBarOptionList<T>({
                 <span className={comboboxStyles.itemRightSlot}>
                   <span className={comboboxStyles.checkContainer}>
                     {isSelected ? (
-                      selected && <IconCheckmark1 className={comboboxStyles.checkIcon} />
+                      selected && <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
                     ) : (
                       <ComboboxPrimitive.ItemIndicator>
-                        <IconCheckmark1 className={comboboxStyles.checkIcon} />
+                        <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
                       </ComboboxPrimitive.ItemIndicator>
                     )}
                   </span>

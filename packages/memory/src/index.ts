@@ -849,8 +849,13 @@ export class Memory extends MastraMemory {
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
       const threshold = semanticConfig?.threshold;
-      const filteredVectorResults =
-        threshold !== undefined ? vectorResults.filter(r => r.score >= threshold) : vectorResults;
+      // Check each hit's scope as well as the store's filter, so a store that drops or misapplies
+      // filters cannot bring other threads' or resources' messages into recall.
+      const filteredVectorResults = vectorResults.filter(
+        r =>
+          (threshold === undefined || r.score >= threshold) &&
+          (resourceScope ? r.metadata?.resource_id === resourceId : r.metadata?.thread_id === threadId),
+      );
 
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
@@ -930,6 +935,14 @@ export class Memory extends MastraMemory {
         // Reverse to restore chronological order if we queried DESC to get newest messages
         rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
         ({ total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult);
+      }
+
+      // The stored message is the authority on where it lives: drop any recalled message, or
+      // context neighbour, that the vector hit's metadata placed in scope but storage does not.
+      if (include.length) {
+        rawMessages = rawMessages.filter(
+          message => message.threadId === threadId || (resourceScope && message.resourceId === resourceId),
+        );
       }
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
@@ -2599,6 +2612,10 @@ Notes:
         } as never);
         for (const r of results) {
           if (!r.metadata?.thread_id) {
+            continue;
+          }
+          // Don't rely on the store having applied the filter: skip hits outside the scope.
+          if (r.metadata.resource_id !== resourceId || (filter?.threadId && r.metadata.thread_id !== filter.threadId)) {
             continue;
           }
 

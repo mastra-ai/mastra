@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Button } from '../Button';
 import type { ButtonProps } from '../Button';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 export type JSONSchemaFormFieldRemoveProps = Omit<ButtonProps, 'onClick' | 'tooltip' | 'children' | 'size'> & {
   tooltip?: React.ReactNode;
@@ -14,7 +14,7 @@ export function FieldRemove({ children, tooltip = 'Remove field', ...props }: JS
 
   return (
     <Button {...props} tooltip={tooltip} onClick={remove} size="icon-md">
-      {children || <IconTrashCan />}
+      {children || <TrashIcon />}
     </Button>
   );
 }

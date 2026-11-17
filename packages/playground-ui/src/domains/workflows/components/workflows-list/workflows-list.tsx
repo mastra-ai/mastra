@@ -1,6 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflowsRunCounts } from '@mastra/react/hooks/workflows';
-import { WorkflowIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
 import { sortWorkflows } from './workflows-sort';
@@ -14,6 +13,7 @@ import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconPause } from '@/ds/icons/central/IconPause';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
@@ -176,7 +176,7 @@ function WorkflowRow({
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
                 className="inline-flex shrink-0 items-center gap-1"
               >
-                <WorkflowIcon aria-hidden className="size-3.5" />
+                <WorkflowIcon aria-hidden className="size-icon-sm" />
                 {nestedIds.length}
               </Txt>
             ) : null}
@@ -202,7 +202,7 @@ function WorkflowRow({
               className="inline-flex items-center gap-1.5 text-warning-foreground"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
-              <IconPause aria-hidden className="size-3.5" />
+              <IconPause aria-hidden className="size-icon-sm" />
               {suspendedCount}
             </span>
           ) : (

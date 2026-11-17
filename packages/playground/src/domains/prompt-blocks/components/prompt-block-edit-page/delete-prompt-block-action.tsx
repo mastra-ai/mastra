@@ -1,6 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
@@ -39,7 +39,7 @@ export function DeletePromptBlockAction({ blockId, blockName, disabled = false }
         variant="ghost"
         size="sm"
       >
-        <IconTrashCan />
+        <TrashIcon />
         Delete
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

@@ -2,18 +2,18 @@ import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { Link } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import type { SessionExternalLink } from '../services/sessionRows';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function SessionMenuItems({
   menu,
@@ -62,7 +62,7 @@ export function SessionMenuItems({
       {onAnswerApproval ? (
         <>
           <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('approve')}>
-            <IconCheckmark1 />
+            <IconCheckmark2Medium />
             Approve
           </Menu.Item>
           <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('decline')}>
@@ -93,7 +93,7 @@ export function SessionMenuItems({
       ) : null}
       {onDelete ? (
         <Menu.Item variant="destructive" onClick={onDelete}>
-          <IconTrashCan />
+          <TrashIcon />
           Delete
         </Menu.Item>
       ) : null}

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { LogsIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { fn } from 'storybook/test';
@@ -19,6 +18,7 @@ import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { LogsIcon } from '@/ds/icons/LogsIcon';
 
 // Input and output tokens share a scale, so neither line is flattened against the axis.
 const data: Record<string, unknown>[] = [

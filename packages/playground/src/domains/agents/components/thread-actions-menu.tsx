@@ -2,8 +2,8 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export interface ThreadActionsMenuProps {
   onPin?: () => void;
@@ -41,7 +41,7 @@ export const ThreadActionsMenu = ({ onPin, onUnpin, onRename, onDelete }: Thread
         )}
         {onDelete && (
           <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-            <IconTrashCan />
+            <TrashIcon />
             Delete
           </DropdownMenu.Item>
         )}

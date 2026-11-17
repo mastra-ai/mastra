@@ -5,7 +5,7 @@ import type { ChatAnnotation } from './chat-annotations';
 import { Button } from '@/ds/components/Button';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 export interface AnnotationCommentCardProps {
   annotation: ChatAnnotation;
@@ -39,7 +39,7 @@ export function AnnotationCommentCard({
           tooltip={`Remove annotation ${number}`}
           onClick={onRemove}
         >
-          <IconTrashCan />
+          <TrashIcon />
         </Button>
       </div>
       <blockquote className="line-clamp-3 border-l-2 border-info-indicator ps-2.5 text-body-sm whitespace-pre-line text-muted-foreground">

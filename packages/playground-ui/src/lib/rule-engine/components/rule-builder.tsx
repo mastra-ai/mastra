@@ -10,7 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { IconComponents } from '@/ds/icons/central/IconComponents';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -116,7 +116,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       ))}
 
       <div className="flex gap-1 p-2">
-        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<IconPlusLarge />}>
+        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<IconPlusMedium />}>
           Add rule
         </Button>
         {depth < maxDepth - 1 && (
@@ -165,7 +165,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         )}
       >
         <Icon>
-          <IconPlusLarge />
+          <IconPlusMedium />
         </Icon>
         <Txt as="span" variant="caption" className="block">
           Add conditional rule

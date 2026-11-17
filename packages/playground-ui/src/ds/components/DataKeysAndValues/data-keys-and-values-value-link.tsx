@@ -1,5 +1,5 @@
 import { dataKeysAndValuesValueStyles } from './shared';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
   const linkClassName = cn(
     'flex items-center gap-2 truncate hover:text-foreground',
     controlStateColorTransition,
-    '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-70',
+    '[&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:opacity-70',
   );
 
   if (isExternal) {
@@ -43,7 +43,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Component {...navigationProps} className={linkClassName}>
         <span>{children}</span>
-        <IconChainLink1 />
+        <IconChainLink3 />
       </Component>
     </dd>
   );

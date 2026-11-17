@@ -5,8 +5,8 @@ import { workflowCameraDuration } from './workflow-camera-duration';
 import { Button } from '@/ds/components/Button';
 import { Slider } from '@/ds/components/Slider';
 import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
-import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { cn } from '@/utils/cn';
 
 export const ZoomSlider = forwardRef<
@@ -33,7 +33,7 @@ export const ZoomSlider = forwardRef<
         disabled={zoom <= minZoom}
         onClick={() => zoomOut({ duration: workflowCameraDuration() })}
       >
-        <IconMinusLarge />
+        <IconMinusMedium />
       </Button>
       {!compact && (
         <Slider
@@ -57,7 +57,7 @@ export const ZoomSlider = forwardRef<
         disabled={zoom >= maxZoom}
         onClick={() => zoomIn({ duration: workflowCameraDuration() })}
       >
-        <IconPlusLarge />
+        <IconPlusMedium />
       </Button>
       <Button
         size="sm"

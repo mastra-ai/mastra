@@ -1,19 +1,12 @@
+import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
-import { CalendarRange, Circle, LoaderCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import {
-  ALL_SESSION_OWNERS,
-  MY_SESSIONS,
-  SESSION_STATUS_OPTIONS,
-  SESSION_UPDATED_OPTIONS,
-  sessionOwnerOptions,
-} from '../services/sessionFilters';
+import { SESSION_STATUS_OPTIONS, SESSION_UPDATED_OPTIONS, sessionOwnerOptions } from '../services/sessionFilters';
 import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
-import type { SessionListRow } from '../services/sessionRows';
+import type { SessionOwner } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS } from '../services/sessionSort';
 import { IconCalendarDays } from '@mastra/playground-ui/icons/central/IconCalendarDays';
-import { IconCheckCircle2 } from '@mastra/playground-ui/icons/central/IconCheckCircle2';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';
 import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
@@ -26,6 +19,9 @@ import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanVi
 import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconCirclePlus } from '@mastra/playground-ui/icons/central/IconCirclePlus';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconFormCircle } from '@mastra/playground-ui/icons/central/IconFormCircle';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 function withIcons<V extends string>(options: readonly DropdownMenuRadioOption<V>[], icons: Record<V, LucideIcon>) {
   return options.map(option => {
@@ -44,16 +40,16 @@ export const SESSION_STATUS_MENU_OPTIONS = withIcons(SESSION_STATUS_OPTIONS, {
   all: IconCircleDashed,
   waiting: IconHand5Finger,
   working: IconElectrocardiogram,
-  initializing: LoaderCircle,
-  idle: Circle,
-  done: IconCheckCircle2,
+  initializing: IconLoadingCircle,
+  idle: IconFormCircle,
+  done: IconCircleCheck,
 });
 
 export const SESSION_UPDATED_MENU_OPTIONS = withIcons(SESSION_UPDATED_OPTIONS, {
   all: IconInfinity,
   '24h': IconClock,
   '7d': IconCalendarDays,
-  '30d': CalendarRange,
+  '30d': IconCalendarDays,
 });
 
 export const SESSION_GROUP_MENU_OPTIONS = withIcons(SESSION_GROUP_BY_OPTIONS, {
@@ -64,12 +60,12 @@ export const SESSION_GROUP_MENU_OPTIONS = withIcons(SESSION_GROUP_BY_OPTIONS, {
 });
 
 const OWNER_ICONS: Partial<Record<string, LucideIcon>> = {
-  [ALL_SESSION_OWNERS]: IconUserDuo,
-  [MY_SESSIONS]: IconUserAdded,
+  [SESSION_ROW_ALL_OWNERS]: IconUserDuo,
+  [SESSION_ROW_MY_SESSIONS]: IconUserAdded,
 };
 
-export function sessionOwnerMenuOptions(rows: readonly SessionListRow[], viewerUserId: string | undefined) {
-  return sessionOwnerOptions(rows, viewerUserId).map(option => {
+export function sessionOwnerMenuOptions(owners: readonly SessionOwner[], viewerUserId: string | undefined) {
+  return sessionOwnerOptions(owners, viewerUserId).map(option => {
     const Icon = OWNER_ICONS[option.value] ?? IconUser;
     return { ...option, icon: <Icon aria-hidden /> };
   });

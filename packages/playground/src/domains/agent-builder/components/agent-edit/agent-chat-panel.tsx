@@ -2,7 +2,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconLightBulb } from '@mastra/playground-ui/icons/central/IconLightBulb';
+import { IconLightBulbSimple } from '@mastra/playground-ui/icons/central/IconLightBulbSimple';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
@@ -57,7 +57,7 @@ const STARTER_PROMPTS = [
     title: 'Suggest a task',
     description: 'Get an example prompt to try',
     prompt: 'Suggest a useful task I can try with you, including an example prompt.',
-    Icon: IconLightBulb,
+    Icon: IconLightBulbSimple,
   },
   {
     title: 'Run a self-check',

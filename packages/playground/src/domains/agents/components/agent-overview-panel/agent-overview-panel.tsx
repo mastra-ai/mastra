@@ -13,8 +13,9 @@ import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
 import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
-import { IconPodcast1 } from '@mastra/playground-ui/icons/central/IconPodcast1';
+import { IconSignalTower } from '@mastra/playground-ui/icons/central/IconSignalTower';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -24,7 +25,6 @@ import {
   useUpdateModelInModelList,
   useChannelPlatforms,
 } from '@mastra/react/hooks/agents';
-import { Workflow } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useWatch } from 'react-hook-form';
 import { extractPrompt } from '../../utils/extractPrompt';
@@ -264,7 +264,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         title="Workflows"
         count={workflows.length}
         accent="blue"
-        icon={<Workflow />}
+        icon={<WorkflowIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
         <AgentMetadataWorkflowList workflows={workflows} />
@@ -329,7 +329,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       </AgentMetadataSection>
 
       {hasChannels && (
-        <AgentMetadataSection title="Channels" accent="cyan" icon={<IconPodcast1 />}>
+        <AgentMetadataSection title="Channels" accent="cyan" icon={<IconSignalTower />}>
           <AgentChannels agentId={agentId} />
         </AgentMetadataSection>
       )}

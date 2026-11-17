@@ -9,10 +9,10 @@ import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import type { ReactNode } from 'react';
@@ -141,7 +141,7 @@ function DatasetPage() {
   const headerActions = (
     <>
       {hasItems && (
-        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<IconPlusLarge />}>
+        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<IconPlusMedium />}>
           New experiment
         </Button>
       )}
@@ -172,7 +172,7 @@ function DatasetPage() {
             <IconSquareBehindSquare1 /> Duplicate dataset
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => setDeleteDialogOpen(true)} variant="destructive">
-            <IconTrashCan /> Delete dataset
+            <TrashIcon /> Delete dataset
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>

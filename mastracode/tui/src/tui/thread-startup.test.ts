@@ -1,6 +1,30 @@
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { describe, expect, it, vi } from 'vitest';
+import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
+
+vi.mock('./modal-question.js', () => ({ askModalQuestion: vi.fn() }));
+vi.mock('./overlay.js', () => ({ showModalOverlay: vi.fn() }));
+
+function createDriftState(current: { value: boolean }) {
+  const drifted = { ...createThread('thread-drifted', 'Drifted', '2026-08-28T11:00:00Z'), resourceId: 'resource-old' };
+  const state = {
+    projectInfo: { rootPath: '/tmp/project' },
+    pendingNewThread: false,
+    ui: { requestRender: vi.fn(), hideOverlay: vi.fn() },
+    session: {
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+      thread: {
+        getId: vi.fn(() => null),
+        list: vi.fn(async (input?: { metadata?: unknown }) => (input?.metadata ? [drifted] : [])),
+        cloneToCurrentResource: vi.fn(async () => {}),
+      },
+    },
+  } as any;
+  state.local = { controller: {}, session: state.session };
+  return { state, drifted, isCurrent: () => current.value };
+}
 
 function createThread(id: string, title: string, updatedAt: string) {
   return {
@@ -176,6 +200,211 @@ describe('resumeThreadOnStartup', () => {
 
     expect(deleteThread).not.toHaveBeenCalled();
     expect(switchThread).not.toHaveBeenCalled();
+  });
+
+  it('does not switch or mark a pending thread for a factory session when the caller stopped while threads were listed', async () => {
+    for (const threads of [[createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z')], []]) {
+      const switchThread = vi.fn().mockResolvedValue(undefined);
+      let current = true;
+      const state = {
+        projectInfo: { rootPath: '/tmp/project' },
+        pendingNewThread: false,
+        session: {
+          thread: {
+            getId: vi.fn(() => null),
+            list: vi.fn(async () => {
+              current = false;
+              return threads;
+            }),
+            switch: switchThread,
+          },
+        },
+      } as any;
+
+      await expect(resumeThreadOnStartup(state, undefined, () => current)).resolves.toBeUndefined();
+
+      expect(state.session.thread.list).toHaveBeenCalledTimes(1);
+      expect(switchThread).not.toHaveBeenCalled();
+      expect(state.pendingNewThread).toBe(false);
+    }
+  });
+
+  it('does not switch threads when the caller stopped while threads were listed', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    let current = true;
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn(async () => {
+            current = false;
+            return [latest];
+          }),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, undefined, () => current)).resolves.toBeUndefined();
+
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('does not change resource or switch to a requested thread when the caller stopped while threads were listed', async () => {
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+    };
+    const setResourceId = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    let current = true;
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: true,
+      controller: { setResourceId },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn(async () => {
+            current = false;
+            return [requested];
+          }),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested', () => current)).resolves.toBeUndefined();
+
+    expect(setResourceId).not.toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
+  });
+
+  it('does not ask about a drifted thread when the caller stopped while drifted threads were listed', async () => {
+    vi.mocked(askModalQuestion).mockReset();
+    const current = { value: true };
+    const { state, drifted, isCurrent } = createDriftState(current);
+    state.session.thread.list.mockImplementation(async (input?: { metadata?: unknown }) => {
+      if (!input?.metadata) return [];
+      current.value = false;
+      return [drifted];
+    });
+
+    await resumeThreadOnStartup(state, undefined, isCurrent);
+
+    expect(state.session.thread.list).toHaveBeenCalledTimes(2);
+    expect(askModalQuestion).not.toHaveBeenCalled();
+    expect(state.session.thread.cloneToCurrentResource).not.toHaveBeenCalled();
+  });
+
+  it('does not mark a pending thread when the caller stopped while finding no drifted thread', async () => {
+    const current = { value: true };
+    const { state, isCurrent } = createDriftState(current);
+    state.session.thread.list.mockImplementation(async (input?: { metadata?: unknown }) => {
+      if (input?.metadata) current.value = false;
+      return [];
+    });
+
+    await resumeThreadOnStartup(state, undefined, isCurrent);
+
+    expect(state.session.thread.list).toHaveBeenCalledTimes(2);
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('does not clone a drifted thread when the caller stopped while the clone question was open', async () => {
+    vi.mocked(askModalQuestion).mockReset();
+    vi.mocked(showModalOverlay).mockReset();
+    const current = { value: true };
+    const { state, isCurrent } = createDriftState(current);
+    vi.mocked(askModalQuestion).mockImplementation(async () => {
+      current.value = false;
+      return 'Clone and resume';
+    });
+
+    await resumeThreadOnStartup(state, undefined, isCurrent);
+
+    expect(askModalQuestion).toHaveBeenCalledTimes(1);
+    expect(showModalOverlay).not.toHaveBeenCalled();
+    expect(state.session.thread.cloneToCurrentResource).not.toHaveBeenCalled();
+  });
+
+  it('does not clone a drifted thread when the caller stopped while the clone progress showed', async () => {
+    vi.mocked(askModalQuestion).mockReset();
+    vi.mocked(showModalOverlay).mockReset();
+    const current = { value: true };
+    const { state, isCurrent } = createDriftState(current);
+    vi.mocked(askModalQuestion).mockResolvedValue('Clone and resume');
+    vi.mocked(showModalOverlay).mockImplementation(() => {
+      current.value = false;
+    });
+
+    await resumeThreadOnStartup(state, undefined, isCurrent);
+
+    expect(showModalOverlay).toHaveBeenCalledTimes(1);
+    expect(state.session.thread.cloneToCurrentResource).not.toHaveBeenCalled();
+    expect(state.ui.hideOverlay).toHaveBeenCalled();
+  });
+
+  it('does not try the next thread when the caller stopped while a locked thread was tried', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const older = createThread('thread-older', 'Older thread', '2026-08-28T10:00:00Z');
+    let current = true;
+    const switchThread = vi.fn(async () => {
+      current = false;
+      throw new ThreadLockError('thread-latest', 1234);
+    });
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([older, latest]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await resumeThreadOnStartup(state, undefined, () => current);
+
+    expect(switchThread).toHaveBeenCalledTimes(1);
+    expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('does not mark a pending thread when the caller stopped while the only saved thread was tried', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    let current = true;
+    const switchThread = vi.fn(async () => {
+      current = false;
+      throw new ThreadLockError('thread-latest', 1234);
+    });
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([latest]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await resumeThreadOnStartup(state, undefined, () => current);
+
+    expect(switchThread).toHaveBeenCalledTimes(1);
+    expect(state.pendingNewThread).toBe(false);
   });
 
   it('resumes the latest unlocked thread for the current directory', async () => {

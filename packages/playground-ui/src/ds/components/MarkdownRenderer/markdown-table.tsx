@@ -5,8 +5,8 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
@@ -28,7 +28,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             }}
             aria-label="Copy table as markdown"
           >
-            {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
+            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
             {isCopied ? 'Copied!' : 'Copy table as markdown'}
           </Button>
           <DropdownMenu>
@@ -36,7 +36,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
               disabled={typeof csv !== 'string'}
               render={
                 <Button type="button" size="icon-sm" variant="ghost" aria-label="More table options">
-                  <IconChevronBottom />
+                  <IconChevronDownMedium />
                 </Button>
               }
             />

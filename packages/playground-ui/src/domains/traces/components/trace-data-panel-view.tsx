@@ -1,4 +1,3 @@
-import { Loader2Icon, MessageSquareReplyIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Group, Panel, useGroupRef } from 'react-resizable-panels';
@@ -20,13 +19,15 @@ import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
 import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -192,7 +193,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <IconBubbleText />
+              <IconChatBubble7 />
             </Icon>
             <span className="@max-[501px]:sr-only">Messages</span>
           </>
@@ -206,7 +207,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <MessageSquareReplyIcon />
+              <IconChatBubble7Plus />
             </Icon>
             <span className="@max-[501px]:sr-only">
               Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
@@ -324,7 +325,7 @@ export function TraceDataPanelView({
     <>
       {!isOnTracePage && LinkComponent && traceHref && (
         <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={traceHref} />}>
-          <IconChainLink1 />
+          <IconChainLink3 />
         </Button>
       )}
       <Button
@@ -334,7 +335,7 @@ export function TraceDataPanelView({
         disabled={isDownloadingTrace}
         onClick={() => downloadTraceJson(traceId)}
       >
-        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <IconArrowInbox />}
+        {isDownloadingTrace ? <IconLoadingCircle className="animate-spin" /> : <IconArrowInbox />}
       </Button>
     </>
   );
@@ -505,7 +506,7 @@ export function TraceDataPanelView({
                   // bottom rule is its only edge, and keyboard focus lights that rule like a
                   // field's rim. The view switch stays as flat square icons.
                   <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-                    <IconMagnifyingGlass aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                    <IconMagnifyingGlass aria-hidden className="ml-1 size-icon-md shrink-0 text-muted-foreground" />
                     <input
                       type="search"
                       aria-label="Search spans"

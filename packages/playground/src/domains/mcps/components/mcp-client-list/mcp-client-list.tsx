@@ -6,11 +6,11 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconMacbook } from '@mastra/playground-ui/icons/central/IconMacbook';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -138,7 +138,7 @@ export function MCPClientList() {
           <SubSectionHeader title="MCP Clients" icon={<IconMacbook />} />
 
           {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusLarge />}>
+            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusMedium />}>
               Add MCP client
             </Button>
           )}
@@ -151,7 +151,7 @@ export function MCPClientList() {
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
-                <Button size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusLarge />}>
+                <Button size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusMedium />}>
                   Add MCP client
                 </Button>
               }

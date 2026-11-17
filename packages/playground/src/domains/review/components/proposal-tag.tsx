@@ -1,6 +1,6 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -64,7 +64,7 @@ export function ProposalTag({
           }}
           className={cn(quietTextHover, 'p-0.5')}
         >
-          <IconCheckmark1 className="h-3 w-3" />
+          <IconCheckmark2Medium className="size-icon-xs" />
         </button>
       </span>
     );
@@ -84,7 +84,7 @@ export function ProposalTag({
         className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
-        <IconPencil className="h-3 w-3" />
+        <IconPencil className="size-icon-xs" />
       </button>
       <button
         type="button"
@@ -92,7 +92,7 @@ export function ProposalTag({
         className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
-        <IconCrossMedium className="h-3 w-3" />
+        <IconCrossMedium className="size-icon-xs" />
       </button>
     </span>
   );

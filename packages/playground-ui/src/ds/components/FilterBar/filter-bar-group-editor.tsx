@@ -11,8 +11,8 @@ import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
@@ -180,7 +180,7 @@ export function FilterBarGroupEditor({
             ref={addFilterRef}
             variant="ghost"
             size="sm"
-            icon={<IconPlusLarge />}
+            icon={<IconPlusMedium />}
             onClick={() => ctx.openGroupInput(group.id)}
           >
             Condition
@@ -201,7 +201,7 @@ export function FilterBarGroupEditor({
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconTrashCan />}
+            icon={<TrashIcon />}
             className="ml-auto text-muted-foreground"
             aria-label={removeLabel}
             onClick={onRemove}
@@ -233,7 +233,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       )}
     >
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <IconFolder1 className="size-3.5 text-muted-foreground" />
+        <IconFolder1 className="size-icon-sm text-muted-foreground" />
         <Txt as="span" variant="label" tone="ink">
           Group
         </Txt>
@@ -249,7 +249,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
             disabled={leaving}
             onClick={() => ctx.removeGroup(group.id)}
           >
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         </div>
       </div>

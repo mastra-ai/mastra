@@ -16,7 +16,7 @@ import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -77,7 +77,7 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
       tooltip="New workflow run"
       onClick={onClick}
     >
-      <IconPlusLarge />
+      <IconPlusMedium />
     </Button>
   );
 }

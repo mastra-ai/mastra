@@ -10,7 +10,7 @@ import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
@@ -262,7 +262,7 @@ export const DateTimePickerContent = ({
           </Button>
         )}
         <Button
-          icon={newValueDefined ? <IconCheckmark1 /> : <IconCrossMedium />}
+          icon={newValueDefined ? <IconCheckmark2Medium /> : <IconCrossMedium />}
           tabIndex={0}
           type="button"
           size="md"

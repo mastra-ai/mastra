@@ -3,8 +3,8 @@ import { v4 as uuid } from '@lukeed/uuid';
 import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 interface KeyValuePair {
   id: string;
@@ -96,7 +96,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
             aria-label="Remove pair"
             onClick={() => removePair(pair.id)}
           >
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         </div>
       ))}
@@ -106,7 +106,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
         size="sm"
         className="justify-self-start"
         onClick={addPair}
-        icon={<IconPlusLarge />}
+        icon={<IconPlusMedium />}
       >
         Add pair
       </Button>

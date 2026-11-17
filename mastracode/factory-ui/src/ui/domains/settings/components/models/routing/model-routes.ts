@@ -2,9 +2,9 @@ import type { LucideIcon } from 'lucide-react';
 
 import type { FactoryModelScope, FactoryProjectPayload } from '../../../../workspaces/services/github';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconChatBubbles } from '@mastra/playground-ui/icons/central/IconChatBubbles';
-import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconChatBubbles } from '@mastra/playground-ui/icons/central/IconChatBubbles';
 
 export type ModelLane = 'chats' | 'runs';
 export type ModelDefaults = 'personal' | 'factory';
@@ -31,7 +31,7 @@ export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
 export const MODEL_DEFAULTS_UNUSED_NOTE = 'Not used in this scope';
 
 export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
-  personal: IconCirclePerson,
+  personal: IconUser,
   factory: IconBuildings,
 };
 

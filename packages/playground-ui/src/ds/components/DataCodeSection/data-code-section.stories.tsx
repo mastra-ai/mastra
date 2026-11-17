@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TooltipProvider } from '../Tooltip';
 import { DataCodeSection } from './data-code-section';
-import { IconCode } from '@/ds/icons/central/IconCode';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 
 const meta: Meta<typeof DataCodeSection> = {
   title: 'Composite/DataCodeSection',
@@ -47,7 +47,7 @@ export const Default: Story = {
 export const WithIcon: Story = {
   args: {
     title: 'Request Body',
-    icon: <IconCode />,
+    icon: <IconCodeBrackets />,
     codeStr: sampleJson,
   },
 };
@@ -76,7 +76,7 @@ export const WithMultilineContent: Story = {
 export const LargeContent: Story = {
   args: {
     title: 'Response',
-    icon: <IconCode />,
+    icon: <IconCodeBrackets />,
     codeStr: JSON.stringify(
       {
         workflow: {
@@ -110,7 +110,7 @@ export const CustomDialogTitle: Story = {
   args: {
     title: 'Input',
     dialogTitle: 'Full Request Payload — POST /api/agents/run',
-    icon: <IconCode />,
+    icon: <IconCodeBrackets />,
     codeStr: sampleJson,
   },
 };

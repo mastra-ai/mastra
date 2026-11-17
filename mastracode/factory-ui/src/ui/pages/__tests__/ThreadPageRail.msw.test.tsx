@@ -42,9 +42,7 @@ function stubThreadRoute(messages: MastraDBMessage[]) {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
-            ],
+            repositories: [listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),

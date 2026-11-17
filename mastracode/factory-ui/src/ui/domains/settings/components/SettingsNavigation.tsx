@@ -14,12 +14,11 @@ import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
-import { IconColorPalette } from '@mastra/playground-ui/icons/central/IconColorPalette';
 import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -42,14 +41,9 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'account',
         label: SETTINGS_SECTION_LABELS.account,
-        icon: IconCirclePerson,
-        searchText: 'my account profile identity email authentication session log out sign out user',
-      },
-      {
-        id: 'preferences',
-        label: SETTINGS_SECTION_LABELS.preferences,
-        icon: IconColorPalette,
-        searchText: 'preferences general theme appearance color scheme completion sound',
+        icon: IconUser,
+        searchText:
+          'my account profile identity email authentication preferences general theme appearance color scheme completion sound session log out sign out user',
       },
       {
         id: 'connections',
@@ -106,8 +100,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: IconInboxEmpty,
-        searchText:
-          'work intake sources tasks issues pull requests github gitlab linear jira incident feed sync connect routes routing new cards board catch-all',
+        searchText: 'work intake sources accounts workspaces connect github gitlab linear jira incident vanta',
       },
       {
         id: 'factory',

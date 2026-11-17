@@ -4,7 +4,7 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { LinearWorkspaceConnection } from '../../factory/services/linear';
 import type { LinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { LinearWorkspaceControl } from './LinearWorkspaceControl';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function PausedLinearWorkspace({
   workspace,
@@ -17,7 +17,7 @@ export function PausedLinearWorkspace({
   count: number;
   reconnect: LinearReconnectResult;
   onRetry: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   return (
     <SettingsRow
@@ -39,15 +39,17 @@ export function PausedLinearWorkspace({
           </Button>
         )}
         <LinearWorkspaceControl workspace={workspace} targeted />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<IconTrashCan />}
-          aria-label={`Remove sources from ${workspace.name}`}
-          onClick={onRemove}
-        >
-          Remove
-        </Button>
+        {onRemove && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<TrashIcon />}
+            aria-label={`Remove sources from ${workspace.name}`}
+            onClick={onRemove}
+          >
+            Remove
+          </Button>
+        )}
       </div>
     </SettingsRow>
   );

@@ -1,11 +1,11 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { ScanSearch } from 'lucide-react';
 import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import type { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
+import { IconPageSearch } from '@mastra/playground-ui/icons/central/IconPageSearch';
 
 type BoardSource = (typeof BOARD_SOURCE_OPTIONS)[number]['value'];
 
@@ -15,7 +15,7 @@ const SOURCE_MARKS = {
   linear: { Icon: LinearIcon, color: '#5E6AD2' },
   jira: { Icon: JiraIcon, color: '#1868DB' },
   incidentio: { Icon: IncidentIoIcon, color: '#F2555A' },
-  detail: { Icon: ScanSearch, color: 'var(--muted-foreground)' },
+  detail: { Icon: IconPageSearch, color: 'var(--muted-foreground)' },
   manual: { Icon: IconCircleRecord, color: 'var(--muted-foreground)' },
   'pull-request': { Icon: IconPullRequest, color: 'var(--muted-foreground)' },
 };

@@ -2,7 +2,6 @@ import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
 import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
-import { FlagIcon, OctagonIcon, PercentIcon, ShapesIcon, TagsIcon, WaypointsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   isTraceFilterGroup,
@@ -28,29 +27,33 @@ import type {
   FilterBarSuggestionsResolver,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
 import { IconBox } from '@/ds/icons/central/IconBox';
 import { IconBranch } from '@/ds/icons/central/IconBranch';
-import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
-import { IconBubble5 } from '@/ds/icons/central/IconBubble5';
 import { IconBuildings } from '@/ds/icons/central/IconBuildings';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconChip } from '@/ds/icons/central/IconChip';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { IconFlag2 } from '@/ds/icons/central/IconFlag2';
+import { IconFormOctagon } from '@/ds/icons/central/IconFormOctagon';
 import { IconGauge } from '@/ds/icons/central/IconGauge';
 import { IconGlobe } from '@/ds/icons/central/IconGlobe';
 import { IconHashtag } from '@/ds/icons/central/IconHashtag';
 import { IconLab } from '@/ds/icons/central/IconLab';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconPercent } from '@/ds/icons/central/IconPercent';
 import { IconPlay } from '@/ds/icons/central/IconPlay';
-import { IconPodcast1 } from '@/ds/icons/central/IconPodcast1';
 import { IconServer } from '@/ds/icons/central/IconServer';
+import { IconShapesPlusXSquareCircle } from '@/ds/icons/central/IconShapesPlusXSquareCircle';
+import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconStar } from '@/ds/icons/central/IconStar';
 import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { IconTag } from '@/ds/icons/central/IconTag';
-import { IconThumbsUp } from '@/ds/icons/central/IconThumbsUp';
+import { IconThumbUpSimple } from '@/ds/icons/central/IconThumbUpSimple';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
 export type {
@@ -376,22 +379,22 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   entityName: IconTag,
   entityId: IconFingerPrint1,
   status: IconElectrocardiogram,
-  outcome: FlagIcon,
-  stopReason: OctagonIcon,
-  tags: TagsIcon,
+  outcome: IconFlag2,
+  stopReason: IconFormOctagon,
+  tags: IconTag,
   serviceName: IconServer,
   environment: IconGlobe,
-  traceId: WaypointsIcon,
+  traceId: IconAgents,
   runId: IconPlay,
-  threadId: IconBubble2,
+  threadId: IconChatBubble7,
   sessionId: IconLayersTwo,
-  requestId: IconPodcast1,
+  requestId: IconSignalTower,
   resourceId: IconHashtag,
   userId: IconUser,
   organizationId: IconBuildings,
   experimentId: IconLab,
   'spans.name': IconBranch,
-  'spans.spanType': ShapesIcon,
+  'spans.spanType': IconShapesPlusXSquareCircle,
   'spans.model': IconChip,
   'spans.provider': IconCloud,
   durationMs: IconStopwatch,
@@ -402,10 +405,10 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'spans.timeToFirstTokenMs': IconStopwatch,
   'spans.error': IconExclamationTriangle,
   'scores.scorerId': IconGauge,
-  'scores.score': PercentIcon,
-  'feedback.feedbackType': IconThumbsUp,
+  'scores.score': IconPercent,
+  'feedback.feedbackType': IconThumbUpSimple,
   'feedback.value': IconStar,
-  'feedback.comment': IconBubble5,
+  'feedback.comment': IconChatBubble7,
 };
 
 /** Which optional trace query fields the server declares support for. */

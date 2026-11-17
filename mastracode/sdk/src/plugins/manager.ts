@@ -22,6 +22,8 @@ import type {
 } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
+// Plugin errors kept for the first listener; a headless embedder never subscribes.
+const MAX_UNHEARD_PLUGIN_ERRORS = 20;
 
 function gitExecOptions(cwd: string) {
   return { cwd, env: NON_INTERACTIVE_GIT_ENV };
@@ -56,6 +58,7 @@ export class PluginManager {
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
   private readonly pluginErrorListeners = new Set<(event: PluginErrorEvent) => void>();
+  private readonly unheardPluginErrors: PluginErrorEvent[] = [];
   private runtime: MastraCodePluginRuntime | undefined;
 
   constructor(private readonly options: PluginManagerOptions) {
@@ -109,25 +112,33 @@ export class PluginManager {
 
   /**
    * Notified of plugin problems the user should see. With no listener, they go to
-   * `console.warn` so a headless embedder still has a trace.
+   * `console.warn` so a headless embedder still has a trace, and the most recent
+   * ones are handed to the first listener that subscribes: plugin signal providers
+   * start while Mastra Code boots, before a UI exists to subscribe.
    */
   onPluginError(listener: (event: PluginErrorEvent) => void): () => void {
     this.pluginErrorListeners.add(listener);
+    const unheard = this.unheardPluginErrors.splice(0);
+    for (const event of unheard) this.notifyPluginErrorListener(listener, event);
     return () => this.pluginErrorListeners.delete(listener);
   }
 
   reportPluginError(event: PluginErrorEvent): void {
     if (this.pluginErrorListeners.size === 0) {
       console.warn(event.message);
+      this.unheardPluginErrors.push(event);
+      if (this.unheardPluginErrors.length > MAX_UNHEARD_PLUGIN_ERRORS) this.unheardPluginErrors.shift();
       return;
     }
-    // A listener that throws must not stop the others, nor the reload or lane cleanup reporting through here.
-    for (const listener of this.pluginErrorListeners) {
-      try {
-        listener(event);
-      } catch (error) {
-        console.warn(`Plugin error listener failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    for (const listener of this.pluginErrorListeners) this.notifyPluginErrorListener(listener, event);
+  }
+
+  // A listener that throws must not stop the others, nor the reload or lane cleanup reporting through here.
+  private notifyPluginErrorListener(listener: (event: PluginErrorEvent) => void, event: PluginErrorEvent): void {
+    try {
+      listener(event);
+    } catch (error) {
+      console.warn(`Plugin error listener failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

@@ -6,17 +6,17 @@ import { DropdownMenu } from './dropdown-menu';
 import type { DropdownMenuRadioOption } from './dropdown-menu';
 import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
-import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
-import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconKeyboard } from '@/ds/icons/central/IconKeyboard';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
-import { IconSortArrowUpDown } from '@/ds/icons/central/IconSortArrowUpDown';
 import { IconUser } from '@/ds/icons/central/IconUser';
 import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
@@ -67,7 +67,7 @@ export const Variants: Story = {
           ))}
           <DropdownMenu>
             <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
-              <IconSettingsGear1 />
+              <IconSettingsGear5 />
             </DropdownMenu.Trigger>
             {menuItems}
           </DropdownMenu>
@@ -97,7 +97,7 @@ export const Compact: Story = {
           Profile
         </DropdownMenu.Item>
         <DropdownMenu.Item size="sm">
-          <IconSettingsGear1 />
+          <IconSettingsGear5 />
           Settings
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -130,7 +130,7 @@ export const WithIcons: Story = {
           <span>Profile</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <IconSettingsGear1 />
+          <IconSettingsGear5 />
           <span>Settings</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
@@ -170,7 +170,7 @@ export const WithLabelsAndGroups: Story = {
             <DropdownMenu.Shortcut>Ctrl+B</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <IconSettingsGear1 />
+            <IconSettingsGear5 />
             <span>Settings</span>
             <DropdownMenu.Shortcut>Ctrl+S</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -186,7 +186,7 @@ export const WithLabelsAndGroups: Story = {
             <span>Invite users</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <IconPlusLarge />
+            <IconPlusMedium />
             <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -291,7 +291,7 @@ export const WithRadioSubs: Story = {
         <DropdownMenu.Content align="end">
           <DropdownMenu.RadioSub
             label="Sort"
-            icon={<IconSortArrowUpDown aria-hidden />}
+            icon={<IconArrowsUpDown aria-hidden />}
             options={listSortOptions}
             value={sort}
             onValueChange={setSort}
@@ -334,11 +334,11 @@ export const WithSubMenu: Story = {
       <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <IconEmail1 />
+          <IconEmail2 />
           <span>Email</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <IconBubble2 />
+          <IconChatBubble7 />
           <span>Message</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
@@ -349,16 +349,16 @@ export const WithSubMenu: Story = {
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent>
             <DropdownMenu.Item>
-              <IconEmail1 />
+              <IconEmail2 />
               <span>Email</span>
             </DropdownMenu.Item>
             <DropdownMenu.Item>
-              <IconBubble2 />
+              <IconChatBubble7 />
               <span>Message</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item>
-              <IconPlusLarge />
+              <IconPlusMedium />
               <span>More...</span>
             </DropdownMenu.Item>
           </DropdownMenu.SubContent>
@@ -471,11 +471,11 @@ export const KitchenSink: Story = {
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent>
               <DropdownMenu.Item>
-                <IconEmail1 />
+                <IconEmail2 />
                 <span>Email</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <IconBubble2 />
+                <IconChatBubble7 />
                 <span>Message</span>
               </DropdownMenu.Item>
             </DropdownMenu.SubContent>

@@ -8,7 +8,7 @@ import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/S
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
@@ -87,7 +87,7 @@ export default function AgentBuilderSkillsPage() {
             actionSlot={
               canWriteSkills ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusLarge />}>
+                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusMedium />}>
                     New skill
                   </Button>
                   {enabledRegistry && (
@@ -135,7 +135,7 @@ export default function AgentBuilderSkillsPage() {
                       Browse registry
                     </Button>
                   )}
-                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusLarge />}>
+                  <Button variant="primary" onClick={goToCreate} icon={<IconPlusMedium />}>
                     New skill
                   </Button>
                 </ActionRow.End>

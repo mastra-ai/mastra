@@ -1,8 +1,8 @@
-import { LogsIcon } from 'lucide-react';
 import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
 import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { LogsIcon } from '@/ds/icons/LogsIcon';
 
 type CardActionButtonProps = {
   onClick: () => void;

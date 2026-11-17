@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Spinner } from '@/ds/components/Spinner/spinner';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { menuEmptyClass, menuItemButtonClass, menuItemCheckClass, menuSearchClasses } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
@@ -36,7 +36,7 @@ function PickMultiItem({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {checked && (
         <span className={menuItemCheckClass}>
-          <IconCheckmark1 />
+          <IconCheckmark2Medium />
         </span>
       )}
     </button>

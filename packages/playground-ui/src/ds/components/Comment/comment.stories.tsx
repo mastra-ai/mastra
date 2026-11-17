@@ -19,8 +19,8 @@ import { CommentComposer, CommentComposerInput, CommentComposerSend } from './co
 import type { CommentVariant } from './comment-context';
 import { CommentEditor } from './comment-editor';
 import { CommentQuote } from './comment-quote';
-import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { IconEmojiAddReaction } from '@/ds/icons/central/IconEmojiAddReaction';
 import { IconOpenQuote1 } from '@/ds/icons/central/IconOpenQuote1';
@@ -67,7 +67,7 @@ const SimpleThread = ({ variant }: { variant: CommentVariant }) => (
                 <IconEmojiAddReaction />
               </Button>
               <Button size="icon-sm" variant="ghost" aria-label="Resolve">
-                <IconCheckmark1 />
+                <IconCheckmark2Medium />
               </Button>
               <Button size="icon-sm" variant="ghost" aria-label="More actions">
                 <IconDotGrid1x3Horizontal />
@@ -203,7 +203,7 @@ export const Thread: Story = {
               <IconOpenQuote1 />
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label="Copy link">
-              <IconChainLink1 />
+              <IconChainLink3 />
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label="Edit comment">
               <IconPencil />

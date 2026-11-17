@@ -3,14 +3,15 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { IconBell } from '@mastra/playground-ui/icons/central/IconBell';
 import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSessionParked } from '../../../../hooks/useWorkItems';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -18,6 +19,7 @@ import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
+import { IconBell2 } from '@mastra/playground-ui/icons/central/IconBell2';
 
 /** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
 export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
@@ -51,15 +53,15 @@ export function notificationUrl(entry: Pick<NotificationEntry, 'source' | 'metad
 function notificationPresentation(entry: NotificationEntry): { state: string; icon: ReactNode; className?: string } {
   const action = entry.metadata?.action;
   if (entry.notifKind === 'pull-request-merged') {
-    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" size={13} decorative /> };
+    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" decorative /> };
   }
   if (entry.notifKind === 'pull-request-closed') {
-    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
+    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <IconCircleRecord size={13} />, className: 'text-success-indicator' };
+    return { state: 'open', icon: <IconCircleRecord />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <IconBell size={13} />, className: 'text-warning-foreground' };
+  return { state: 'notification', icon: <IconBell2 />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
@@ -115,13 +117,16 @@ function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
 function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const parked = useSessionParked(factoryId, waiting.sessionId);
+  const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
   const { toolCallId } = waiting;
   const answer = useMutation({
     mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
     mutationFn: (decision: 'approve' | 'decline') =>
       answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
+      void invalidateSessionQueries(queryClient, factoryId);
+    },
   });
   const outcome = answer.isSuccess
     ? answer.variables === 'approve'
@@ -150,11 +155,7 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
           {outcome}
         </Txt>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        render={<Link to={`/factories/${factoryId}/workspaces/${waiting.sessionId}/threads/${waiting.threadId}`} />}
-      >
+      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
         Open session
       </Button>
     </div>

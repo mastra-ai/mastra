@@ -1,5 +1,6 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 import { IconLayoutGrid1 } from '@mastra/playground-ui/icons/central/IconLayoutGrid1';
 import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
@@ -15,7 +16,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { CableIcon, ClipboardCheck } from 'lucide-react';
+import { CableIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -139,7 +140,7 @@ export const mainNav: NavSection[] = [
       {
         name: 'Review Queue',
         url: '/experiments/review-queue',
-        Icon: ClipboardCheck,
+        Icon: IconClipboard2,
         isOnMastraPlatform: true,
       },
     ],

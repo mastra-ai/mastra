@@ -32,8 +32,6 @@ const repo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 const otherRepo: GithubRepo = { ...repo, id: 100, fullName: 'octo/other', name: 'other', defaultBranch: 'develop' };
 const thirdRepo: GithubRepo = { ...repo, id: 101, fullName: 'octo/third', name: 'third' };
@@ -44,8 +42,6 @@ const gitlabProject: GitLabProject = {
   projectPath: 'team/backend',
   installationStorageId: 'gitlab-inst',
   defaultBranch: 'develop',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/backend',
 };
 const model = { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' as const };
 const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
@@ -159,7 +155,6 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
           projectRepository: {
             id: 'link-1',
             branch: 'main',
-            sandboxWorkdir: '/workspace/hello',
             repository: { slug: 'octo/hello', externalId: '99', defaultBranch: 'main' },
           },
         });
@@ -350,7 +345,7 @@ describe('Draft Factory onboarding', () => {
   });
 
   it('never starts syncing a repository the Work step switch left off', async () => {
-    registerSetup();
+    const writes = registerSetup();
     // Nothing is selected before onboarding, so "off" must not select the repository either, which
     // leaves the intake config untouched.
     const intake = registerIntake();
@@ -365,6 +360,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.find(item => item.path === 'repository')?.body).toMatchObject({ selectIntake: false });
     expect(intake.saved).toEqual([]);
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
   });
@@ -592,7 +588,7 @@ describe('Draft Factory onboarding', () => {
               repository: { ...body.repository, defaultBranch: 'main' },
             };
             if (!links.some(existing => existing.id === link.id)) links.push(link);
-            return HttpResponse.json({ projectRepository: { ...link, branch: 'main', sandboxWorkdir: '/workspace' } });
+            return HttpResponse.json({ projectRepository: { ...link, branch: 'main' } });
           },
         ),
         http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
@@ -650,7 +646,6 @@ describe('Draft Factory onboarding', () => {
               projectRepository: {
                 id,
                 branch: selected.defaultBranch,
-                sandboxWorkdir: selected.sandboxWorkdir,
                 repository: {
                   slug: selected.fullName,
                   externalId: String(selected.id),

@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
@@ -10,7 +10,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
     actionSlot={
       <div className="flex flex-col items-center gap-2">
         {onRunExperiment && (
-          <Button variant="primary" onClick={onRunExperiment} icon={<IconPlusLarge />}>
+          <Button variant="primary" onClick={onRunExperiment} icon={<IconPlusMedium />}>
             New experiment
           </Button>
         )}

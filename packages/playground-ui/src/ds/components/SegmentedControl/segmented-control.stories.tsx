@@ -3,8 +3,8 @@ import { useState } from 'react';
 
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
 import type { SegmentedControlProps } from './segmented-control';
-import { IconBell } from '@/ds/icons/central/IconBell';
-import { IconBellOff } from '@/ds/icons/central/IconBellOff';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
+import { IconBell2Off } from '@/ds/icons/central/IconBell2Off';
 import { IconMoon } from '@/ds/icons/central/IconMoon';
 import { IconStudioDisplay } from '@/ds/icons/central/IconStudioDisplay';
 import { IconSun } from '@/ds/icons/central/IconSun';
@@ -75,10 +75,10 @@ export const IconAndText: Story = {
   render: () => (
     <Controlled aria-label="Alerts" initial="on">
       <SegmentedControlItem value="on">
-        <IconBell /> On
+        <IconBell2 /> On
       </SegmentedControlItem>
       <SegmentedControlItem value="off">
-        <IconBellOff /> Off
+        <IconBell2Off /> Off
       </SegmentedControlItem>
     </Controlled>
   ),

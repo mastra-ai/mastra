@@ -1,4 +1,4 @@
-import { EqualNot, TextSearch, ListX } from 'lucide-react';
+import { EqualNot } from 'lucide-react';
 import * as React from 'react';
 
 import type { ConditionOperator } from '../types';
@@ -7,14 +7,16 @@ import { OPERATOR_LABELS, OPERATORS } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
 import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDoubleLeft } from '@/ds/icons/central/IconChevronDoubleLeft';
 import { IconChevronDoubleRight } from '@/ds/icons/central/IconChevronDoubleRight';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { IconMathEquals } from '@/ds/icons/central/IconMathEquals';
+import { IconPageCross } from '@/ds/icons/central/IconPageCross';
+import { IconPageTextSearch } from '@/ds/icons/central/IconPageTextSearch';
 import { cn } from '@/lib/utils';
 
 /**
@@ -23,15 +25,15 @@ import { cn } from '@/lib/utils';
 const OPERATOR_ICONS: Record<ConditionOperator, React.ReactNode> = {
   equals: <IconMathEquals />,
   not_equals: <EqualNot />,
-  contains: <TextSearch />,
+  contains: <IconPageTextSearch />,
   not_contains: <IconAlignmentLeft />,
-  greater_than: <IconChevronRight />,
-  less_than: <IconChevronLeft />,
+  greater_than: <IconChevronRightMedium />,
+  less_than: <IconChevronLeftMedium />,
   greater_than_or_equal: <IconChevronDoubleRight />,
   less_than_or_equal: <IconChevronDoubleLeft />,
   in: <IconListBullets />,
-  not_in: <ListX />,
-  exists: <IconCheckmark1 />,
+  not_in: <IconPageCross />,
+  exists: <IconCheckmark2Medium />,
   not_exists: <IconCircleBanSign />,
 };
 

@@ -1,9 +1,8 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { CirclePause } from 'lucide-react';
 import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
 import { Spinner } from '@/ds/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconClock } from '@/ds/icons/central/IconClock';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
@@ -29,9 +28,9 @@ function StatusIcon({ status }: WorkflowRunStatusIconProps) {
     case 'paused':
       return <IconPause className={toneText} />;
     case 'suspended':
-      return <CirclePause className={toneText} />;
+      return <IconPause className={toneText} />;
     case 'success':
-      return <IconCheckmark1 className={toneText} />;
+      return <IconCheckmark2Medium className={toneText} />;
     default:
       return <IconClock className={toneText} />;
   }

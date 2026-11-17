@@ -5,7 +5,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
-import { IconCalendarClock } from '@mastra/playground-ui/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@mastra/playground-ui/icons/central/IconCalendarClock4';
 import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { getShortId } from '@mastra/playground-ui/utils/id';
@@ -105,7 +105,7 @@ function metadataMetrics(item: DatasetItem): ComparisonMetric[] {
   if (wasUpdated) {
     metrics.push({
       id: 'updated',
-      icon: <IconCalendarClock />,
+      icon: <IconCalendarClock4 />,
       label: 'Updated',
       value: formatDate(item.updatedAt, 'date-time'),
       delta: null,
