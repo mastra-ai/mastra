@@ -1,6 +1,9 @@
+import type { ChatCompletionRequest, LLMock } from '@copilotkit/aimock';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../../../../agent';
 import type { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import type { RequireToolApproval } from '../../../../tools';
@@ -12,6 +15,8 @@ import {
   isDurableEngineVariant,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../types';
+import { createOpenAI } from '@ai-sdk/openai-v5';
 
 /**
  * A tool call that starts after another call of the same step was suspended and resumed.
@@ -28,6 +33,7 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
   type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
 
   function buildTools(log: string[], askSuspendPayloads: unknown[], { deleteAllRequiresApproval = false } = {}) {
+    const confirmed = new Set<string>();
     return {
       ask: createTool({
         id: 'ask',
@@ -83,6 +89,29 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
           return { free: '10GB' };
         },
       }),
+      list_files: createTool({
+        id: 'list_files',
+        description: 'List files.',
+        inputSchema: z.object({}),
+        execute: async () => {
+          log.push('ran:list_files');
+          return { files: ['a.txt'] };
+        },
+      }),
+      // Asks for approval from inside its body, once per name; declares no suspend schema.
+      confirm: createTool({
+        id: 'confirm',
+        description: 'Confirm with the user.',
+        inputSchema: z.object({ name: z.string() }),
+        execute: async ({ name }, { agent }) => {
+          if (!confirmed.has(name)) {
+            confirmed.add(name);
+            return agent!.suspend({ name }, { requireToolApproval: true });
+          }
+          log.push(`ran:confirm:${name}`);
+          return { confirmed: name };
+        },
+      }),
     };
   }
 
@@ -98,8 +127,18 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
     onlyCalledTools = false,
     beforeFirstResume,
     nextStepToolCalls,
+    fixtures,
+    agents,
+    streamOptions,
+    firstStreamPauses = 1,
   }: {
+    /** Pauses the first stream announces together; a durable stream is read until all arrive. */
+    firstStreamPauses?: number;
     toolCalls: ToolCall[];
+    /** Replaces the default responses (the calls, then "done"). */
+    fixtures?: (llm: LLMock) => void;
+    agents?: Record<string, Agent>;
+    streamOptions?: Record<string, unknown>;
     requireToolApproval?: RequireToolApproval;
     deleteAllRequiresApproval?: boolean;
     /** Pass `requireToolApproval` again on every resume. */
@@ -111,42 +150,56 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
     nextStepToolCalls?: ToolCall[];
   }) {
     const llm = getMock();
-    const responses = [{ toolCalls }, ...(nextStepToolCalls ? [{ toolCalls: nextStepToolCalls }] : [])];
-    responses.forEach((response, sequenceIndex) => llm.on({ endpoint: 'chat', sequenceIndex }, response));
-    llm.on({ endpoint: 'chat', sequenceIndex: responses.length }, { content: 'done' });
+    if (fixtures) {
+      fixtures(llm);
+    } else {
+      const responses = [{ toolCalls }, ...(nextStepToolCalls ? [{ toolCalls: nextStepToolCalls }] : [])];
+      responses.forEach((response, sequenceIndex) => llm.on({ endpoint: 'chat', sequenceIndex }, response));
+      llm.on({ endpoint: 'chat', sequenceIndex: responses.length }, { content: 'done' });
+    }
 
     const log: string[] = [];
     // What the resumed `ask` received as the payload it suspended with.
     const askSuspendPayloads: unknown[] = [];
     const allTools = buildTools(log, askSuspendPayloads, { deleteAllRequiresApproval });
     const calledNames = new Set([...toolCalls, ...(nextStepToolCalls ?? [])].map(call => call.name));
+    const resumeBound = toolCalls.length + (nextStepToolCalls?.length ?? 0) + 2;
     const tools = onlyCalledTools
       ? Object.fromEntries(Object.entries(allTools).filter(([name]) => calledNames.has(name)))
       : allTools;
-    const { agent, mastra } = await createSharedAgent(llm, { engine, instructions: 'Use the tools.', tools });
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      instructions: 'Use the tools.',
+      tools,
+      ...(agents ? { agents, memory: new MockMemory() } : {}),
+    });
     const scenarioAgent = agent as any;
     const resumePolicy = passPolicyOnResume ? { requireToolApproval } : {};
 
     let run: Run = await scenarioAgent.stream('Clean up my files.', {
       ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+      ...(agents ? { memory: { thread: 'fresh-call-thread', resource: 'fresh-call-user' } } : {}),
+      ...streamOptions,
     });
     const runId = run.runId;
-    const answered = new Set<string>();
-    for (let resumes = 0; resumes <= calledNames.size * 2 + 2; resumes++) {
-      let pause: { kind: 'approval' | 'suspended'; toolCallId: string } | undefined;
+    // Every pause is logged and answered once, in the order it was announced.
+    const seen = new Set<string>();
+    const pending: { kind: 'approval' | 'suspended'; toolCallId: string }[] = [];
+    for (let resumes = 0; resumes <= resumeBound * 2; resumes++) {
       for await (const chunk of run.fullStream) {
         if (chunk.type !== 'tool-call-approval' && chunk.type !== 'tool-call-suspended') continue;
         const kind = chunk.type === 'tool-call-approval' ? 'approval' : 'suspended';
         const toolCallId = (chunk.payload as { toolCallId: string }).toolCallId;
-        if (answered.has(`${kind}:${toolCallId}`)) continue;
+        if (seen.has(`${kind}:${toolCallId}`)) continue;
+        seen.add(`${kind}:${toolCallId}`);
         log.push(`${kind}:${toolCallId}`);
-        pause ??= { kind, toolCallId };
+        pending.push({ kind, toolCallId });
         // Durable streams stay open while the run is suspended.
-        if (isDurableEngineVariant(engine)) break;
+        if (isDurableEngineVariant(engine) && pending.length >= (resumes === 0 ? firstStreamPauses : 1)) break;
       }
+      const pause = pending.shift();
       if (!pause) break;
-      if (answered.size === 0) await beforeFirstResume?.(mastra, runId);
-      answered.add(`${pause.kind}:${pause.toolCallId}`);
+      if (resumes === 0) await beforeFirstResume?.(mastra, runId);
       run =
         pause.kind === 'approval'
           ? await scenarioAgent.approveToolCall({ runId, toolCallId: pause.toolCallId, ...resumePolicy })
@@ -312,7 +365,7 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
   // A run stored by an earlier version keeps no trace of a function policy. Nothing forces the
   // calls to run one at a time on resume, so `delete_all` starts next to the approved call and
   // is handed that call's approval payload, the only sign left that the run needed approvals.
-  it('asks for approval of a call started next to a resumed approval in a run stored without its policy', async () => {
+  it('still asks for approval of a call started next to a resumed approval in a run stored without its policy', async () => {
     let edited = 0;
     const { log, text } = await drive({
       toolCalls: [
@@ -374,6 +427,100 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
     expect(log).toEqual(['suspended:call_ask', 'ran:ask', 'approval:call_delete_all', 'ran:delete_all']);
     // `ask` resumes with its resume data but no longer receives the payload it suspended with.
     expect(askSuspendPayloads).toEqual([undefined]);
+    expect(text).toBe('done');
+  });
+
+  // With no approval policy, tools that pause without a suspend schema don't make the calls run
+  // one at a time, so `toolCallConcurrency: 2` leaves `list_files` unstarted while both pause.
+  // After the first is approved it starts in the resumed run, and on the `Agent` loop it is
+  // handed that sibling's approval payload.
+  const pausedThenList = (first: string, second: string, name: string) => [
+    { id: first, name, arguments: name === 'confirm' ? { name: 'a' } : { prompt: 'fetch alpha' } },
+    { id: second, name, arguments: name === 'confirm' ? { name: 'b' } : { prompt: 'fetch beta' } },
+    { id: 'call_list', name: 'list_files', arguments: {} },
+  ];
+
+  it(
+    isPlainLoop
+      ? 'still asks for approval of a call started next to a tool that asked for approval from its body'
+      : 'runs a call started next to a tool that asked for approval from its body without asking',
+    async () => {
+      const { log, text } = await drive({
+        toolCalls: pausedThenList('call_confirm_a', 'call_confirm_b', 'confirm'),
+        onlyCalledTools: true,
+        streamOptions: { toolCallConcurrency: 2 },
+        firstStreamPauses: 2,
+      });
+
+      expect(log.slice(0, 2)).toEqual(['approval:call_confirm_a', 'approval:call_confirm_b']);
+      // On the `Agent` loop the sibling's approval payload still gates the call, as it always did.
+      expect(log.includes('approval:call_list')).toBe(isPlainLoop);
+      expect(log).toContain('ran:list_files');
+      expect(log).toEqual(expect.arrayContaining(['ran:confirm:a', 'ran:confirm:b']));
+      expect(text).toBe('done');
+    },
+  );
+
+  it('runs a call started next to an approved delegation without asking when no policy is set', async () => {
+    const llm = getMock();
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+    const secrets: string[] = [];
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'subAgent',
+      description: 'Fetches secrets',
+      instructions: 'Fetch secrets with secretTool.',
+      model: openai(SCENARIO_MODEL_ID),
+      tools: {
+        secretTool: createTool({
+          id: 'secret-tool',
+          description: 'Fetch a secret',
+          inputSchema: z.object({ query: z.string() }),
+          requireApproval: true,
+          execute: async ({ query }) => {
+            secrets.push(query);
+            return { secret: query };
+          },
+        }),
+      },
+    });
+    const toolNames = (req: ChatCompletionRequest) => (req.tools ?? []).map(tool => tool.function?.name);
+    const lastIsToolResult = (req: ChatCompletionRequest) => req.messages.at(-1)?.role === 'tool';
+    const asks = (req: ChatCompletionRequest, word: string) => JSON.stringify(req.messages).includes(`fetch ${word}`);
+    const isSupervisor = (req: ChatCompletionRequest) => toolNames(req).includes('agent-subAgent');
+    const isSubAgent = (req: ChatCompletionRequest) => toolNames(req).includes('secretTool');
+
+    const { log, text } = await drive({
+      toolCalls: pausedThenList('call_sup_a', 'call_sup_b', 'agent-subAgent'),
+      onlyCalledTools: true,
+      agents: { subAgent },
+      // `autoResumeSuspendedTools` keeps `list_files` from being started while the response
+      // streams: delegations never are, so it would otherwise take a free slot at once.
+      streamOptions: { toolCallConcurrency: 2, autoResumeSuspendedTools: true },
+      firstStreamPauses: 2,
+      fixtures: mock => {
+        mock.on(
+          { endpoint: 'chat', predicate: req => isSupervisor(req) && !lastIsToolResult(req) },
+          { toolCalls: pausedThenList('call_sup_a', 'call_sup_b', 'agent-subAgent') },
+        );
+        mock.on(
+          { endpoint: 'chat', predicate: req => isSupervisor(req) && lastIsToolResult(req) },
+          { content: 'done' },
+        );
+        for (const word of ['alpha', 'beta']) {
+          mock.on(
+            { endpoint: 'chat', predicate: req => isSubAgent(req) && !lastIsToolResult(req) && asks(req, word) },
+            { toolCalls: [{ id: `call_secret_${word}`, name: 'secretTool', arguments: { query: word } }] },
+          );
+        }
+        mock.on({ endpoint: 'chat', predicate: req => isSubAgent(req) && lastIsToolResult(req) }, { content: 'found' });
+      },
+    });
+
+    expect(log.slice(0, 2).sort()).toEqual(['approval:call_sup_a', 'approval:call_sup_b']);
+    expect(log).not.toContain('approval:call_list');
+    expect(log).toContain('ran:list_files');
+    expect([...secrets].sort()).toEqual(['alpha', 'beta']);
     expect(text).toBe('done');
   });
 });

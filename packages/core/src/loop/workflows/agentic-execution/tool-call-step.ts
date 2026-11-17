@@ -564,14 +564,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
         const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
-        // A fresh call handed a sibling's approval payload while no policy resolves asks too: a
-        // run stored before function policies left a stand-in resumes with no policy, and that
-        // payload is the only sign left that the run's calls need approval.
+        // With no policy, keep the gate earlier versions gave a fresh call handed a sibling's
+        // payload (`main`'s `suspendedForApproval`): a run stored before function policies left a
+        // stand-in has nothing else that says its calls need approval.
+        const siblingSuspendData = executionContext.suspendData as
+          | { requireToolApproval?: unknown; suspendedToolRunId?: unknown }
+          | undefined;
         const siblingApprovalWithoutPolicy =
           requireToolApproval === undefined &&
           suspendData === undefined &&
-          typeof (executionContext.suspendData as { requireToolApproval?: unknown } | undefined)
-            ?.requireToolApproval === 'object';
+          !!siblingSuspendData?.requireToolApproval &&
+          !siblingSuspendData?.suspendedToolRunId;
         const toolRequiresApproval =
           (cachedApprovalVerdict ??
             (await resolveToolApprovalVerdict({
