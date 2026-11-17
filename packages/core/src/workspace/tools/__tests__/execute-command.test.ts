@@ -5,7 +5,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { MastraBrowser } from '../../../browser/browser';
 import { browserCliHandler } from '../../../browser/cli-handler';
+import { RequestContext } from '../../../request-context';
 import type { ToolExecutionContext } from '../../../tools/types';
+import type { WorkspaceFilesystem } from '../../filesystem';
 import { LocalSandbox } from '../../sandbox/local-sandbox';
 import type { CommandResult, ExecuteCommandOptions } from '../../sandbox/types';
 import { Workspace } from '../../workspace';
@@ -1272,5 +1274,201 @@ describe('executeCommandTool browser CLI logic', () => {
       expect(executedCommands).toHaveLength(1);
       expect(executedCommands[0]).toContain('open');
     });
+  });
+});
+
+/**
+ * A filesystem stub that reports the sandbox directory shell commands should default to,
+ * like a sandbox-backed filesystem whose paths all resolve against one root.
+ */
+function createMockFilesystem(getCommandCwd?: () => Promise<string | undefined>): WorkspaceFilesystem {
+  return {
+    id: 'test-filesystem',
+    name: 'test-filesystem',
+    provider: 'test',
+    ...(getCommandCwd ? { getCommandCwd } : {}),
+  } as unknown as WorkspaceFilesystem;
+}
+
+function commandResult(): CommandResult {
+  return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+}
+
+describe('executeCommandTool default cwd', () => {
+  it('defaults cwd to the workspace filesystem root when the model omits one', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(received?.cwd).toBe('/srv/session/repo');
+  });
+
+  it('defaults cwd for background commands too', async () => {
+    let received: any;
+    const spawn = async (_command: string, options: any) => {
+      received = options;
+      return { pid: 123 };
+    };
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async () => commandResult(),
+      processes: { spawn },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    const { executeCommandWithBackgroundTool } = await import('../execute-command');
+    await executeCommandWithBackgroundTool.execute!(
+      { command: 'npm start', timeout: null, cwd: null, tail: null, background: true },
+      context,
+    );
+
+    expect(received?.cwd).toBe('/srv/session/repo');
+  });
+
+  it('keeps an explicit absolute cwd', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: '/tmp/elsewhere', tail: null }, context);
+
+    expect(received?.cwd).toBe('/tmp/elsewhere');
+  });
+
+  it('resolves a relative cwd under the workspace filesystem root', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => '/srv/session/repo'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: 'src', tail: null }, context);
+
+    expect(received?.cwd).toBe('/srv/session/repo/src');
+  });
+
+  it('passes no cwd when the filesystem reports no command root', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(received?.cwd).toBeUndefined();
+  });
+
+  it('ignores a command root that is not an absolute sandbox path', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    const sandbox = {
+      id: 'test-sandbox',
+      name: 'test-sandbox',
+      provider: 'test',
+      status: 'running' as const,
+      executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+        received = opts;
+        return commandResult();
+      },
+    };
+    const workspace = new Workspace({
+      sandbox: sandbox as any,
+      filesystem: createMockFilesystem(async () => 'relative/dir'),
+    });
+    const context: ToolExecutionContext = { workspace, writer: { custom: vi.fn() } as any };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(received?.cwd).toBeUndefined();
+  });
+
+  it('does not resolve a dynamic filesystem just to learn the command cwd', async () => {
+    let received: ExecuteCommandOptions | undefined;
+    let resolutions = 0;
+    const workspace = new Workspace({
+      sandbox: {
+        id: 'test-sandbox',
+        name: 'test-sandbox',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async (_command: string, _args: string[], opts?: ExecuteCommandOptions) => {
+          received = opts;
+          return commandResult();
+        },
+      } as any,
+      // A sandbox-only tool call must not pay for the filesystem resolver, so the default
+      // cwd comes from a configured filesystem only — never from a dynamic one.
+      filesystem: () => {
+        resolutions++;
+        return createMockFilesystem(async () => '/srv/session/repo');
+      },
+    });
+    const context: ToolExecutionContext = {
+      workspace,
+      writer: { custom: vi.fn() } as any,
+      requestContext: new RequestContext(),
+    };
+
+    await execute({ command: 'ls', timeout: null, cwd: null, tail: null }, context);
+
+    expect(resolutions).toBe(0);
+    expect(received?.cwd).toBeUndefined();
   });
 });

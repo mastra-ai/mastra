@@ -24,10 +24,10 @@ interface ComposerVoiceButtonProps {
 }
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
-  if (state === 'recording') return <IconStop size={14} />;
+  if (state === 'recording') return <IconStop className="size-icon-sm" />;
   if (state === 'transcribing')
-    return <IconLoadingCircle size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
-  return <IconMicrophone size={14} />;
+    return <IconLoadingCircle className="size-icon-sm motion-safe:animate-spin motion-reduce:animate-none" />;
+  return <IconMicrophone className="size-icon-sm" />;
 }
 
 function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
@@ -48,7 +48,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
           navigate(settingsSectionPath(factoryId, 'models', VOICE_INPUT_ANCHOR), { state: { from: location } })
         }
       >
-        <IconMicrophoneOff size={14} />
+        <IconMicrophoneOff />
       </Button>
     );
   }

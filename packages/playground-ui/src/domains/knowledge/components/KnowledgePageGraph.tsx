@@ -680,7 +680,7 @@ function GraphLegend({
         </li>
         {levels.includes('scope') ? (
           <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
-            <IconLayersTwo aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <IconLayersTwo aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
             <Txt as="span" variant="meta" tone="muted">
               Scope, above its pages
             </Txt>
@@ -688,7 +688,7 @@ function GraphLegend({
         ) : null}
         {levels.includes('ancestor') ? (
           <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
-            <IconArrowWallUp aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <IconArrowWallUp aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
             <Txt as="span" variant="meta" tone="muted">
               Page above the focus
             </Txt>
@@ -862,10 +862,10 @@ function GraphLegend({
         ) : null}
         <li className="flex items-center gap-2">
           <span
-            className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
+            className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground [&>svg]:size-2"
             aria-hidden
           >
-            <IconPin size={8} />
+            <IconPin />
           </span>
           <Txt as="span" variant="meta" tone="muted">
             Pinned

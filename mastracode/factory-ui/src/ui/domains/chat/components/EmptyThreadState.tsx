@@ -10,7 +10,7 @@ import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const emptyThreadClass =
+export const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
 function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value: string; font?: 'body' | 'mono' }) {

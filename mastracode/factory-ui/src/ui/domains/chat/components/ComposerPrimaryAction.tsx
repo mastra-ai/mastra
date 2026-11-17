@@ -23,7 +23,7 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
         }}
         aria-label="Abort"
       >
-        <IconStop size={14} />
+        <IconStop />
       </Button>
     );
   }
@@ -37,7 +37,7 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
       aria-label="Send message"
       title={sendTitle}
     >
-      <IconArrowUp size={16} />
+      <IconArrowUp />
     </Button>
   );
 }

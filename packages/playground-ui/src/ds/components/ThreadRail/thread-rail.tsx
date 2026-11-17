@@ -394,7 +394,7 @@ function ThreadRailPreviewContent({
               key={file}
               className="inline-flex max-w-44 items-center gap-1.5 truncate"
             >
-              <IconFileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              <IconFileText className="size-icon-sm shrink-0 opacity-70" aria-hidden />
               {file}
             </Txt>
           ))}

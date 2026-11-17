@@ -1,18 +1,19 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Link } from 'react-router';
 
-import { NEW_CARD_ROUTES_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
+import { INTAKE_ORDER_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
 
-/** How cards get to a board: Factory files them by the project's intake routes. */
+/** How cards get to a board: each new item is offered to the boards in intake order, and each board's rules decide. */
 export function IntakeNote({ factoryId }: { factoryId: string }) {
   return (
     <Notice variant="info">
       {/* One element: the notice stacks its children. */}
       <span>
-        <Link to={settingsSectionPath(factoryId, 'intake', NEW_CARD_ROUTES_ANCHOR)} className="underline">
-          Intake routes
-        </Link>{' '}
-        decide which board each new card lands on.
+        New issues and pull requests are checked board by board in the{' '}
+        <Link to={settingsSectionPath(factoryId, 'intake', INTAKE_ORDER_ANCHOR)} className="underline">
+          intake order
+        </Link>
+        . Add rules on the new board to decide what it takes.
       </span>
     </Notice>
   );

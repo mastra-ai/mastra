@@ -1207,6 +1207,29 @@ describe('repos route', () => {
     expect(tables.installations).toHaveLength(1);
   });
 
+  it('passes a search and limit to each installation and keeps the most recently pushed overall', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) =>
+      installationId === 7
+        ? [
+            { ...(await defaultImpl(7))[0]!, id: 1, fullName: 'octo/agent-old', pushedAt: '2026-01-01T00:00:00Z' },
+            { ...(await defaultImpl(7))[0]!, id: 2, fullName: 'octo/agent-new', pushedAt: '2026-11-13T00:00:00Z' },
+          ]
+        : [{ ...(await defaultImpl(8))[0]!, id: 3, fullName: 'other/agent-mid', pushedAt: '2026-06-01T00:00:00Z' }],
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos?q=Agent&limit=2');
+
+    expect(res.status).toBe(200);
+    expect(listInstallationRepos).toHaveBeenCalledWith(7, { fresh: false, query: 'agent', limit: 2 });
+    const json = await res.json();
+    expect(json.repos.map((repo: { fullName: string }) => repo.fullName)).toEqual([
+      'octo/agent-new',
+      'other/agent-mid',
+    ]);
+  });
+
   it('lists multiple installations concurrently', async () => {
     install(7, 'octo');
     install(8, 'other');

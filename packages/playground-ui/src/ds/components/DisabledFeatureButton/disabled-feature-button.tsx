@@ -43,7 +43,7 @@ export function DisabledFeatureButton({ icon, label, tooltipContent, docsHref }:
             )}
           >
             Learn more
-            <IconSquareArrowTopRight className="size-3" />
+            <IconSquareArrowTopRight className="size-icon-xs" />
           </a>
         </span>
       </TooltipContent>

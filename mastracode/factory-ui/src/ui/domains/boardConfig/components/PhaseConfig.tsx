@@ -343,7 +343,7 @@ export function PhaseConfig({
                   >
                     <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
                       <span className="flex min-w-0 items-center gap-2">
-                        <IconBook aria-hidden className="text-muted-foreground size-4 shrink-0" />
+                        <IconBook aria-hidden className="text-muted-foreground size-icon-md shrink-0" />
                         <span className="truncate">{skillName ?? 'No skill'}</span>
                       </span>
                     </SelectTrigger>

@@ -1,5 +1,27 @@
 # @mastra/react
 
+## 1.15.1-alpha.4
+
+### Patch Changes
+
+- New feedback comments now show up in the list as soon as you submit them, instead of after the next refresh. Lists from `useTraceFeedback` and `useSpanFeedback` show the comment right away, remove it if the submit fails, and keep showing it until the list returns the stored comment or 60 seconds pass, whichever comes first. While a comment is waiting to be stored, the list refreshes every 3 seconds instead of every 30 seconds. ([#30515](https://github.com/mastra-ai/mastra/pull/30515))
+
+  Comments that are not stored yet have `isPending: true`, so you can hide actions such as delete until the stored comment arrives:
+
+  ```tsx
+  const { data } = useTraceFeedback({ traceId });
+
+  data?.feedback.map(item => (item.isPending ? <span>Sending…</span> : <FeedbackActions item={item} />));
+  ```
+
+  In Studio, a comment that is not stored yet shows "Sending…" instead of its review status, and its Mark reviewed and Delete actions stay hidden until the stored comment arrives.
+
+  `useCreateFeedback` now runs your `onMutate`, `onError` and `onSuccess` options in addition to its own behavior. Before, passing `onSuccess` skipped the hook's list refresh.
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/client-js@1.60.1-alpha.4
+
 ## 1.15.1-alpha.3
 
 ### Patch Changes

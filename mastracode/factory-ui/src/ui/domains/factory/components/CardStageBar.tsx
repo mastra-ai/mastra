@@ -6,7 +6,7 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
@@ -50,7 +50,7 @@ export function CardStageBar({
   const { session, links } = useSessionSubscriptions();
   const repository = session.repository;
   const subscriptions = links.subscriptions;
-  const parkedSessionIds = useSidebarWorkItemsQuery(factory.id).data?.parkedSessionIds ?? NO_SESSIONS;
+  const parkedSessionIds = useSessionActivityQuery(factory.id).data?.parkedSessionIds ?? NO_SESSIONS;
   const sessionStatus = useItemSessionStatuses({ factoryProjectId: factory.id, items: [item], parkedSessionIds }).get(
     item.id,
   );

@@ -13,15 +13,16 @@
  * (org:write parity with Linear), not an organization admin.
  */
 
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
-import type { PlatformApiClient} from '../api-client.js';
+import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
-import { offersSessionTools } from './session-tools.js';
+import { connectToolExclusion, offersSessionTools } from './session-tools.js';
 
 type RouteContext = Context;
 
@@ -83,7 +84,39 @@ export interface BuildPlatformConnectRoutesOptions {
 export interface ConnectToolsSource {
   client: PlatformApiClient;
   projectId: string;
+  /**
+   * `default`: sessions get Factory's own Connect tools for this project.
+   * `custom`: the Factory's `tools` option sets session tools, and may or may
+   * not include these connections.
+   */
+  toolsSource: 'default' | 'custom';
+  /**
+   * Resolves the tools a session started by this request would get from
+   * `toolsSource`: the project's Connect tools before Factory's filters for
+   * `default`, or what the `tools` option returns for `custom`. Rejects when
+   * they can't be resolved.
+   */
+  resolveTools: (args: { requestContext: RequestContext }) => Promise<Record<string, unknown>>;
 }
+
+/** One tool as Settings › Tools lists it. */
+export interface ListedConnectTool {
+  name: string;
+  description: string | null;
+  /** The tool pauses the run until someone approves each call. */
+  requiresApproval: boolean;
+  /** Factory leaves this default Connect tool out of sessions: its name says it deletes or archives. */
+  excluded?: 'destructive';
+}
+
+/** The one piece of setup the Factory lacks to list its project's connections. */
+export type ConnectToolsSetupMissing = 'no_credentials' | 'no_project_id';
+
+const MISSING_SETUP_MESSAGES: Record<ConnectToolsSetupMissing, string> = {
+  no_credentials:
+    'This Factory has no Mastra Platform credentials. Set MASTRA_PLATFORM_SECRET_KEY or MASTRA_PLATFORM_ACCESS_TOKEN.',
+  no_project_id: 'This Factory has Mastra Platform credentials but no MASTRA_PROJECT_ID.',
+};
 
 async function resolveOrgTenant(
   c: RouteContext,
@@ -126,23 +159,33 @@ function platformError(c: RouteContext, err: unknown) {
   return c.json({ error: 'platform_request_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
-export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSource | undefined): ApiRoute {
+/**
+ * Lists the Platform project's connections for Settings › Tools whenever the
+ * Factory has Platform credentials and `MASTRA_PROJECT_ID`, whatever its
+ * `tools` option. `toolsSource` tells the panel whether sessions get these
+ * connections by default or only through the Factory's own `tools` code.
+ */
+export function buildConnectToolsRoute(
+  auth: RouteAuth,
+  source: ConnectToolsSource | { missing: ConnectToolsSetupMissing },
+): ApiRoute {
   return registerApiRoute('/web/integrations/platform/connect-tools', {
     method: 'GET',
     requiresAuth: false,
     handler: async rawContext => {
       const c = loose(rawContext);
-      if (!source) {
-        return c.json(
-          { error: 'connect_tools_off', message: "This Factory's sessions don't get Mastra Connect tools." },
-          404,
-        );
-      }
       if (auth.enabled()) {
         await auth.ensureUser(c);
         if (!auth.tenant(c)) return c.json({ error: 'unauthorized' }, 401);
       }
-      const { client, projectId } = source;
+      if ('missing' in source) {
+        // `connect_tools_off` stays the code so settings pages from older CLIs still read it.
+        return c.json(
+          { error: 'connect_tools_off', reason: source.missing, message: MISSING_SETUP_MESSAGES[source.missing] },
+          404,
+        );
+      }
+      const { client, projectId, toolsSource } = source;
       try {
         const [listed, catalog] = await Promise.all([
           client.request<{ connections: ProjectConnectionRow[] }>(
@@ -171,9 +214,69 @@ export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSour
             };
           })
           .sort((a, b) => a.providerName.localeCompare(b.providerName));
-        return c.json({ projectId, connections });
+        return c.json({ projectId, toolsSource, connections });
       } catch (err) {
         return platformError(c, err);
+      }
+    },
+  });
+}
+
+function listedTool(name: string, tool: unknown, toolsSource: ConnectToolsSource['toolsSource']): ListedConnectTool[] {
+  // Factory filters only its default Connect tools; a `tools` option reaches sessions as written.
+  const exclusion = toolsSource === 'default' ? connectToolExclusion(name) : undefined;
+  // GitHub and GitLab connections aren't listed, so neither are their tools.
+  if (exclusion === 'source_control') return [];
+  const { description, requireApproval } = (tool ?? {}) as { description?: unknown; requireApproval?: unknown };
+  return [
+    {
+      name,
+      description: typeof description === 'string' && description.trim() ? description.trim() : null,
+      requiresApproval: requireApproval === true,
+      ...(exclusion ? { excluded: exclusion } : {}),
+    },
+  ];
+}
+
+/**
+ * Lists the tools sessions get from the Connect tools source, as the signed-in
+ * caller's session would resolve them, for the tool lists in Settings › Tools.
+ */
+export function buildConnectToolListRoute(
+  auth: RouteAuth,
+  source: ConnectToolsSource | { missing: ConnectToolsSetupMissing },
+): ApiRoute {
+  return registerApiRoute('/web/integrations/platform/connect-tools/tools', {
+    method: 'GET',
+    requiresAuth: false,
+    handler: async rawContext => {
+      const c = loose(rawContext);
+      if (auth.enabled()) {
+        await auth.ensureUser(c);
+        if (!auth.tenant(c)) return c.json({ error: 'unauthorized' }, 401);
+      }
+      if ('missing' in source) {
+        return c.json(
+          { error: 'connect_tools_off', reason: source.missing, message: MISSING_SETUP_MESSAGES[source.missing] },
+          404,
+        );
+      }
+      const { toolsSource, resolveTools } = source;
+      const requestContext = (c.get('requestContext' as never) as RequestContext | undefined) ?? new RequestContext();
+      try {
+        const resolved = await resolveTools({ requestContext });
+        const tools = Object.entries(resolved)
+          .flatMap(([name, tool]) => listedTool(name, tool, toolsSource))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        return c.json({ toolsSource, tools });
+      } catch (err) {
+        return c.json(
+          {
+            error: 'tools_unavailable',
+            message: `Couldn't resolve the tools: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          502,
+        );
       }
     },
   });
