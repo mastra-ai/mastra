@@ -96,6 +96,7 @@ describe('FactoryEnvironmentStateProcessor', () => {
       '1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7 (default main, setup ok)',
     );
     expect(contents).toContain('2. acme/mastra at /home/user/mastra on (detached) (default main, setup skipped)');
+    expect(contents).toContain("A directory's AGENTS.md loads when you open a file there with view or an edit tool");
   });
 
   it('names a one-repository environment by its checkout as the working directory, with no multi-repository advice', async () => {
@@ -117,6 +118,7 @@ describe('FactoryEnvironmentStateProcessor', () => {
     expect(contents).toContain('1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7');
     expect(contents).not.toContain('repositories under');
     expect(contents).not.toContain('Run git and project commands inside the repository directory');
+    expect(contents).toContain("A directory's AGENTS.md loads when you open a file there with view or an edit tool");
   });
 
   it('is quiet while the snapshot in the window matches, and emits again when the set changes', async () => {

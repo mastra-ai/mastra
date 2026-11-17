@@ -147,6 +147,7 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
         : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
       lines.join('\n') +
       (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
+      "\nA directory's AGENTS.md loads when you open a file there with view or an edit tool, not through execute_command. Before changing files in a directory you only reached through shell commands, read any AGENTS.md in it or its parent directories." +
       (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,
