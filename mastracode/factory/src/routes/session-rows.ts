@@ -52,6 +52,7 @@ async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScop
     }),
   ]);
   const seen = sessions.seenBy(scope.userId);
+  const isParked = (sessionId: string) => deps.liveSessions.parked(sessionId) !== undefined;
   return {
     seen,
     cards,
@@ -65,7 +66,10 @@ async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScop
         factoryProjectId: scope.factoryProjectId,
         visibleSessionIds: seen,
       }),
-      parkedSessionIds: new Set(sessionIdsWhere(cards, sessionId => deps.liveSessions.parked(sessionId) !== undefined)),
+      parkedSessionIds: new Set([
+        ...sessionIdsWhere(cards, isParked),
+        ...seen.sessions.flatMap(({ sessionId }) => (isParked(sessionId) ? [sessionId] : [])),
+      ]),
     },
   };
 }

@@ -144,7 +144,7 @@ describe('session row status', () => {
     [
       'a sandbox coming up over a parked run',
       { materializedAt: null },
-      { parkedSessionIds: new Set(['s1']) },
+      { runningSessionIds: new Set(['s1']), parkedSessionIds: new Set(['s1']) },
       'initializing',
     ],
     ['a run on a finished card', {}, { cards: [doneCard], runningSessionIds: new Set(['s1']) }, 'working'],
@@ -179,15 +179,15 @@ describe('session row status', () => {
     expect(onlyRow({ sessions: [testSession('s1')], cards: [card] })?.status).toBe('idle');
   });
 
-  it("reads a person's session by its run alone, parked or not", () => {
+  it("reads a person's session by its run, waiting when it parks", () => {
     const rows = rowsOf({
-      sessions: [personSession('quiet'), personSession('busy', { materializedAt: null })],
-      parkedSessionIds: new Set(['quiet']),
+      sessions: [personSession('asking'), personSession('busy', { materializedAt: null })],
+      parkedSessionIds: new Set(['asking']),
       runningSessionIds: new Set(['busy']),
     });
 
     expect(rows.map(row => [row.session.sessionId, row.status])).toEqual([
-      ['quiet', 'idle'],
+      ['asking', 'waiting'],
       ['busy', 'initializing'],
     ]);
   });

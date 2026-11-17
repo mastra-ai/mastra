@@ -89,7 +89,7 @@ async function createSession(
 async function createCardSession(
   sessionId: string,
   title: string,
-  session: { userId?: string; visibility?: 'org' | 'private' } = {},
+  session: { userId?: string; visibility?: 'org' | 'private'; materialized?: boolean } = {},
 ): Promise<Card> {
   const branch = `factory/${sessionId}`;
   await createSession(sessionId, { ...session, branch });
@@ -295,6 +295,23 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(body, 'quiet-run')?.status).toBe('idle');
   });
 
+  it("marks a person's session waiting while its run waits on their answer", async () => {
+    await createSession('asking');
+
+    const body = await readRows(buildApp('u1', { parked: new Set(['asking']) }));
+
+    expect(rowOf(body, 'asking')).toMatchObject({ origin: 'user', status: 'waiting' });
+  });
+
+  it('marks a never set up session initializing only while a run waits on its setup', async () => {
+    await createSession('never-set-up', { materialized: false });
+
+    expect(rowOf(await readRows(buildApp('u1')), 'never-set-up')?.status).toBe('idle');
+
+    const running = buildApp('u1', { running: [{ threadId: 'never-set-up', resourceId: 'u1' }] });
+    expect(rowOf(await readRows(running), 'never-set-up')?.status).toBe('initializing');
+  });
+
   it("marks the follower's own session waiting when the card it follows parks on a person", async () => {
     const card = await createCardSession('card-run', 'Followed');
     await createSession('follower');
@@ -383,6 +400,18 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     });
     expect(activity.cards).toEqual({ working: 1, waiting: 2 });
     expect(activity.sessionHeldCardIds).toEqual([proposed.id, twoSessions.id].toSorted((a, b) => a.localeCompare(b)));
+  });
+
+  it('answers a card whose setup never finished its own status once the run is over', async () => {
+    const card = await createCardSession('setup-failed', 'Clone failed', { materialized: false });
+    await proposeRunFor(card);
+    const app = buildApp('u1');
+
+    const [rows, activity] = await Promise.all([readRows(app), readActivity(app)]);
+
+    expect(rowOf(rows, 'setup-failed')?.status).toBe('waiting');
+    expect(activity.cardStatuses).toEqual({ [card.id]: 'waiting' });
+    expect(activity.sessionHeldCardIds).toEqual([]);
   });
 
   it("leaves another person's private sessions out", async () => {
