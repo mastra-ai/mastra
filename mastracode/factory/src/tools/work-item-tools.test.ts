@@ -1,11 +1,14 @@
+import assert from 'node:assert';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
-import type { FactoryTransitionService } from '../rules/transition-service.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL } from './permissions.js';
+import { createFactoryReadTools } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
 import { createFactoryWorkItemTools } from './work-item-tools.js';
 
@@ -709,5 +712,222 @@ describe('on a turn nobody signed in started', () => {
     expect(dismiss).not.toHaveBeenCalled();
     expect(auditRecorder.record).not.toHaveBeenCalled();
     expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision);
+  });
+});
+
+/**
+ * A person asks a chat session (Slack, the web) for a card's work, through the board's real rules
+ * engine and storage. The session must do what the board's own buttons do: a move into a stage, or,
+ * for the stage the card is in, its Start/Review button (`reenter`), approved by that person.
+ */
+describe("a card's work requested from a chat", () => {
+  const PULL_REQUEST_URL = 'https://github.com/mastra-ai/mastra/pull/30578';
+
+  async function boardSetup({ interactive = true }: { interactive?: boolean } = {}) {
+    const seed = await createFactoryStorageForTests();
+    const boards = createBoardRegistry();
+    const service = new FactoryTransitionService({
+      configVersion: 'chat-request-test',
+      boards,
+      storage: seed.workItems,
+    });
+    const toolScope = { ...scope, interactive };
+    const tools = {
+      ...createFactoryWorkItemTools(toolScope, {
+        workItems: seed.workItems,
+        boards,
+        transitionService: service,
+        auditRecorder: { record: vi.fn(async () => null) } as never,
+        sessions: { getSourceControlBySessionId: async () => null },
+        intakeEvaluator: 'route-list',
+      }),
+      ...createFactoryReadTools(toolScope, { workItems: seed.workItems, audit: seed.audit, boards }),
+    } as Record<string, { execute: (input: unknown, context: unknown) => Promise<unknown> }>;
+    const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
+    const runs = async (workItemId: string) =>
+      (await seed.workItems.listDeferredDecisions('org-1', 'project-1', { workItemId })).filter(
+        record => record.decision.type === 'invokeSkill',
+      );
+    return { ...seed, service, run, runs };
+  }
+
+  /**
+   * A pull request's card as intake leaves it: in Review, its review run held for a person's approval
+   * because nobody consented to it (the dispatcher parks it as a proposal).
+   */
+  async function heldReviewCard(env: Awaited<ReturnType<typeof boardSetup>>, url = PULL_REQUEST_URL) {
+    const number = Number(url.split('/').at(-1));
+    const { item } = await env.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'someone-else',
+      factoryProjectId: 'project-1',
+      input: {
+        title: `PR ${number}`,
+        stages: ['pr-review'],
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: `pr-${number}`, url },
+        metadata: { githubPullRequestNumber: number },
+      },
+    });
+    const entered = await env.service.transition({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: item.id,
+      board: 'work',
+      stage: 'pr-review',
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'factory' },
+      ingress: { type: 'rule', identity: `intake:${item.id}` },
+      cause: 'intake',
+      initialEntry: true,
+    });
+    assert(entered.status === 'accepted');
+    const now = new Date();
+    const claimed = await env.workItems.claimDeferredDecisions({
+      ownerId: 'dispatcher',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 10,
+    });
+    for (const record of claimed) {
+      await env.workItems.proposeDeferredDecision(
+        { id: record.id, orgId: record.orgId, factoryProjectId: record.factoryProjectId, ownerId: 'dispatcher' },
+        now,
+      );
+    }
+    const [held] = await env.runs(item.id);
+    assert(held?.status === 'proposed' && held.approvedAt === null);
+    return (await env.workItems.get({ orgId: 'org-1', id: item.id }))!;
+  }
+
+  // Slack, 2026-11-16: "review: <pull request link>" on a card whose review was held for approval
+  // ended in a side session's review posted in Slack; the card never ran its review.
+  it('starts the review held on a pull request card when someone asks for it by its link', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+
+    await expect(
+      env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review' }),
+    ).resolves.toMatchObject({ workItemId: card.id, stage: 'pr-review', reran: true });
+
+    // What the dispatcher reads: a review run approved by the person, which it starts without asking.
+    const queued = (await env.runs(card.id)).filter(record => record.status === 'pending');
+    expect(queued).toEqual([
+      expect.objectContaining({
+        approvedBy: 'user-1',
+        approvedAt: expect.any(Date),
+        decision: expect.objectContaining({ type: 'invokeSkill', role: 'review', cancelInFlight: true }),
+      }),
+    ]);
+    expect((await env.workItems.get({ orgId: 'org-1', id: card.id }))?.stages).toEqual(['pr-review']);
+    expect(await env.workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: card.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', reason: 'moved' }),
+    ]);
+  });
+
+  it('refuses a second run while the first is still queued, as the board refuses a busy card', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+    await env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' });
+
+    await expect(env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' })).rejects.toThrow(
+      'The move was refused (card_busy)',
+    );
+    expect((await env.runs(card.id)).filter(record => record.status === 'pending')).toHaveLength(1);
+  });
+
+  it('leaves the held run alone on a turn nobody signed in started', async () => {
+    const env = await boardSetup({ interactive: false });
+    const card = await heldReviewCard(env);
+
+    await expect(env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' })).rejects.toThrow(
+      'needs a person in this turn',
+    );
+    expect((await env.runs(card.id)).map(record => record.status)).toEqual(['proposed']);
+  });
+
+  it('lists the stages the card can move to, and that its own stage can run again', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+
+    const inspected = await env.run<{ moves: unknown }>('factory_inspect_work_item', { workItem: PULL_REQUEST_URL });
+
+    expect(inspected.moves).toMatchObject({
+      board: { key: 'work' },
+      stage: { key: 'pr-review', kind: 'working' },
+      canRerun: true,
+      next: expect.arrayContaining([expect.objectContaining({ key: 'done', kind: 'terminal' })]),
+    });
+    expect(card.stages).toEqual(['pr-review']);
+  });
+
+  // With two repositories linked, a bare number names the issue's card first; the link names the pull request.
+  it('finds the pull request a link names when an issue in another repository has the same number', async () => {
+    const env = await boardSetup();
+    const { item: issue } = await env.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'someone-else',
+      factoryProjectId: 'project-1',
+      input: {
+        title: 'An old issue',
+        stages: ['intake'],
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'issue-5001',
+          url: 'https://github.com/mastra-ai/mastra/issues/5001',
+        },
+        metadata: { githubIssueNumber: 5001 },
+      },
+    });
+    const pullRequest = await heldReviewCard(env, 'https://github.com/mastra-ai/platform/pull/5001');
+
+    const inspect = (workItem: string) =>
+      env.run<{ item: { id: string } }>('factory_inspect_work_item', { workItem }).then(result => result.item.id);
+    expect(await inspect('#5001')).toBe(issue.id);
+    expect(await inspect('https://github.com/mastra-ai/platform/pull/5001')).toBe(pullRequest.id);
+    expect(await inspect('https://github.com/mastra-ai/platform/pull/5001/files#diff-1')).toBe(pullRequest.id);
+    expect(await inspect('mastra-ai/platform#5001')).toBe(pullRequest.id);
+    expect(await inspect('https://github.com/mastra-ai/mastra/issues/5001')).toBe(issue.id);
+    await expect(inspect('https://github.com/mastra-ai/mastra/pull/9999')).rejects.toThrow('No work item');
+
+    const listed = await env.run<{ items: Array<{ id: string }> }>('factory_list_work_items', {
+      query: 'https://github.com/mastra-ai/platform/pull/5001',
+    });
+    expect(listed.items.map(row => row.id)).toEqual([pullRequest.id]);
+  });
+
+  it("finds a pull request attached to its issue's card through that card", async () => {
+    const env = await boardSetup();
+    const { item: issue } = await env.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'someone-else',
+      factoryProjectId: 'project-1',
+      input: {
+        title: 'Fix the login page',
+        stages: ['execute'],
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'issue-12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+        },
+        metadata: { githubIssueNumber: 12 },
+      },
+    });
+    await env.workItems.attachSource({
+      orgId: 'org-1',
+      id: issue.id,
+      source: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: 'pr-40',
+        url: 'https://github.com/mastra-ai/mastra/pull/40',
+      },
+      metadata: { githubPullRequestNumber: 40 },
+    });
+
+    await expect(
+      env.run('factory_inspect_work_item', { workItem: 'https://github.com/mastra-ai/mastra/pull/40' }),
+    ).resolves.toMatchObject({ item: { id: issue.id } });
   });
 });

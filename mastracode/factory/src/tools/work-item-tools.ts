@@ -78,6 +78,11 @@ function briefItem(item: Card) {
   };
 }
 
+function workItemLabel(item: Card): string {
+  const number = workItemNumber(item);
+  return number === null ? `"${item.title}"` : `#${number}`;
+}
+
 function settled(result: FactoryDecisionActionResult) {
   if (!result.ok) throw new Error(result.message);
   const { decision } = result;
@@ -209,23 +214,42 @@ export function createFactoryWorkItemTools(
 
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
-      description:
-        "Move a work item to another stage of its board, as the person you are working with. The board's rules decide whether the move is allowed and what it starts.",
+      description: [
+        "Move a work item to another stage of its board, or run the stage it is already in again, as the person you are working with: the same request the board's own move and Start buttons send.",
+        "The board's rules decide whether the move is allowed and what it starts. The run it starts counts as approved by that person, so it does not wait in the approval queue.",
+        "This is how to get a card's work done (a review, a build, a plan): when someone asks to review a pull request that has a card, move the card to its review stage, or rerun that stage, instead of reviewing it yourself or in a side session.",
+      ].join(' '),
       inputSchema: z
         .object({
           workItem: workItemRefSchema,
-          stage: z.string().trim().min(1).max(64).describe('Destination stage, e.g. "planning" or "done".'),
+          stage: z
+            .string()
+            .trim()
+            .min(1)
+            .max(64)
+            .describe(
+              'Destination stage key, as factory_inspect_work_item lists it (e.g. "planning" or "done"). The stage the card is already in runs it again.',
+            ),
         })
         .strict(),
       execute: async ({ workItem, stage }) => {
         if (!deps.transitionService) throw new Error('Factory stage transitions are not available right now.');
         const item = await requireItem(workItem);
+        // The board's Start button sends the card's own stage with `reenter`; the rules decide the rest.
+        const rerun = item.stages.length === 1 && item.stages[0] === stage;
+        // Rerunning starts a run approved by whoever asks, so like the button it needs a person.
+        if (rerun && !scope.interactive) {
+          throw new Error(
+            `Running ${stage} again on ${workItemLabel(item)} needs a person in this turn: ask them to request it from a signed-in chat or the board.`,
+          );
+        }
         const parsed = transitionBodySchema.safeParse({
           board: boardForWorkItem(item),
           stage,
           expectedRevision: item.revision,
           requestId: randomUUID(),
           cause: 'factory_tools',
+          ...(rerun ? { reenter: true } : {}),
         });
         if (!parsed.success) throw new Error(`"${stage}" is not a valid stage name.`);
         const result = await deps.transitionService.transition({
@@ -252,7 +276,12 @@ export function createFactoryWorkItemTools(
         // The move can start a phase session the Factory owns. Following the card is what lets
         // this session hear when that run waits on someone, and answer it from here.
         // The card has moved by now: a failed follow is reported with the move, not instead of it.
-        const moved = { workItemId: item.id, stage: result.stage, revision: result.revision };
+        const moved = {
+          workItemId: item.id,
+          stage: result.stage,
+          revision: result.revision,
+          ...(rerun ? { reran: true } : {}),
+        };
         try {
           await follow(item, 'moved');
         } catch (error) {
@@ -270,7 +299,7 @@ export function createFactoryWorkItemTools(
     factory_update_work_item: createTool({
       id: 'factory_update_work_item',
       description:
-        "Edit a work item's fields as the person you are working with: its title, description, the repository its runs use, or its parent item. Move stages with factory_transition_work_item and start roles with factory_start_session.",
+        "Edit a work item's fields as the person you are working with: its title, description, the repository its runs use, or its parent item. Move stages, or rerun the stage a card is in, with factory_transition_work_item.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,

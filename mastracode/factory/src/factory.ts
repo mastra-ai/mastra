@@ -140,7 +140,6 @@ import type { FactoryRuleActor } from './rules/index.js';
 import { createPhaseGoalEnder } from './rules/phase-goal.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
-import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -652,7 +651,6 @@ export class MastraFactory {
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #unsubscribeSessionListChanges: Promise<() => Promise<void>> | undefined;
-  #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
   #shutdownPromise: Promise<void> | undefined;
@@ -1526,8 +1524,6 @@ export class MastraFactory {
             }
           : {}),
       },
-      intake: intakeStorage,
-      startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
       liveSessions: () => liveSessions,
     };
@@ -2303,8 +2299,7 @@ export class MastraFactory {
               : {}),
             factoryTransitionService: transitionService,
             runSlots: () => this.#dispatcher?.runSlots(),
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
-              this.#startCoordinator = startCoordinator;
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
