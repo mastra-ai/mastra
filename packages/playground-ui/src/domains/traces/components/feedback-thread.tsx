@@ -71,6 +71,24 @@ function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewSta
   );
 }
 
+function FeedbackItemStatus({ item }: { item: FeedbackListItem }) {
+  if (item.isPending) {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
+        Sending…
+      </Txt>
+    );
+  }
+  if (item.deleteStatus === 'deleting') {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-deleting">
+        Deleting…
+      </Txt>
+    );
+  }
+  return <FeedbackReviewStatusBadge status={item.reviewStatus} />;
+}
+
 function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
   if (text) return text;
@@ -104,19 +122,8 @@ function FeedbackItems({
     const feedbackId = fb.feedbackId;
     // A pending comment has no stored record yet, and a deleting one is on its way out,
     // so there is nothing to review or delete.
-    const isDeleting = fb.deleteStatus === 'deleting';
-    const status = fb.isPending ? (
-      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
-        Sending…
-      </Txt>
-    ) : isDeleting ? (
-      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-deleting">
-        Deleting…
-      </Txt>
-    ) : (
-      <FeedbackReviewStatusBadge status={fb.reviewStatus} />
-    );
-    const hasActions = Boolean(feedbackId && !fb.isPending && !isDeleting);
+    const status = <FeedbackItemStatus item={fb} />;
+    const hasActions = Boolean(feedbackId && !fb.isPending && fb.deleteStatus !== 'deleting');
     const canMarkReviewed = Boolean(hasActions && onMarkReviewed && fb.reviewStatus !== 'reviewed');
     const canDelete = Boolean(hasActions && onRequestDelete);
     const actions = feedbackId && (canMarkReviewed || canDelete) && (

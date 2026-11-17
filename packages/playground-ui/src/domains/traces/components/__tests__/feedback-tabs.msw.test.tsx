@@ -436,37 +436,41 @@ describe('feedback tabs queued delete', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
   }
 
-  it('shows the row as deleting, without actions, until the server drops it', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const api = queuedDeleteServer();
-    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+  describe('when the server accepts the delete and the cleanup job removes the row', () => {
+    it('shows the row as deleting, without actions, until the server drops it', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const api = queuedDeleteServer();
+      render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
 
-    await deleteDoomed();
+      await deleteDoomed();
 
-    await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
-    expect(within(rowOf('delete me')).queryByRole('button', { name: 'Feedback actions' })).toBeNull();
-    expect(within(rowOf('keep me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
+      await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
+      expect(within(rowOf('delete me')).queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+      expect(within(rowOf('keep me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
 
-    api.applyDeletes();
-    await act(() => vi.advanceTimersByTimeAsync(3_100));
+      api.applyDeletes();
+      await act(() => vi.advanceTimersByTimeAsync(3_100));
 
-    await waitFor(() => expect(screen.queryByText('delete me')).toBeNull());
-    expect(screen.getByText('keep me')).toBeTruthy();
-    expect(screen.queryByRole('alert')).toBeNull();
+      await waitFor(() => expect(screen.queryByText('delete me')).toBeNull());
+      expect(screen.getByText('keep me')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 
-  it('restores the row with an error when the server still returns it after the deletion window', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    queuedDeleteServer();
-    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+  describe('when the server still returns the row after the deletion window', () => {
+    it('restores the row with its actions and shows an error', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      queuedDeleteServer();
+      render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
 
-    await deleteDoomed();
-    await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
+      await deleteDoomed();
+      await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
 
-    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 + 1));
+      await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 + 1));
 
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback'));
-    expect(within(rowOf('delete me')).queryByText('Deleting…')).toBeNull();
-    expect(within(rowOf('delete me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback'));
+      expect(within(rowOf('delete me')).queryByText('Deleting…')).toBeNull();
+      expect(within(rowOf('delete me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
+    });
   });
 });

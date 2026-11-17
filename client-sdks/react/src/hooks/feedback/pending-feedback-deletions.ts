@@ -1,7 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import type { FeedbackListResponse } from './optimistic-feedback';
 
@@ -46,6 +45,14 @@ export function addPendingFeedbackDeletion(
     ...entries.filter(entry => entry.feedbackId !== feedbackId),
     { feedbackId, expiresAt: Date.now() + PENDING_FEEDBACK_DELETION_TTL_MS, failed: false },
   ]);
+  // No-op if the row was dropped (settled) or the entry was garbage-collected before then.
+  setTimeout(
+    () =>
+      updatePendingDeletions(queryClient, traceId, spanId, entries =>
+        entries.map(entry => (!entry.failed && entry.expiresAt <= Date.now() ? { ...entry, failed: true } : entry)),
+      ),
+    PENDING_FEEDBACK_DELETION_TTL_MS,
+  );
 }
 
 /** Marks rows with an accepted deletion as `deleting`, or `failed` once the deletion timed out. */
@@ -90,29 +97,14 @@ export function usePendingFeedbackDeletions({ traceId, spanId }: { traceId: stri
   const queryClient = useQueryClient();
   const queryKey = pendingDeletionsKey(traceId, spanId);
   // Read-only view of a client-side cache entry written by useDeleteFeedback; never fetched.
-  const { data: entries = NO_DELETIONS } = useQuery({
+  const { data = NO_DELETIONS } = useQuery({
     queryKey,
     queryFn: () => queryClient.getQueryData<PendingDeletion[]>(queryKey) ?? [],
     enabled: false,
     staleTime: Infinity,
     gcTime: PENDING_FEEDBACK_DELETION_TTL_MS,
   });
-
-  useEffect(() => {
-    const deleting = entries.filter(entry => !entry.failed);
-    if (deleting.length === 0) return;
-    const nextExpiry = Math.min(...deleting.map(entry => entry.expiresAt));
-    const timer = setTimeout(
-      () =>
-        updatePendingDeletions(queryClient, traceId, spanId, current =>
-          current.map(entry => (!entry.failed && entry.expiresAt <= Date.now() ? { ...entry, failed: true } : entry)),
-        ),
-      Math.max(0, nextExpiry - Date.now()),
-    );
-    return () => clearTimeout(timer);
-  }, [entries, queryClient, traceId, spanId]);
-
-  return entries;
+  return data;
 }
 
 /** True while at least one deletion is waiting for the server to drop its row. */
