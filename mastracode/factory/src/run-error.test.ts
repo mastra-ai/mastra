@@ -275,6 +275,94 @@ describe('describeRunError', () => {
       });
     });
 
+    it.each([
+      [401, 'some_new_key_reason'],
+      [403, 'identity_policy_denied'],
+      [403, 'byok_connection_inactive'],
+    ])('keeps the credential recovery for a %i %s refusal of the key or connection', (status, code) => {
+      expect(describeRunError(gatewayRefusal(status, code))).toMatchObject({
+        title: 'Provider access failed',
+        recoveries: ['credentials', 'model'],
+      });
+    });
+
+    it('offers another model when no route in the key’s region serves it', () => {
+      expect(describeRunError(gatewayRefusal(403, 'no_route_in_region'))).toMatchObject({
+        title: 'Model not available through the Mastra Gateway',
+        recoveries: ['model'],
+      });
+    });
+
+    it('names the provider behind the gateway when it is the one limiting requests', () => {
+      const limited = toPersistedErrorIdentity({
+        name: 'AI_APICallError',
+        message: 'Upstream provider rate limit reached. Try again shortly.',
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          error: {
+            type: 'rate_limit_error',
+            code: 'provider_rate_limited',
+            message: 'Upstream provider rate limit reached. Try again shortly.',
+          },
+        }),
+      });
+      expect(describeRunError(limited)).toMatchObject({
+        title: 'Model provider rate limit reached',
+        recoveries: ['continue', 'model'],
+      });
+    });
+
+    it.each(['key_budget_capacity_held', 'organization_budget_capacity_held'])(
+      'asks to continue in a few seconds when %s',
+      code => {
+        expect(describeRunError(gatewayRefusal(429, code))).toMatchObject({
+          title: 'Mastra Gateway budget busy',
+          recoveries: ['continue', 'model'],
+        });
+      },
+    );
+
+    it('recognizes the gateway from the saved codes alone when the body is gone', () => {
+      const withoutBody = {
+        name: 'AI_APICallError',
+        message: 'key_budget_exhausted',
+        statusCode: 402,
+        codes: ['gateway_error', 'key_budget_exhausted'],
+      };
+      expect(describeRunError(withoutBody)).toMatchObject({ title: 'Mastra Gateway spend limit reached' });
+    });
+
+    it("keeps a provider's relayed 429 the provider account's limit", () => {
+      const relayed = {
+        name: 'AI_APICallError',
+        message: 'Rate limit reached for requests',
+        statusCode: 429,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+        responseBody: JSON.stringify({
+          error: { type: 'requests', code: 'rate_limit_exceeded', message: 'Rate limit reached for requests' },
+        }),
+      };
+      expect(describeRunError(relayed)).toMatchObject({ title: 'Provider rate limit reached' });
+    });
+
+    it('cannot yet tell the gateway’s own 429 from a saved part, which keeps no request URL', () => {
+      // The reply's type and code are also used by other providers, so they cannot identify the gateway alone.
+      const saved = toPersistedErrorIdentity({
+        name: 'AI_APICallError',
+        message: 'Gateway key requests limit exceeded. Retry in 12s.',
+        statusCode: 429,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+        responseBody: JSON.stringify({
+          error: {
+            type: 'rate_limit_error',
+            code: 'rate_limit_exceeded',
+            message: 'Gateway key requests limit exceeded. Retry in 12s.',
+          },
+        }),
+      });
+      expect(describeRunError(saved)).toMatchObject({ title: 'Provider rate limit reached' });
+    });
+
     it('keeps an Anthropic 403 a credential problem', () => {
       const anthropicDenied = {
         name: 'AI_APICallError',

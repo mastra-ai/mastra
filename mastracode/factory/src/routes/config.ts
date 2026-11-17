@@ -189,7 +189,8 @@ async function isReservedProviderId(controller: ModelCatalog, providerId: string
  * A tenant's own gateway key wins over the server's at run time, so its
  * catalogue is fetched with that key: a v2 key sees what its organization may
  * use. A catalogue that cannot be fetched leaves the gateway's models out
- * rather than failing the caller's settings.
+ * rather than failing the caller's settings, and the server key's list is
+ * never shown in place of a tenant key's.
  */
 async function listCatalogModels(
   controller: ModelCatalog,
@@ -199,10 +200,10 @@ async function listCatalogModels(
   if (!tenantCredentials) return models;
   const tenantKey = tenantGatewayKey(tenantCredentials);
   if (!tenantKey && models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
-  const gateway = await fetchMastraGatewayCatalog(
-    tenantKey ? { apiKey: tenantKey, baseUrl: mastraGatewayBaseUrl() } : {},
-  );
-  if (!gateway) return models;
+  const gateway = await fetchMastraGatewayCatalog({ apiKey: tenantKey, baseUrl: mastraGatewayBaseUrl() });
+  // The server key's models are not what a tenant's own key may use, so they never stand in for its list.
+  const withoutGateway = tenantKey ? models.filter(m => m.provider !== MASTRA_GATEWAY_CATALOG_PROVIDER) : models;
+  if (!gateway) return withoutGateway;
   const gatewayModels = gateway.models.map(modelName => ({
     id: `${MASTRA_GATEWAY_CATALOG_PROVIDER}/${modelName}`,
     provider: MASTRA_GATEWAY_CATALOG_PROVIDER,
@@ -246,13 +247,10 @@ export async function listProviders({
 }): Promise<ProviderInfo[]> {
   const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
-  // The gateway's connect and disconnect controls stay reachable when its model list is empty or unavailable.
+  // The gateway's connect and disconnect controls stay reachable for tenant callers when its model
+  // list is empty or unavailable, as they are when the bundled list is shown.
   const keepGatewayRow =
-    tenantCredentials !== undefined &&
-    !models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER) &&
-    (connectWithMastraAccount ||
-      Boolean(MastraCodeGateway.getMastraGatewayApiKey()) ||
-      grantingTenantRecord(tenantCredentials, MASTRA_GATEWAY_PROVIDER) !== undefined);
+    tenantCredentials !== undefined && !models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER);
   const rows: Array<Pick<CatalogModel, 'provider' | 'hasApiKey' | 'apiKeyEnvVar'>> = keepGatewayRow
     ? [...models, { provider: MASTRA_GATEWAY_CATALOG_PROVIDER, hasApiKey: false }]
     : models;

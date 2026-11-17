@@ -140,7 +140,16 @@ const ORGANIZATION_BUDGET_SHORT = new Set([
 ]);
 const SPEND_LIMIT_REACHED = new Set(['key_budget_exhausted', 'spend_limit_reached']);
 const BILLING_OVERAGE_UNSUPPORTED = 'billing_overage_unsupported';
-const ROUTE_REFUSED = new Set(['no_eligible_route', 'model_not_allowed']);
+/** Routing policy refusals: the key was accepted, but no route it may use serves this model or feature. */
+const ROUTE_REFUSED = new Set([
+  'no_eligible_route',
+  'model_not_allowed',
+  'no_route_in_region',
+  'provider_reference_requires_bound_route',
+  'response_origin_route_unavailable',
+  'thinking_origin_route_unavailable',
+  'thinking_verification_route_unavailable',
+]);
 const GATEWAY_CONTEXT_OVERFLOW = new Set(['context_too_large', 'context_unaccountable']);
 const UPSTREAM_RATE_LIMITED = 'provider_rate_limited';
 const BUDGET_CAPACITY_HELD = new Set(['key_budget_capacity_held', 'organization_budget_capacity_held']);
@@ -221,8 +230,8 @@ function explainGatewayRefusal(
       recoveries: ['credits', 'continue', 'model'],
     };
   }
-  if (kind === 'auth' && (reply?.type === 'gateway_error' || (code !== undefined && ROUTE_REFUSED.has(code)))) {
-    // The key was accepted; the gateway's routing policy refused this model or feature.
+  // Any other refusal of the key or connection keeps the credential recovery.
+  if (kind === 'auth' && code !== undefined && ROUTE_REFUSED.has(code)) {
     return {
       title: 'Model not available through the Mastra Gateway',
       message: said(
@@ -253,7 +262,9 @@ function explainGatewayRefusal(
       recoveries: ['continue', 'model'],
     };
   }
-  if (code === GATEWAY_RATE_LIMITED || reply?.type === 'gateway_error') {
+  // The gateway's limit reply pairs these two; a provider reply relayed through it names its own type.
+  const gatewayLimit = code === GATEWAY_RATE_LIMITED && reply?.type === 'rate_limit_error';
+  if (gatewayLimit || reply?.type === 'gateway_error') {
     // The gateway's own limit on the key or organization, not the provider account's.
     return {
       title: 'Mastra Gateway rate limit reached',
