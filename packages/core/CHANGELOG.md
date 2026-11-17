@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 1.84.0-alpha.7
+
+### Minor Changes
+
+- Add shared contracts for experimental Platform trace page. ([#30512](https://github.com/mastra-ai/mastra/pull/30512))
+
+- Added the `apps` and `studioUrl` options to `ServerMCPConfig` (`server.mcp`), for the built-in MCP server's MCP Apps. `apps: false` turns them off, and `studioUrl` sets where their **Open in Studio** button points. ([#30244](https://github.com/mastra-ai/mastra/pull/30244))
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      mcp: {
+        apps: true,
+        studioUrl: 'https://studio.example.com',
+      },
+    },
+  });
+  ```
+
+- Replaced experimental textSearch contracts and capabilities with token predicates for supporting hosts. ([#30511](https://github.com/mastra-ai/mastra/pull/30511))
+
+### Patch Changes
+
+- Fixed durable and evented agent streams so completion and cleanup from an earlier execution preserve a newer or resumed run's status, live state, and replay history. Existing durable replay records remain readable after upgrading. Queued events retain their step ownership guard and publication options, including local-only replay exclusion, and registry cleanup handles publisher detachment failures. Stream cleanup stops the owning execution's producer and drains pending local publications before deleting replay history, preserving successors that take over during the drain. Denied cleanup attempts preserve run-record recovery after transient cache failures. ([#30376](https://github.com/mastra-ai/mastra/pull/30376))
+
+- Fixed resumed step retries and `perStep` runs on the evented engine. A resumed step that fails and is retried now gets the same resume data on its retry, so it finishes instead of suspending again. A run started with `perStep: true` now pauses after a step that succeeded on a retry, and after a loop, instead of running the remaining steps. A `perStep` run whose step bails now ends `success`, as on the default engine, and a `perStep` run now reports its real final status (for example `canceled`) instead of always `paused`. ([#30398](https://github.com/mastra-ai/mastra/pull/30398))
+
+- A notification sent with `ifIdle: { behavior: 'persist' }` now stays persist-only when its delivery is deferred. The record stores the asked-for idle behavior alongside the existing routing requirement, and delayed deliveries — full, summarized, and retried — deliver with it instead of falling back to waking the idle thread. A summarized batch keeps the thread asleep only when every record in it asked to persist. ([#30623](https://github.com/mastra-ai/mastra/pull/30623))
+
+- Coding agents now subscribe their thread to an existing pull request or merge request when they start working on it, such as reviewing it, fixing merge conflicts, addressing review comments, fixing CI, or pushing to its branch. The thread then gets the merge and close notices for that PR, not only for PRs the agent created itself. ([#30675](https://github.com/mastra-ai/mastra/pull/30675))
+
+- Corrected the `Mastra.addTool()` JSDoc. It now says that adding a tool with a key that is already registered keeps the existing tool and returns without an error. The JSDoc previously said this case throws. ([#30681](https://github.com/mastra-ai/mastra/pull/30681))
+
+- Improved workflow recovery so it lists active runs for at most five workflows at a time instead of all at once. A recovery scan no longer takes every connection of the storage pool and slows down the process's other storage calls. ([#30396](https://github.com/mastra-ai/mastra/pull/30396))
+
+- Fixed extra model step and model inference spans in traces when `onStepFinish` takes time to finish. Each model call now has one step span and one inference span with its own token usage, so exporters such as PostHog and Langfuse no longer count a model call twice. ([#30442](https://github.com/mastra-ai/mastra/pull/30442))
+
 ## 1.84.0-alpha.6
 
 ### Minor Changes

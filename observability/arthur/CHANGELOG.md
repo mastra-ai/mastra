@@ -1,5 +1,17 @@
 # @mastra/arthur
 
+## 0.5.0-alpha.2
+
+### Minor Changes
+
+- Updated to the OpenTelemetry semantic conventions 1.41.0 attributes from `@mastra/otel-exporter`. Fixed the finish reason on model calls. It showed `stop` for every call, and now shows the real reason, such as `tool-calls` or `length`. Stop sequences now also appear in the invocation parameters. ([#30342](https://github.com/mastra-ai/mastra/pull/30342))
+
+### Patch Changes
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`85fdeb1`](https://github.com/mastra-ai/mastra/commit/85fdeb19701e258e5ad85291e9d428c8c9cf9590), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/otel-exporter@1.6.0-alpha.2
+
 ## 0.4.31-alpha.1
 
 ### Patch Changes

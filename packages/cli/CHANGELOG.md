@@ -1,5 +1,32 @@
 # mastra
 
+## 1.40.0-alpha.7
+
+### Minor Changes
+
+- Updated experimental search commands for supporting hosts. ([#30511](https://github.com/mastra-ai/mastra/pull/30511))
+
+- Added `mastra api factory skill create` to create a skill for one Factory project. `mastra api factory skill update` now also updates a skill the project created, and `mastra api factory skill revert` deletes one. Only organization admins can create skills. ([#30647](https://github.com/mastra-ai/mastra/pull/30647))
+
+  ```sh
+  mastra api factory skill create <project-id> '{"name":"release-notes","content":"---\nname: release-notes\ndescription: Write release notes for a merged change\n---\n\n# Release notes\n"}'
+  ```
+
+### Patch Changes
+
+- Card-move rules now decide for themselves whether they act on pull requests from outside authors. A new rule that should only act for trusted authors says so with a "Pull request trusted is yes" condition; the rule builder warns when a rule on pull request events would also match outside authors and adds that condition in one click. Rules stored before this change keep the old behaviour and skip outside authors' pull requests until an admin opts them in with "Let outside authors match", or over the API: ([#30623](https://github.com/mastra-ai/mastra/pull/30623))
+
+  ```http
+  PATCH /web/factory/projects/:projectId/intake-routes/:routeId
+  { "expectedRevision": 3, "outsiderPullRequestsGated": false }
+  ```
+
+  The intake dry-run tester reports the same skips dispatch would, and a run queued by a card move on a pull request event no trusted actor vouches for always waits for a person's approval, even in a phase that starts on its own. A maintainer pushing to or requesting review of an outside author's pull request is that vouch, so the review they ask for starts as before.
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/deployer@1.84.0-alpha.7
+
 ## 1.40.0-alpha.6
 
 ### Patch Changes
