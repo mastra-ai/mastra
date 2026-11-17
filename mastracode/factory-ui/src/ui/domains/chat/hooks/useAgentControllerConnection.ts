@@ -30,7 +30,7 @@ interface UseAgentControllerConnectionArgs {
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
-  onEvent: (event: AgentControllerEvent) => void;
+  onEvent: (event: AgentControllerEvent, opensStream: boolean) => void;
 }
 
 export function useAgentControllerConnection({
@@ -119,7 +119,7 @@ export function useAgentControllerConnection({
     }
   };
 
-  const handleEvent = (event: AgentControllerEvent) => {
+  const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {
     const displayStateRunning =
       isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
         ? event.displayState.isRunning
@@ -153,7 +153,7 @@ export function useAgentControllerConnection({
         { updatedAt },
       );
     }
-    onEvent(event);
+    onEvent(event, opensStream);
   };
 
   useAgentControllerEvents({

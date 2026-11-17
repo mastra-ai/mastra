@@ -63,20 +63,15 @@ function toolPart(tool: Tool, state: 'call' | 'result'): MastraMessagePart {
 }
 
 // Storage keeps step-start and workspace data parts the stream never sends; the stream indexes live parts only.
+// Like the server with displayState=false, a new stream opens on the row in flight as a message_start.
 function runOnServer() {
   const encoder = new TextEncoder();
   const stored: MastraDBMessage[] = [];
   let live: MastraDBMessage | null = null;
   let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
 
-  const write = (event: { type: string; [key: string]: unknown }) =>
+  const send = (event: { type: string; [key: string]: unknown }) =>
     stream?.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-  const snapshot = () =>
-    write({ type: 'display_state_changed', displayState: { isRunning: true, currentMessage: live } });
-  const send = (event: { type: string; [key: string]: unknown }) => {
-    write(event);
-    snapshot();
-  };
 
   const rowInFlight = () => {
     const storedRow = stored.find(message => message.id === live?.id);
@@ -97,6 +92,9 @@ function runOnServer() {
 
   server.use(
     http.get(`${AC}/sessions/:resourceId/stream`, ({ request }) => {
+      if (new URL(request.url).searchParams.get('displayState') !== 'false') {
+        return new HttpResponse('expected displayState=false', { status: 400 });
+      }
       request.signal.addEventListener('abort', () => {
         stream = undefined;
       });
@@ -104,7 +102,7 @@ function runOnServer() {
         new ReadableStream<Uint8Array>({
           start(controller) {
             stream = controller;
-            snapshot();
+            if (live) send({ type: 'message_start', message: structuredClone(live) });
           },
         }),
         { headers: { 'content-type': 'text/event-stream' } },

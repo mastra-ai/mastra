@@ -1249,7 +1249,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }

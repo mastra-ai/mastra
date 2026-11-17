@@ -4103,6 +4103,7 @@ export class SessionBus {
    * workspace ready or error state.
    */
   #lastWorkspaceEvents: AgentControllerEvent[] = [];
+  #lastOmStatus: Extract<AgentControllerEvent, { type: 'om_status' }> | undefined;
 
   /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
   setDisplayState(displayState: SessionDisplayState): void {
@@ -4136,6 +4137,17 @@ export class SessionBus {
     return this.#listeners.length > 0;
   }
 
+  /** See {@link Session.initialStateEvents}. */
+  initialStateEvents(): AgentControllerEvent[] {
+    const events: AgentControllerEvent[] = [];
+    const { isRunning, currentMessage } = this.#displayState?.get() ?? {};
+    if (isRunning && currentMessage) {
+      events.push({ type: 'message_start', message: structuredClone(currentMessage) });
+    }
+    if (this.#lastOmStatus) events.push(this.#lastOmStatus);
+    return events;
+  }
+
   emit(event: AgentControllerEvent): void {
     if (
       event.type === 'workspace_status_changed' ||
@@ -4147,6 +4159,15 @@ export class SessionBus {
       } else {
         this.#lastWorkspaceEvents.push(event);
       }
+    }
+    if (event.type === 'om_status') {
+      this.#lastOmStatus = event;
+    } else if (
+      event.type === 'thread_changed' ||
+      event.type === 'thread_created' ||
+      (event.type === 'thread_deleted' && event.threadId === this.#lastOmStatus?.threadId)
+    ) {
+      this.#lastOmStatus = undefined;
     }
     this.#displayState?.apply(event);
 
@@ -4441,6 +4462,23 @@ export class Session<TState = unknown> {
    */
   subscribe(listener: AgentControllerEventListener): () => void {
     return this.#bus.subscribe(listener);
+  }
+
+  /**
+   * The session's current state as events, for a subscriber that joins without
+   * `display_state_changed` snapshots: the message being streamed, as
+   * `message_start` so later `message_update` deltas apply to it, the active
+   * thread's latest `om_status`, and its token total as a `usage_update` with
+   * no step usage. Never emitted on the bus: deliver them to the joining
+   * subscriber only, right before {@link subscribe} in the same synchronous
+   * block, so no live event lands between.
+   */
+  initialStateEvents(): AgentControllerEvent[] {
+    const total = this.getTokenUsage();
+    return [
+      ...this.#bus.initialStateEvents(),
+      ...(total.totalTokens > 0 ? [{ type: 'usage_update' as const, usage: createEmptyTokenUsage(), total }] : []),
+    ];
   }
 
   /** Subscribe to work that must complete before the terminal agent event is exposed. */
