@@ -120,7 +120,7 @@ describe('Mastra Connect tools settings', () => {
 
     expect(await screen.findByText('PostHog')).toBeInTheDocument();
     expect(screen.getByText(/This Factory sets its session tools in code/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage in Platform' })).toBeInTheDocument();
     expect(screen.queryByText(/Mastra Connect tools are off/)).not.toBeInTheDocument();
   });
 
