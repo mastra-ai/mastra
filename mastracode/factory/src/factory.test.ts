@@ -394,9 +394,6 @@ async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null)
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   await sourceControl.sessions.create({
     sessionId: 'session-1',
@@ -681,10 +678,31 @@ describe('MastraFactory.prepare', () => {
     ).resolves.toBe('anthropic/factory-observer');
   });
 
-  it('uses the platform bot co-author identity', async () => {
+  it('defaults the commit co-author to the platform bot', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+  });
+
+  it('forwards a configured commit co-author identity', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot', email: 'bot@acme.dev' },
+    });
+
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot', email: 'bot@acme.dev' });
+  });
+
+  it('forwards a partial commit co-author identity unchanged', async () => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: null,
+      coAuthor: { name: 'Acme Bot' },
+    });
+
+    // The SDK fills the email it was not given; Factory only forwards.
+    expect(config.coAuthor).toEqual({ name: 'Acme Bot' });
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
@@ -773,9 +791,6 @@ describe('MastraFactory.prepare', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     await sourceControl.sessions.create({
       sessionId: 'session-1',
@@ -951,7 +966,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
-    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      dispatcher: { maxInFlight: 7, maxInteractiveInFlight: 3 },
+    });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
@@ -960,6 +978,7 @@ describe('MastraFactory.prepare', () => {
 
     expect(dispatcherOptions).toHaveLength(1);
     expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
+    expect(dispatcherOptions[0]?.maxInteractiveInFlight).toBe(3);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
@@ -979,7 +998,6 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
-      'filesystem',
       'source-control',
       'channel-identity',
       'skill-overrides',
@@ -1638,9 +1656,6 @@ describe('MastraFactory.prepare', () => {
         orgId: 'org-1',
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: 'user-1',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/sandbox/mastra',
       });
       await sourceControl.sessions.create({
         sessionId: 'session-1',
@@ -3052,6 +3067,23 @@ describe('MastraFactory.prepare integrations', () => {
   it('omits the source-control owner from the routes context when github is absent', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
     expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
+  it('hands workers the Not routed lookup only when the boards domain is ready', async () => {
+    const contextFor = async (boardsReady: boolean) => {
+      const storage = fakeStorage();
+      if (!boardsReady) vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'boards');
+      const workers = vi.fn((_ctx: IntegrationContext) => [{ name: 'custom-poller' } as unknown as MastraWorker]);
+      await new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'custom', workers })],
+      }).prepare();
+      return workers.mock.calls[0]![0];
+    };
+
+    expect((await contextFor(true)).runtime?.notRouted).toBeDefined();
+    expect((await contextFor(false)).runtime?.notRouted).toBeUndefined();
   });
 
   it('does not collect workers from integrations that are not ready', async () => {

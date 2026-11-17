@@ -7,9 +7,6 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
-export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
-
 export interface FactoryUserSessionOwner {
   id: string;
   name: string;

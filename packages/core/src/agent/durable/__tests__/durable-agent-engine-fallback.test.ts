@@ -15,7 +15,7 @@
  * error — see workflows/evented/storage-capability-gate.test.ts.
  */
 
-import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
@@ -58,7 +58,8 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
   it.each(['sync', 'async'] as const)(
     'keeps streaming with a warning when shared storage reports no fencing (%s)',
     async probe => {
-      const pubsub = new UnixSocketPubSub(join(tmpdir(), `fencing-${randomUUID()}.sock`));
+      const directory = await mkdtemp(join(tmpdir(), 'fence-'));
+      const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
       const storage = new MockStore();
       const workflows: WorkflowsStorage = storage.stores.workflows;
       const capability = vi.spyOn(workflows, 'supportsRunFencing');
@@ -84,12 +85,14 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
       } finally {
         await mastra?.shutdown();
         await pubsub.close();
+        await rm(directory, { recursive: true, force: true });
       }
     },
   );
 
   it('keeps streaming with a private agent transport on a shared evented host', async () => {
-    const pubsub = new UnixSocketPubSub(join(tmpdir(), `mixed-bus-${randomUUID()}.sock`));
+    const directory = await mkdtemp(join(tmpdir(), 'mixed-'));
+    const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
     const agent = createEventedAgent({
       agent: new Agent({
         id: 'private-bus',
@@ -112,6 +115,7 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     } finally {
       await mastra?.shutdown();
       await pubsub.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 

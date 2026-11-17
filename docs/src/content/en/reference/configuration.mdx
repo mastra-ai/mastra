@@ -113,7 +113,8 @@ export const mastra = new Mastra({
     type: 'number',
     isOptional: true,
     defaultValue: '300000',
-    description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
+    description:
+      'Default per-task timeout in milliseconds. `0` means no timeout. Can be overridden per-tool or per-call.',
   },
   {
     name: 'defaultRetries',

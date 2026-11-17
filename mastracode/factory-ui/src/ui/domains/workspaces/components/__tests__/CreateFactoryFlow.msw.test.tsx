@@ -45,8 +45,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 function LocationProbe() {
@@ -463,8 +461,6 @@ describe('Create Factory wizard', () => {
               connectionId: 'direct',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'local',
-              sandboxWorkdir: '/workspace/app',
             },
           ],
         }),
@@ -761,7 +757,6 @@ describe('Create Factory wizard', () => {
 const linkedRepository = {
   id: 'ghp_1',
   branch: 'main',
-  sandboxWorkdir: '/workspace/hello',
   repository: { slug: 'octo/hello', defaultBranch: 'main' },
 };
 

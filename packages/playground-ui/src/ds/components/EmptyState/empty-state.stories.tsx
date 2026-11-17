@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Inbox } from 'lucide-react';
 import { Button } from '../Button';
 import { EmptyStateIllustration } from './empty-state-illustration';
 import { EmptyState } from './EmptyState';
+import { IconInboxEmpty } from '@/ds/icons/central/IconInboxEmpty';
 
 const meta: Meta<typeof EmptyState> = {
   title: 'Feedback/EmptyState',
@@ -58,7 +58,7 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox />,
+    iconSlot: <IconInboxEmpty />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get started</Button>,

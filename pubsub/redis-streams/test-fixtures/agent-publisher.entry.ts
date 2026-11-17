@@ -5,9 +5,9 @@ import { createDurableAgent, EventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { PostgresStore } from '@mastra/pg';
+import { RedisServerCache } from '@mastra/redis';
 import { createClient } from 'redis';
 import { z } from 'zod';
-import { RedisServerCache } from '../../../stores/redis/src/cache';
 import { RedisStreamsPubSub } from '../src/index';
 
 const runId = process.env.PUBLISHER_RUN_ID!;
@@ -19,6 +19,11 @@ let terminalReleased = false;
 let released = false;
 // Hold publication after a step result, before the loop advances to its next step.
 class PausingPubSub extends RedisStreamsPubSub {
+  override async subscribe(...args: Parameters<RedisStreamsPubSub['subscribe']>) {
+    if (process.env.PUBLISHER_NO_WORKERS === '1' && args[0] === 'workflows') return;
+    await super.subscribe(...args);
+  }
+
   override async publish(...args: Parameters<RedisStreamsPubSub['publish']>) {
     await super.publish(...args);
     const [topic, event] = args;
@@ -88,8 +93,14 @@ const base = new Agent({
       description: 'Look up the answer.',
       inputSchema: z.object({}),
       requireApproval: process.env.PUBLISHER_APPROVAL === '1',
-      execute: async () => {
+      execute: async (_input, context) => {
         console.info('publisher-tool-executed');
+        if (process.env.PUBLISHER_BLOCK_TOOL === '1') {
+          const signal = context?.abortSignal;
+          if (!signal?.aborted)
+            await new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }));
+          console.info('publisher-tool-aborted');
+        }
         return { answer: 42 };
       },
     }),
@@ -120,6 +131,9 @@ const server = createServer(async (req, res) => {
         result = { error: String(error) };
         console.error(error);
       });
+    } else if (req.url === '/abort-local') {
+      res.end(JSON.stringify({ aborted: agent.abortRunStream(runId) }));
+      return;
     } else if (req.url === '/abort') {
       res.end(JSON.stringify({ acknowledged: await agent.__abortRunAcknowledged(runId) }));
       return;

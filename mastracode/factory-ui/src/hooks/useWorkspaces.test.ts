@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../api/keys';
+import type { SessionRowsResponse, SessionRowWire } from '../api/types';
 import { createQueryClient } from '../query-client';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { addCachedSession, sessionsRefetchInterval, updateCachedSessionTitle } from './useWorkspaces';
@@ -168,5 +169,64 @@ describe('updateCachedSessionTitle', () => {
       'Generated workspace title',
     );
     expect(client.getQueryData(queryKey)).toBe(current);
+  });
+
+  it('names the session in the sidebar’s rows, nested ones included, and on its own page', async () => {
+    const client = createQueryClient();
+    const wireSession = (sessionId: string): SessionRowWire['session'] => ({
+      id: `row-${sessionId}`,
+      sessionId,
+      projectRepositoryId: 'ghp-1',
+      userId: 'user-1',
+      branch: `factory/${sessionId}`,
+      title: null,
+      visibility: 'org',
+      createdAt: '2026-07-20T00:00:00.000Z',
+    });
+    const rowFields: Pick<SessionRowWire, 'origin' | 'status' | 'pinned' | 'updatedAt'> = {
+      origin: 'factory',
+      status: 'idle',
+      pinned: false,
+      updatedAt: '2026-07-20T00:00:00.000Z',
+    };
+    const rowsKey = queryKeys.sessionRows('factory-1', {
+      sort: 'activity',
+      groupBy: 'none',
+      owner: 'all',
+      children: true,
+      pin: [],
+      windows: {},
+    });
+    const rows: SessionRowsResponse = {
+      total: 2,
+      matching: 2,
+      groups: [
+        {
+          key: 'all',
+          total: 2,
+          rows: [
+            { ...rowFields, session: wireSession('sess-1') },
+            {
+              ...rowFields,
+              session: wireSession('sess-2'),
+              childRows: [{ ...rowFields, session: wireSession('sess-1') }],
+            },
+          ],
+        },
+      ],
+      boards: [],
+      owners: [],
+      settling: false,
+    };
+    client.setQueryData(rowsKey, rows);
+    client.setQueryData(queryKeys.userSession('sess-1'), session({ title: undefined }));
+
+    await updateCachedSessionTitle(client, 'factory-1', 'sess-1', 'Generated title');
+
+    const [first, second] = client.getQueryData<SessionRowsResponse>(rowsKey)?.groups[0]?.rows ?? [];
+    expect(first?.session.title).toBe('Generated title');
+    expect(second?.session.title).toBeNull();
+    expect(second?.childRows?.[0]?.session.title).toBe('Generated title');
+    expect(client.getQueryData<FactoryUserSession>(queryKeys.userSession('sess-1'))?.title).toBe('Generated title');
   });
 });

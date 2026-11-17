@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { HeaderListFormItem } from '@/domains/configuration/components/header-list-form';
 import { HeaderListForm } from '@/domains/configuration/components/header-list-form';
@@ -52,7 +52,7 @@ export const AuthHeadersForm = () => {
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
         <Button type="submit" className="ml-auto">
-          <SaveIcon />
+          <IconFloppyDisk1 />
           Save headers
         </Button>
       </Form>

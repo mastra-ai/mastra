@@ -8,10 +8,9 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
 import { AGENT_CONTROL_TOPIC } from '../../streams/constants';
-import { writeAgentRunRecord } from '../../streams/run-records';
+import { durableReplayOwnerKey, writeAgentRunRecord } from '../../streams/run-records';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
-import { durableReplayOwnerKey } from '../replay-owners';
 
 /** Count requests on the shared control topic so aborts are not delivered twice. */
 function countControlPublishes(pubsub: PubSub, runId: string): () => number {

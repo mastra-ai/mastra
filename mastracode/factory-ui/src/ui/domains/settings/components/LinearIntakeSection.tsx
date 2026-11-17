@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectListingQuery, useLinearTeamListingQuery } from '../../../../hooks/useLinearData';
@@ -24,6 +23,7 @@ import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 import { PausedLinearWorkspace } from './PausedLinearWorkspace';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function LinearIntakeSection({
   config,
@@ -143,7 +143,12 @@ export function LinearIntakeSection({
       }
       action={
         statusUnavailable && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )
@@ -161,7 +166,7 @@ export function LinearIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             onClick={() => {
               void projectsQuery.refetch();
               void teamsQuery.refetch();

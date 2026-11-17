@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider, useSidebar } from '..';
 
 const mockMatchMedia = (matches: boolean) => {
@@ -22,6 +22,10 @@ const mockMatchMedia = (matches: boolean) => {
   });
 };
 
+beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
+});
+
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -39,6 +43,9 @@ const getSidebarScope = () => {
   if (!scope) throw new Error('Sidebar scope was not rendered');
   return scope;
 };
+
+const widthOf = (scope: HTMLElement) =>
+  scope.querySelector<HTMLElement>('[data-slot="sidebar-panel"]')?.style.getPropertyValue('--sidebar-width');
 
 describe('Sidebar resize handle gesture', () => {
   const renderCollapsedSidebar = () => {
@@ -190,8 +197,6 @@ describe('Sidebar resize handle keyboard', () => {
     );
     return { scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
-
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
 
   it('narrows the sidebar a step at a time', () => {
     const { scope, separator } = renderSidebar();
@@ -358,7 +363,6 @@ describe('Sidebar minimum width raised at runtime', () => {
       </Sidebar>
     </SidebarProvider>
   );
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
 
   it('widens a narrower sidebar, then returns it to the width the user chose', () => {
     mockMatchMedia(false);
@@ -423,8 +427,6 @@ describe('Sidebar dragging the resize handle', () => {
     );
     return { ...view, scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
-
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
   const press = (separator: HTMLElement, clientX: number, pointerId = 1, button = 0) =>
     fireEvent(separator, pointerEvent('pointerdown', { button, pointerId, clientX }));
   const move = (clientX: number, pointerId = 1) =>
@@ -996,7 +998,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
     expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('false'),

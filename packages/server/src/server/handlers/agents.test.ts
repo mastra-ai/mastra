@@ -7,7 +7,7 @@ import type { DurableAgent } from '@mastra/core/agent/durable';
 import { matchesPermission } from '@mastra/core/auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { EventEmitterPubSub } from '@mastra/core/events';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import {
@@ -464,6 +464,96 @@ describe('getProvidersHandler', () => {
       const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
 
       expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+    });
+
+    it('uses only the live Mastra catalog in v2 mode', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.endsWith('/v1/models')
+            ? Response.json({ data: [{ id: 'live-chat-model', endpoints: ['chat'] }] })
+            : Response.json({ providers: {} }),
+        ),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
+    });
+
+    it('uses the live Mastra catalog when v2 is signaled only by a registered gateway config key', async () => {
+      delete process.env.MASTRA_GATEWAY_VERSION;
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          url.endsWith('/v1/models')
+            ? Response.json({ data: [{ id: 'live-chat-model', endpoints: ['chat'] }] })
+            : Response.json({ providers: {} }),
+        ),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({ gateways: { mastra: new MastraGateway({ apiKey: 'mskv2_org-key' }) } }),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
+    });
+
+    it('does not fall back to cached Mastra models when the v2 catalog fails', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+      Object.assign(globalThis, {
+        __MOCK_PROVIDER_REGISTRY__: {
+          mastra: {
+            name: 'Gateway',
+            models: ['stale-v1-model'],
+            apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+            gateway: 'mastra',
+          },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          if (url.endsWith('/v1/models')) throw new Error('catalog unavailable');
+          return Response.json({ providers: {} });
+        }),
+      );
+
+      const result = await GET_PROVIDERS_ROUTE.handler({
+        mastra: new Mastra({}),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.providers.find(provider => provider.id === 'mastra')).toBeUndefined();
+      expect(result.providers.find(provider => provider.id === 'openai')).toBeDefined();
     });
   });
 

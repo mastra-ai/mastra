@@ -9,6 +9,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createLegacyCardTablesForTests } from '../../test-utils.js';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
@@ -126,8 +127,7 @@ describe('WorkItemsStorage', () => {
         expectedRevision,
         destinationStage: 'intake',
         actorId: 'triage-agent',
-        ingress: { identity, triggerType: 'agent', transitionId: identity },
-        configVersion: 'rules-v1',
+        ingress: { identity, transitionId: identity },
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
@@ -276,8 +276,7 @@ describe('WorkItemsStorage', () => {
       storage.commitRuleEvaluation({
         ...scope,
         workItemId: null,
-        ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
-        configVersion: 'v1',
+        ingress: { identity: 'linear:issue:ENG-1:1' },
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -329,8 +328,7 @@ describe('WorkItemsStorage', () => {
         orgId: 'org1',
         factoryProjectId: 'p1',
         workItemId: created.item.id,
-        ingress: { identity: 'github:delivery-1', triggerType: 'github.issueComment' },
-        configVersion: 'v1',
+        ingress: { identity: 'github:delivery-1' },
         expectedRevision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -357,8 +355,7 @@ describe('WorkItemsStorage', () => {
       orgId: 'org1',
       factoryProjectId: 'p1',
       workItemId: other.item.id,
-      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueComment' },
-      configVersion: 'v1',
+      ingress: { identity: 'github:delivery-2' },
       expectedRevision: other.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -385,8 +382,7 @@ describe('WorkItemsStorage', () => {
     const commitResult = await storage.commitRuleEvaluation({
       ...scope,
       workItemId: null,
-      ingress: { identity: 'github:issue:1:1', triggerType: 'issue.observed' },
-      configVersion: 'v1',
+      ingress: { identity: 'github:issue:1:1' },
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -830,8 +826,7 @@ describe('WorkItemsStorage', () => {
       await storage.commitRuleEvaluation({
         ...scope,
         workItemId: created.item.id,
-        ingress: { identity: `park-${index}`, triggerType: 'test' },
-        configVersion: 'rules-v1',
+        ingress: { identity: `park-${index}` },
         expectedRevision: current?.revision ?? created.item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -880,8 +875,7 @@ describe('WorkItemsStorage', () => {
     await storage.commitRuleEvaluation({
       ...scope,
       workItemId: created.item.id,
-      ingress: { identity: 'receipt-race', triggerType: 'test' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'receipt-race' },
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1058,6 +1052,30 @@ describe('work item subscriptions', () => {
     expect(
       await storage.listSessionSubscriptions({ orgId: 'org1', factoryProjectId: 'project2', sessionId: 'sess-a' }),
     ).toEqual([]);
+  });
+
+  it('lists a follow made or dropped after the Factory was last listed', async () => {
+    const { storage, item, other } = await seed();
+    const followed = async () =>
+      (await storage.listProjectSubscriptions({ orgId: 'org1', factoryProjectId: 'project1' })).map(
+        row => `${row.sessionId}:${row.workItemId}`,
+      );
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-15T10:00:00Z') });
+    try {
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+      vi.setSystemTime(Date.now() + 10_000);
+      expect(await followed()).toEqual([`sess-a:${item.id}`]);
+
+      await storage.subscribeToWorkItem(follow(other.id, 'sess-b', 'subscribed'));
+      expect(await followed()).toEqual([`sess-a:${item.id}`, `sess-b:${other.id}`]);
+
+      vi.setSystemTime(Date.now() + 10_000);
+      expect(await followed()).toEqual([`sess-a:${item.id}`, `sess-b:${other.id}`]);
+      await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' });
+      expect(await followed()).toEqual([`sess-b:${other.id}`]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('unsubscribes one session from one item', async () => {
@@ -1321,8 +1339,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       await workItems.commitRuleEvaluation({
         ...scope,
         workItemId: item.id,
-        ingress: { identity: 'approval', triggerType: 'test' },
-        configVersion: 'v1',
+        ingress: { identity: 'approval' },
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -1371,6 +1388,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       delete legacy.work_item;
       delete legacy.work_item_sources;
       delete legacy.changed_at;
+      await createLegacyCardTablesForTests(storage);
       await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');

@@ -11,17 +11,40 @@ function remToPx(rem: number) {
   return rem * (rootFontSize || DEFAULT_ROOT_FONT_SIZE);
 }
 
-/** Container query in JS — tracks the element's own width, so a resized sidebar counts too. */
-export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number) {
-  const [state, setState] = useState({ wider: false, revision: 0 });
+// The sidebar sets `--sidebar-width` to where it is heading while its box still animates there.
+function pendingGrowth(sidebar: HTMLElement | null | undefined) {
+  if (!sidebar) return 0;
+  const destination = parseFloat(sidebar.style.getPropertyValue('--sidebar-width'));
+  return Number.isNaN(destination) ? 0 : destination - sidebar.getBoundingClientRect().width;
+}
+
+type MovingSidebar = { panelRef: RefObject<HTMLElement | null>; state: string };
+
+/** Container query in JS — tracks the element's own width, so a resized sidebar counts too.
+ * `revision` counts crossings since the first measurement, so 0 is the layout the page painted with.
+ * With `sidebar`, the answer is for the width the element settles at, from the frame the sidebar
+ * starts moving rather than the frame its animation crosses the threshold. */
+export function useWiderThan(
+  ref: RefObject<HTMLElement | null>,
+  minRem: number,
+  slackPx = 0,
+  sidebar?: MovingSidebar | null,
+) {
+  const sidebarRef = sidebar?.panelRef;
+  const sidebarState = sidebar?.state;
+  const [state, setState] = useState<{ wider: boolean; revision: number }>();
 
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
 
     const measure = (width: number) => {
-      const wider = width >= remToPx(minRem);
-      setState(current => (current.wider === wider ? current : { wider, revision: current.revision + 1 }));
+      const settled = width - pendingGrowth(sidebarRef?.current);
+      const wider = settled >= remToPx(minRem) + slackPx;
+      setState(current => {
+        if (!current) return { wider, revision: 0 };
+        return current.wider === wider ? current : { wider, revision: current.revision + 1 };
+      });
     };
 
     measure(element.getBoundingClientRect().width);
@@ -34,7 +57,7 @@ export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number)
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [ref, minRem]);
+  }, [ref, minRem, slackPx, sidebarRef, sidebarState]);
 
-  return state;
+  return { wider: state?.wider ?? false, revision: state?.revision ?? 0 };
 }

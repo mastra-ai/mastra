@@ -49,11 +49,10 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
-import { getExecutionStreamPublisher } from '../execution-stream-publisher';
+import { getExecutionStreamOwner } from '../execution-stream-publisher';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -502,7 +501,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       }
     });
 
-    it.each(['takeover', 'unverified'])(
+    it.each(['takeover', 'released-takeover', 'unverified'])(
       'a held terminal preserves shared state and only completes a nonsuperseded reader when ownership is %s (COR-1560)',
       async ownership => {
         const storage = createStorage(backend);
@@ -549,14 +548,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const clearTopic = vi.spyOn(pubsub, 'clearTopic');
         const result = await agent.stream('Answer me.', { runId, onFinish });
         const stream = collect(result.fullStream);
+        const observer = ownership === 'unverified' ? await agent.observe(runId) : undefined;
+        const observedStream = observer ? collect(observer.fullStream) : undefined;
         const fence = ExecutionFence.getLocalActive(runId)!;
         const foreign = foreignOwnership(backend, storage, pubsub);
-        const originalPublisher = getExecutionStreamPublisher({
+        const originalPublisher = getExecutionStreamOwner({
           runId,
           agentId: agent.id,
           mastra,
           claim: fence.claim,
-          role: 'lifecycle',
         })!;
         try {
           await model.entered;
@@ -564,25 +564,28 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await fence.whenSettled;
           expect(fence.settlement).toBe('owned');
           expect(terminal).toBeDefined();
-          if (ownership === 'takeover') {
+          if (ownership !== 'unverified') {
             await foreign.hold(agent.id, runId, 'replacement-reader');
             const record =
               backend === 'storage'
                 ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
                 : undefined;
-            const replacement = getExecutionStreamPublisher({
+            const replacement = getExecutionStreamOwner({
               runId,
               agentId: agent.id,
               mastra,
-              role: 'lifecycle',
               claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
             })!;
             await replacement.ready;
+            if (ownership === 'released-takeover') {
+              await replacement.settle('finished');
+              await foreign.free(agent.id, runId, 'replacement-reader');
+            }
           }
           const expected = await agent.__getRunRecord(runId);
           expect(expected).toMatchObject({
-            status: 'running',
-            publisherId: ownership === 'takeover' ? 'replacement-reader' : fence.executionId,
+            status: ownership === 'released-takeover' ? 'finished' : 'running',
+            publisherId: ownership !== 'unverified' ? 'replacement-reader' : fence.executionId,
           });
           if (ownership === 'unverified') {
             const unavailable = new Error('ownership backend unavailable');
@@ -597,10 +600,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           await terminalDelivery;
           expect(await agent.__getRunRecord(runId)).toEqual(expected);
           if (ownership === 'unverified') {
-            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+            await expect.poll(() => onFinish.mock.calls.length).toBe(1);
+            await expect.poll(() => stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
             expect(onFinish).toHaveBeenCalledOnce();
             expect(onFinish.mock.calls[0]![0].text).toBe('old answer');
-            expect(scheduleCleanup).not.toHaveBeenCalled();
+            await expect(observer!.output.text).resolves.toBe('old answer');
+            for (const [cleanup] of scheduleCleanup.mock.calls) cleanup();
+            expect(clearTopic).not.toHaveBeenCalled();
+            observer!.cleanup();
+            await originalPublisher.detach();
             expect(clearTopic).not.toHaveBeenCalled();
             expect(agent.__getRunOwner(runId)).toBeDefined();
             result.cleanup();
@@ -619,6 +627,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         } finally {
           model.release();
           await stream.stop();
+          await observedStream?.stop();
+          observer?.detach();
           result.cleanup();
           if (ownership === 'takeover') await foreign.free(agent.id, runId, 'replacement-reader');
         }
@@ -644,12 +654,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const result = await agent.stream('Answer me.', { runId });
       const stream = collect(result.fullStream);
       const fence = ExecutionFence.getLocalActive(runId)!;
-      const publisher = getExecutionStreamPublisher({
+      const publisher = getExecutionStreamOwner({
         runId,
         agentId: agent.id,
         mastra,
         claim: fence.claim,
-        role: 'lifecycle',
       })!;
       try {
         await model.entered;
@@ -677,7 +686,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         memory,
       });
       // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
-      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, storageVersion: 1 });
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -817,6 +826,88 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await stream.stop();
         result.cleanup();
+      },
+    );
+
+    it.each([false, true])(
+      'keeps a warm resumed execution alive (clean up recovery reader=%s)',
+      async cleanupRecovery => {
+        const storage = createStorage(backend);
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('abandoned answer');
+        const resumedToolEntered = gate();
+        const releaseResumedTool = gate();
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Wait for confirmation before looking up the answer.',
+          inputSchema: z.object({}),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          suspendSchema: z.object({ question: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) {
+              return context?.agent?.suspend({ question: 'Continue?' });
+            }
+            resumedToolEntered.open();
+            await releaseResumedTool.opened;
+            return { answer: 'confirmed' };
+          },
+        });
+        const agentA = buildAgent({ model: original.model, storage, cache, tools: { lookup } });
+        const started = await agentA.stream('Look up the answer.');
+        const startedStream = collect(started.fullStream);
+        const { runId } = started;
+        let recovered: Awaited<ReturnType<typeof agentA.recover>> | undefined;
+        let resumed: Awaited<ReturnType<typeof agentA.resume>> | undefined;
+        let recoveredStream: ReturnType<typeof collect> | undefined;
+        let resumedStream: ReturnType<typeof collect> | undefined;
+        try {
+          await original.entered;
+          await waitForCheckpoint(storage, runId);
+          // The checkpoint survives the originating process; recover and resume run in its replacement.
+          globalRunRegistry.clear();
+          __resetExecutionFencesForTests();
+          const replacement = toolCallThenTextModel('lookup', {}, 'confirmed answer');
+          const agentB = buildAgent({
+            model: replacement.model,
+            storage,
+            cache,
+            tools: { lookup },
+            cleanupTimeoutMs: 0,
+          });
+          recovered = await agentB.recover(runId, { force: true });
+          recoveredStream = collect(recovered.fullStream);
+          await vi.waitFor(() =>
+            expect(recoveredStream!.chunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true),
+          );
+          const recoveryEntry = globalRunRegistry.get(runId)!;
+          await recoveryEntry.workflowExecution;
+          const recoveryFence = recoveryEntry.executionFence;
+          await recoveryFence?.whenSettled;
+          resumed = await agentB.resume(runId, { confirmed: true }, { toolCallId: 'call-1' });
+          resumedStream = collect(resumed.fullStream);
+          await resumedToolEntered.opened;
+          const resumedEntry = globalRunRegistry.get(runId)!;
+          expect(resumedEntry).toBe(recoveryEntry);
+          expect(resumedEntry.executionFence).not.toBe(recoveryFence);
+          const clearTopic = vi.spyOn(agentB.pubsub, 'clearTopic');
+          if (cleanupRecovery) recovered.cleanup();
+          await new Promise(resolve => setTimeout(resolve, 20));
+          expect.soft(globalRunRegistry.get(runId) === resumedEntry).toBe(true);
+          expect.soft(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+          releaseResumedTool.open();
+          await vi.waitFor(() => expect(resumedStream!.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+          expect(await resumed.output.text).toBe('confirmed answer');
+        } finally {
+          releaseResumedTool.open();
+          original.release();
+          await startedStream.stop();
+          await recoveredStream?.stop();
+          await resumedStream?.stop();
+          resumed?.cleanup();
+          recovered?.cleanup();
+          started.cleanup();
+        }
       },
     );
 
@@ -2049,7 +2140,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         [DurableStepIds.AGENTIC_EXECUTION]: 'running',
       });
       const writes = (
-        ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState', 'deleteWorkflowRunById'] as const
+        [
+          'persistWorkflowSnapshot',
+          'updateWorkflowResults',
+          'updateWorkflowState',
+          'appendWorkflowRunEntries',
+          'mergeWorkflowRunStepResult',
+          'writeWorkflowRunCheckpoint',
+          'updateWorkflowRunHeader',
+          'deleteWorkflowRunById',
+        ] as const
       ).map(method => vi.spyOn(workflows, method));
       await memory.saveMessages({ messages: [recoveredAssistantMessage(messageId, 'recovered answer')] });
 
@@ -2293,6 +2393,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
       'updateWorkflowResults',
       'updateWorkflowState',
       'appendWorkflowRunEntries',
+      'mergeWorkflowRunStepResult',
       'writeWorkflowRunCheckpoint',
       'updateWorkflowRunHeader',
     ] as const) {

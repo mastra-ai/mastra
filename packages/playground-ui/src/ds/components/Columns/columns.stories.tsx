@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SlidersHorizontalIcon } from 'lucide-react';
-
 import { Button } from '../Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../Card';
 import { Column, Columns } from './index';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
 
 const meta: Meta<typeof Columns> = {
   title: 'Layout/Columns',
@@ -26,7 +25,7 @@ function MetricsColumn({ title }: { title: string }) {
       <Column.Toolbar>
         <h2 className="text-heading text-foreground">{title}</h2>
         <Button size="sm" variant="ghost">
-          <SlidersHorizontalIcon />
+          <IconSettingsSliderHor />
           Configure
         </Button>
       </Column.Toolbar>

@@ -79,7 +79,6 @@ import { expect, vi } from 'vitest';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
-import { storeRunsInV2 } from './storage-version';
 
 export type RestartKind = 'durable' | 'evented' | 'evented-fallback' | 'workflow';
 
@@ -215,6 +214,12 @@ export type ScenarioOptions<K extends RestartKind> = {
   /** Park graph 1 inside the write that leaves the snapshot this picks out. */
   hold?: HoldWrite;
   timeoutMs?: number;
+  /**
+   * The workflow storage version agents store their runs in. Defaults to 1. On
+   * 2, only gate checkpoints restart: `copyStore` carries v2's tables over as
+   * they are at `restart()`, which is the checkpoint only while graph 1 is parked.
+   */
+  storageVersion?: 1 | 2;
 };
 
 export type Graph = {
@@ -247,13 +252,12 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
 
     // Checkpoints are v1 rows, restored through `persistWorkflowSnapshot`, and `copyStore` carries
     // v2's tables over as they are now rather than as they were at the checkpoint. So agents
-    // store their runs in v1.
-    const agent = storeRunsInV2(
+    // store their runs in v1 unless the scenario asks for v2.
+    const storageVersion = options.storageVersion === 2 ? 2 : 1;
+    const agent =
       options.kind === 'durable'
-        ? core.createDurableAgent({ agent: built })
-        : core.createEventedAgent({ agent: built }),
-      false,
-    );
+        ? core.createDurableAgent({ agent: built, storageVersion })
+        : core.createEventedAgent({ agent: built, storageVersion });
     // Before `new Mastra(...)`: the engine resolves during agent registration.
     if (options.kind === 'evented-fallback') {
       vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
@@ -466,7 +470,12 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
             `(found ${root ? root.snapshot.status : 'none'}; rows: ${checkpoint.rows.map(r => `${r.workflowName}:${r.snapshot.status}`).join(', ') || 'none'})`,
         );
       }
-      for (const row of checkpoint.rows) await graph.workflows.persistWorkflowSnapshot(structuredClone(row));
+      if (options.storageVersion === 2) {
+        // `copyStore` already carried the v2 runs over; replaying them as v1 rows would duplicate them.
+        if (checkpoint.write !== 0) throw new Error('restart: storage v2 restarts only from a gate checkpoint');
+      } else {
+        for (const row of checkpoint.rows) await graph.workflows.persistWorkflowSnapshot(structuredClone(row));
+      }
 
       if (options.kind === 'workflow') {
         const run = await graph.workflow.createRun({ runId: options.runId });

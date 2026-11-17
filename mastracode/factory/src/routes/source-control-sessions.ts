@@ -1,7 +1,7 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
@@ -11,7 +11,6 @@ import { z } from 'zod';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -24,9 +23,7 @@ import {
 import { normalizeSessionTitle } from '../session/session-title.js';
 import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
-import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
@@ -35,50 +32,37 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { answerParkedCall } from '../tools/approval-tools.js';
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
+import { createSessionOwnerProfileResolver, withOwnerProfile } from './project-sessions.js';
+import type {
+  ProjectSessionsReader,
+  SessionOwnerProfileResolver,
+  SessionOwnerUserProvider,
+} from './project-sessions.js';
 import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
-// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
-const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const MAX_SESSION_OWNER_PROFILES = 100;
-const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
-const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
-
-interface SessionOwnerProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
 
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
   projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
+  projectSessions: ProjectSessionsReader;
   controller?: MountedMastraCode['controller'];
   audit?: AuditRecorder;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
-  /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
-  filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
-    Partial<
-      Pick<
-        WorkItemsStorage,
-        'listProjectSubscriptions' | 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'
-      >
-    >;
+    Partial<Pick<WorkItemsStorage, 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'>>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
 }
@@ -363,84 +347,10 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
-function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
-  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
-  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
-    cache.delete(userId);
-    cache.set(userId, { profile, expiresAt });
-    if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
-      const oldestUserId = cache.keys().next().value;
-      if (oldestUserId !== undefined) cache.delete(oldestUserId);
-    }
-  };
-
-  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    const profiles = new Map<string, SessionOwnerProfile>();
-    // A session the Factory owns has no person to look up; it is named for what it is.
-    for (const userId of userIds) {
-      if (isFactoryPrincipalId(userId)) profiles.set(userId, { id: userId, name: 'Factory' });
-    }
-    if (!users) return profiles;
-    const requestedUserIds = [...new Set(userIds)]
-      .filter(userId => !isFactoryPrincipalId(userId))
-      .slice(0, MAX_SESSION_OWNER_PROFILES);
-    const unresolvedUserIds: string[] = [];
-    const now = Date.now();
-
-    for (const userId of requestedUserIds) {
-      const cached = cache.get(userId);
-      if (!cached || cached.expiresAt <= now) {
-        cache.delete(userId);
-        unresolvedUserIds.push(userId);
-      } else if (cached.profile) {
-        profiles.set(userId, cached.profile);
-      }
-    }
-    if (unresolvedUserIds.length === 0) return profiles;
-
-    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
-    if (users.getUsers) {
-      try {
-        resolvedUsers = await users.getUsers(unresolvedUserIds);
-      } catch (error) {
-        console.warn('[Factory Sessions] Bulk owner profile lookup failed; falling back to individual lookups', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-          .filter(result => result.status === 'fulfilled')
-          .map(result => result.value);
-      }
-    } else {
-      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-        .filter(result => result.status === 'fulfilled')
-        .map(result => result.value);
-    }
-
-    for (const user of resolvedUsers) {
-      if (!user) continue;
-      const name = user.name?.trim() || user.email?.trim();
-      if (!name) continue;
-      profiles.set(user.id, {
-        id: user.id,
-        name,
-        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-      });
-    }
-    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
-    for (const userId of unresolvedUserIds) cacheProfile(userId, profiles.get(userId), expiresAt);
-    return profiles;
-  };
-}
-
-function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
-  const owner = owners.get(session.userId);
-  return owner ? { ...session, owner } : session;
-}
-
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
-  resolveOwnerProfiles: ReturnType<typeof createSessionOwnerProfileResolver>,
+  resolveOwnerProfiles: SessionOwnerProfileResolver,
 ): ApiRoute[] {
   return [
     registerApiRoute(path, {
@@ -588,31 +498,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const factoryProjectId = c.req.param('id');
         const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
         if (!project) return c.json({ error: 'Factory not found' }, 404);
-        // Storage is partitioned per provider; a Factory's sessions can live in any of them.
-        const sessions = (
-          await Promise.all(
-            options.sourceControls.map(sourceControl =>
-              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
-            ),
-          )
-        ).flat();
-        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        // The follow link is the only tie between a person's session and a card's phase sessions.
-        const followed = new Map<string, string[]>();
-        for (const link of (await options.workItems?.listProjectSubscriptions?.({
-          orgId,
-          factoryProjectId: project.id,
-        })) ?? []) {
-          const workItemIds = followed.get(link.sessionId);
-          if (workItemIds) workItemIds.push(link.workItemId);
-          else followed.set(link.sessionId, [link.workItemId]);
-        }
-        return c.json({
-          sessions: sessions.map(session => ({
-            ...withOwnerProfile(session, owners),
-            followedWorkItemIds: followed.get(session.sessionId) ?? [],
-          })),
-        });
+        return c.json({ sessions: await options.projectSessions({ orgId, factoryProjectId: project.id, userId }) });
       },
     }),
     // Approve or decline the tool call a card's phase session waits on, from the card or a
@@ -776,12 +662,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           session.sessionId,
           options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS,
         );
-        await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-          console.warn('[Factory Sessions] Failed to drain filesystem capture before sandbox recreate', {
-            sessionId: session.sessionId,
-            error,
-          });
-        });
         try {
           const outcome = await sessionRetirement.recreateSessionSandbox({
             sourceControl: match.sourceControl,
@@ -789,13 +669,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             sessionId: session.sessionId,
           });
           if (outcome === 'not-found') return c.json({ error: 'Session not found' }, 404);
-          // The captured listings describe the destroyed sandbox; the next turn re-captures.
-          await options.filesystem?.deleteResourceFiles({ resourceId: session.sessionId }).catch(error => {
-            console.warn('[Factory Sessions] Failed to clear file listings after sandbox recreate', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           return c.json({ recreated: true, aborted });
         } catch (error) {
           console.error('[Factory Sessions] Failed to recreate session sandbox', {
@@ -899,14 +772,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
-          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          // A failed drain only costs the snapshot; it must not block teardown.
-          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-            console.warn('[Factory Sessions] Failed to drain filesystem capture before delete', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           await options.controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {

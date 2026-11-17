@@ -135,6 +135,8 @@ The `_background` override only _modifies_ tools the developer has already opted
 
 When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
+A timeout of `0` means no timeout. Set `timeoutMs: 0` on a tool or agent tool entry, or `defaultTimeoutMs: 0` on the manager, for tasks that should run until they finish or are cancelled.
+
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
 ## Background tasks related stream chunks

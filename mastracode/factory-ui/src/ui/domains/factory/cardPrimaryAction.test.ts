@@ -243,6 +243,10 @@ describe('cardMoves', () => {
       ]);
       expect(cardMoves(carrying('merged', { merged: true }), 'done', work)).toEqual([]);
     });
+
+    it("offers no Re-review in Done while the pull request's state is unknown", () => {
+      expect(cardMoves(carrying(''), 'done', work)).toEqual([]);
+    });
   });
 
   it("offers a card in an older project's Work self-review no lane, so its session is the action", () => {

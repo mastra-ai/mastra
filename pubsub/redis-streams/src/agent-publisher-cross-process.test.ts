@@ -10,7 +10,7 @@ const connectionString =
   process.env.POSTGRES_CONNECTION_STRING ?? 'postgresql://postgres:postgres@localhost:5436/mastra';
 
 describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1560)', engine => {
-  for (const scenario of ['abort', 'reuse', 'resume']) {
+  for (const scenario of ['abort', 'local-abort', 'reuse', 'resume']) {
     // COR-1565: remote evented approval runs the tool but never finishes, even with A alive.
     // Also reproduced on the prerequisite branch, 3a23fe1ac5a; do not fix its resume protocol here.
     const test = engine === 'evented' && scenario === 'resume' ? it.fails : it;
@@ -47,6 +47,8 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
               PUBLISHER_PREFIX: prefix,
               PUBLISHER_RUN_ID: runId,
               PUBLISHER_ENGINE: engine,
+              PUBLISHER_NO_WORKERS: engine === 'evented' && scenario === 'local-abort' && i === 0 ? '1' : '0',
+              PUBLISHER_BLOCK_TOOL: scenario === 'local-abort' ? '1' : '0',
               PUBLISHER_APPROVAL: scenario === 'resume' ? '1' : '0',
               PUBLISHER_MODEL_URL: llm.url,
             },
@@ -60,6 +62,24 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
           if (!response.ok) throw new Error(await response.text());
           return response.json();
         };
+        if (scenario === 'local-abort') {
+          await Promise.all([
+            request(0, '/release'),
+            request(1, '/release'),
+            request(0, '/release-terminal'),
+            request(1, '/release-terminal'),
+          ]);
+          await request(0, '/run');
+          const executor = engine === 'evented' ? processes[1]! : processes[0]!;
+          await waitForLine(executor, 'publisher-tool-executed', 30_000);
+          expect(await request(0, '/abort-local')).toEqual({ aborted: true });
+          await waitForLine(executor, 'publisher-tool-aborted', 5_000);
+          await expect
+            .poll(async () => (await request(0, '/state')).result.finishReason, { timeout: 10_000 })
+            .toBe('aborted');
+          await request(0, '/cleanup');
+          return;
+        }
         if (scenario === 'resume') {
           await Promise.all([
             request(0, '/release'),

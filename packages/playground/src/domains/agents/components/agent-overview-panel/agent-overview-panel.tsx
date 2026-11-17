@@ -6,6 +6,16 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBox2 } from '@mastra/playground-ui/icons/central/IconBox2';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconChip } from '@mastra/playground-ui/icons/central/IconChip';
+import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconSignalTower } from '@mastra/playground-ui/icons/central/IconSignalTower';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -15,7 +25,6 @@ import {
   useUpdateModelInModelList,
   useChannelPlatforms,
 } from '@mastra/react/hooks/agents';
-import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useWatch } from 'react-hook-form';
 import { extractPrompt } from '../../utils/extractPrompt';
@@ -205,7 +214,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         <AgentMetadataSection
           title="Models"
           accent="blue"
-          icon={<Boxes />}
+          icon={<IconBox2 />}
           actions={editFormContext?.readOnly ? <Badge variant="warning">Read-only</Badge> : undefined}
         >
           {ownsModel && editFormContext ? (
@@ -242,7 +251,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         title="Tools"
         count={tools.length}
         accent="amber"
-        icon={<Wrench />}
+        icon={<IconMaintenance />}
         hint={{
           link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
           title: 'Using Tools and MCP documentation',
@@ -255,7 +264,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         title="Workflows"
         count={workflows.length}
         accent="blue"
-        icon={<Workflow />}
+        icon={<WorkflowIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
         <AgentMetadataWorkflowList workflows={workflows} />
@@ -266,7 +275,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title="Workspace Tools"
           count={workspaceTools.length}
           accent="green"
-          icon={<Folder />}
+          icon={<IconFolder1 />}
           hint={{
             link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
             title: 'Workspace tools documentation',
@@ -281,7 +290,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title="Browser Tools"
           count={browserTools.length}
           accent="cyan"
-          icon={<Globe />}
+          icon={<IconGlobe />}
           hint={{
             link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
             title: 'Browser tools documentation',
@@ -295,7 +304,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         <AgentMetadataSection
           title="Processors"
           accent="orange"
-          icon={<Cpu />}
+          icon={<IconChip />}
           hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
           <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
@@ -306,21 +315,21 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         title="Skills"
         count={skills.length}
         accent="purple"
-        icon={<Sparkles />}
+        icon={<IconSparklesTwo />}
         hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
+      <AgentMetadataSection title="Scorers" accent="pink" icon={<IconGauge />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
-      <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
+      <AgentMetadataSection title="Memory" accent="purple" icon={<IconBrain />}>
         <AgentMemoryConfig agentId={agentId} />
       </AgentMetadataSection>
 
       {hasChannels && (
-        <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
+        <AgentMetadataSection title="Channels" accent="cyan" icon={<IconSignalTower />}>
           <AgentChannels agentId={agentId} />
         </AgentMetadataSection>
       )}

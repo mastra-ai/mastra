@@ -5,11 +5,11 @@ import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/co
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { useAgent } from '@mastra/react/hooks/agents';
-import { Save } from 'lucide-react';
 import { useMemo } from 'react';
-import { useFormState } from 'react-hook-form';
 
+import { useFormState } from 'react-hook-form';
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { BrowserSessionProvider } from '../../context/browser-session-provider';
@@ -53,7 +53,7 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
             size="sm"
             onClick={() => handleSaveDraft()}
             disabled={isSavingDraft}
-            icon={<Save />}
+            icon={<IconFloppyDisk1 />}
           >
             {isSavingDraft ? 'Saving...' : saveLabel}
           </Button>

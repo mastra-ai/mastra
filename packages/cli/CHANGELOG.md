@@ -1,5 +1,93 @@
 # mastra
 
+## 1.39.1-alpha.3
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- Improved Factory card sessions: the card's stage, links, changes and files now sit in one place beside the conversation. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+  **Stage bar**
+
+  The session header shows the card's phase, with arrows to the nearest phase it can move to and a menu of every allowed move. A move that can't happen says why. The breadcrumb is gone: the sidebar names the session and the panel names the card.
+
+  **Session panel**
+
+  The panel runs from the top of the page beside the conversation, which keeps its width: when room runs out, the panel narrows, then folds into the header. Its overview lists the card's source and description, the workspace branch and pull request, the changed files, the pull requests the work opened, related cards, and a timeline of the card's moves. Pull request links now show once, here. Opening the panel doesn't re-render the conversation, and its text doesn't rewrap while the panel opens, narrows or folds.
+
+  **Go to file**
+
+  Go to file searches every file in the workspace, not only folders already opened, and ranks changed files first. The file tree marks changed files and the file viewer numbers its lines.
+
+  **Consistency fixes**
+
+  - A pull request's status icon follows one rule on the board, in the sidebar and in the panel, and GitLab merge request cards show it too.
+  - Links name what they point at, such as **PR #202** or **Issue #42**.
+  - Phase names follow the card's own board everywhere, including custom boards.
+  - A finished pull request card whose pull request is still open offers **Re-review**.
+  - A section that can't load says so instead of looking empty.
+
+  Search now sits only in the sidebar, on phones too. Cmd/Ctrl+K still opens it.
+
+  The sidebar no longer asks for each session's pull request status every 5 seconds. It reads the status again when the board's live feed reports a change.
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Factory no longer sends or expects a `sandboxProvider` value when linking a repository during setup. Update `mastra` together with `@mastra/factory`: repository linking fails when one of them is older than the other. ([#30508](https://github.com/mastra-ai/mastra/pull/30508))
+
+- Updated the Factory API route schemas used by `mastra api`: project repository responses no longer list `sandboxWorkdir` or `lastBuiltAt`. ([#30495](https://github.com/mastra-ai/mastra/pull/30495))
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/deployer@1.84.0-alpha.3
+
+## 1.39.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/deployer@1.84.0-alpha.2
+
+## 1.39.1-alpha.1
+
+### Patch Changes
+
+- Added `mastra api factory decision queue`, which lists a Factory project's automated runs waiting for a run slot, oldest first, and the runs holding one. ([#30295](https://github.com/mastra-ai/mastra/pull/30295))
+
+  ```bash
+  mastra api factory decision queue <project-id>
+  ```
+
+- Reduced provider requests from the Factory board and search. The board and ⌘K search now show only cards, read from Factory, and never ask GitHub, GitLab, Linear, Jira or incident.io for their issue or pull request lists. New issues and pull requests reach the board as cards the server files. An open issue or pull request with no card no longer appears in Intake or search until the server files it as a card. ([#30266](https://github.com/mastra-ai/mastra/pull/30266))
+
+- Simplified `mastra factory dev` startup output. Per-phase `[factory:timing]` lines, per-integration "initialized" lines, and poller/worker "started" lines no longer print on a local dev boot. Instead you see the ready banner (with the Factory UI URL on its own line) and one Intake line showing which integrations are connected and which are available: ([#30344](https://github.com/mastra-ai/mastra/pull/30344))
+
+  ```
+  ◇ Intake: GitHub connected · Jira, Linear, GitLab, incident.io available
+  ```
+
+  Run `mastra factory dev --debug` to bring back the boot timings and integration details. Deployed Factories still log boot timings as before.
+
+- The board's Intake column now shows an error with a Retry button when the intake source bindings fail to load, instead of saying Intake is clear. ([#30377](https://github.com/mastra-ai/mastra/pull/30377))
+
+- Removed `save_messages` and `search_memory` from the built-in MCP memory toolset, and added a read-only `get_working_memory` tool. ([#30245](https://github.com/mastra-ai/mastra/pull/30245))
+
+  MCP clients can now inspect working memory without changing it, for a thread or for the caller's resource:
+
+  ```json
+  { "name": "get_working_memory", "arguments": { "agentId": "support-agent", "threadId": "thread-123" } }
+  ```
+
+  Leave out `threadId` to read resource-scoped working memory. It is also served over HTTP at `GET /api/memory/working-memory?agentId=support-agent&resourceId=user-456`. Servers that map users to resources can omit `resourceId`; the caller's resource is used either way.
+
+  If an MCP client called `save_messages` or `search_memory`, call the HTTP endpoints instead. They are unchanged: `POST /api/memory/save-messages?agentId=...` saves messages, and `GET /api/memory/search?agentId=...&resourceId=...&searchQuery=...` searches memory.
+
+- Updated dependencies [[`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/core@1.84.0-alpha.1
+  - @mastra/deployer@1.84.0-alpha.1
+
 ## 1.39.1-alpha.0
 
 ### Patch Changes

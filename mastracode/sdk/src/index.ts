@@ -1339,6 +1339,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...(agentConnectionsSignalProvider ? [agentConnectionsSignalProvider.id] : []),
           ...(githubSignals ? [githubSignals.id] : []),
         ],
+        // A provider failing mid-session is a plugin problem the user should see,
+        // so it goes where plugin reload failures go rather than to the console.
+        onError: (message, error, pluginId) =>
+          pluginManager.reportPluginError({
+            pluginId,
+            message:
+              error === undefined ? message : `${message} ${error instanceof Error ? error.message : String(error)}`,
+          }),
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
@@ -117,7 +117,7 @@ export function VantaIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             onClick={() => {
               void connectionsQuery.refetch();
               void statusQuery.refetch();

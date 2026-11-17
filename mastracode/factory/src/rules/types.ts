@@ -12,6 +12,7 @@ export type WorkItemSource =
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
   | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -38,7 +39,9 @@ export function externalSourceForWorkItem(
                     ? ['github', 'dependabot-alert']
                     : source === 'vanta-vulnerability'
                       ? ['vanta', 'vulnerability']
-                      : ['factory', 'manual'];
+                      : source === 'detail-finding'
+                        ? ['detail', 'finding']
+                        : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -71,6 +74,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
   if (source.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (source.integrationId === 'detail') return 'detail-finding';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
@@ -133,6 +137,7 @@ export const FACTORY_RULE_SOURCES = [
   'incidentioFollowUp',
   'dependabotAlert',
   'vantaVulnerability',
+  'detailFinding',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -152,6 +157,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestReviewSubmitted',
   'pullRequestMerged',
   'pullRequestClosed',
+  'pullRequestReopened',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
@@ -212,7 +218,18 @@ export interface FactoryRuleItemContext {
 export type FactoryRuleActor =
   | { type: 'human'; id: string }
   | { type: 'agent'; bindingId: string; role: string }
-  | { type: 'github'; login: string; trusted: boolean; factoryAuthored: boolean }
+  | {
+      type: 'github';
+      login: string;
+      trusted: boolean;
+      factoryAuthored: boolean;
+      /**
+       * Whether GitHub typed the sender as a person (`User`), not an app or bot.
+       * Absent on events Factory synthesizes itself and on actors recorded before
+       * it existed: neither says a person sent them.
+       */
+      human?: boolean;
+    }
   | { type: 'gitlab'; username: string; trusted: boolean; factoryAuthored: boolean }
   | { type: 'system'; id: string };
 
@@ -653,7 +670,9 @@ export type FactoryRuleRejectionCode =
   | 'rule_error'
   | 'causal_depth_exceeded'
   | 'repeated_transition'
-  | 'approval_required';
+  | 'approval_required'
+  /** A person moved a card into a phase that may start a run while a run is in flight on it or queued for it. */
+  | 'card_busy';
 
 export interface FactoryRuleRejectDecision {
   type: 'reject';
@@ -702,6 +721,11 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
 export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
   type: 'routeEvent';
   event: BoardEventFacts;
+  /**
+   * An update the card's own session made (its labels or assignees, set through Factory): held
+   * until the session's run ends, then combined with the session's other updates into one event.
+   */
+  fromCardSession?: true;
 }
 
 /**
@@ -762,9 +786,9 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
    */
   attachTo?: { workItemId: string };
   /**
-   * The card of the issue this pull or merge request closes. When no card holds the record yet,
-   * the project's intake routes can test that card and join the record to it (see
-   * `IntakeRouteTarget.joinClosedIssue`); otherwise it is filed as usual.
+   * The card of the issue this pull or merge request closes. When no card holds the record yet and
+   * that card is unfinished, the record links to it, whoever authored it, and the card gets a
+   * `pull_request.opened` for its board's card-move rules; otherwise it is filed as usual.
    */
   closesIssue?: { workItemId: string };
   metadata?: Record<string, FactoryRuleJsonValue>;
@@ -895,6 +919,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'dependabotAlert';
     case 'vanta-vulnerability':
       return 'vantaVulnerability';
+    case 'detail-finding':
+      return 'detailFinding';
     case 'manual':
       return 'manual';
   }

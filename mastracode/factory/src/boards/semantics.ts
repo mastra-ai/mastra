@@ -8,6 +8,15 @@ import type { Card } from '../storage/domains/work-items/base.js';
 import type { MetricsPhaseOutcomes } from '../storage/domains/work-items/metrics.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
+import {
+  isOpenPullRequestSource,
+  isPullRequestCard,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  reviewedPullRequest,
+  trustedPullRequestSource,
+} from '../work-items/change-requests.js';
+import type { SourcedItem } from '../work-items/change-requests.js';
 import { DEFAULT_BOARD_ID } from './default-board.js';
 import { REVIEW_CONTEXT } from './define-board.js';
 import type {
@@ -186,65 +195,11 @@ export function withBoardFlow(
   return item ? { flow: cardBoardFlow(boards, item) } : {};
 }
 
-interface SourcedItem {
-  readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;
-}
-
-/**
- * A card whose own primary source is a pull or merge request: an outside contributor's
- * PR filed on its own card, or a PR card filed before PRs attached to their issue's card.
- * An issue card with an attached PR is not one; see {@link hasPullRequest}.
- */
-export function isPullRequestCard(item: { readonly source: string }): boolean {
-  return item.source === 'github-pr' || item.source === 'gitlab-pr';
-}
-
-/** Every pull or merge request source on a card, oldest first. */
-export function pullRequestSources(item: SourcedItem): WorkItemSourceRow[] {
-  return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
-}
-
 /** Whether a card carries a pull or merge request: its own, or one attached to its issue. */
 export function hasPullRequest(item: SourcedItem & { readonly source?: string }): boolean {
   return (
     (item.source !== undefined && isPullRequestCard({ source: item.source })) || pullRequestSources(item).length > 0
   );
-}
-
-/** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
-export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
-  const metadata = source.metadata ?? {};
-  const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
-}
-
-function openSource(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
-  const state = source.state ?? source.metadata?.state;
-  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
-}
-
-/**
- * The pull request a PR review pass on this card reviews: the one the card's
- * `openPullRequestNumber` names, else the newest open one, else the newest one.
- */
-export function reviewedPullRequest(
-  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
-): WorkItemSourceRow | undefined {
-  const sources = pullRequestSources(item);
-  const pointer = item.metadata?.openPullRequestNumber;
-  return (
-    (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
-    sources.findLast(openSource) ??
-    sources.at(-1)
-  );
-}
-
-/** The newest still-open pull request on a card other than `except`, for re-pointing `openPullRequestNumber`. */
-export function newestOpenPullRequestNumber(item: SourcedItem, except?: number): number | null {
-  const open = pullRequestSources(item).filter(
-    source => openSource(source) && pullRequestSourceNumber(source) !== except,
-  );
-  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
 }
 
 interface SessionedItem {
@@ -268,15 +223,19 @@ export function cardOwnsBranch(item: SessionedItem & BranchedItem, headBranch: s
   return buildBranch === headBranch || Object.values(item.sessions).some(session => session?.branch === headBranch);
 }
 
-/** The newest open pull request the card's own sessions opened, other than `except`. */
+/**
+ * The newest open pull request the card's own sessions opened, other than `except`. A branch name
+ * is anyone's to pick, so an outsider's pull request on the card's branch name never counts.
+ */
 export function newestOwnedOpenPullRequestNumber(
-  item: SourcedItem & SessionedItem & BranchedItem,
+  item: SourcedItem & SessionedItem & BranchedItem & { readonly metadata?: Record<string, unknown> | null },
   except?: number,
 ): number | null {
   const open = pullRequestSources(item).filter(
     source =>
-      openSource(source) &&
+      isOpenPullRequestSource(source) &&
       pullRequestSourceNumber(source) !== except &&
+      trustedPullRequestSource(item, source) &&
       typeof source.metadata?.headBranch === 'string' &&
       cardOwnsBranch(item, source.metadata.headBranch),
   );

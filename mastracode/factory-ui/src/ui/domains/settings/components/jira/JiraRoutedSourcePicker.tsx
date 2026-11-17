@@ -1,7 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
-
 import { useIntakeBindingsQuery } from '../../../../../hooks/useIntakeConfig';
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
 import { SourcePicker, sourcePickerItemText } from '../IntakeSourcePicker';
@@ -9,6 +7,7 @@ import type { SourcePickerProps } from '../IntakeSourcePicker';
 import { JiraSourceRoutes } from './JiraSourceRoutes';
 import { jiraBindingsFor } from './routing';
 import type { Factory } from './routing';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 function projectNote(bindings: IntakeSourceBinding[]): string | undefined {
   if (bindings.length === 0) return "Not routed. This project's issues won't be picked up.";
@@ -43,7 +42,12 @@ export function JiraRoutedSourcePicker({ factories, ...picker }: SourcePickerPro
       />
       {bindingsQuery.isError && (
         <SettingsRow label="Routing is unavailable" description="Your source routes could not be loaded.">
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void bindingsQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void bindingsQuery.refetch()}
+          >
             Retry
           </Button>
         </SettingsRow>

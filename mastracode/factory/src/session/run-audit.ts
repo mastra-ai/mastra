@@ -165,6 +165,15 @@ export async function listSessionOpenRuns(session: RunEndCaptureSession): Promis
   return z.array(factoryOpenRunSchema).parse(stored ?? []);
 }
 
+/** The open-run ledger of `threadId`, whichever thread the session is on now. */
+export async function listThreadOpenRuns(
+  session: { readonly thread: { getSettingOn(args: { threadId: string; key: string }): Promise<unknown> } },
+  threadId: string,
+): Promise<FactoryOpenRun[]> {
+  const stored = await session.thread.getSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING });
+  return z.array(factoryOpenRunSchema).parse(stored ?? []);
+}
+
 export async function waitForSessionRunAudit(session: RunEndCaptureSession): Promise<void> {
   await (pendingWrites.get(session) ?? Promise.resolve());
 }

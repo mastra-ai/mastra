@@ -7,8 +7,8 @@ export interface BoardConfigLocation {
   phaseKey?: string;
   /** The factory skills page, opened from this board's settings. Skills are factory-wide; the board only keeps the sidebar in place. */
   skills?: true;
-  /** The board's card moves: how cards already on it move when their issue or pull request changes. */
-  moves?: true;
+  /** The board's rules: what it takes when an item arrives and where its cards move. */
+  rules?: true;
 }
 
 /** A board's configuration: its General page, or one phase's page. */
@@ -25,9 +25,9 @@ export function boardSkillsPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/skills`;
 }
 
-/** The board's card moves. Outside `config/` for the same reason as the skills page. */
-export function boardCardMovesPath(factoryId: string, boardId: string): string {
-  return `${boardPath(factoryId, boardId)}/moves`;
+/** The board's rules. Outside `config/` for the same reason as the skills page. */
+export function boardRulesPath(factoryId: string, boardId: string): string {
+  return `${boardPath(factoryId, boardId)}/rules`;
 }
 
 /** The form that creates a board. Not under `boards/`, where `new` could be a board key. */
@@ -36,13 +36,13 @@ export function newBoardPath(factoryId: string): string {
 }
 
 const BOARD_CONFIG_PATH =
-  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills)|(moves))\/?$/;
+  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills)|(rules))\/?$/;
 
 /** Reads a board configuration path, so the sidebar outside the page outlet knows what is open. */
 export function parseBoardConfigPath(pathname: string): BoardConfigLocation | undefined {
   const match = BOARD_CONFIG_PATH.exec(pathname);
   if (!match) return undefined;
-  const [, factoryId, builtinBoard, customBoard, phaseKey, skills, moves] = match;
+  const [, factoryId, builtinBoard, customBoard, phaseKey, skills, rules] = match;
   // A hand-typed URL can carry a broken escape; it then names no board page.
   try {
     return {
@@ -50,7 +50,7 @@ export function parseBoardConfigPath(pathname: string): BoardConfigLocation | un
       boardId: builtinBoard ?? decodeURIComponent(customBoard ?? ''),
       ...(phaseKey ? { phaseKey: decodeURIComponent(phaseKey) } : {}),
       ...(skills ? { skills: true } : {}),
-      ...(moves ? { moves: true } : {}),
+      ...(rules ? { rules: true } : {}),
     };
   } catch {
     return undefined;

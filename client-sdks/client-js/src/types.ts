@@ -113,7 +113,12 @@ export interface ClientOptions {
   baseUrl: string;
   /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
   apiPrefix?: string;
-  /** Number of retry attempts for failed requests */
+  /**
+   * Number of retry attempts for failed requests. Defaults to 3 for read requests
+   * (GET, HEAD, OPTIONS). Write requests (POST, PUT, PATCH, DELETE) are not retried
+   * unless this or a per-request `retries` count is set, so a failed attempt cannot
+   * repeat a state-changing request.
+   */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
   backoffMs?: number;
@@ -197,7 +202,11 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
-  /** Overrides the client's configured retry count for this request. */
+  /**
+   * Overrides the client's configured retry count for this request. Also opts a write
+   * request (POST, PUT, PATCH, DELETE) back into retrying, since writes are not retried
+   * by default.
+   */
   retries?: number;
   /** Per-request abort signal. Merged with the client-wide `abortSignal` from `ClientOptions`. */
   signal?: AbortSignal;

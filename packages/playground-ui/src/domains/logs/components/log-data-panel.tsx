@@ -1,4 +1,3 @@
-import { ArrowRightIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { LogRecord } from '../types';
 import { Button } from '@/ds/components/Button';
@@ -7,6 +6,7 @@ import { CopyButton } from '@/ds/components/CopyButton';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
@@ -101,7 +101,7 @@ export function LogDataPanel({
                     <ButtonsGroup className="w-full min-w-0">
                       <Button
                         className="min-w-0 flex-1 justify-between overflow-hidden"
-                        icon={<ArrowRightIcon />}
+                        icon={<IconArrowRight />}
                         onClick={() => log.traceId && onTraceClick?.(log.traceId)}
                       >
                         <span>Trace</span>
@@ -118,7 +118,7 @@ export function LogDataPanel({
                         className="min-w-0 flex-1 justify-between overflow-hidden"
                         disabled={!log.traceId || !onSpanClick}
                         onClick={() => log.traceId && log.spanId && onSpanClick?.(log.traceId, log.spanId)}
-                        icon={<ArrowRightIcon />}
+                        icon={<IconArrowRight />}
                       >
                         <span>Span</span>
                         <Txt as="span" variant="caption" tone="faint" className="ml-auto min-w-0 truncate">

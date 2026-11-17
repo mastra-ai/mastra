@@ -1,11 +1,13 @@
+import { cardContextSessions } from '@mastra/factory/work-items/card-context-sessions';
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+
 import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { cardContextSessions, SOURCE_LABELS } from '../../factory/boardItems';
-import type { CardContextSession } from '../../factory/boardItems';
+import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
@@ -41,7 +43,7 @@ export interface WorkItemSearchResult {
 interface SessionWorkItem {
   item: WorkItem;
   /** The context the card holds this session under, so sessions on one card read apart. */
-  session: CardContextSession;
+  session: CardContextSession<WorkItemSessionRef>;
 }
 
 function joinValue(parts: (string | undefined | null)[]): string {

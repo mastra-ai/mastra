@@ -2,13 +2,16 @@ import type { DashboardWidget } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LinkIcon, PinIcon, PinOffIcon, StarIcon } from 'lucide-react';
 import { useState } from 'react';
 import { dashboardStoryFetch, STORY_BASE_URL } from '../../../../.storybook/fixtures/dashboards';
 import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { DashboardRenderer } from './dashboard-renderer';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconStar } from '@/ds/icons/central/IconStar';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 
 type Args = { pin: boolean; share: boolean; favorite: boolean };
 
@@ -35,7 +38,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
             onClick={() => setLast(`Copied a link to ${name}`)}
             className={onCardHover}
           >
-            <LinkIcon />
+            <IconChainLink3 />
           </MetricsCard.Action>
         )}
         {favorite && (
@@ -44,7 +47,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
             onClick={() => setFavorites(ids => (isFavorite ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))}
             className={isFavorite ? undefined : onCardHover}
           >
-            <StarIcon className={isFavorite ? 'fill-current' : undefined} />
+            <IconStar className={isFavorite ? 'fill-current' : undefined} />
           </MetricsCard.Action>
         )}
         {pin && (
@@ -53,7 +56,7 @@ function HostActionsHost({ pin, share, favorite }: Args) {
             onClick={() => setPinned(ids => (isPinned ? ids.filter(id => id !== widget.id) : [...ids, widget.id]))}
             className={isPinned ? undefined : onCardHover}
           >
-            {isPinned ? <PinOffIcon /> : <PinIcon />}
+            {isPinned ? <IconUnpin /> : <IconPin />}
           </MetricsCard.Action>
         )}
       </>

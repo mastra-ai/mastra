@@ -16,11 +16,15 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsListHeader, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { Fragment, useId, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 /** A source row in the picker drawer, which has no settings card around it to space its rows. */
 const drawerRowLayout = 'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 px-4 py-2 text-left';
@@ -164,7 +168,13 @@ export function SourcePicker(props: SourcePickerProps) {
           action={
             <DrawerTrigger
               render={
-                <Button ref={trigger} type="button" size="sm" icon={<Plus />} aria-label={`${addLabel} to ${label}`}>
+                <Button
+                  ref={trigger}
+                  type="button"
+                  size="sm"
+                  icon={<IconPlusMedium />}
+                  aria-label={`${addLabel} to ${label}`}
+                >
                   {addLabel}
                 </Button>
               }
@@ -196,7 +206,7 @@ export function SourcePicker(props: SourcePickerProps) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon={<Trash2 />}
+                      icon={<TrashIcon />}
                       aria-label={`Remove ${sourcePickerItemText(item)}`}
                       onClick={() => {
                         onToggleItem(item.id);
@@ -224,7 +234,7 @@ export function SourcePicker(props: SourcePickerProps) {
                   {error}
                 </Txt>
                 {onRetry && (
-                  <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={onRetry}>
+                  <Button size="sm" variant="ghost" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
                     Retry
                   </Button>
                 )}
@@ -286,7 +296,7 @@ function SourcePickerDrawer({
         {error ? (
           <SettingsRow label={label} description={error}>
             {onRetry && (
-              <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={onRetry}>
+              <Button size="sm" variant="ghost" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
                 Retry
               </Button>
             )}
@@ -318,7 +328,7 @@ function SourcePickerDrawer({
                             focusSearch();
                           }}
                         >
-                          <X />
+                          <IconCrossMedium />
                         </Button>
                       </div>
                     </li>
@@ -356,7 +366,7 @@ function SourcePickerDrawer({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  icon={<Plus />}
+                                  icon={<IconPlusMedium />}
                                   aria-label={`Add ${sourcePickerItemText(item)}`}
                                   onClick={() => {
                                     onToggleItem(item.id);
@@ -380,7 +390,7 @@ function SourcePickerDrawer({
         {saving && <SavingStatus label={label} />}
         <DrawerClose
           render={
-            <Button size="sm" icon={<Check />}>
+            <Button size="sm" icon={<IconCheckmark2Medium />}>
               Done
             </Button>
           }
