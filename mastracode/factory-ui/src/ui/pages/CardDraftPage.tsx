@@ -48,8 +48,8 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
     item && !catalog.isPending
       ? cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '')
       : undefined;
-  // A Start opens its own thread, with its prompt.
-  const openedSession = routedWorkItemId && !draftStart.started ? cardSession : undefined;
+  const startOpensItsThread = draftStart.started;
+  const openedSession = routedWorkItemId && !startOpensItsThread ? cardSession : undefined;
   const openedSessionId = openedSession?.sessionId;
   const openedThreadId = openedSession?.threadId;
   const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) => {
