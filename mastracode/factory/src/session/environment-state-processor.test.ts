@@ -140,6 +140,28 @@ describe('FactoryEnvironmentStateProcessor', () => {
     expect(contents).not.toContain('AGENTS.md');
   });
 
+  it('re-emits without the AGENTS.md guidance when a trusted session turns untrusted', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+    const trusted = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(trusted.contents).toContain('AGENTS.md');
+    const inWindow = {
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { state: { cacheKey: trusted.cacheKey } } },
+      tracking: { currentCacheKey: trusted.cacheKey },
+    };
+
+    const untrusted = (await processor.computeStateSignal(
+      stateArgs(requestContext('sess-1', { factoryProjectId: PROJECT_ID, untrustedCheckout: true }), inWindow),
+    )) as { cacheKey: string; contents: string; mode: string };
+    expect(untrusted.mode).toBe('snapshot');
+    expect(untrusted.cacheKey).not.toBe(trusted.cacheKey);
+    expect(untrusted.contents).not.toContain('AGENTS.md');
+  });
+
   it('is quiet while the snapshot in the window matches, and emits again when the set changes', async () => {
     recordSessionEnvironment('sess-1', environment);
     const processor = new FactoryEnvironmentStateProcessor();
