@@ -58,9 +58,9 @@ Write `Not applicable` when no reference page is in scope. Do not apply referenc
 
 ## Prose quality
 
-| Page        | Changed lines reviewed | `STYLEGUIDE.md` sections applied | Vale warnings and suggestions on changed lines | Outcome                       |
-| ----------- | ---------------------- | -------------------------------- | ---------------------------------------------- | ----------------------------- |
-| `$DOC_PATH` | `$LINE_RANGES`         | `$SECTIONS`                      | `$NONE_OR_RULE_IDS_AND_LINES`                  | `$PASS_WARN_FAIL_AND_SUMMARY` |
+| Page        | Changed lines reviewed | `STYLEGUIDE.md` sections applied | Vale warnings on changed lines | Outcome                       |
+| ----------- | ---------------------- | -------------------------------- | ------------------------------ | ----------------------------- |
+| `$DOC_PATH` | `$LINE_RANGES`         | `$SECTIONS`                      | `$NONE_OR_RULE_IDS_AND_LINES`  | `$PASS_WARN_FAIL_AND_SUMMARY` |
 
 Include every changed page. List each violation as a finding. Don't summarize prose problems only in this table.
 

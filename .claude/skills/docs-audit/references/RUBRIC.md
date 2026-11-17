@@ -114,7 +114,7 @@ Derive the tasks promised by the page without asking the user to select them. Ch
 
 Type: judgment against `STYLEGUIDE.md` and the applicable page guide.
 
-Review every changed passage against each section of `STYLEGUIDE.md`, starting with its plain-language principles. Review from the point of view of a rushed reader or one reading in a non-native language. Vale warnings and suggestions on changed lines count as evidence. A clean Vale run doesn't mean this dimension passes. Technical accuracy doesn't excuse a prose finding.
+Review every changed passage against each section of `STYLEGUIDE.md`, starting with its plain-language principles. Review from the point of view of a rushed reader or one reading in a non-native language. Vale warnings on changed lines count as evidence. A clean Vale run doesn't mean this dimension passes. Technical accuracy doesn't excuse a prose finding.
 
 - `pass`: Every changed passage follows `STYLEGUIDE.md` and the page guide.
 - `warn`: Localized violations remain, but the reader can still find and act on the content.
