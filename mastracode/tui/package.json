@@ -72,6 +72,12 @@
         "default": "./dist/plugin.cjs"
       }
     },
+    "./run-tui": {
+      "import": {
+        "types": "./dist/run-tui.d.ts",
+        "default": "./dist/run-tui.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
