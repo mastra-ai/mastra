@@ -42,13 +42,13 @@ describe('native card facts', () => {
 });
 
 it.each([
-  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'list', repositories: ['acme/app'], reference: 'app#73' },
-  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
-  { layout: 'list', repositories: ['acme/app', 'acme/docs'], reference: 'app#73' },
+  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app'], reference: 'app#73', link: 'app#73' },
+  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app', 'acme/docs'], reference: 'app#73', link: 'app#73' },
 ])(
   'shows source facts in $layout without provider lookups beyond routine intake browsing, as $reference among $repositories',
-  async ({ layout, repositories, reference }) => {
+  async ({ layout, repositories, reference, link }) => {
     const projectUrl = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
     const providerRequests: string[] = [];
     server.use(
@@ -92,7 +92,7 @@ it.each([
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
     expect(card).toHaveTextContent(reference);
-    if (layout === 'list') expect(within(card).getByText(reference, { exact: true })).toBeVisible();
+    expect(within(card).getByRole('link', { name: `Open in GitHub: ${link}` })).toBeVisible();
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();
