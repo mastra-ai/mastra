@@ -372,26 +372,29 @@ async function captureCheckpoints(
   }
 
   const result = await original.durableAgent.stream('Look two things up');
-  let text = '';
-  for await (const chunk of result.fullStream) {
-    if (chunk.type === 'text-delta') text += chunk.payload.text;
+  try {
+    let text = '';
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    expect(text).toBe('done');
+    // A finished run deletes its snapshots; wait for that so every write has been captured.
+    await vi.waitFor(
+      async () =>
+        expect(
+          await original.workflows.loadWorkflowSnapshot({
+            workflowName: DurableStepIds.AGENTIC_LOOP,
+            runId: result.runId,
+          }),
+        ).toBeFalsy(),
+      { timeout: 5_000 },
+    );
+  } finally {
+    // A finished run keeps its agent (and with it this whole module graph) alive
+    // until the stream bus grace-period timer fires. Release it now.
+    result.cleanup();
+    original.release(result.runId);
   }
-  expect(text).toBe('done');
-  // A finished run deletes its snapshots; wait for that so every write has been captured.
-  await vi.waitFor(
-    async () =>
-      expect(
-        await original.workflows.loadWorkflowSnapshot({
-          workflowName: DurableStepIds.AGENTIC_LOOP,
-          runId: result.runId,
-        }),
-      ).toBeFalsy(),
-    { timeout: 5_000 },
-  );
-  // A finished run keeps its agent (and with it this whole module graph) alive
-  // until the stream bus grace-period timer fires. Release it now.
-  result.cleanup();
-  original.release(result.runId);
   return { agent: original.durableAgent, checkpoints, runId: result.runId };
 }
 
@@ -469,8 +472,13 @@ async function recoverFrom(
     clearTimeout(timer);
     await pubsub.unsubscribe(AGENT_STREAM_TOPIC(runId), countFinish);
     // Without this the run cleanup timer retains this recovery module graph for 30s.
-    recovered?.cleanup();
-    release(runId);
+    // On timeout the attempt is still pending, so release again once it settles.
+    const releaseRun = () => {
+      recovered?.cleanup();
+      release(runId);
+    };
+    releaseRun();
+    void attempt.then(releaseRun, releaseRun);
   }
 }
 

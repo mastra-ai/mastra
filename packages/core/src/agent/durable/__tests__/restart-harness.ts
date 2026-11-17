@@ -540,13 +540,16 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       // awaits, so stopping before releasing would deadlock.
       for (const hold of holds.splice(0)) hold.release();
       for (const graph of graphs.splice(0)) {
-        await graph.mastra?.stopWorkers?.();
-        // Module-level caches and heartbeats arm timers that would keep each
-        // graph alive long after the test, so empty them.
-        graph.core.resetExecutionFences();
-        graph.core.releaseRunMessageRefs(options.runId);
-        graph.core.globalRunRegistry.clear();
-        graph.core.takeRunScorerInstances(options.runId, undefined);
+        try {
+          await graph.mastra?.stopWorkers?.();
+        } finally {
+          // Module-level caches and heartbeats arm timers that would keep each
+          // graph alive long after the test, so empty them.
+          graph.core.resetExecutionFences();
+          graph.core.releaseRunMessageRefs(options.runId);
+          graph.core.globalRunRegistry.clear();
+          graph.core.takeRunScorerInstances(options.runId, undefined);
+        }
       }
     },
   };
