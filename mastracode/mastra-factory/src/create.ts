@@ -161,7 +161,9 @@ export async function create(args: CreateArgs): Promise<void> {
     const { pinned, unresolved } = pinResult;
     if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
       pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
-      throw new Error(`No Mastra packages are published under the "${tag}" tag.`);
+      throw new Error(
+        `No Mastra packages are published under the "${tag}" tag. Run \`npm view ${unresolved[0]} dist-tags\` to see the available tags.`,
+      );
     }
     // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
     // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to

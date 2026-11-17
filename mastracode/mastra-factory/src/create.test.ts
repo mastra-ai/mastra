@@ -505,7 +505,9 @@ describe('create --tag', () => {
   it('fails before installing when no Mastra package is published under the tag', async () => {
     await expect(
       create({ projectName: 'my-factory', noPlatform: true, versionTag: 'does-not-exist', analytics }),
-    ).rejects.toThrow('No Mastra packages are published under the "does-not-exist" tag');
+    ).rejects.toThrow(
+      'No Mastra packages are published under the "does-not-exist" tag. Run `npm view @mastra/core dist-tags` to see the available tags.',
+    );
     const packageManager = detectPackageManager();
     expect(tinyexec.x).not.toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), expect.anything());
   });
@@ -522,7 +524,9 @@ describe('create --tag', () => {
 
     await expect(
       create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics }),
-    ).rejects.toThrow('Could not look up the "alpha" versions of @mastra/factory.');
+    ).rejects.toThrow(
+      'Could not look up the "alpha" versions of @mastra/factory. Run `npm view @mastra/factory dist-tags` to check that the registry is reachable and the tag exists.',
+    );
     expect(readPkg().dependencies['@mastra/core']).toBe('latest');
     const packageManager = detectPackageManager();
     expect(tinyexec.x).not.toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), expect.anything());

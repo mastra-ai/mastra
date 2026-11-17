@@ -47,7 +47,7 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   const failed = resolved.filter(([, result]) => result.failed).map(([name]) => name);
   if (failed.length > 0) {
     throw new Error(
-      `Could not look up the "${tag}" versions of ${failed.join(', ')}. Check your network connection and npm registry access.`,
+      `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`npm view ${failed[0]} dist-tags\` to check that the registry is reachable and the tag exists.`,
     );
   }
 
