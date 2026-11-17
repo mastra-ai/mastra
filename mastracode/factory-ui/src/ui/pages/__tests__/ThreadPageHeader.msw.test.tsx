@@ -215,6 +215,24 @@ describe('ThreadPage header', () => {
     expect(within(panel).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
   });
 
+  it('titles a factory session with no card and no title by its branch, as the sidebar names it', async () => {
+    stubThreadRoute();
+    const slackSession = { ...workspaceSession, branch: 'slack/1794850014-495739', title: null };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [slackSession] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: slackSession })),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('heading', { level: 1, name: slackSession.branch })).toBeInTheDocument();
+  });
+
   it('shares from the header and restores privacy from the sidebar menu', async () => {
     stubThreadRoute();
     const user = userEvent.setup();
