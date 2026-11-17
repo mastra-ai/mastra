@@ -1915,7 +1915,9 @@ export class FactoryDecisionDispatcher {
                 requestContext,
               },
             ),
-          true,
+          // A persist message succeeds by being stored for the idle session;
+          // only a message that must wake or reach a live run fails without it.
+          decision.idleBehavior !== 'persist',
         );
         return;
       }
