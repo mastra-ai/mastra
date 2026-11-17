@@ -12,9 +12,9 @@
  * it reads fail with 500 `knowledge_misconfigured`.
  */
 
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import type { Knowledge, KnowledgeChangeEvent } from '@mastra/core/knowledge';
 import {
-  encodeKnowledgeScopeId,
   KnowledgeDeclarationError,
   listKnowledgeTreeChildren,
   readKnowledgePage,
@@ -146,12 +146,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
     try {
-      // The same canonical addresses a Factory session's runs hold (see the SDK's resolveKnowledgeSessionScopes).
-      const principals = [
-        `org:${encodeKnowledgeScopeId(tenant.orgId)}`,
-        `project:${encodeKnowledgeScopeId(projectId)}`,
-      ];
-      return { knowledge, store, read: await knowledge.readScopeFor(principals) };
+      // The same resolver a Factory session's runs use, so the page reads exactly what an agent there holds.
+      const session = resolveKnowledgeSessionScopes({ factoryOrgId: tenant.orgId, factoryProjectId: projectId });
+      if (!session.resolved) {
+        return { response: c.json({ error: 'organization_required', message: session.reason }, 403) };
+      }
+      return { knowledge, store, read: await knowledge.readScopeFor(session.scopes) };
     } catch (error) {
       // The host's Knowledge does not declare the scopes a Factory run holds (`org:` and `project:`): a
       // deployment misconfiguration, which its session runs hit too. Never fall back to a guessed scope.

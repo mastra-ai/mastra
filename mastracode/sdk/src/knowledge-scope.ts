@@ -26,7 +26,7 @@ function isIdentityTag(tag: string): boolean {
  * - Local sessions act with the host's scopes as given; they are canonical addresses already.
  */
 export function resolveKnowledgeSessionScopes(
-  state: MastraCodeState | undefined,
+  state: Pick<MastraCodeState, 'factoryOrgId' | 'factoryProjectId' | 'factoryOrgUnresolved'> | undefined,
   hostScopes: readonly string[] = [],
 ): KnowledgeSessionScopes {
   const projectId = typeof state?.factoryProjectId === 'string' ? state.factoryProjectId.trim() : '';
