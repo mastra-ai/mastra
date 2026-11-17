@@ -225,6 +225,7 @@ function BoardLanes({
         <RuleBuilderDialog
           // A reloaded rule has a new revision, so the dialog starts over from it.
           key={editing.rule ? `${editing.rule.id}:${editing.rule.revision}` : `new-${editing.event}`}
+          factoryId={factoryId}
           board={board}
           boards={boards}
           initial={editing.rule}

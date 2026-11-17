@@ -44,7 +44,13 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { andLimits, repositoryHint } from '../services/rules';
-import { CONDITION_OPERATORS, VALUE_PLACEHOLDERS, conditionFields } from './conditionFields';
+import {
+  CONDITION_OPERATORS,
+  VALUE_PLACEHOLDERS,
+  conditionFields,
+  isPresenceField,
+  legacyConditionFields,
+} from './conditionFields';
 import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
 import type { Group, Item, Row } from './conditionTree';
@@ -72,6 +78,8 @@ const FIELD_ICONS: Record<string, LucideIcon> = {
   'event.type': IconZap,
   'event.reason': IconCircleCheck,
 };
+
+const LEGACY_FIELDS = legacyConditionFields();
 
 function operatorLabel(field: FilterBarField | undefined, operator: string): string {
   return (
@@ -274,7 +282,10 @@ function ConditionLine({
   onChange: (row: Row) => void;
   onRemove: () => void;
 }) {
-  const listed = fields.find(candidate => candidate.id === row.field);
+  const legacy = LEGACY_FIELDS.find(candidate => candidate.id === row.field);
+  // A stored rule may name a field the picker no longer offers: it still shows, and can be changed away from.
+  const shown = legacy && !fields.some(candidate => candidate.id === legacy.id) ? [legacy, ...fields] : fields;
+  const listed = shown.find(candidate => candidate.id === row.field);
   const field = listed && narrowSuggestions(listed, limits);
 
   return (
@@ -282,7 +293,7 @@ function ConditionLine({
       <Select
         value={row.field || null}
         onValueChange={id => {
-          const next = fields.find(candidate => candidate.id === id);
+          const next = shown.find(candidate => candidate.id === id);
           if (!next) return;
           const operator = next.operators?.[0] ?? 'equals';
           onChange({ ...row, field: next.id, operator, value: valueFor(next, operator, undefined) });
@@ -297,7 +308,7 @@ function ConditionLine({
           </span>
         </SelectTrigger>
         <SelectContent>
-          {fields.map(candidate => (
+          {shown.map(candidate => (
             <SelectItem key={candidate.id} value={candidate.id}>
               <span className="flex items-center gap-2">
                 <FieldIcon id={candidate.id} />
@@ -309,7 +320,8 @@ function ConditionLine({
       </Select>
 
       {field?.type === 'boolean' && <BooleanValue row={row} field={field} onChange={onChange} />}
-      {field && field.type !== 'boolean' && (
+      {field && isPresenceField(field.id) && <PresenceValue row={row} field={field} onChange={onChange} />}
+      {field && field.type !== 'boolean' && !isPresenceField(field.id) && (
         <>
           <Select
             value={row.operator}
@@ -362,6 +374,28 @@ function BooleanValue({ row, field, onChange }: { row: Row; field: FilterBarFiel
             {option.label}
           </SegmentedControlItem>
         ))}
+      </SegmentedControl>
+    </>
+  );
+}
+
+/** A fact only tested for being there reads as "Has pull request is [Yes | No]". */
+function PresenceValue({ row, field, onChange }: { row: Row; field: FilterBarField; onChange: (row: Row) => void }) {
+  return (
+    <>
+      <Txt as="span" variant="caption" tone="muted">
+        is
+      </Txt>
+      <SegmentedControl
+        size="sm"
+        aria-label={field.label}
+        value={row.operator === 'not_exists' ? 'false' : 'true'}
+        onValueChange={value =>
+          onChange({ ...row, operator: value === 'true' ? 'exists' : 'not_exists', value: undefined })
+        }
+      >
+        <SegmentedControlItem value="true">Yes</SegmentedControlItem>
+        <SegmentedControlItem value="false">No</SegmentedControlItem>
       </SegmentedControl>
     </>
   );

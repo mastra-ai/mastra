@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { BoardRules } from '../components/BoardRules';
@@ -671,6 +672,50 @@ describe('Board rules', () => {
 
     expect(dialog.queryByRole('button', { name: 'Remove condition' })).not.toBeInTheDocument();
     expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('filters on the project’s own sources, picking fields A to Z and a pull request as yes or no', async () => {
+    serveRules({ rules: [closed()] });
+    server.use(
+      http.get('*/web/factory/projects', () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra'), listedRepository('repo-2', 'acme/app')],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRules();
+
+    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
+    await user.click(dialog.getByRole('button', { name: 'Add condition' }));
+
+    await user.click(dialog.getByRole('combobox', { name: 'Field' }));
+    const fields = (await screen.findAllByRole('option')).map(option => option.textContent ?? '');
+    expect(fields).toEqual([...fields].sort((a, b) => a.localeCompare(b)));
+    expect(fields).toEqual(expect.arrayContaining(['Source', 'Has pull request']));
+    for (const gone of ['State', 'Integration', 'Provider', 'Source kind', 'Closed issue has a pull request']) {
+      expect(fields).not.toContain(gone);
+    }
+    await user.click(screen.getByRole('option', { name: 'Has pull request' }));
+    await user.click(dialog.getByRole('radio', { name: 'No' }));
+    expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
+
+    await user.click(dialog.getByRole('button', { name: 'Add condition' }));
+    await user.click(dialog.getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository, team or project' }));
+    await user.click(dialog.getByRole('combobox', { name: 'Value' }));
+    await user.keyboard('mas');
+    expect(await screen.findByRole('option', { name: 'mastra-ai/mastra' })).toBeVisible();
+    expect(screen.queryByRole('option', { name: 'acme/app' })).not.toBeInTheDocument();
   });
 
   it('picks a board with the arrow keys, as one radio group', async () => {

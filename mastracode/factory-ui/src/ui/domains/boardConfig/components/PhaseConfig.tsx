@@ -20,6 +20,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
@@ -167,6 +168,7 @@ export function PhaseConfig({
   /** Unset when the phase can't be removed. */
   onRemove?: () => void;
 }) {
+  const sources = useSourceSuggestions(factoryId);
   const working = phase.kind === 'working';
   const next = nextPhasesOf(phase, phases);
   const instructions = phase.runner?.instructions ?? '';
@@ -240,6 +242,7 @@ export function PhaseConfig({
                   description="Leave empty to start every card on its own."
                   rule={phase.autoStartWhen}
                   schema={cardRuleGroupSchema}
+                  options={{ 'source.repository': sources }}
                   disabled={disabled}
                   json={json('autoStartWhen')}
                   onUnfinished={unfinished => onUnfinished('autoStartWhen', unfinished)}
@@ -460,6 +463,7 @@ export function PhaseConfig({
                     description="Leave empty to approve for every card."
                     rule={phase.exitTool.autoApproveWhen}
                     schema={cardRuleGroupSchema}
+                    options={{ 'source.repository': sources }}
                     disabled={disabled}
                     json={json('autoApproveWhen')}
                     onUnfinished={unfinished => onUnfinished('autoApproveWhen', unfinished)}
