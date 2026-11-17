@@ -573,6 +573,7 @@ describe('createSourceControlTools', () => {
           if (args.includes('show-ref')) {
             return { exitCode: checkouts.missingBranch?.includes(workdir) ? 1 : 0, stdout: '', stderr: '' };
           }
+          if (args.includes('rev-parse')) return { exitCode: 0, stdout: 'abc123\n', stderr: '' };
           if (args.includes('get-url')) {
             const remote = checkouts.remotes?.[workdir] ?? `https://gitlab.com/acme/${workdir.split('/').pop()}.git`;
             return { exitCode: 0, stdout: `${remote}\n`, stderr: '' };
@@ -649,9 +650,23 @@ describe('createSourceControlTools', () => {
 
       const result = await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/repo',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(pushes()).toHaveLength(1);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/repo',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
         { projectRepositoryId: 'repo-link-1', branch: 'factory/issue-1', changeRequestUrl: null },
@@ -676,7 +691,13 @@ describe('createSourceControlTools', () => {
         { workspace: { sandbox } },
       );
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/other',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
@@ -684,7 +705,15 @@ describe('createSourceControlTools', () => {
         '-c',
         'factory/issue-1',
       ]);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/other',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
       expect(JSON.stringify(executions)).not.toContain('glpat-secret');
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
@@ -1179,8 +1208,15 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       await push();
       expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
       const next = commit('next change');
-      await push();
+      await expect(push()).resolves.toMatchObject({ commit: next, upToDate: false });
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
+    });
+
+    it('reports a push that sent nothing new as up to date', async () => {
+      const { commit, push } = await checkoutFixture(repository);
+      const head = commit('agent change');
+      await expect(push()).resolves.toMatchObject({ commit: head, upToDate: false });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: head, upToDate: true });
     });
 
     it('pushes an ahead session branch without moving the active checkout', async () => {
@@ -1191,7 +1227,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
       const dirty = git('status', '--porcelain');
 
-      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: sessionHead, upToDate: false });
 
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
       expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');
