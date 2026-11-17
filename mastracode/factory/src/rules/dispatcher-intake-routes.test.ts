@@ -1359,6 +1359,74 @@ describe('intake routes moving existing cards on status events', () => {
       },
     );
 
+    // The move's message always reaches the card's session either way; what an outside author's
+    // pull request event never buys is waking an idle session. The message persists in its
+    // notifications instead of starting it, and nothing waits on a person for the message itself.
+    it.each([
+      ['persists the move message without waking', "an outside author's", false, 'persist'],
+      ['wakes the session with the move message', "a trusted author's", true, 'wake'],
+    ] as const)('%s when %s push moves the card by the default move', async (_what, _whose, trusted, idleBehavior) => {
+      const { deliver, deliverDecision, workItems, project, retry } = await setup();
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: trusted, state: 'open' },
+      }))!;
+
+      const moved = (
+        await deliverDecision(card.id, {
+          type: 'transition',
+          idempotencyKey: 'push:re-review-updated',
+          board: 'work',
+          stage: 'pr-review',
+          message: { text: 'New commits on pull request #17.' },
+          event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted },
+        })
+      ).card!;
+      expect(placed(moved)).toEqual({ board: 'work', stages: ['pr-review'] });
+
+      await retry();
+      const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.workItemId === card.id && record.decision.type === 'sendMessage',
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.decision).toMatchObject({ idleBehavior });
+      // The message is delivered either way, never parked waiting on a person.
+      expect(messages[0]!.status).not.toBe('proposed');
+    });
+
+    // Any decision marked as answering an outside author's pull request event parks for a
+    // person before the consent check lets messages through — a wake holds a session for a
+    // whole run, so it is never free.
+    it.each([
+      ['parks a wake marked as answering', true, 'proposed'],
+      ['delivers an unmarked wake', false, 'pending'],
+    ] as const)("%s an outside author's pull request event", async (_what, marked, status) => {
+      const { deliver, deliverDecision, workItems, project, retry } = await setup();
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: false, state: 'open' },
+      }))!;
+
+      await deliverDecision(card.id, {
+        type: 'sendMessage',
+        idempotencyKey: 'wake:outsider-push',
+        message: 'New commits on pull request #17.',
+        idleBehavior: 'wake',
+        ...(marked ? { untrustedPullRequestEvent: true } : {}),
+      });
+      await retry();
+      const wakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.workItemId === card.id && record.decision.type === 'sendMessage',
+      );
+      expect(wakes).toHaveLength(1);
+      if (marked) expect(wakes[0]!.status).toBe(status);
+      else expect(wakes[0]!.status).not.toBe('proposed');
+    });
+
     it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {
       const { boards, scope, route, deliver, deliverEvent, putAt, runs, workItems, otherWorker } = await setup();
       // Ship's run waits for a person's approval: a worker parks it as a proposal.

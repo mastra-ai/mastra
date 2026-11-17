@@ -654,7 +654,12 @@ export class FactoryTransitionService {
           // phase that starts on its own.
           if (request.untrustedPullRequestEvent) {
             for (const decision of validated) {
-              if (decision.type === 'invokeSkill') decision.untrustedPullRequestEvent = true;
+              if (
+                decision.type === 'invokeSkill' ||
+                (decision.type === 'sendMessage' && decision.prepareBinding === true)
+              ) {
+                decision.untrustedPullRequestEvent = true;
+              }
             }
           }
           if (humanMove) {

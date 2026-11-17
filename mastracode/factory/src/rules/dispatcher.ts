@@ -1538,14 +1538,20 @@ export class FactoryDecisionDispatcher {
   // `autoStartWhen` matches). Anything else waits for a person.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null) return false;
+    // A decision queued by a card move on an outside author's pull request event acts on that
+    // author's say-so — a run is compute and code execution, a wake holds a session for one.
+    // It waits for a person before the consent check (which lets messages through), past the
+    // card's armed autonomy and however its phase starts.
+    if (
+      (decision.type === 'invokeSkill' || decision.type === 'sendMessage') &&
+      decision.untrustedPullRequestEvent === true
+    ) {
+      return true;
+    }
     const boards = await this.#boards.load(record);
     if (!requestsConsent(boards, record, decision)) return false;
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
     if (!item) return true;
-    // A run queued by a card move on an outside author's pull request event is compute and code
-    // execution on that author's say-so: it waits for a person, past the card's armed autonomy
-    // and however its phase starts.
-    if (decision.type === 'invokeSkill' && decision.untrustedPullRequestEvent === true) return true;
     // Once someone starts a card, the runs that carry it to review are that same request continuing.
     if (item.autonomyArmedAt != null) return false;
     if (reviewsFactoryAuthoredCode(boards, item, decision)) return false;
@@ -2626,7 +2632,10 @@ export class FactoryDecisionDispatcher {
           idempotencyKey: messageKey,
           message: transitionMessage.text,
           priority: 'high',
-          idleBehavior: 'wake',
+          // The move's message always reaches the card's session, but an outside author's pull
+          // request event never wakes an idle one: the message persists in its notifications
+          // instead, read when a person (or an approved run) brings the session back.
+          idleBehavior: decision.event && untrustedPullRequestEvent(decision.event) ? 'persist' : 'wake',
           ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
         },
       ],

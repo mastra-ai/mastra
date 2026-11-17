@@ -510,7 +510,16 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'sendMessage': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'message', 'priority', 'idleBehavior', 'prepareBinding'],
+        [
+          'type',
+          'idempotencyKey',
+          'role',
+          'message',
+          'priority',
+          'idleBehavior',
+          'prepareBinding',
+          'untrustedPullRequestEvent',
+        ],
         'Factory send message decision',
       );
       const priority =
@@ -523,6 +532,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           : enumValue(value.idleBehavior, ['persist', 'wake'] as const, 'Factory message idle behavior');
       if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
         throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory message untrustedPullRequestEvent must be a boolean.');
       }
       if (value.prepareBinding === true && value.role === undefined) {
         throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
@@ -539,6 +551,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),
         ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
       };
     }
     case 'notify': {
