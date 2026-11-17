@@ -5,9 +5,18 @@ import type { GithubIntegration } from './integration.js';
 const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionId: string }) => ({ created: true })),
   unsubscribe: vi.fn(async (_input: { sessionId: string }) => ({ removed: true })),
-  getPullRequest: vi.fn(async ({ repo }: { owner: string; repo: string; pull_number: number }) => ({
-    data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'factory/issue-1' } },
-  })),
+  getPullRequest: vi.fn(
+    async ({
+      repo,
+    }: {
+      owner: string;
+      repo: string;
+      pull_number: number;
+    }): Promise<{ data: { base: { repo: { id: number } }; head: { ref: string; repo: { id: number } | null } } }> => {
+      const id = repo === 'docs' ? 98 : 99;
+      return { data: { base: { repo: { id } }, head: { ref: 'factory/issue-1', repo: { id } } } };
+    },
+  ),
   upsertSessionRepository: vi.fn(async () => undefined),
   listPullRequests: vi.fn(
     async (_input: {
@@ -155,6 +164,8 @@ function refreshableRequestContext(
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  // Back to the vi.fn default: some tests swap in a whole implementation.
+  mocks.getPullRequest.mockReset();
   delete integrationStorage.settings;
   storageState.links = links;
   storageState.session = sessionRow;
@@ -318,6 +329,56 @@ describe('subscribeCurrentSessionToPushedPullRequests', () => {
     expect(mocks.upsertSessionRepository).toHaveBeenCalledWith(
       expect.objectContaining({ projectRepositoryId: 'project-repository-2', changeRequestId: '7' }),
     );
+  });
+
+  it('never subscribes to a fork pull request whose head branch shares the pushed name', async () => {
+    mocks.listPullRequests.mockResolvedValueOnce({
+      pullRequests: [
+        { id: '11', headBranch: 'factory/issue-1', baseBranch: 'release' },
+        { id: '12', headBranch: 'factory/issue-1', baseBranch: 'main' },
+        { id: '7', headBranch: 'factory/issue-1', baseBranch: 'main' },
+      ],
+      nextCursor: null,
+    });
+    mocks.getPullRequest.mockImplementation(async ({ pull_number }) => ({
+      data: {
+        base: { repo: { id: 98 } },
+        // 11 comes from an outside fork, 12 from a fork that was since deleted.
+        head: { ref: 'factory/issue-1', repo: pull_number === 11 ? { id: 4242 } : pull_number === 12 ? null : { id: 98 } },
+      },
+    }));
+
+    await expect(
+      subscribeCurrentSessionToPushedPullRequests(
+        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
+        [{ repository: 'mastra-ai/docs', branch: 'factory/issue-1' }],
+        githubStub,
+      ),
+    ).resolves.toEqual([7]);
+
+    expect(mocks.subscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '7' }), integrationStorage);
+  });
+
+  it('subscribes nothing when the only matching pull request comes from a fork', async () => {
+    mocks.listPullRequests.mockResolvedValueOnce({
+      pullRequests: [{ id: '11', headBranch: 'factory/issue-1', baseBranch: 'main' }],
+      nextCursor: null,
+    });
+    mocks.getPullRequest.mockResolvedValueOnce({
+      data: { base: { repo: { id: 98 } }, head: { ref: 'factory/issue-1', repo: { id: 4242 } } },
+    });
+
+    await expect(
+      subscribeCurrentSessionToPushedPullRequests(
+        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
+        [{ repository: 'mastra-ai/docs', branch: 'factory/issue-1' }],
+        githubStub,
+      ),
+    ).resolves.toEqual([]);
+
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+    expect(mocks.upsertSessionRepository).not.toHaveBeenCalled();
   });
 
   it('subscribes nothing for a branch without an open pull request or a repository outside the environment', async () => {

@@ -244,28 +244,41 @@ export async function subscribeCurrentSessionToPullRequest(
 /** Bounds the open pull request scan one push triggers. */
 const PUSHED_BRANCH_MAX_PAGES = 20;
 
-/** The open pull request whose head is `branch` in `repository`, if any. */
+/**
+ * The open pull request whose head is `branch` of `repository` itself, if any.
+ * Anyone can open a pull request from a fork branch with the same name, so a
+ * name match alone would let an outsider's pull request take the thread's
+ * subscription; only a pull request whose head repository is the environment
+ * repository counts.
+ */
 async function findOpenPullRequestForBranch(
   github: GithubIntegration,
   installationId: number,
-  repository: string,
+  repository: { slug: string; externalId: string },
   branch: string,
 ): Promise<number | undefined> {
+  const [owner, repo] = repository.slug.split('/');
+  if (!owner || !repo) return undefined;
+  const octokit = github.getInstallationOctokit(installationId);
   let cursor: string | null = '1';
   for (let page = 0; cursor !== null && page < PUSHED_BRANCH_MAX_PAGES; page += 1) {
     const listed = await github.versionControl.listPullRequests({
       connection: { type: 'app-installation', installationId },
-      sourceId: repository,
+      sourceId: repository.slug,
       state: 'open',
       includeDrafts: true,
       cursor,
     });
-    // The listing carries no head repository, so a fork's `main -> main`
-    // pull request would otherwise match every push to `main`.
-    const match = listed.pullRequests.find(
-      pullRequest => pullRequest.headBranch === branch && pullRequest.baseBranch !== branch,
-    );
-    if (match) return Number(match.id);
+    for (const candidate of listed.pullRequests) {
+      // A pull request within one repository never has the same head and
+      // base, so this skips fork `main -> main` pull requests without a fetch.
+      if (candidate.headBranch !== branch || candidate.baseBranch === branch) continue;
+      const number = Number(candidate.id);
+      // The listing carries no head repository; fetch it, and fail closed
+      // when it is missing (a deleted fork reports `head.repo: null`).
+      const { data } = await octokit.pulls.get({ owner, repo, pull_number: number });
+      if (data.head.repo && String(data.head.repo.id) === repository.externalId) return number;
+    }
     cursor = listed.nextCursor;
   }
   return undefined;
@@ -294,7 +307,7 @@ export async function subscribeCurrentSessionToPushedPullRequests(
     });
     const installationId = Number(installation?.externalId);
     if (!installation || !Number.isSafeInteger(installationId) || installationId <= 0) continue;
-    const number = await findOpenPullRequestForBranch(github, installationId, repository.repository.slug, push.branch);
+    const number = await findOpenPullRequestForBranch(github, installationId, repository.repository, push.branch);
     if (number === undefined) continue;
     await subscribeResolvedPullRequest(target, { ...repository, installation, number }, 'auto-git-push', github);
     subscribed.push(number);

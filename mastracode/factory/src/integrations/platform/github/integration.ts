@@ -160,7 +160,8 @@ type GithubPullRequest = {
   merged: boolean;
   mergeable: boolean | null;
   draft: boolean;
-  head: { ref: string; sha: string };
+  /** `repo` is absent from older platform responses; `null` when the head fork was deleted. */
+  head: { ref: string; sha: string; repo?: { id: number } | null };
   base: { ref: string; repo: { id: number; fullName: string } };
   user: GithubActor;
   assignees?: string[];
@@ -1412,7 +1413,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             'GET',
             repositoryPath(`${owner}/${repo}`, `pulls/${pull_number}`),
           );
-          return { data: { base: { repo: { id: data.base.repo.id } }, head: { ref: data.head.ref } } };
+          return {
+            data: {
+              base: { repo: { id: data.base.repo.id } },
+              head: { ref: data.head.ref, repo: data.head.repo ? { id: data.head.repo.id } : null },
+            },
+          };
         },
       },
     } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
