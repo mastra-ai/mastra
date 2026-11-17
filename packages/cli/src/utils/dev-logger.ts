@@ -13,6 +13,7 @@ interface HTTPSOptions {
 
 export class DevLogger {
   private options: DevLoggerOptions;
+  private startupTimer?: ReturnType<typeof setInterval>;
 
   constructor(options: DevLoggerOptions = {}) {
     this.options = {
@@ -54,8 +55,27 @@ export class DevLogger {
   }
 
   starting(): void {
-    const prefix = this.formatPrefix('◇', pc.blue);
-    console.info(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
+    this.stopStarting();
+    if (!process.stdout.isTTY) {
+      console.info(`${this.formatPrefix('◇', pc.blue)} ${pc.blue('Starting Mastra dev server...')}`);
+      return;
+    }
+
+    this.update(pc.blue('Starting Mastra dev server...'));
+    this.startupTimer = setInterval(() => this.update(pc.blue('Starting Mastra dev server...')), 80);
+    this.startupTimer.unref();
+  }
+
+  stopStarting(): void {
+    if (!this.startupTimer) return;
+    clearInterval(this.startupTimer);
+    this.startupTimer = undefined;
+    this.clearLine();
+  }
+
+  serverOutput(output: string, stream: NodeJS.WriteStream): void {
+    this.stopStarting();
+    stream.write(output);
   }
 
   ready(
@@ -72,6 +92,8 @@ export class DevLogger {
       protocol = 'https';
     }
 
+    this.stopStarting();
+    this.success('Mastra dev server started');
     console.info('');
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);

@@ -5,6 +5,79 @@ vi.mock('..', () => ({ version: '1.0.0' }));
 
 import { DevLogger } from './dev-logger';
 
+describe('DevLogger startup', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('animates during startup and replaces it with success on readiness in a TTY', () => {
+    vi.useFakeTimers();
+    const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const logger = new DevLogger();
+      logger.starting();
+      vi.advanceTimersByTime(160);
+      expect(
+        writeSpy.mock.calls.filter(([message]) => String(message).includes('Starting Mastra dev server')),
+      ).toHaveLength(3);
+
+      logger.ready('localhost', 4111, '/studio', '/api');
+      expect(
+        infoSpy.mock.calls.some(([message]) =>
+          stripVTControlCharacters(String(message)).includes('✓ Mastra dev server started'),
+        ),
+      ).toBe(true);
+      const writesAfterReady = writeSpy.mock.calls.length;
+      vi.advanceTimersByTime(160);
+      expect(writeSpy).toHaveBeenCalledTimes(writesAfterReady);
+    } finally {
+      if (originalIsTTY) Object.defineProperty(process.stdout, 'isTTY', originalIsTTY);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
+  });
+
+  it('stops the spinner before forwarding child output', () => {
+    vi.useFakeTimers();
+    const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const logger = new DevLogger();
+      logger.starting();
+      logger.serverOutput('child log\n', process.stdout);
+      const writesAfterOutput = writeSpy.mock.calls.length;
+      expect(writeSpy.mock.calls.some(([message]) => message === 'child log\n')).toBe(true);
+      vi.advanceTimersByTime(160);
+      expect(writeSpy).toHaveBeenCalledTimes(writesAfterOutput);
+    } finally {
+      if (originalIsTTY) Object.defineProperty(process.stdout, 'isTTY', originalIsTTY);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
+  });
+
+  it('logs startup and success without animation when stdout is redirected', () => {
+    const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: false });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const logger = new DevLogger();
+      logger.starting();
+      logger.ready('localhost', 4111, '/studio', '/api');
+      expect(infoSpy.mock.calls.some(([message]) => String(message).includes('Starting Mastra dev server'))).toBe(true);
+      expect(infoSpy.mock.calls.some(([message]) => String(message).includes('Mastra dev server started'))).toBe(true);
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      if (originalIsTTY) Object.defineProperty(process.stdout, 'isTTY', originalIsTTY);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
+  });
+});
+
 describe('DevLogger.ready', () => {
   afterEach(() => {
     vi.restoreAllMocks();
