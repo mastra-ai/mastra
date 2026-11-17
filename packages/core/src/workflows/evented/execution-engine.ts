@@ -22,7 +22,7 @@ import type {
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
-import { getStepId } from './workflow-event-processor/utils';
+import { endedPaused, getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -443,7 +443,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         steps,
         state: finalState,
       };
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       callbackArg = {
         status: 'paused',
         steps,
@@ -510,7 +510,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           steps: callbackArg.steps,
         } as TOutput;
       }
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       result = {
         status: 'paused',
         steps: callbackArg.steps,

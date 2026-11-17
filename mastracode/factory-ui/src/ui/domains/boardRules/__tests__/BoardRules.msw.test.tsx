@@ -424,6 +424,40 @@ describe('Board rules', () => {
     );
   });
 
+  it('offers a new-item rule every phase but the finished ones, even one the first phase can’t move to', async () => {
+    const { sent } = serveRules({ rules: [everythingElse(), closed()] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: OPENED });
+    await user.click(lane(OPENED).getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Every item/ }));
+    await user.click(dialog.getByRole('button', { name: 'Continue' }));
+    // Intake can't move a card to Building, but a rule may still file one there: the rule's
+    // author designs the board. Only the finished phases are out.
+    const phases = within(dialog.getByRole('radiogroup', { name: 'Phase' }));
+    for (const title of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
+      expect(phases.getByRole('radio', { name: title })).toBeInTheDocument();
+    }
+    expect(phases.getAllByRole('radio')).toHaveLength(5);
+    expect(phases.queryByRole('radio', { name: 'Done' })).not.toBeInTheDocument();
+    expect(phases.queryByRole('radio', { name: 'Canceled' })).not.toBeInTheDocument();
+    await user.click(phases.getByRole('radio', { name: 'Building' }));
+    const name = dialog.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'New items go straight to Building');
+    await user.click(dialog.getByRole('button', { name: 'Create rule' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(sent.find(request => request.method === 'POST' && request.path === '')?.body).toMatchObject({
+      name: 'New items go straight to Building',
+      on: ['work_item.opened'],
+      target: { boardKey: 'work', phaseKey: 'execute' },
+    });
+  });
+
   it('keeps a new rule it created once, even when moving it above the lane’s catch-all fails', async () => {
     const closedAll = rule({
       id: ruleId('closed-all'),

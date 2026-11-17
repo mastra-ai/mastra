@@ -365,7 +365,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       [{ boardKey: 'review', phaseKey: 'review' }, 'unknown_board'],
       [{ boardKey: 'work', phaseKey: 'nope' }, 'unknown_phase'],
       [{ boardKey: 'work', phaseKey: 'done' }, 'terminal_phase'],
-      [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
       // Only a route moving existing cards sends them to another board.
       [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'reported' }, 'move_on_arrival'],
     ] as const;
@@ -392,6 +391,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       status: 201,
       body: { intakeRoute: { target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' } } },
     });
+    // A route filing new cards may target any non-terminal phase of its board, even one its first
+    // phase can't move to: the admin designing the rule designs the board too.
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'Opened pull requests go straight to Fixing',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'stepwise', phaseKey: 'fixing' },
+      }),
+    ).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { target: { boardKey: 'stepwise', phaseKey: 'fixing' }, problems: [] } },
+    });
     for (const [target, error] of cases) {
       expect(await replicaA.send('POST', base, { name: 'Bad', target })).toMatchObject({
         status: 422,
@@ -408,6 +419,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
     expect(await list(replicaA.send, base)).toEqual([
       expect.objectContaining({ name: 'Ship', revision: 1 }),
+      expect.objectContaining({ name: 'Opened pull requests go straight to Fixing', revision: 1 }),
       expect.objectContaining({ name: 'Ok', revision: 1 }),
     ]);
   });

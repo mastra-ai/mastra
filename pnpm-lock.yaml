@@ -73,6 +73,7 @@ catalogs:
 
 overrides:
   hono@<4.13.18: 4.13.18
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'
   miniflare@4.20260730.0>workerd: 1.20261023.1
@@ -101,7 +102,7 @@ overrides:
   qs@>=6.7.0 <6.16.1: 6.16.1
   e2b>undici8: npm:undici@8.12.4
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
-  '@opentelemetry/resources@>=1.10.0 <2.12.1': 2.12.1
+  '@opentelemetry/resources@>=2.0.0 <2.12.1': 2.12.1
   '@opentelemetry/resources@>=3.0.0 <3.1.1': 3.1.1
   uuid@<11.1.1: 11.1.1
   '@babel/core@>=7.0.0 <7.29.6': 8.0.7
@@ -6704,6 +6705,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis':
+        specifier: workspace:*
+        version: link:../../stores/redis
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7069,6 +7073,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: workspace:*
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7078,6 +7085,9 @@ importers:
       '@mastra/server-adapters-test-suite':
         specifier: workspace:*
         version: link:../server-adapters-test-suite
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -13510,7 +13520,7 @@ packages:
     resolution: {integrity: sha512-5VdOr0Z71u+Yp3ozOx8T11N703wIFGVRgOWbOZMKgglPJsWA54MRIoMNVMa7shUToIhx5J8vX4sOZgD2XiihiQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      postcss: ^8.4
+      postcss: 8.5.23
 
   '@cursor/sdk-darwin-arm64@1.3.0':
     resolution: {integrity: sha512-UqAWxbZ3/MHJkLU3Az0V8ezM+0zZd3WoForpLmNruD+1b9a4U4D7I4QSVxVGHb55WjZMbkW+zoAp2tsNL/TJiQ==}

@@ -72,20 +72,14 @@ export function placedByIntakeRoute(item: Pick<Card, 'metadata'>): boolean {
 }
 
 export type IntakeTargetProblem = {
-  code:
-    | 'unknown_board'
-    | 'unknown_phase'
-    | 'terminal_phase'
-    | 'unreachable_phase'
-    | 'join_on_event'
-    | 'move_on_arrival';
+  code: 'unknown_board' | 'unknown_phase' | 'terminal_phase' | 'join_on_event' | 'move_on_arrival';
   message: string;
 };
 
 /**
  * Why a route's target can't take cards in this project, or undefined when it can. A route that
- * places new cards needs a phase they can reach; one that only moves existing cards on later
- * events, such as a close, may name any phase, terminal ones included.
+ * places new cards needs a phase on its own board that isn't terminal; one that only moves
+ * existing cards on later events, such as a close, may name any phase, terminal ones included.
  */
 export function intakeTargetProblem(
   registry: BoardRegistry,
@@ -140,12 +134,6 @@ export function intakeTargetProblem(
     return {
       code: 'terminal_phase',
       message: `Phase "${target.phaseKey}" on board "${board.id}" is terminal; new cards can't land there.`,
-    };
-  }
-  if (!board.allowsTransition(board.initialPhase, target.phaseKey)) {
-    return {
-      code: 'unreachable_phase',
-      message: `Board "${board.id}" doesn't allow moving a card from its first phase "${board.initialPhase}" to "${target.phaseKey}".`,
     };
   }
   return undefined;
@@ -442,14 +430,25 @@ function resolveByRouteList({ routes, facts, registry }: IntakeQuery): IntakeRes
     : { outcome: 'not_routed', reason: 'The project has no board to take it.' };
 }
 
-/** The phase a route's card lands in: its named phase when new cards can reach it, else the board's first. */
+/** The phase a route's card lands in: its named phase while it exists and isn't terminal, else the board's first. */
 export function landingPhase(board: InstalledBoard, phase: string | null | undefined): string {
-  const usable =
-    phase &&
-    board.phaseKind(phase) !== undefined &&
-    !board.isTerminal(phase) &&
-    board.allowsTransition(board.initialPhase, phase);
+  const usable = phase && board.phaseKind(phase) !== undefined && !board.isTerminal(phase);
   return usable ? phase : board.initialPhase;
+}
+
+/**
+ * The phase a retry of a filing decision resumes its card into: the route's phase while the card
+ * can work there, else the board's first phase. The route may have been retargeted since filing,
+ * and an issue card can't be forced into a review phase a filing would never have sent it to.
+ */
+export function resumeLandingPhase(
+  board: InstalledBoard,
+  phase: string | null | undefined,
+  facts: RuleFacts,
+  carriesPullRequest = false,
+): string {
+  const landing = landingPhase(board, phase);
+  return placementTakesCard(board, landing, facts, carriesPullRequest) ? landing : board.initialPhase;
 }
 
 /** Whether any route on the board, enabled or not, handles the event: then the routes own it. */
