@@ -4836,17 +4836,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "working",
             "waiting"
           ]
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
         "runningSessionIds",
         "parkedSessionIds",
         "initializingSessionIds",
-        "cards",
-        "settling"
+        "cards"
       ],
       "$defs": {
         "__schema0": {
@@ -5145,9 +5141,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "userId"
             ]
           }
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
@@ -5155,8 +5148,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "matching",
         "groups",
         "boards",
-        "owners",
-        "settling"
+        "owners"
       ],
       "$defs": {
         "__schema0": {

@@ -111,10 +111,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         if ('response' in resolved) return resolved.response;
         await workItems.ensureReady();
         const facts = await sessionFacts(deps, resolved);
-        return sendRevalidated(
-          context,
-          hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions })),
-        );
+        return sendRevalidated(context, hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions })));
       },
     }),
   ];
