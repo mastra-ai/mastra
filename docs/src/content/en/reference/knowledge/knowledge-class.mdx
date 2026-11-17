@@ -288,7 +288,7 @@ movePage(input: {
 }): Promise<KnowledgePage>
 ```
 
-Moves the page at `path` in `scope`, with its child pages, under the page at `parent` and resolves to the moved page. `parent` is a key path in the destination scope; leave it out to move the page to the top of the scope. `toScope` moves the page to another scope, creating that scope on first write like `upsertPage()`. The page keeps its ID, notes, pins and embeddings, so use it instead of removing and re-creating a page when its source moves. Paths below the page change, and links by path are re-resolved.
+Moves the page at `path` in `scope`, with its child pages, under the page at `parent` and resolves to the moved page. `parent` is a key path in the destination scope. Leave it out to move the page to the top of the scope. `toScope` moves the page to another scope, creating that scope on first write like `upsertPage()`. The page keeps its ID, notes, pins and embeddings, so use it instead of removing and re-creating a page when its source moves. Paths below the page change, and links by path are re-resolved.
 
 Throws `KnowledgeNotFoundError` when the page or the parent doesn't exist, `"<scope>#<path>" is declared in config; change the scope's pages to move it.` for a template page, `"<scope>#<path>" can't move under itself or its own subtree.`, and `"<parent>" already has a page with key "<key>"; move or rename that one first.` It also throws when the move would put pages more than 10 levels below the scope, and without retrying when another write changed the page first or when `expectedVersion` is stale.
 
