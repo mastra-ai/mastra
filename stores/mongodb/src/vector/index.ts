@@ -2560,6 +2560,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (!p0) {
         // The cached target may be the lifetime that just changed; the next call re-reads it.
         this.indexTargets.delete(indexName);
+        // A collection this call created for an entry deleted meanwhile is no one's: drop it, as the
+        // rollback does, unless a registration references it (read after the miss).
+        if (
+          collectionCreated &&
+          !(await this.registry()
+            .findOne({ collectionName: targetCollection })
+            .catch(() => true))
+        ) {
+          this.collections.delete(targetCollection);
+          await collection.drop().catch(() => {});
+        }
         const winner = await this.readRegistryEntry(indexName);
         this.assertNotDeleting(winner, 'CREATE_INDEX');
         const sameCollection = winner?.collectionName === targetCollection;
@@ -4257,7 +4268,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           collectionName,
           searchIndexName,
           deleting: { $ne: true },
-          ...(seen.generation ? { generation: seen.generation } : {}),
+          // A pre-PR entry is pinned on having none, so a replacement misses and is re-read below.
+          generation: seen.generation ?? { $exists: false },
         },
         [
           {

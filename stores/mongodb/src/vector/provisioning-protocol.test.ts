@@ -452,6 +452,28 @@ describe('provisioning protocol', () => {
         await waitFor(async () => (await searchIndexNames(db, coll)).length === 0);
       });
 
+      it('a stale managed refresh that recreated the deleted collection drops it again', async () => {
+        const name = uniqueName('psro');
+        colls.push(name);
+        await a.createIndex({ indexName: name, dimension: 4 });
+        const p = pause();
+        hooks(a, { afterCreateIndexRead: p.hook });
+        try {
+          const refresh = a.createIndex({ indexName: name, dimension: 4 }).catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: name });
+          p.release.resolve();
+          const err = await refresh;
+          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+          expect(err?.message).toBe(retryText(name));
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+        expect(await entry(name)).toBeNull();
+        expect(await db.listCollections({ name }).hasNext()).toBe(false);
+      });
+
       it('a refresh that read an entry without a generation re-reads a replacement instead of writing its stale policy', async () => {
         const coll = await byoColl('psrl');
         const legacy = {
@@ -630,15 +652,7 @@ describe('provisioning protocol', () => {
         expect(after).toEqual({ ...legacy, generation: after?.generation, rev: 2, claimToken: after?.claimToken });
       });
 
-      it('(vi) an entry deleted between the read and P0 is not re-inserted, so nothing needs rolling back', async () => {
-        const coll = await byoColl('prb6');
-        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
-        const err = await failAfterInterleavedWrite(coll, {}, () => b.deleteIndex({ indexName: coll }));
-        // P0 of a refresh is pinned on the generation it read and never upserts.
-        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
-        expect(await entry(coll)).toBeNull();
-        expect(await searchIndexNames(db, coll)).toEqual([]);
-      });
+      // (vi), a delete between the read and P0, is covered by P-STALE-REFRESH-gone: P0 no longer re-inserts.
 
       it('(vii) a refresh-time TOFU write after P0 moves the pin, so the rollback still undoes P0 and keeps the id', async () => {
         const coll = await byoColl('prb7');

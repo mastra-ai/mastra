@@ -1681,6 +1681,33 @@ describe('legacy ownership', () => {
       expect(await reg(X)).toMatchObject({ ownsCollection: true, ownsVectorIndex: true, ownsTextIndex: false });
     });
 
+    it('a claim that read an entry without a generation does not claim a replacement registered meanwhile', async () => {
+      const X = uniqueName('claim');
+      names.push(X);
+      await seedCollection(db, X, [{ title: 'a' }]);
+      // Adopted an existing collection (ownsCollection: false), as a pre-generation instance left it.
+      await other.createIndex({ indexName: X, dimension: 4 });
+      await db.collection(REGISTRY).updateOne({ _id: X as any }, { $unset: { generation: '' } });
+      const hold = holdAfterRead();
+      const claim = store.claimLegacyIndex({ indexName: X }).catch(e => e);
+      await hold.reached.promise;
+      await other.deleteIndex({ indexName: X });
+      // Atlas Local can briefly list the dropped indexes as DELETING, a retryable CONFLICT.
+      const stuck = createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT');
+      await waitFor(() =>
+        other.createIndex({ indexName: X, dimension: 4 }).then(
+          () => true,
+          e => (e?.id === stuck ? false : Promise.reject(e)),
+        ),
+      );
+      const replacement = await reg(X);
+      expect(replacement?.ownsCollection).toBe(false);
+      hold.release.resolve();
+      const err = await claim;
+      expect(err?.id).toBe(errId('CONFLICT'));
+      expect(await reg(X)).toEqual(replacement);
+    });
+
     describe('T10: refusals and idempotence', () => {
       it('a BYO entry refuses with BYO and is unchanged', async () => {
         const { X, entry } = await flagless({ isByo: true, allowWrites: false });
