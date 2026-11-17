@@ -1080,6 +1080,51 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(await names(boards, scope)).toEqual(['g', 'a', 'c', 'd', 'e2', 'f']);
   });
 
+  it('reordering one board’s rules over a gap leaves the other board’s rules untouched', async () => {
+    const { boards, scope } = await setup();
+    const byBoard = (name: string, boardKey: string) =>
+      route(name, {
+        when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: name }] },
+        target: { boardKey },
+      });
+    await boards.createIntakeRoute(scope, byBoard('w1', 'work'), 'u');
+    const d1 = await boards.createIntakeRoute(scope, byBoard('d1', 'docs'), 'u');
+    const w2 = await boards.createIntakeRoute(scope, byBoard('w2', 'work'), 'u');
+    const d2 = await boards.createIntakeRoute(scope, byBoard('d2', 'docs'), 'u');
+    await boards.createIntakeRoute(scope, byBoard('w3', 'work'), 'u');
+    await boards.deleteIntakeRoute(scope, w2.id, { expectedRevision: 1 });
+
+    const reordered = await boards.reorderIntakeRoutes(scope, [d2.id, d1.id], 'admin', { boardKey: 'docs' });
+
+    expect(reordered.map(row => row.name)).toEqual(['d2', 'd1']);
+    // The reordered rules trade the board's own position slots; Work's rules keep theirs, so an
+    // open Work edit still saves against the revision it read.
+    expect((await boards.listIntakeRoutes(scope)).map(row => [row.name, row.position, row.revision])).toEqual([
+      ['w1', 0, 1],
+      ['d2', 1, 2],
+      ['d1', 3, 2],
+      ['w3', 4, 1],
+    ]);
+  });
+
+  it('adds a rule ahead of the catch-all over a gap without touching unrelated rules', async () => {
+    const { boards, scope } = await setup();
+    await boards.createIntakeRoute(scope, labelled('a'), 'u');
+    const b1 = await boards.createIntakeRoute(scope, labelled('b1'), 'u');
+    const b2 = await boards.createIntakeRoute(scope, labelled('b2'), 'u');
+    await boards.createIntakeRoute(scope, route('everything'), 'u');
+    await boards.deleteIntakeRoute(scope, b1.id, { expectedRevision: 1 });
+    await boards.deleteIntakeRoute(scope, b2.id, { expectedRevision: 1 });
+
+    // "c" slots into the gap ahead of the catch-all; "a" and the catch-all stay as they were.
+    await boards.createIntakeRoute(scope, labelled('c'), 'u');
+    expect((await boards.listIntakeRoutes(scope)).map(row => [row.name, row.position, row.revision])).toEqual([
+      ['a', 0, 1],
+      ['c', 2, 2],
+      ['everything', 3, 1],
+    ]);
+  });
+
   it('refuses an order that misses, repeats or invents a route, and changes nothing', async () => {
     const { boards, scope } = await setup();
     for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, labelled(name), 'u');
