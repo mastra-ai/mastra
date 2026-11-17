@@ -8,12 +8,12 @@ import type { IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
 import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from '../../incidentio/intake.js';
 import {
   attachIncidentioIssueReconcileOne,
   attachIncidentioIssueReconciler,
 } from '../../incidentio/issue-reconciler.js';
 import { incidentioReconciliationInterval } from '../../incidentio/reconciliation-config.js';
-import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from '../../incidentio/intake.js';
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import type { IssueReconcileOne, IssueReconciler } from '../../issue-reconciler.js';
 import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
@@ -168,7 +168,7 @@ export class PlatformIncidentioIntegration extends PlatformConnectIntegration {
       reconcileOne = attachIncidentioIssueReconcileOne(this, ctx) ?? null;
       this.#reconcileOne.set(ctx, reconcileOne);
     }
-    await handleIncidentioConnectEvent(event, reconcileOne);
+    await handleIncidentioConnectEvent(event, reconcileOne, () => this.requestDiscovery());
   }
 
   /**

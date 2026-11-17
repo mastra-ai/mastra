@@ -125,7 +125,7 @@ export class PlatformJiraIntegration extends PlatformConnectIntegration {
       reconcileOne = attachJiraIssueReconcileOne(this, ctx) ?? null;
       this.#reconcileOne.set(ctx, reconcileOne);
     }
-    await handleJiraConnectEvent(event, reconcileOne);
+    await handleJiraConnectEvent(event, reconcileOne, () => this.requestDiscovery());
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

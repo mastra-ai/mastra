@@ -6,9 +6,9 @@ import { withIntakeDiscovery } from '../intake-discovery.js';
 import { createIssueReconcileOne, createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconcileOne, IssueReconciler, IssueReconcilerOptions } from '../issue-reconciler.js';
 import type { IncidentioEventRules } from './default-rules.js';
+import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 import { IncidentioRules } from './rules.js';
 import type { IncidentioIssueIngress } from './rules.js';
-import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 
 export type IncidentioIssueReconciler = IssueReconciler;
 
