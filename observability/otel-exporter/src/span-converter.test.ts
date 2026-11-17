@@ -719,7 +719,13 @@ describe('SpanConverter', () => {
       const attrs = result.attributes;
 
       expect(attrs['gen_ai.input.messages']).toBe('What is the capital of France?');
-      expect(attrs['gen_ai.output.messages']).toBe('The capital of France is Paris.');
+      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual([
+        {
+          role: 'assistant',
+          parts: [{ type: 'text', content: 'The capital of France is Paris.' }],
+          finish_reason: 'unknown',
+        },
+      ]);
       expect(attrs['mastra.input']).toBeUndefined();
       expect(attrs['mastra.output']).toBeUndefined();
       expect(attrs['gen_ai.prompt']).toBeUndefined();
@@ -772,10 +778,13 @@ describe('SpanConverter', () => {
           role: 'assistant',
         },
       ]);
-      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual({
-        content: 'How can I help?',
-        role: 'assistant',
-      });
+      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual([
+        {
+          role: 'assistant',
+          parts: [{ type: 'text', content: '{"content":"How can I help?","role":"assistant"}' }],
+          finish_reason: 'unknown',
+        },
+      ]);
     });
 
     it('should include both generic and specific input/output attributes for LLM spans', async () => {

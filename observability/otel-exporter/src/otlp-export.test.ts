@@ -156,7 +156,10 @@ describe('OTLP exports', () => {
   }
 
   it('declares the semantic conventions version on exported traces and logs', async () => {
-    exporter = new OtelExporter({ provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } } });
+    exporter = new OtelExporter({
+      provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } },
+      resourceAttributes: { 'deployment.environment': 'test' },
+    });
     await sendSpan();
     await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
     await exporter.flush();

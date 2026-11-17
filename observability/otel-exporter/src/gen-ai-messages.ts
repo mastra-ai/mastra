@@ -149,18 +149,19 @@ const toGenAIOutputMessage = (output: MastraModelOutput, finishReason?: string):
 const withFinishReason = (message: GenAIMessage, finishReason: string | undefined): GenAIMessage =>
   finishReason === undefined ? message : { ...message, finish_reason: finishReason };
 
-const convert = (inputOutputString: string, finishReason?: string): string => {
+/** Returns `undefined` when the value is not in a shape that maps to messages. */
+const convert = (inputOutputString: string, finishReason?: string): string | undefined => {
   try {
     const parsedIO = JSON.parse(inputOutputString) as unknown;
     if (typeof parsedIO !== 'object' || parsedIO == null) {
-      return inputOutputString;
+      return undefined;
     }
     // A bare message list: the shallow prompt preview recorded on
     // MODEL_STEP / MODEL_INFERENCE spans.
     if (Array.isArray(parsedIO)) {
       return parsedIO.every(isMastraMessage)
         ? JSON.stringify(parsedIO.map(m => toGenAIMessage(m, finishReason)))
-        : inputOutputString;
+        : undefined;
     }
     // Model output `{ text, toolCalls }` becomes one assistant message with a
     // text part and a tool_call part per tool call.
@@ -173,11 +174,9 @@ const convert = (inputOutputString: string, finishReason?: string): string => {
         (parsedIO.messages as unknown[]).map(m => (isMastraMessage(m) ? toGenAIMessage(m, finishReason) : m)),
       );
     }
-    // we've failed type-guards, just return original I/O string
-    return inputOutputString;
+    return undefined;
   } catch {
-    // silently fallback to original I/O string
-    return inputOutputString;
+    return undefined;
   }
 };
 
@@ -188,7 +187,13 @@ const GENAI_FINISH_REASONS: Record<string, string> = { 'tool-calls': 'tool_call'
  * Convert model output to `gen_ai.output.messages`. Each output message must carry a
  * `finish_reason`, so an unrecorded reason is sent as `unknown`, as Mastra's loop does.
  */
-export const convertMastraOutputToGenAIMessages = (outputString: string, finishReason: string | undefined): string =>
-  convert(outputString, finishReason ? (GENAI_FINISH_REASONS[finishReason] ?? finishReason) : 'unknown');
+export const convertMastraOutputToGenAIMessages = (outputString: string, finishReason: string | undefined): string => {
+  const reason = finishReason ? (GENAI_FINISH_REASONS[finishReason] ?? finishReason) : 'unknown';
+  return (
+    convert(outputString, reason) ??
+    JSON.stringify([withFinishReason({ role: 'assistant', parts: [{ type: 'text', content: outputString }] }, reason)])
+  );
+};
 
-export const convertMastraMessagesToGenAIMessages = (inputString: string): string => convert(inputString);
+export const convertMastraMessagesToGenAIMessages = (inputString: string): string =>
+  convert(inputString) ?? inputString;
