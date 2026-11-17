@@ -417,7 +417,10 @@ export abstract class ProcessHandle {
   /**
    * @internal Providers call this right after setting {@link exitCode}, so
    * everything waiting on {@link whenExited} runs as soon as the process is
-   * really gone.
+   * really gone. A provider that only learns the exit after `wait()` has
+   * resolved must call it too: until it does, the handle still counts as
+   * running and anything coupled to its lifetime, such as the abort listener
+   * attached when it was spawned, stays attached.
    */
   protected notifyExited(): void {
     if (this._exited) return;
