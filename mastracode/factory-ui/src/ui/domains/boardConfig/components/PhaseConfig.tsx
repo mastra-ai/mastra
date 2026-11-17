@@ -59,6 +59,7 @@ function SkillBadges({ skill, missing }: { skill?: FactorySkillInfo; missing: bo
       {missing && <Badge variant="destructive">Not found</Badge>}
       {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
       {skill?.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && <Badge>Overridden by app</Badge>}
+      {skill?.origin === 'project' && <Badge>Custom</Badge>}
       {skill?.edited && <Badge>Edited</Badge>}
     </>
   );

@@ -7,10 +7,12 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { projectSkillNamesOf } from '../skills/catalog.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { BoardWriteError, BoardWrites } from './board-writes.js';
 import type { BoardWriter } from './board-writes.js';
@@ -57,19 +59,69 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     const projects = factoryStorage.registerDomain(new FactoryProjectsStorage());
     const workItems = factoryStorage.registerDomain(new WorkItemsStorage());
     const storage = factoryStorage.registerDomain(new StoredBoardsStorage());
+    const skillOverrides = factoryStorage.registerDomain(new SkillOverridesStorage());
     await factoryStorage.init();
     onTestFinished(() => factoryStorage.close());
 
     const orgId = `org-${randomUUID()}`;
     const project = await projects.create({ orgId, userId: 'admin', input: { name: 'Acme' } });
     const scope = { orgId, factoryProjectId: project.id };
-    const boards = new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage, projects, warn: () => {} });
+    const boards = new ProjectBoardCache({
+      codeRegistry: createBoardRegistry(),
+      storage,
+      projects,
+      projectSkills: projectSkillNamesOf(skillOverrides),
+      recheckMs: 0,
+      warn: () => {},
+    });
     const audits: EmitAuditInput[] = [];
     const writer: BoardWriter = { id: 'admin', audit: async input => void audits.push(input) };
     const writes = new BoardWrites({ storage, boards, workItems });
     const served = async (key: string) => (await boards.describe(scope)).registry.get(key);
-    return { storage, workItems, scope, boards, writes, writer, audits, served };
+    return { storage, workItems, skillOverrides, scope, boards, writes, writer, audits, served };
   }
+
+  it("runs a skill the project created, and flags the phase once it's deleted", async () => {
+    const { writes, writer, scope, boards, skillOverrides } = await setup();
+    const notes = {
+      key: 'notes',
+      name: 'Release notes',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['writing'] },
+        {
+          key: 'writing',
+          name: 'Writing',
+          kind: 'working',
+          runner: { context: 'writer', skill: 'release-notes' },
+          nextPhases: ['done'],
+        },
+        { key: 'done', name: 'Done', kind: 'terminal' },
+      ],
+    } satisfies { key: string; name: string; phases: StoredPhaseInput[] };
+    const skill = { orgId: scope.orgId, projectId: scope.factoryProjectId, skillName: 'release-notes' };
+
+    expect(await refusal(() => writes.create(scope, notes, writer))).toMatchObject({
+      status: 422,
+      code: 'unknown_skill',
+    });
+
+    await skillOverrides.create({
+      ...skill,
+      content: '---\nname: release-notes\ndescription: Write release notes\n---\n\n# Notes\n',
+      updatedBy: 'admin',
+    });
+    await writes.create(scope, notes, writer);
+    expect((await boards.describe(scope)).details.get('notes')?.problems).toEqual([]);
+
+    // Another project has no such skill.
+    const other = { orgId: scope.orgId, factoryProjectId: randomUUID() };
+    expect(await boards.projectSkillNames(other)).toEqual(new Set());
+
+    await skillOverrides.delete(skill);
+    expect((await boards.describe(scope)).details.get('notes')?.problems).toEqual([
+      expect.stringContaining("runs skill 'release-notes', but no such skill exists"),
+    ]);
+  });
 
   it('creates a board, serves it at once, and records who did it', async () => {
     const { writes, writer, scope, audits, served } = await setup();

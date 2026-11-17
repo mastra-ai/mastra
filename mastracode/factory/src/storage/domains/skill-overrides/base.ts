@@ -1,15 +1,22 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-/** A project's edited copy of one Factory skill's SKILL.md. */
+/**
+ * `edit` replaces a skill the app serves and stops applying when that skill is removed. `created` is a skill
+ * the project added itself, served even when the app has no skill of that name.
+ */
+export type SkillOverrideKind = 'edit' | 'created';
+
+/** A project's SKILL.md for one Factory skill: an edited copy of an app skill, or a skill the project created. */
 export interface SkillOverrideRecord {
   orgId: string;
   projectId: string;
   skillName: string;
-  /** The full edited SKILL.md, frontmatter included. */
+  /** The full SKILL.md, frontmatter included. */
   content: string;
-  /** sha256 of the original SKILL.md the edit was made against. */
+  /** sha256 of the original SKILL.md an edit was made against; empty for a created skill. */
   baseHash: string;
+  kind: SkillOverrideKind;
   updatedBy: string;
   updatedAt: Date;
 }
@@ -38,6 +45,8 @@ export const SKILL_OVERRIDES_SCHEMA: CollectionSchema = {
     skill_name: { type: 'text' },
     content: { type: 'text' },
     base_hash: { type: 'text' },
+    // Added after the first release; rows stored before it are edits.
+    kind: { type: 'text', default: 'edit' },
     updated_by: { type: 'text' },
     updated_at: { type: 'timestamp' },
   },
@@ -69,6 +78,7 @@ interface SkillOverrideDbRow extends Record<string, unknown> {
   skill_name: string;
   content: string;
   base_hash: string;
+  kind: string;
   updated_by: string;
   updated_at: Date;
 }
@@ -88,6 +98,7 @@ function toRecord(row: SkillOverrideDbRow): SkillOverrideRecord {
     skillName: row.skill_name,
     content: row.content,
     baseHash: row.base_hash,
+    kind: row.kind === 'created' ? 'created' : 'edit',
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
@@ -143,13 +154,20 @@ export class SkillOverridesStorage extends FactoryStorageDomain {
     return row ? toRecord(row) : null;
   }
 
+  /** Saves the project's SKILL.md for a skill, replacing any stored one. `kind` defaults to `edit`. */
   async upsert({
     content,
     baseHash,
+    kind = 'edit',
     updatedBy,
     skillName,
     ...scope
-  }: SkillScope & { content: string; baseHash: string; updatedBy: string }): Promise<SkillOverrideRecord> {
+  }: SkillScope & {
+    content: string;
+    baseHash: string;
+    kind?: SkillOverrideKind;
+    updatedBy: string;
+  }): Promise<SkillOverrideRecord> {
     await this.#ensureRevisionRow(scope);
     return this.storage.withTransaction(async ops => {
       const now = await this.#bumpRevision(ops, scope);
@@ -161,11 +179,42 @@ export class SkillOverridesStorage extends FactoryStorageDomain {
           skill_name: skillName,
           content,
           base_hash: baseHash,
+          kind,
           updated_by: updatedBy,
           updated_at: now,
         },
       );
       return toRecord(row);
+    });
+  }
+
+  /**
+   * Stores a skill the project created, or returns `null` when the project already created one by that name.
+   * An edit stored under the name is replaced: its skill is gone from the app, so nothing served it.
+   */
+  async create({
+    content,
+    updatedBy,
+    skillName,
+    ...scope
+  }: SkillScope & { content: string; updatedBy: string }): Promise<SkillOverrideRecord | null> {
+    await this.#ensureRevisionRow(scope);
+    return this.storage.withTransaction(async ops => {
+      // Lock the revision row first, so two creates of one name serialize and the second sees the first.
+      const result: { created?: SkillOverrideDbRow } = {};
+      await ops.updateAtomic<RevisionDbRow>('factory_skill_override_revisions', projectWhere(scope), async row => {
+        const skill = { ...projectWhere(scope), skill_name: skillName };
+        const existing = await ops.findOne<SkillOverrideDbRow>('factory_skill_overrides', skill);
+        if (existing?.kind === 'created') return null;
+        const now = new Date();
+        result.created = await ops.upsertOne<SkillOverrideDbRow>(
+          'factory_skill_overrides',
+          ['org_id', 'factory_project_id', 'skill_name'],
+          { ...skill, content, base_hash: '', kind: 'created', updated_by: updatedBy, updated_at: now },
+        );
+        return { revision: row.revision + 1, updated_at: now };
+      });
+      return result.created ? toRecord(result.created) : null;
     });
   }
 

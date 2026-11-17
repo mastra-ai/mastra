@@ -60,6 +60,56 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('SkillOverridesS
     expect(await overrides.revision(scope)).toBe(3);
   });
 
+  it('creates a skill once per project, replacing only an edit stored under its name', async () => {
+    const { overrides, orgId } = await makeStorage();
+    const scope = { orgId, projectId: 'project-a' };
+    const create = (content: string) =>
+      overrides.create({ ...scope, skillName: 'release-notes', content, updatedBy: 'user-1' });
+
+    const first = await create('first');
+    expect(first).toMatchObject({ skillName: 'release-notes', content: 'first', kind: 'created', baseHash: '' });
+    expect(await overrides.revision(scope)).toBe(1);
+    expect(await create('second')).toBeNull();
+    expect(await overrides.revision(scope)).toBe(1);
+    expect(await overrides.get({ ...scope, skillName: 'release-notes' })).toEqual(first);
+    // Saving it keeps it a created skill when asked to.
+    await overrides.upsert({
+      ...scope,
+      skillName: 'release-notes',
+      content: 'third',
+      baseHash: '',
+      kind: 'created',
+      updatedBy: 'user-1',
+    });
+    expect(await overrides.get({ ...scope, skillName: 'release-notes' })).toMatchObject({
+      kind: 'created',
+      content: 'third',
+    });
+
+    // An edit left behind by a removed app skill gives way to a created skill.
+    await save(overrides, scope, 'old-app-skill', 'edited');
+    expect((await overrides.get({ ...scope, skillName: 'old-app-skill' }))?.kind).toBe('edit');
+    expect(
+      await overrides.create({ ...scope, skillName: 'old-app-skill', content: 'mine', updatedBy: 'user-2' }),
+    ).toMatchObject({
+      kind: 'created',
+      content: 'mine',
+      updatedBy: 'user-2',
+    });
+  });
+
+  it('creates one skill when the same name is created concurrently', async () => {
+    const { overrides, orgId } = await makeStorage();
+    const scope = { orgId, projectId: 'project-a' };
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        overrides.create({ ...scope, skillName: 'release-notes', content: `content ${i}`, updatedBy: 'user-1' }),
+      ),
+    );
+    expect(results.filter(result => result !== null)).toHaveLength(1);
+    expect(await overrides.revision(scope)).toBe(1);
+  });
+
   it('counts every concurrent save once', async () => {
     const { overrides, orgId } = await makeStorage();
     const scope = { orgId, projectId: 'project-a' };

@@ -12,7 +12,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { FACTORY_ROUTE_CONTRACTS, skillOverrideSaveRequestSchema } from './contracts.js';
+import { FACTORY_ROUTE_CONTRACTS, skillCreateBodySchema, skillOverrideSaveRequestSchema } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
 
@@ -45,7 +45,7 @@ export interface SkillRoutesDeps extends RouteDependencies {
   /** Per-project skill edits. Without it the catalog lists originals only and edit routes are not served. */
   overrides?: {
     projects: Pick<FactoryProjectsStorage, 'ensureReady' | 'get'>;
-    storage: Pick<SkillOverridesStorage, 'ensureReady' | 'list' | 'get' | 'upsert' | 'delete'>;
+    storage: Pick<SkillOverridesStorage, 'ensureReady' | 'list' | 'get' | 'upsert' | 'create' | 'delete'>;
     audit: AuditEmitter;
   };
 }
@@ -232,23 +232,26 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
         );
       }
       const name = path.data.name;
-      const original = (await readFactorySkillOriginals(this.deps.skills)).get(name);
-      if (!original) return c.json({ error: 'not_found', message: `Skill "${name}" not found.` }, 404);
       const scope = { orgId: access.orgId, projectId: access.projectId, skillName: name };
       await overrides!.storage.ensureReady();
+      const original = (await readFactorySkillOriginals(this.deps.skills)).get(name);
+      // Without an original, the name can only be a skill this project created.
+      if (!original && (await overrides!.storage.get(scope))?.kind !== 'created') {
+        return c.json({ error: 'not_found', message: `Skill "${name}" not found.` }, 404);
+      }
 
       if (revert) {
         if (await overrides!.storage.delete(scope)) {
           await overrides!.audit.emit({
             context: c,
             input: {
-              action: 'factory.skill.reverted',
+              action: original ? 'factory.skill.reverted' : 'factory.skill.deleted',
               targets: [{ type: 'skill', id: name }],
               factoryProjectId: access.projectId,
             },
           });
         }
-        return c.json({ skill: await this.#catalogEntry(access, name) });
+        return c.json({ skill: original ? ((await this.#catalogEntry(access, name)) ?? null) : null });
       }
 
       let body: unknown;
@@ -270,7 +273,9 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       await overrides!.storage.upsert({
         ...scope,
         content: request.data.content,
-        baseHash: hashSkillContent(original.raw),
+        ...(original
+          ? { baseHash: hashSkillContent(original.raw), kind: 'edit' as const }
+          : { baseHash: '', kind: 'created' as const }),
         updatedBy: access.userId,
       });
       await overrides!.audit.emit({
@@ -279,10 +284,60 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           action: 'factory.skill.updated',
           targets: [{ type: 'skill', id: name }],
           factoryProjectId: access.projectId,
-          metadata: { origin: original.origin },
+          metadata: { origin: original?.origin ?? 'project' },
         },
       });
       return c.json({ skill: await this.#catalogEntry(access, name) });
+    };
+
+    const handleSkillCreate = async (context: unknown) => {
+      const c = loose(context);
+      const { overrides } = this.deps;
+      const path = FACTORY_ROUTE_CONTRACTS.skillCreate.pathSchema.safeParse({ id: c.req.param('id') });
+      if (!path.success) return c.json({ error: 'Project not found' }, 404);
+      const access = await this.#projectAccess(c, path.data.id);
+      if ('response' in access) return access.response;
+      if (!(await this.#canEdit(c, access.orgId))) {
+        return c.json(
+          { error: 'forbidden', message: 'Organization administrator access is required to create skills.' },
+          403,
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
+      }
+      const request = skillCreateBodySchema.safeParse(body);
+      if (!request.success) {
+        return c.json(
+          { error: 'invalid_skill', message: request.error.issues.map(issue => issue.message).join('\n') },
+          400,
+        );
+      }
+      const { name, content } = request.data;
+      const exists = { error: 'skill_exists', message: `A skill named "${name}" already exists. Edit it instead.` };
+      if ((await readFactorySkillOriginals(this.deps.skills)).has(name)) return c.json(exists, 409);
+      await overrides!.storage.ensureReady();
+      const created = await overrides!.storage.create({
+        orgId: access.orgId,
+        projectId: access.projectId,
+        skillName: name,
+        content,
+        updatedBy: access.userId,
+      });
+      if (!created) return c.json(exists, 409);
+      await overrides!.audit.emit({
+        context: c,
+        input: {
+          action: 'factory.skill.created',
+          targets: [{ type: 'skill', id: name }],
+          factoryProjectId: access.projectId,
+        },
+      });
+      return c.json({ skill: await this.#catalogEntry(access, name) }, 201);
     };
 
     return [
@@ -293,6 +348,11 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       }),
       ...(this.deps.overrides
         ? [
+            registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillCreate.path, {
+              method: FACTORY_ROUTE_CONTRACTS.skillCreate.method,
+              requiresAuth: false,
+              handler: context => handleSkillCreate(context),
+            }),
             registerApiRoute(FACTORY_ROUTE_CONTRACTS.skillOverrideSave.path, {
               method: FACTORY_ROUTE_CONTRACTS.skillOverrideSave.method,
               requiresAuth: false,

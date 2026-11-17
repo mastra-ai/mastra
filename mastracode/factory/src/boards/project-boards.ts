@@ -123,8 +123,21 @@ interface CacheEntry {
   boards: ProjectBoards;
   version: string | null;
   reviewInUse: boolean;
+  /** The project's skill revision the boards' skill problems were checked at. */
+  skillsRevision: number;
   checkedAt: number;
 }
+
+/**
+ * The skills a project created (Settings › Skills), which its boards' runners may name besides the app's.
+ * `revision` moves whenever the project's skills change, so loads recheck the names only then.
+ */
+export interface ProjectSkillNames {
+  revision(scope: StoredBoardScope): Promise<number>;
+  names(scope: StoredBoardScope): Promise<ReadonlySet<string>>;
+}
+
+const NO_PROJECT_SKILLS: ReadonlySet<string> = new Set();
 
 export interface ProjectBoardCacheOptions {
   /** The code boards, built-ins included when enabled. */
@@ -147,6 +160,8 @@ export interface ProjectBoardCacheOptions {
     ops: FactoryStorageOps,
   ) => Promise<ReadonlyMap<string, ReadonlySet<string>> | null>;
   codeSkills?: readonly InlineSkill[];
+  /** The skills each project created. Without it, runners may only name the app's skills. */
+  projectSkills?: ProjectSkillNames;
   /**
    * Whether the project still uses the retired Review board (an open card is stored on it). Such
    * a project is served Review alongside its boards; without this, no project is.
@@ -213,6 +228,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #warned = new Set<string>();
   readonly #seeded = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
+  readonly #projectSkills: ProjectSkillNames | undefined;
   readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
   /** Boards the app upserted for every project, which a project with no boards gets before Factory's. */
   readonly #appBoards = new Map<string, StoredBoardInput>();
@@ -228,6 +244,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     this.#occupiedPhases = options.occupiedPhases;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
+    this.#projectSkills = options.projectSkills;
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
     this.#now = options.now ?? Date.now;
     this.#warn = options.warn ?? (message => console.warn(`[factory] ${message}`));
@@ -346,6 +363,33 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return this.#codeSkills;
   }
 
+  /**
+   * The skills the project created, which its runners may name besides the app's. Empty when they can't be
+   * read, so a storage failure flags those runners instead of failing the boards.
+   */
+  async projectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string>> {
+    if (!this.#projectSkills) return NO_PROJECT_SKILLS;
+    try {
+      return await this.#projectSkills.names(scope);
+    } catch (error) {
+      this.#warnOnce(
+        `project-skills:${scopeKey(scope)}`,
+        `Could not read the skills project ${scope.factoryProjectId} created; boards that run them show them as missing: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return NO_PROJECT_SKILLS;
+    }
+  }
+
+  async #projectSkillsRevision(scope: StoredBoardScope): Promise<number> {
+    if (!this.#projectSkills) return 0;
+    try {
+      return await this.#projectSkills.revision(scope);
+    } catch {
+      // Never equal to a stored revision, so the next load rereads the names.
+      return -1;
+    }
+  }
+
   /** Makes the next load reread the project. The loaded boards keep serving sync reads until then. */
   invalidate(scope: StoredBoardScope): void {
     const key = scopeKey(scope);
@@ -378,14 +422,28 @@ export class ProjectBoardCache implements ProjectBoardSource {
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
     const reviewInUse = (await this.#reviewBoardInUse?.(scope)) ?? false;
-    if (current && current.version === version && current.reviewInUse === reviewInUse) {
+    const skillsRevision = await this.#projectSkillsRevision(scope);
+    if (
+      current &&
+      current.version === version &&
+      current.reviewInUse === reviewInUse &&
+      current.skillsRevision === skillsRevision &&
+      skillsRevision !== -1
+    ) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
     const snapshot = await this.#consistentSnapshot(scope);
-    const boards = this.#compile(scope, snapshot.boards, reviewInUse);
+    const projectSkills = await this.projectSkillNames(scope);
+    const boards = this.#compile(scope, snapshot.boards, reviewInUse, projectSkills);
     if ((this.#generations.get(key) ?? 0) === generation) {
-      this.#entries.set(key, { boards, version: snapshot.version, reviewInUse, checkedAt: this.#now() });
+      this.#entries.set(key, {
+        boards,
+        version: snapshot.version,
+        reviewInUse,
+        skillsRevision,
+        checkedAt: this.#now(),
+      });
     }
     return boards;
   }
@@ -479,7 +537,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
     };
   }
 
-  #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[], reviewInUse: boolean): ProjectBoards {
+  #compile(
+    scope: StoredBoardScope,
+    rows: readonly StoredBoardRecord[],
+    reviewInUse: boolean,
+    projectSkills: ReadonlySet<string>,
+  ): ProjectBoards {
     const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
@@ -521,7 +584,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
       report(row, merged.problems);
       details.set(code.id, {
         ...details.get(code.id)!,
-        problems: [...merged.problems, ...this.#skillProblems(merged.board)],
+        problems: [...merged.problems, ...this.#skillProblems(merged.board, projectSkills)],
       });
       boards.push(merged.board);
     }
@@ -548,7 +611,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
         continue;
       }
       boards.push(board);
-      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board) });
+      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board, projectSkills) });
     }
     return {
       registry: boardRegistryOf(boards),
@@ -557,8 +620,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
     };
   }
 
-  #skillProblems(board: InstalledBoard): string[] {
-    return findBoardSkillProblems(boardRegistryOf([board]), this.#codeSkills);
+  #skillProblems(board: InstalledBoard, projectSkills?: ReadonlySet<string>): string[] {
+    return findBoardSkillProblems(boardRegistryOf([board]), this.#codeSkills, undefined, projectSkills);
   }
 
   #warnOnce(key: string, message: string, debug = false): void {

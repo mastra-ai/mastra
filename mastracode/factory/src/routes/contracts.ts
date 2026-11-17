@@ -1469,6 +1469,8 @@ const skillNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
 const skillResponseSchema = z.object({ skill: entitySchema });
+/** `skill` is null when the request deleted a skill the project created. */
+const skillRevertResponseSchema = z.object({ skill: entitySchema.nullable() });
 
 /** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
 function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
@@ -1489,6 +1491,12 @@ export const skillOverrideBodySchema = z
  */
 export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
+/** A new skill's SKILL.md must load under the name it is created with, exactly as the runtime validates it. */
+export const skillCreateBodySchema = z
+  .object({ name: skillNameSchema, content: skillContentSchema })
+  .strict()
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
@@ -2064,10 +2072,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: z.object({ projectId: uuidSchema.optional() }),
     responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
+  skillCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/skills',
+    description: 'Create a skill for one Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: skillCreateBodySchema,
+    responseSchema: skillResponseSchema,
+  },
   skillOverrideSave: {
     method: 'PUT',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Save a project's edited SKILL.md for a Factory skill",
+    description: "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     pathSchema: skillPathSchema,
     bodySchema: skillOverrideBodySchema,
     responseSchema: skillResponseSchema,
@@ -2075,9 +2091,10 @@ export const FACTORY_ROUTE_CONTRACTS = {
   skillOverrideRevert: {
     method: 'DELETE',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    description:
+      "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     pathSchema: skillPathSchema,
-    responseSchema: skillResponseSchema,
+    responseSchema: skillRevertResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

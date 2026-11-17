@@ -184,6 +184,7 @@ import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import { shareSessionListChanges } from './session-list-changes.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
+import { projectSkillNamesOf } from './skills/catalog.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -1102,6 +1103,10 @@ export class MastraFactory {
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         codeSkills: this.#skills,
+        // Runners may also name the skills a project created in Settings › Skills.
+        ...(storage.isDomainReady('skill-overrides')
+          ? { projectSkills: projectSkillNamesOf(skillOverridesStorage) }
+          : {}),
         // A project still using the retired Review board keeps it; work items are read once they're ready.
         ...(storage.isDomainReady('work-items')
           ? {

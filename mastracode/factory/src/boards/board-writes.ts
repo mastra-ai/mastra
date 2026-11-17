@@ -37,7 +37,10 @@ import { workBoard } from './work.js';
 export interface BoardWritesDeps {
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
-  boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
+  boards: Pick<
+    ProjectBoardCache,
+    'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'projectSkillNames' | 'seedFor'
+  >;
   /** Read to refuse edits that would strand cards; the retired Review board's cards leave `review` through it. */
   workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
 }
@@ -120,10 +123,11 @@ export class BoardWrites {
   }
 
   /**
-   * Validates a definition the way `defineBoard()` does, plus the skills its runners name. A code
-   * board's copy is also checked against the code behaviour of its board and phase keys.
+   * Validates a definition the way `defineBoard()` does, plus the skills its runners name: the app's,
+   * and `projectSkills`, the skills the project it is stored in created. A code board's copy is also
+   * checked against the code behaviour of its board and phase keys.
    */
-  validate(input: unknown): StoredBoardInput {
+  validate(input: unknown, projectSkills?: ReadonlySet<string>): StoredBoardInput {
     const { boards } = this.deps;
     const parsed = storedBoardInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -137,7 +141,7 @@ export class BoardWrites {
       }
     }
     const board = code ? compileStoredBoard(parsed.data, code) : compileStoredBoard(parsed.data);
-    const problems = findBoardSkillProblems(boardRegistryOf([board]), boards.codeSkills);
+    const problems = findBoardSkillProblems(boardRegistryOf([board]), boards.codeSkills, undefined, projectSkills);
     const unknown = problems.filter(problem => problem.includes(UNKNOWN_SKILL));
     if (unknown.length > 0) throw new BoardWriteError(422, { error: 'unknown_skill', message: unknown.join(' ') });
     return parsed.data;
@@ -147,7 +151,7 @@ export class BoardWrites {
   async create(scope: StoredBoardScope, input: unknown, writer: BoardWriter): Promise<StoredBoardRecord> {
     const key = (input as { key?: unknown } | null)?.key;
     if (typeof key === 'string') this.refuseCodeBoard(key, 'create');
-    const board = this.validate(input);
+    const board = this.validate(input, await this.deps.boards.projectSkillNames(scope));
     // Factory stores its boards only into a project that has none, so they go in first.
     await this.deps.boards.describe(scope);
     const row = await stored(() =>
@@ -222,7 +226,7 @@ export class BoardWrites {
     // The project's first load stores Factory's boards.
     if (seed) await boards.describe(scope);
     const row = await this.existing(scope, key);
-    const input = this.validate({ key, ...definition });
+    const input = this.validate({ key, ...definition }, await boards.projectSkillNames(scope));
     if (row.revision === expectedRevision && sameBoardDefinition(row, input)) {
       return { row, written: false };
     }
