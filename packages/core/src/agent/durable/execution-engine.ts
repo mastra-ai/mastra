@@ -24,10 +24,16 @@ import type {
   DurableAgentListActiveRunsOptions,
   DurableAgentListActiveRunsResult,
 } from './durable-agent';
-import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
+import {
+  ExecutionFence,
+  fencePubSub,
+  readRunGeneration,
+  resolveLeaseProvider,
+  supportsRunFencing,
+} from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
-import { emitAbortEvent } from './stream-adapter';
+import { createSupersededEventFilter, emitAbortEvent } from './stream-adapter';
 import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
@@ -91,6 +97,26 @@ export class DurableExecutionEngine {
   }
   get workflow(): DurableWorkflow | null {
     return this.#workflow;
+  }
+
+  async readReplayFloor(
+    pubsub: PubSub,
+    runId: string,
+    offset: number | undefined,
+  ): Promise<{ minGeneration?: number; keepReplayEvent: (event: AgentStreamEvent) => boolean }> {
+    const history = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+    const keepReplayEvent = createSupersededEventFilter(history);
+    if (!offset) return { keepReplayEvent };
+    const skipped = history.slice(0, offset);
+    if (skipped.length === offset) {
+      let floor: number | undefined;
+      for (const event of skipped) {
+        const generation = event.generation;
+        if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
+      }
+      return { minGeneration: floor, keepReplayEvent };
+    }
+    return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent };
   }
 
   async loadSuspendedIteration(

@@ -127,7 +127,6 @@ import {
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
-  createSupersededEventFilter,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
@@ -4664,16 +4663,19 @@ export class DurableAgent<
     }
   > {
     try {
-      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const initialFilter = createSupersededEventFilter(history);
+      const { keepReplayEvent: initialFilter, ...floor } = await this.executionEngine.readReplayFloor(
+        this.pubsub,
+        runId,
+        offset,
+      );
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
       let currentFilter: typeof initialFilter | undefined;
       // Subscription can replay a newer claim than the snapshot above. Refresh
       // before the first replayed event; live events and later deliveries stay synchronous.
       const refreshReplayFilter = () => {
-        refreshedFilter ??= this.pubsub
-          .getHistory(AGENT_STREAM_TOPIC(runId), 0)
-          .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
+        refreshedFilter ??= this.executionEngine
+          .readReplayFloor(this.pubsub, runId, undefined)
+          .then(evidence => (currentFilter = evidence.keepReplayEvent))
           .catch(() => (currentFilter = initialFilter));
         return refreshedFilter;
       };
@@ -4682,17 +4684,7 @@ export class DurableAgent<
         if (currentFilter) return currentFilter(event);
         return refreshReplayFilter().then(filter => filter(event));
       };
-      if (!offset) return { keepReplayEvent, refreshReplayFilter };
-      const skipped = history.slice(0, offset);
-      if (skipped.length === offset) {
-        let floor: number | undefined;
-        for (const event of skipped) {
-          const generation = event.generation;
-          if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
-        }
-        return { minGeneration: floor, keepReplayEvent, refreshReplayFilter };
-      }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent, refreshReplayFilter };
+      return { ...floor, keepReplayEvent, refreshReplayFilter };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
