@@ -113,6 +113,15 @@ export async function resolveWorkItemRepository(args: {
     if (match) return resolvedRepository(match);
   }
 
+  const otherProvider =
+    externalRepositorySignal === undefined ? otherProviderLabel(sourceControl.integrationId, metadata) : undefined;
+  if (otherProvider !== undefined) {
+    return {
+      status: 'unlinked',
+      hint: `This card comes from ${otherProvider}, and no ${otherProvider} repository is linked to this Factory.`,
+    };
+  }
+
   if (repositorySignal) {
     const match = findRepositoryBySlug(linked, repositorySignal);
     return match
@@ -124,14 +133,6 @@ export async function resolveWorkItemRepository(args: {
     return {
       status: 'unlinked',
       hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
-    };
-  }
-
-  const otherProvider = otherProviderLabel(sourceControl.integrationId, metadata);
-  if (otherProvider !== undefined) {
-    return {
-      status: 'unlinked',
-      hint: `This card comes from ${otherProvider}, and no ${otherProvider} repository is linked to this Factory.`,
     };
   }
 

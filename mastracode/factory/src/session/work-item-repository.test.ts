@@ -156,7 +156,10 @@ describe('resolveWorkItemRepository', () => {
     },
   );
 
-  it("refuses a card from another provider instead of filing it under this Factory's only repository", async () => {
+  it.each([
+    { case: 'only repository', metadata: null },
+    { case: 'repository of the same name', metadata: { repository: 'acme/only' } },
+  ])("refuses a card from another provider instead of filing it under this Factory's $case", async ({ metadata }) => {
     const { sourceControl, project } = await seedRepositories(['acme/only'], 'gitlab');
 
     await expect(
@@ -164,7 +167,7 @@ describe('resolveWorkItemRepository', () => {
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        item: { metadata: null, workItem: { metadata: { githubRepositoryId: 42 } } },
+        item: { metadata, workItem: { metadata: { githubRepositoryId: 42 } } },
       }),
     ).resolves.toEqual({
       status: 'unlinked',
