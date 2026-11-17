@@ -5,6 +5,7 @@ import { createTestBoard } from '../../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import type { IssueReconcileSummary } from '../../issue-reconciler.js';
+import { VANTA_VULNERABILITIES_SOURCE_ID } from '../../vanta/sync.js';
 import { problem, startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
 import { PlatformVantaIntegration } from './integration.js';
@@ -194,7 +195,10 @@ describe('Vanta sync through the Factory project connections', () => {
   async function setup(platform: FakePlatform) {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme' } });
-    await seeded.intake.saveConfig({ orgId: 'org-1', config: { vanta: { enabled: true, sourceIds: [] } } });
+    await seeded.intake.saveConfig({
+      orgId: 'org-1',
+      config: { vanta: { enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] } },
+    });
     const { item: filed } = await seeded.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
