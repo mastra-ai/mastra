@@ -1272,6 +1272,63 @@ describe('FactoryDecisionDispatcher', () => {
     expect(consumeStream).toHaveBeenCalledOnce();
   });
 
+  it('completes a persist-only message against a bound idle session without waking it or retrying', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'New commits on pull request #17.',
+      priority: 'high',
+      // What an outside author's pull request event queues: the message reaches
+      // the session's notifications, but an idle session is never woken for it.
+      idleBehavior: 'persist',
+      idempotencyKey: 'outsider-push-message-1',
+    });
+    // The idle session stores the notification without starting a run: core
+    // answers with neither a wake nor a live delivery.
+    const { controller, sendNotificationSignal, consumeStream } = createSession(Promise.resolve({ action: 'persist' }));
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: item.externalSource,
+          title: item.title,
+          stages: ['execute'],
+          sessions: {},
+          metadata: item.metadata,
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'outsider-push-message-1',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rule-message', summary: 'New commits on pull request #17.' }),
+      expect.objectContaining({ ifIdle: { behavior: 'persist' } }),
+    );
+    expect(consumeStream).not.toHaveBeenCalled();
+    const [record] = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      entry => entry.decision.type === 'sendMessage',
+    );
+    // Stored without waking is this message succeeding, never a delivery failure owed a retry.
+    expect(record).toMatchObject({ status: 'succeeded', failureCode: null });
+  });
+
   it("sends a rule notification as the session's owner, so a woken run has an authenticated user (#29819)", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

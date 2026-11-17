@@ -1,4 +1,4 @@
-import { STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import { SETTLING_PULL_REQUEST_EVENTS, STATUS_EVENTS, testsField } from '@mastra/factory/boards/board-events';
 import { kindsTakenWhole } from '@mastra/factory/boards/intake-order';
 import {
   CircleCheck,
@@ -189,15 +189,32 @@ export function movesCardsOnly(rule: IntakeRouteInfo, event: RuleEvent): boolean
 }
 
 /**
+ * Whether the rule's old outsider gate holds on this lane: stored before rules decided outsiders'
+ * pull requests and not asking about `pullRequest.trusted` itself, it skips outside authors' pull
+ * requests on every pull request event that doesn't settle one — so there it never takes everything.
+ */
+export function skipsOutsidersOn(rule: IntakeRouteInfo, event: RuleEvent): boolean {
+  return (
+    rule.outsiderPullRequestsGated === true &&
+    event.startsWith('pull_request.') &&
+    !SETTLING_PULL_REQUEST_EVENTS.has(event) &&
+    !testsField(rule.when, 'pullRequest.trusted')
+  );
+}
+
+/**
  * The rule above `index` in a lane that keeps it from ever being reached; -1 when none does. Only a rule with no
  * conditions hides everything below it: on an arrival lane the same rules also move the issue cards a pull request
- * links to or was opened from, so a rule testing only the kind hides just the rules that need that kind too.
+ * links to or was opened from, so a rule testing only the kind hides just the rules that need that kind too. A rule
+ * whose old outsider gate holds (`skipsOutsidersOn`) lets outside authors' pull requests fall through, so it hides
+ * nothing on those lanes — unless the rule below skips them too, and nothing falls through to it either.
  */
 export function shadowedBy(lane: readonly IntakeRouteInfo[], event: RuleEvent, index: number): number {
   const rule = lane[index];
   if (!rule) return -1;
   const kinds = requiredKinds(rule);
   return lane.slice(0, index).findIndex(taker => {
+    if (skipsOutsidersOn(taker, event) && !skipsOutsidersOn(rule, event)) return false;
     if (catchAllIndex([taker], event) !== 0) return false;
     if (taker.when === null) return true;
     const needs = kindsTakenWhole(taker);

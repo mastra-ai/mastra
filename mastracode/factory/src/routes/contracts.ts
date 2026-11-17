@@ -157,6 +157,8 @@ export const intakeRouteInputSchema = z
     on: intakeRouteFields.on.optional(),
     /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
     pullRequestOpenedMovesOnly: z.literal(true).optional(),
+    /** Restores a route read with `outsiderPullRequestsGated` as it was: its card moves skipping outside authors' pull requests. */
+    outsiderPullRequestsGated: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -167,6 +169,12 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
+    /**
+     * `false` lets outside authors' pull requests match an older rule's card moves, like every rule
+     * written since rules decided them. No other edit changes it, so an edit and its Undo can't
+     * quietly widen the rule.
+     */
+    outsiderPullRequestsGated: z.literal(false).optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -210,6 +218,12 @@ const intakeRouteSchema = z.object({
    * files no pull request, through every edit. Add a route to file pull requests.
    */
   pullRequestOpenedMovesOnly: z.literal(true).optional(),
+  /**
+   * True on a route stored before card-move rules decided outsiders' pull requests: its card moves
+   * skip an outside author's pull request unless its conditions test `pullRequest.trusted`. Edits
+   * keep it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
+   */
+  outsiderPullRequestsGated: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),

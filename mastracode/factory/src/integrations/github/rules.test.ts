@@ -4492,11 +4492,12 @@ describe('GithubRules issue labels', () => {
       const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
         .filter(entry => entry.decision.type === 'routeEvent')
         .map(entry => entry.decision.event);
-      // On an issue card the event names the pull request that changed and that pull request's trust.
+      // On an issue card the event names the pull request that changed and that pull request's
+      // trust; the maintainer who made the change is the event's actor either way.
       const pullRequest =
         where === 'own card'
-          ? { pullRequestTrusted: false }
-          : { pullRequest: 'pull-request:github:10:pull-request:17', pullRequestTrusted: true };
+          ? { pullRequestTrusted: false, actorTrusted: true }
+          : { pullRequest: 'pull-request:github:10:pull-request:17', pullRequestTrusted: true, actorTrusted: true };
       expect(events).toEqual([
         { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, ...pullRequest },
         { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] }, ...pullRequest },
@@ -5183,12 +5184,44 @@ describe('GithubRules with outside work in Intake', () => {
       const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
       expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'work', stage: 'pr-review' } });
       expect(item?.stages).toEqual(['pr-review']);
-      // The pusher is a maintainer, but the routes' `pullRequest.trusted` is the pull request's author.
+      // The routes' `pullRequest.trusted` is the pull request's author; the pusher is a
+      // maintainer, and run approval reads the pusher.
       expect(transition?.decision.event).toEqual({
         type: 'pull_request.synchronized',
         pullRequestTrusted: 'authorTrusted' in metadata && metadata.authorTrusted,
+        actorTrusted: true,
       });
+      // The maintainer's push vouches for the re-review: it is released, never parked for a
+      // second approval, whoever wrote the pull request.
+      const reviews = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]!.status).not.toBe('proposed');
     });
+
+    // A maintainer asking Factory to review is the same vouch: the review they ask for starts,
+    // whoever wrote the pull request and wherever its card sits.
+    it.each(['intake', 'done'] as const)(
+      `reviews ${author}'s pull request from %s when a maintainer asks`,
+      async stage => {
+        const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage, metadata });
+        const { decisions, item } = await deliver({
+          event: 'pull_request',
+          deliveryId: 'delivery-review-request',
+          payload: {
+            action: 'review_requested',
+            installation: { id: 7 },
+            repository: { id: 10, full_name: 'acme/repo' },
+            sender: { login: 'maintainer' },
+            requested_reviewer: { login: 'factory-app[bot]' },
+            pull_request: { number: 17, title: 'PR 17', html_url: 'https://github.com/acme/repo/pull/17' },
+          },
+        });
+        expect(item?.stages).toEqual(['pr-review']);
+        const reviews = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+        expect(reviews).toHaveLength(1);
+        expect(reviews[0]!.status).not.toBe('proposed');
+      },
+    );
 
     // Triage runs once: a comment on a card a person moved to Triage starts nothing, whoever wrote it.
     it(`does not re-triage ${author}'s issue a person moved to Triage when someone comments`, async () => {
@@ -7764,18 +7797,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       operator: 'AND',
       conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: false }],
     };
-    // A project set up before pull requests linked keeps "Pull requests go to Review" as it stored
-    // it. For an outsider's linked pull request a card-move rule counts only if it tests the pull
-    // request's trust; one that doesn't never moves the issue's card.
+    const trustedOnly: RuleGroup = {
+      operator: 'AND',
+      conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+    };
+    // A card-move rule decides outsiders' pull requests itself: one meant only for maintainers says
+    // so with a `pullRequest.trusted` condition. Only a rule stored before rules decided
+    // (`outsider_pull_requests_gated` NULL) keeps the old gate: there an outsider's linked pull
+    // request moves the issue's card only by a rule that tests the pull request's trust.
     it.each([
-      ['an outsider', 'read', 'testing nothing', null, ['intake']],
-      ['an outsider', 'read', 'testing the repository', repositoryIsAcme, ['intake']],
-      ['a maintainer', 'write', 'testing nothing', null, ['pr-review']],
-      ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, ['pr-review']],
-      ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, ['pr-review']],
+      ['an outsider', 'read', 'testing nothing', null, false, ['pr-review']],
+      ['an outsider', 'read', 'testing the repository', repositoryIsAcme, false, ['pr-review']],
+      ['an outsider', 'read', 'testing for a trusted pull request', trustedOnly, false, ['intake']],
+      ['a maintainer', 'write', 'testing nothing', null, false, ['pr-review']],
+      ['a maintainer', 'write', 'testing the repository', repositoryIsAcme, false, ['pr-review']],
+      ['an outsider', 'read', "testing for an outsider's pull request", outsidersOnly, false, ['pr-review']],
+      ['an outsider', 'read', 'testing nothing, stored before rules decided', null, true, ['intake']],
+      ['an outsider', 'read', 'testing the repository, stored before rules decided', repositoryIsAcme, true, ['intake']],
+      ['a maintainer', 'write', 'testing nothing, stored before rules decided', null, true, ['pr-review']],
+      [
+        'an outsider',
+        'read',
+        "testing for an outsider's pull request, stored before rules decided",
+        outsidersOnly,
+        true,
+        ['pr-review'],
+      ],
     ] as const)(
       "puts issue 42's card for %s's (%s) linked pull request, by a stored Review rule %s (%j), in %j",
-      async (_author, permission, _rule, when, stages) => {
+      async (_author, permission, _rule, when, legacy, stages) => {
         const h = await harness(permission);
         const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
         const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
@@ -7787,7 +7837,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await h.storage.ops.updateMany(
           'factory_intake_routes',
           { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
-          { when_condition: when },
+          // NULL is what a rule stored before the column existed reads as: it was never backfilled.
+          { when_condition: when, ...(legacy ? { outsider_pull_requests_gated: null } : {}) },
         );
         const issue = await h.issueCard(42, 'intake');
 
@@ -7800,6 +7851,48 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // Factory leaves the stored rule as the project has it.
         const stored = (await h.boards.listIntakeRoutes(scope)).find(route => route.name === PULL_REQUEST_INTAKE_ROUTE.name);
         expect(stored?.when).toEqual(when);
+        expect(stored?.outsiderPullRequestsGated).toBe(legacy ? true : undefined);
+      },
+    );
+
+    // Moving the card is the rule's call; running Factory on the pull request's code is a
+    // person's. The review that moving an outsider's linked pull request into the auto-starting
+    // phase queues parks as a proposal for approval; a maintainer's is released on its own — no
+    // session is bound here, so the released run shows as a start attempt retrying, where the
+    // parked one never attempts at all.
+    it.each([
+      ['parks the review', 'an outsider', 'read', { status: 'proposed', attempts: 0, lastError: null }],
+      ['starts the review', 'a maintainer', 'write', { status: 'retry', failureCode: 'session_unavailable' }],
+    ] as const)(
+      "%s a stored Review rule testing nothing queues when %s's linked pull request moves issue 42's card into the auto-starting Review phase",
+      async (_what, _author, permission, expected) => {
+        const h = await harness(permission);
+        const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+        const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+        await h.boards.listIntakeRoutes(scope);
+        await h.storage.ops.updateMany('factory_intake_route_locks', where, {
+          seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+        });
+        await h.storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+        await h.storage.ops.updateMany(
+          'factory_intake_routes',
+          { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
+          { when_condition: null },
+        );
+        const issue = await h.issueCard(42, 'intake');
+
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        // The chain takes three passes: link the pull request, move the card, decide its review.
+        await h.dispatch();
+
+        expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+        expect(await reviewsStarted(h, issue.id)).toEqual([
+          expect.objectContaining({
+            ...expected,
+            decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }),
+            approvedAt: null,
+          }),
+        ]);
       },
     );
 

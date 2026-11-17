@@ -702,7 +702,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
@@ -779,6 +779,177 @@ describe('Board rules', () => {
 
     await screen.findByRole('region', { name: 'Work item closed' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('warns a rule on a pull request event also matches outside authors, and adds the trusted condition in one click', async () => {
+    const pushes = rule({
+      id: ruleId('pushes'),
+      name: 'Pushes re-review',
+      on: ['pull_request.synchronized'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+    });
+    const { sent } = serveRules({ rules: [everythingElse(), pushes] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Pushes re-review' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
+    const warning = 'Also matches pull requests from outside authors.';
+    expect(dialog.getByText(warning)).toBeVisible();
+
+    await user.click(dialog.getByRole('button', { name: 'Add: Pull request trusted is yes' }));
+    await waitFor(() => expect(dialog.queryByText(warning)).not.toBeInTheDocument());
+    await user.click(dialog.getByRole('button', { name: 'Save rule' }));
+    await waitForMutationsIdle(client);
+
+    expect(sent.find(request => request.method === 'PATCH')?.body).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }] },
+      expectedRevision: pushes.revision,
+    });
+  });
+
+  it('keeps the outside-author warning off rules on issue events and off older gated rules', async () => {
+    const gated = rule({
+      id: ruleId('gated'),
+      name: 'Requested reviews go to Review',
+      on: ['pull_request.review_requested'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+      outsiderPullRequestsGated: true,
+    });
+    serveRules({ rules: [closed(), gated] });
+    const user = userEvent.setup();
+    renderRules();
+
+    const warning = 'Also matches pull requests from outside authors.';
+    await screen.findByRole('region', { name: 'Work item closed' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
+    expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    // The older rule still skips outsiders, so the builder has nothing to warn about.
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Requested reviews go to Review' }));
+    expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
+  });
+
+  it("notes an older rule skips outside authors' pull requests, and lets them match on request", async () => {
+    const pushes = rule({
+      id: ruleId('pushes'),
+      name: 'Pushes re-review',
+      on: ['pull_request.synchronized'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+      outsiderPullRequestsGated: true,
+    });
+    const { sent } = serveRules({ rules: [pushes] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    const item = within(
+      await within(await screen.findByRole('region', { name: 'Pull request gets new commits' })).findByRole(
+        'listitem',
+        { name: 'Pushes re-review' },
+      ),
+    );
+    expect(item.getByText(/Skips outside authors. pull requests \(older rule\)/)).toBeVisible();
+
+    await user.click(item.getByRole('button', { name: 'Let outside authors match' }));
+    await waitForMutationsIdle(client);
+
+    expect(sent.find(request => request.method === 'PATCH')?.body).toEqual({
+      outsiderPullRequestsGated: false,
+      expectedRevision: 1,
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('listitem', { name: 'Pushes re-review' })).queryByText(/older rule/),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("hides the older-rule note once the rule's own conditions test the pull request's trust", async () => {
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('gated-trusting'),
+          name: 'Trusted pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }] },
+          target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+          outsiderPullRequestsGated: true,
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    expect(screen.queryByText(/older rule/)).not.toBeInTheDocument();
+  });
+
+  it('keeps rules under an older gated rule reachable, as outside authors’ pull requests fall through it', async () => {
+    const PUSHES = 'Pull request gets new commits';
+    const target = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null };
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('gated-all'),
+          name: 'Pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: null,
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-gated'),
+          name: 'Docs pushes wait in Triage',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'triage' },
+        }),
+        rule({
+          id: ruleId('gated-below-gated'),
+          name: 'Old docs pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('closed-all'),
+          name: 'Closed pull requests cancel',
+          on: ['pull_request.closed'],
+          when: null,
+          target: { ...target, phaseKey: 'canceled' },
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-closed'),
+          name: 'Closed docs cancel too',
+          on: ['pull_request.closed'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'canceled' },
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: PUSHES });
+    // The gated rule skips outside authors' pull requests, so the rule below still catches those.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Docs pushes wait in Triage' })).queryByText(/Never reached/),
+    ).not.toBeInTheDocument();
+    // A gated rule below it skips the same pull requests: trusted ones stop at the catch-all,
+    // outside authors' fall through both, so nothing ever reaches it.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Old docs pushes re-review' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
+    // Closing settles the pull request whoever wrote it: there the gate holds nothing back.
+    expect(
+      within(lane('Pull request closed unmerged').getByRole('listitem', { name: 'Closed docs cancel too' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
   });
 
   it('turns a rule off, which marks it skipped', async () => {

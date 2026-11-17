@@ -1,6 +1,10 @@
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem } from '@mastra/factory/boards/board-events';
+import {
+  INTAKE_ROUTE_RULE_FIELDS,
+  matchesOutsiderPullRequests,
+  routeEventsProblem,
+} from '@mastra/factory/boards/board-events';
 import { ruleGroupSchema } from '@mastra/factory/rules/rule-group';
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -119,6 +123,8 @@ export function RuleBuilderDialog({
   );
   const [name, setName] = useState<string | undefined>(() => initial?.name);
   const [step, setStep] = useState<RuleStep>(initialStep);
+  // Bumped when the dialog rewrites the conditions itself: the editor reads them once per key.
+  const [rewrites, setRewrites] = useState(0);
 
   const placesNew = placesArrival(on);
   const targetBoard = boards.find(candidate => candidate.id === boardKey);
@@ -155,6 +161,21 @@ export function RuleBuilderDialog({
       when: rule,
       target: { phaseKey: phase.id, moveToBoardKey: boardKey === board.id ? null : boardKey },
     });
+  };
+
+  // The rule moves cards on pull request events for whoever opened them, so it can narrow itself to trusted authors.
+  const addTrustedCondition = () => {
+    const trusted: RuleCondition = { field: 'pullRequest.trusted', operator: 'equals', value: true };
+    setWhen(
+      rule === null
+        ? { operator: 'AND', conditions: [trusted] }
+        : rule.operator === 'AND'
+          ? { ...rule, conditions: [...rule.conditions, trusted] }
+          : { operator: 'AND', conditions: [rule, trusted] },
+    );
+    setFiltered(true);
+    setIncomplete(false);
+    setRewrites(count => count + 1);
   };
 
   const summary: Record<RuleStep, ReactNode> = {
@@ -251,6 +272,7 @@ export function RuleBuilderDialog({
                   {filtered && (
                     <div className="border-border bg-fill-subtle rounded-xl border p-3">
                       <ConditionRows
+                        key={rewrites}
                         label="Conditions"
                         rule={when}
                         facts={intakeRouteFacts(on)}
@@ -263,6 +285,18 @@ export function RuleBuilderDialog({
                     </div>
                   )}
                   {problem && <Notice variant="warning">{problem}</Notice>}
+                  {!initial?.outsiderPullRequestsGated && matchesOutsiderPullRequests(on, rule) && (
+                    <Notice variant="info">
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span>Also matches pull requests from outside authors.</span>
+                        {!readOnly && (
+                          <button type="button" onClick={addTrustedCondition} className="shrink-0 underline">
+                            Add: Pull request trusted is yes
+                          </button>
+                        )}
+                      </span>
+                    </Notice>
+                  )}
                 </div>
               )}
 

@@ -12,6 +12,8 @@ import {
   eventRuleFacts,
   isPullRequestEvent,
   LEGACY_ARRIVAL_EVENT,
+  SETTLING_PULL_REQUEST_EVENTS,
+  testsField,
 } from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
@@ -24,7 +26,10 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly'> & {
+type IntakeRoute = Pick<
+  StoredIntakeRouteRecord,
+  'id' | 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly' | 'outsiderPullRequestsGated'
+> & {
   target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'phaseKey' | 'joinClosedIssue'> & {
     moveToBoardKey?: string | null;
   };
@@ -456,11 +461,29 @@ export function routesHandleEvent(
   return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
 }
 
-const SETTLING_PULL_REQUEST_EVENTS = new Set<string>(['pull_request.merged', 'pull_request.closed']);
+/**
+ * Whether the event is a pull request event that no trusted actor vouches for, and that doesn't
+ * settle the pull request. A run that such an event queues is compute and code execution on an
+ * outside actor's say-so: it waits for a person, whatever card it moves. A maintainer acting on
+ * an outside author's pull request is that vouch, so this reads the actor's trust, never the
+ * author's. Merging and closing settle the pull request either way, so they never count.
+ */
+export function untrustedPullRequestEvent(event: BoardEventFacts): boolean {
+  return isPullRequestEvent(event.type) && !SETTLING_PULL_REQUEST_EVENTS.has(event.type) && event.actorTrusted !== true;
+}
 
-function testsField(group: RuleGroup | null, field: string): boolean {
+/**
+ * Whether the event is an outside author's pull request event on an issue's card: an unsettling
+ * pull request event an untrusted author wrote, on a card that isn't the pull request's own. The
+ * legacy rule gate only ever held moves of linked cards back by the author's trust — what the
+ * rules' `pullRequest.trusted` tests — so it keeps both that scope and that signal.
+ */
+export function untrustedLinkedPullRequestEvent(event: BoardEventFacts, cardFacts: RuleFacts): boolean {
   return (
-    group?.conditions.some(member => ('field' in member ? member.field === field : testsField(member, field))) ?? false
+    cardFacts['source.kind'] !== 'pull_request' &&
+    isPullRequestEvent(event.type) &&
+    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
+    event.pullRequestTrusted !== true
   );
 }
 
@@ -521,14 +544,12 @@ export function traceEventRoute(
         }
       : {}),
   };
-  // An outsider's pull request linked to an issue's card moves the card only by a rule that asks
-  // about the pull request's trust; one that doesn't was never written with outsiders in mind.
-  // Merging and closing settle the pull request either way, so those still move the card.
-  const untrustedLinkedPullRequest =
-    isPullRequestEvent(event.type) &&
-    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
-    cardFacts['source.kind'] !== 'pull_request' &&
-    pullRequestTrusted !== true;
+  // Rules decide outsiders' pull requests themselves: one that should only act for a maintainer
+  // says so with a `pullRequest.trusted` condition. Only a rule stored before that
+  // (`outsiderPullRequestsGated`) keeps the old gate: an outsider's pull request linked to an
+  // issue's card moves the card only by a rule that asks about the pull request's trust. Merging
+  // and closing settle the pull request either way, so those still move the card.
+  const untrustedLinkedPullRequest = untrustedLinkedPullRequestEvent(event, cardFacts);
   const rules: EventRuleTrace[] = [];
   let move: EventMove | undefined;
   for (const route of routes) {
@@ -538,12 +559,16 @@ export function traceEventRoute(
       rules.push({ ...named, outcome: 'disabled' });
       continue;
     }
-    // Not a skip the dispatcher logs: the rule was never meant for this pull request.
-    if (untrustedLinkedPullRequest && !testsField(route.when, 'pullRequest.trusted')) {
+    // Not a skip the dispatcher logs: the older rule was never meant for this pull request.
+    if (
+      untrustedLinkedPullRequest &&
+      route.outsiderPullRequestsGated &&
+      !testsField(route.when, 'pullRequest.trusted')
+    ) {
       rules.push({
         ...named,
         outcome: 'skipped',
-        reason: "the pull request's author is an outsider, and this rule doesn't test pullRequest.trusted",
+        reason: "the pull request's author is an outsider, and this older rule skips outside authors' pull requests",
       });
       continue;
     }

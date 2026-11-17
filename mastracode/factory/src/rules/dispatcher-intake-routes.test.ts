@@ -1277,8 +1277,9 @@ describe('intake routes moving existing cards on status events', () => {
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
-        .card!;
+      const moved = (
+        await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true, actorTrusted: true })
+      ).card!;
 
       expect(moved.id).toBe(card.id);
       expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
@@ -1288,6 +1289,172 @@ describe('intake routes moving existing cards on status events', () => {
       const started = await runs(card.id);
       expect(started).toHaveLength(1);
       expect(started).not.toContain('proposed');
+    });
+
+    // An outside author's push may move even the pull request's own card where a rule says, but
+    // the run the auto-starting destination queues is code execution on that author's say-so: it
+    // parks for a person, the bar auto-review already holds. A trusted author's push starts it.
+    it.each([
+      ['parks the run', "an outside author's", false],
+      ['starts the run', "a trusted author's", true],
+    ] as const)(
+      "%s when %s push moves the pull request's own card into an auto-starting phase",
+      async (_what, _whose, trusted) => {
+        const { boards, scope, route, deliver, deliverEvent, runs } = await setup();
+        await boards.create(scope, shipBoard, 'admin');
+        await route({
+          name: 'Pushed pull requests ship',
+          on: ['pull_request.synchronized'],
+          target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+        });
+        const card = (await deliver({
+          sourceKey: 'github-pr:17',
+          source: 'github-pr',
+          title: 'PR 17',
+          metadata: { authorTrusted: trusted, state: 'open' },
+        }))!;
+
+        const moved = (
+          await deliverEvent(card.id, {
+            type: 'pull_request.synchronized',
+            pullRequestTrusted: trusted,
+            actorTrusted: trusted,
+          })
+        ).card!;
+
+        expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+        const started = await runs(card.id);
+        expect(started).toHaveLength(1);
+        if (trusted) expect(started).not.toContain('proposed');
+        else expect(started).toEqual(['proposed']);
+      },
+    );
+
+    // Reopening is no settling event either: the outside author's say-so still waits for a person.
+    it('parks the run when an outside author reopens their pull request and a rule moves its card into an auto-starting phase', async () => {
+      const { boards, scope, route, deliver, deliverEvent, runs } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      await route({
+        name: 'Reopened pull requests ship',
+        on: ['pull_request.reopened'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: false, state: 'open' },
+      }))!;
+
+      const moved = (
+        await deliverEvent(card.id, { type: 'pull_request.reopened', pullRequestTrusted: false, actorTrusted: false })
+      ).card!;
+
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(await runs(card.id)).toEqual(['proposed']);
+    });
+
+    // With no stored rule handling the event, the provider's default move answers it instead.
+    // That move stands too, but the run its auto-starting destination queues on an outside
+    // author's pull request event parks for a person all the same.
+    it.each([
+      ['parks the run', "an outside author's", false],
+      ['starts the run', "a trusted author's", true],
+    ] as const)(
+      '%s when %s push moves the card by the default move, no rule handling the event',
+      async (_what, _whose, trusted) => {
+        const { deliver, deliverDecision, runs } = await setup({ autoStart: true });
+        const card = (await deliver({
+          sourceKey: 'github-pr:17',
+          source: 'github-pr',
+          title: 'PR 17',
+          metadata: { authorTrusted: trusted, state: 'open' },
+        }))!;
+
+        const moved = (
+          await deliverDecision(card.id, {
+            type: 'transition',
+            idempotencyKey: 'push:re-review-updated',
+            board: 'work',
+            stage: 'pr-review',
+            event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted, actorTrusted: trusted },
+          })
+        ).card!;
+
+        expect(placed(moved)).toEqual({ board: 'work', stages: ['pr-review'] });
+        const started = await runs(card.id);
+        expect(started).toHaveLength(1);
+        if (trusted) expect(started).not.toContain('proposed');
+        else expect(started).toEqual(['proposed']);
+      },
+    );
+
+    // The move's message always reaches the card's session either way; what an outside author's
+    // pull request event never buys is waking an idle session. The message persists in its
+    // notifications instead of starting it, and nothing waits on a person for the message itself.
+    it.each([
+      ['persists the move message without waking', "an outside author's", false, 'persist'],
+      ['wakes the session with the move message', "a trusted author's", true, 'wake'],
+    ] as const)('%s when %s push moves the card by the default move', async (_what, _whose, trusted, idleBehavior) => {
+      const { deliver, deliverDecision, workItems, project, retry } = await setup();
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: trusted, state: 'open' },
+      }))!;
+
+      const moved = (
+        await deliverDecision(card.id, {
+          type: 'transition',
+          idempotencyKey: 'push:re-review-updated',
+          board: 'work',
+          stage: 'pr-review',
+          message: { text: 'New commits on pull request #17.' },
+          event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted, actorTrusted: trusted },
+        })
+      ).card!;
+      expect(placed(moved)).toEqual({ board: 'work', stages: ['pr-review'] });
+
+      await retry();
+      const messages = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.workItemId === card.id && record.decision.type === 'sendMessage',
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.decision).toMatchObject({ idleBehavior });
+      // The message is delivered either way, never parked waiting on a person.
+      expect(messages[0]!.status).not.toBe('proposed');
+    });
+
+    // Any decision marked as answering an outside author's pull request event parks for a
+    // person before the consent check lets messages through — a wake holds a session for a
+    // whole run, so it is never free.
+    it.each([
+      ['parks a wake marked as answering', true, 'proposed'],
+      ['delivers an unmarked wake', false, 'pending'],
+    ] as const)("%s an outside author's pull request event", async (_what, marked, status) => {
+      const { deliver, deliverDecision, workItems, project, retry } = await setup();
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: false, state: 'open' },
+      }))!;
+
+      await deliverDecision(card.id, {
+        type: 'sendMessage',
+        idempotencyKey: 'wake:outsider-push',
+        message: 'New commits on pull request #17.',
+        idleBehavior: 'wake',
+        ...(marked ? { untrustedPullRequestEvent: true } : {}),
+      });
+      await retry();
+      const wakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        record => record.workItemId === card.id && record.decision.type === 'sendMessage',
+      );
+      expect(wakes).toHaveLength(1);
+      if (marked) expect(wakes[0]!.status).toBe(status);
+      else expect(wakes[0]!.status).not.toBe('proposed');
     });
 
     it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {

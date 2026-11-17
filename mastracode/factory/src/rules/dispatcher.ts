@@ -35,6 +35,7 @@ import {
   resolveIntake,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
+  untrustedPullRequestEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -1563,6 +1564,16 @@ export class FactoryDecisionDispatcher {
   // `autoStartWhen` matches). Anything else waits for a person.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null) return false;
+    // A decision queued by a card move on an outside author's pull request event acts on that
+    // author's say-so — a run is compute and code execution, a wake holds a session for one.
+    // It waits for a person before the consent check (which lets messages through), past the
+    // card's armed autonomy and however its phase starts.
+    if (
+      (decision.type === 'invokeSkill' || decision.type === 'sendMessage') &&
+      decision.untrustedPullRequestEvent === true
+    ) {
+      return true;
+    }
     const boards = await this.#boards.load(record);
     if (!requestsConsent(boards, record, decision)) return false;
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
@@ -1930,7 +1941,9 @@ export class FactoryDecisionDispatcher {
                 requestContext,
               },
             ),
-          true,
+          // A persist message succeeds by being stored for the idle session;
+          // only a message that must wake or reach a live run fails without it.
+          decision.idleBehavior !== 'persist',
         );
         return;
       }
@@ -2421,6 +2434,8 @@ export class FactoryDecisionDispatcher {
           event: {
             type: 'pull_request.opened',
             pullRequestTrusted: link.trusted,
+            // The author opened it, so the opener's trust is the author's.
+            actorTrusted: link.trusted,
             closedIssue: { phase: link.phase, hasPullRequest: link.hasPullRequest },
           },
         },
@@ -2616,6 +2631,10 @@ export class FactoryDecisionDispatcher {
       cause: 'rule_decision',
       causalChain: nextChain,
       ...(decision.reenter ? { reenter: true } : {}),
+      // A default rule's own move (no stored rule handled the event, or none exists) answers the
+      // event too: when it is an outside author's pull request event, the run the destination
+      // queues waits for a person just as a rule's move does.
+      ...(decision.event && untrustedPullRequestEvent(decision.event) ? { untrustedPullRequestEvent: true } : {}),
     });
     if (result.status === 'rejected') throw new FactoryRuleRejectedError(result.code, result.reason);
     const transitionMessage = decision.message;
@@ -2643,7 +2662,10 @@ export class FactoryDecisionDispatcher {
           idempotencyKey: messageKey,
           message: transitionMessage.text,
           priority: 'high',
-          idleBehavior: 'wake',
+          // The move's message always reaches the card's session, but an outside author's pull
+          // request event never wakes an idle one: the message persists in its notifications
+          // instead, read when a person (or an approved run) brings the session back.
+          idleBehavior: decision.event && untrustedPullRequestEvent(decision.event) ? 'persist' : 'wake',
           ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
         },
       ],
@@ -2727,6 +2749,10 @@ export class FactoryDecisionDispatcher {
       cause: 'event_route',
       causalChain,
       eventRoute: { routeId: route.routeId },
+      // The rule owns the move; a run the destination queues on an outside author's pull
+      // request event still waits for a person, whether the card is the pull request's own
+      // or an issue's it links to.
+      ...(untrustedPullRequestEvent(event) ? { untrustedPullRequestEvent: true } : {}),
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale')
