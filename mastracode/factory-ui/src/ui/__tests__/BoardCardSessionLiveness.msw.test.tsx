@@ -141,11 +141,14 @@ describe('Board card session liveness', () => {
     expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
   });
 
-  it('shows the initializing dot while a bound session is still materializing', async () => {
+  it('shows the initializing dot while a run waits on its bound session setting up', async () => {
     stubFactoryWithBoundSession();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
       ),
     );
     renderWorkBoard();

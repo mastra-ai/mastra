@@ -150,6 +150,7 @@ async function stubbedSessionFacts(reads: StubbedReads, factoryProjectId: string
         viewerUserId,
         factoryProjectId,
         visibleSessionIds: new Set(sessions.map(session => session.sessionId)),
+        sessionOnThread: () => undefined,
       }),
       parkedSessionIds: new Set(parkedSessionIds),
     },

@@ -142,6 +142,7 @@ interface ModelApplySession {
 
 interface ModelApplyController {
   getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
+  setThreadModel: (args: { resourceId: string; threadId: string; modelId: string }) => Promise<unknown>;
 }
 
 export interface ProjectRoutesDeps extends RouteDependencies {
@@ -712,7 +713,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 }
                 const session = await controller.getSession(binding.sessionId);
                 if (!session) {
-                  skipped++;
+                  // An unloaded session reads the thread's model when it loads again, so store it on the thread.
+                  await controller.setThreadModel({
+                    resourceId: binding.resourceId,
+                    threadId: binding.threadId,
+                    modelId,
+                  });
+                  applied++;
                   continue;
                 }
                 const thread = await session.thread.getById({ threadId: binding.threadId });

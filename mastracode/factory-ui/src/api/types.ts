@@ -35,6 +35,9 @@ export type IntakeTestBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.b
 export type IntakeTestResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeTest.responseSchema>;
 export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate.bodySchema>;
 export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
+export type WorkItemSessionRepository = z.infer<
+  typeof FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.responseSchema
+>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
 export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
@@ -246,7 +249,9 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;

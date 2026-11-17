@@ -746,6 +746,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'session-repository', FACTORY_API_ROUTE_CATALOG.workItemSessionRepository, {
+    description: "Show which repository a card's session starts in, or why none can",
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'working-pull-request', FACTORY_API_ROUTE_CATALOG.workItemWorkingPullRequest, {
     description: "Make one of a card's linked pull requests the one its sessions work on",
     input: 'required',

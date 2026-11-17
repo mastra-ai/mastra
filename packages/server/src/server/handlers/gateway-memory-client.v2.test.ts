@@ -83,7 +83,11 @@ describe('v2 detection and the v1 memory client across configurations', () => {
     organization: 'mskv2_org-key',
     unprefixed: 'deployment-key',
   } as const;
-  const registeredKeys = { none: undefined, v1: 'msk_fedcba9876543210fedcba9876543210', v2: 'mskv2_registered' } as const;
+  const registeredKeys = {
+    none: undefined,
+    v1: 'msk_fedcba9876543210fedcba9876543210',
+    v2: 'mskv2_registered',
+  } as const;
 
   // [env key, MASTRA_GATEWAY_VERSION, registered gateway key, isGatewayV2, v1 memory client built]
   const table: Array<[keyof typeof envKeys, 'unset' | 'v2', keyof typeof registeredKeys, boolean, boolean]> = [
@@ -133,4 +137,3 @@ describe('v2 detection and the v1 memory client across configurations', () => {
     },
   );
 });
-

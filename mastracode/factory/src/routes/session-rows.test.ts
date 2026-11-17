@@ -24,9 +24,13 @@ interface LiveState {
   running?: readonly { threadId: string; resourceId?: string }[];
   parked?: ReadonlySet<string>;
   authEnabled?: boolean;
+  sessionOnThread?: ReadonlyMap<string, string>;
 }
 
-function buildApp(viewer: string, { running = [], parked = new Set(), authEnabled = true }: LiveState = {}) {
+function buildApp(
+  viewer: string,
+  { running = [], parked = new Set(), authEnabled = true, sessionOnThread = new Map() }: LiveState = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser' as never, { workosId: c.req.header('x-viewer') ?? viewer, organizationId: ORG } as never);
@@ -45,6 +49,7 @@ function buildApp(viewer: string, { running = [], parked = new Set(), authEnable
       liveSessions: {
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+        sessionOnThread: threadId => sessionOnThread.get(threadId),
       },
       projectSessions,
       activeRuns: () => running,
@@ -89,7 +94,7 @@ async function createSession(
 async function createCardSession(
   sessionId: string,
   title: string,
-  session: { userId?: string; visibility?: 'org' | 'private' } = {},
+  session: { userId?: string; visibility?: 'org' | 'private'; materialized?: boolean } = {},
 ): Promise<Card> {
   const branch = `factory/${sessionId}`;
   await createSession(sessionId, { ...session, branch });
@@ -283,6 +288,19 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(body, 'also-mine')?.status).toBe('working');
   });
 
+  it("marks a person's session working while it runs on a thread it opened after its first", async () => {
+    await createSession('mine');
+
+    const body = await readRows(
+      buildApp('u1', {
+        running: [{ threadId: 'second-thread', resourceId: 'u1' }],
+        sessionOnThread: new Map([['second-thread', 'mine']]),
+      }),
+    );
+
+    expect(rowOf(body, 'mine')?.status).toBe('working');
+  });
+
   it('marks a parked run and a card waiting on a proposal as waiting', async () => {
     await createCardSession('parked-run', 'Parked');
     await proposeRunFor(await createCardSession('proposed-run', 'Proposed'));
@@ -293,6 +311,49 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
     expect(rowOf(body, 'parked-run')?.status).toBe('waiting');
     expect(rowOf(body, 'proposed-run')?.status).toBe('waiting');
     expect(rowOf(body, 'quiet-run')?.status).toBe('idle');
+  });
+
+  it("marks a person's session waiting while its run waits on their answer", async () => {
+    await createSession('asking');
+
+    const body = await readRows(buildApp('u1', { parked: new Set(['asking']) }));
+
+    expect(rowOf(body, 'asking')).toMatchObject({ origin: 'user', status: 'waiting' });
+  });
+
+  it("leaves a teammate's session waiting on its owner's answer off another reader's waiting", async () => {
+    await createSession('their-asking', { userId: 'u2' });
+    const live = { running: [{ threadId: 'their-asking', resourceId: 'u2' }], parked: new Set(['their-asking']) };
+
+    expect(rowOf(await readRows(buildApp('u1', live)), 'their-asking')?.status).toBe('idle');
+    expect(rowOf(await readRows(buildApp('u2', live)), 'their-asking')?.status).toBe('waiting');
+  });
+
+  it('marks a never set up session initializing only while a run waits on its setup', async () => {
+    await createSession('never-set-up', { materialized: false });
+
+    expect(rowOf(await readRows(buildApp('u1')), 'never-set-up')?.status).toBe('idle');
+
+    const running = buildApp('u1', { running: [{ threadId: 'never-set-up', resourceId: 'u1' }] });
+    expect(rowOf(await readRows(running), 'never-set-up')?.status).toBe('initializing');
+  });
+
+  it('marks a session waiting when its run asks a person before its sandbox ever came up', async () => {
+    await createSession('asking-first', { materialized: false });
+    await createCardSession('card-asking-first', 'Asks first', { materialized: false });
+
+    const body = await readRows(
+      buildApp('u1', {
+        running: [
+          { threadId: 'asking-first', resourceId: 'u1' },
+          { threadId: 'card-asking-first', resourceId: 'u1' },
+        ],
+        parked: new Set(['asking-first', 'card-asking-first']),
+      }),
+    );
+
+    expect(rowOf(body, 'asking-first')?.status).toBe('waiting');
+    expect(rowOf(body, 'card-asking-first')?.status).toBe('waiting');
   });
 
   it("marks the follower's own session waiting when the card it follows parks on a person", async () => {
@@ -383,6 +444,18 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
     });
     expect(activity.cards).toEqual({ working: 1, waiting: 2 });
     expect(activity.sessionHeldCardIds).toEqual([proposed.id, twoSessions.id].toSorted((a, b) => a.localeCompare(b)));
+  });
+
+  it('answers a card whose setup never finished its own status once the run is over', async () => {
+    const card = await createCardSession('setup-failed', 'Clone failed', { materialized: false });
+    await proposeRunFor(card);
+    const app = buildApp('u1');
+
+    const [rows, activity] = await Promise.all([readRows(app), readActivity(app)]);
+
+    expect(rowOf(rows, 'setup-failed')?.status).toBe('waiting');
+    expect(activity.cardStatuses).toEqual({ [card.id]: 'waiting' });
+    expect(activity.sessionHeldCardIds).toEqual([]);
   });
 
   it("leaves another person's private sessions out", async () => {
