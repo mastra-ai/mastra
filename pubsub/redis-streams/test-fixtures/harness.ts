@@ -426,3 +426,58 @@ export function makeStallingProxy(target: { host: string; port: number }) {
     },
   };
 }
+
+/**
+ * TCP proxy in front of a Redis node that can freeze every connection, open or
+ * new, like a paused server (`docker pause`): nothing is answered and nothing
+ * fails. Bytes sent either way while frozen are held, in order, and delivered
+ * on thaw, like the server answering late.
+ */
+export function makeFreezingProxy(target: { host: string; port: number }) {
+  const sockets = new Set<Socket>();
+  const flushes = new Set<() => void>();
+  let frozen = false;
+  const relay = (from: Socket, to: Socket) => {
+    const held: Buffer[] = [];
+    let ended = false;
+    // A side that closes still has its held bytes delivered, then the close.
+    const flush = () => {
+      for (const data of held.splice(0)) to.write(data);
+      if (ended) {
+        flushes.delete(flush);
+        to.end();
+      }
+    };
+    flushes.add(flush);
+    from.on('data', (data: Buffer) => void (frozen ? held.push(data) : to.write(data)));
+    from.on('close', () => {
+      ended = true;
+      if (!frozen) flush();
+    });
+  };
+  const server = createServer(client => {
+    const upstream = connect(target.port, target.host);
+    for (const socket of [client, upstream]) {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+    }
+    relay(client, upstream);
+    relay(upstream, client);
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  return {
+    listening,
+    freeze: () => void (frozen = true),
+    thaw() {
+      frozen = false;
+      for (const flush of flushes) flush();
+    },
+    close() {
+      for (const s of sockets) s.destroy();
+      return new Promise<void>(r => server.close(() => r()));
+    },
+  };
+}
