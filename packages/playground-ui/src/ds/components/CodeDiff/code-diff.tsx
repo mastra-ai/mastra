@@ -27,6 +27,19 @@ export type CodeDiffProps = {
 /** The highlighter theme paints its own canvas under the code; the diff takes the card's fill like the rest of it. */
 const CARD_CANVAS = ':host { --diffs-dark-bg: var(--card); --diffs-light-bg: var(--card); }';
 
+/**
+ * Under a file header the lines run flush from the header to the card's bottom edge, like a pull request: no
+ * padding above the first line or below the last, and a native scrollbar that only takes room when lines
+ * overflow (and none where the platform overlays it).
+ */
+const FLUSH_LINES = `
+:host { --diffs-overflow-override: auto; }
+[data-code],
+[data-diff][data-overflow='wrap'],
+[data-diff][data-dehydrated][data-diff-type='split'][data-overflow='scroll'] { padding-block: 0; }
+[data-code] { scrollbar-width: thin; }
+`;
+
 const PATCH_METADATA_PREFIXES = [
   'Binary files ',
   'GIT binary patch',
@@ -93,7 +106,7 @@ export function CodeDiff({ className, layout, overflow = 'wrap', header, ref, ..
     diffIndicators: 'classic',
     disableFileHeader: true,
     overflow,
-    unsafeCSS: CARD_CANVAS,
+    unsafeCSS: header ? CARD_CANVAS + FLUSH_LINES : CARD_CANVAS,
   };
 
   return (
