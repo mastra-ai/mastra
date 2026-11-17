@@ -381,6 +381,9 @@ interface RegistryDoc extends IndexTarget {
 }
 
 /** Pipeline expression: `indexIds` with the entry for `name` set to `id` (I11b callers decide when). */
+/** A journal doc whose lease ran out on the server's clock; only such a doc is the reconciler's. */
+const LEASE_EXPIRED = { $expr: { $lt: ['$leaseUntil', '$$NOW'] } };
+
 function indexIdsWith(name: string, id: string): Document {
   return {
     $concatArrays: [
@@ -792,28 +795,79 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * The lazy reconciler (§4): resolves this collection's journal docs whose lease expired. An
    * `intent` never reached Atlas and goes; a `creating` one goes when its name is absent or its
    * row is explained, and otherwise becomes `uncertain` (I9). Every write is conditioned on the
-   * observed state, so concurrent reconcilers and a live op never double-apply. Never throws.
+   * observed state, so concurrent reconcilers and a live op never double-apply. A `created` doc
+   * is recorded (P7, P7b or P7c), an `orphaned` one cleaned from §3.8 step 2. Never throws.
+   * Returns the ids of the docs it tried, so the call's handshake cleans a stale block only once.
    */
-  private async reconcile(collectionName: string): Promise<void> {
+  private async reconcile(collectionName: string): Promise<Set<string>> {
+    const tried = new Set<string>();
     try {
       const journal = this.journal();
-      const expired = { $expr: { $lt: ['$leaseUntil', '$$NOW'] } };
       // `uncertain` docs are never resolved here; selecting them could starve the rest of the batch.
       const docs = await journal
-        .find({ collectionName, state: { $ne: 'uncertain' }, ...expired })
+        .find({ collectionName, state: { $ne: 'uncertain' }, ...LEASE_EXPIRED })
         .limit(RECONCILE_BATCH)
         .toArray();
       for (const doc of docs) {
+        tried.add(doc._id);
         try {
-          if (doc.state === 'intent') await journal.findOneAndDelete({ _id: doc._id, state: 'intent', ...expired });
+          if (doc.state === 'intent')
+            await journal.findOneAndDelete({ _id: doc._id, state: 'intent', ...LEASE_EXPIRED });
           else if (doc.state === 'creating') await this.reconcileCreating(doc);
-          // `created` and `orphaned` are resolved by a later stage.
+          else if (doc.state === 'created') await this.reconcileCreated(doc);
+          else if (doc.state === 'orphaned') await this.cleanupOrphan(doc, 2);
         } catch (error) {
           this.logger.warn(`could not reconcile provisioning record ${doc._id} on "${collectionName}": ${error}`);
         }
       }
     } catch (error) {
       this.logger.warn(`could not reconcile the provisioning records of "${collectionName}": ${error}`);
+    }
+    return tried;
+  }
+
+  /**
+   * §4.2 `created`: P7 with the stored id, else P7b (retired) or P7c (§3.8 from step 1), as the op
+   * would; their CONFLICT is only logged here. P7 and P7b take the doc in their transaction, so a
+   * second reconciler's transaction conflicts, then finds it gone and stops.
+   */
+  private async reconcileCreated(doc: JournalDoc): Promise<void> {
+    const { _id, indexName, collectionName, name, role, generation } = doc;
+    const R = doc.indexId!;
+    const resolved = new Error('reconcile: the record was resolved by another call');
+    const missed = new Error('reconcile: the registration did not match');
+    const record = async (retire: boolean) => {
+      try {
+        await this.inTransaction(async session => {
+          const taken = await this.journal().deleteOne({ _id, state: 'created', ...LEASE_EXPIRED }, { session });
+          if (taken.deletedCount === 0) throw resolved;
+          if (!(await this.recordOwnership(indexName, role, name, generation, R, session, retire))) throw missed;
+        });
+        return true;
+      } catch (error) {
+        if (error === missed) return false;
+        throw error;
+      }
+    };
+    const what = `search index "${name}" (id ${R}) on "${collectionName}" of provisioning record ${_id}`;
+    await this.testHooks?.beforeRecordOwnership?.(indexName, name);
+    try {
+      for (let round = 0; round < 3; round++) {
+        if (await record(false)) return;
+        const current = await this.readRegistryEntry(indexName);
+        if (!current || current.generation !== generation || current.deleting) {
+          const outcome = await this.cleanupOrphan(doc, 1);
+          this.logger.warn(`${what}: index "${indexName}" was removed or recreated; the index was ${outcome}`);
+          return;
+        }
+        if (await record(true)) {
+          this.logger.warn(`${what}: index "${indexName}" changed its target; kept as a retired index`);
+          return;
+        }
+      }
+      this.logger.warn(`${what}: index "${indexName}" kept changing; left for a later reconcile`);
+    } catch (error) {
+      if (error !== resolved) throw error;
     }
   }
 
@@ -1819,6 +1873,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX',
     expected: Partial<Pick<RegistryDoc, 'searchIndexName' | 'textSearchIndexName'>>,
     generation: string,
+    reconciled: Set<string>,
   ): Promise<void> {
     await this.testHooks?.beforePendingDropCheck?.(indexName);
     const registry = this.registry();
@@ -1861,11 +1916,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       });
     }
     // M8: a name whose orphan cleanup (§3.8) is pending; its step 1 wrote before reading users (I7).
-    const orphan = await this.journal().findOne({
+    const pending = {
       collectionName,
       name: { $in: names.filter((n): n is string => !!n) },
-      state: 'orphaned',
-    });
+      state: 'orphaned' as const,
+    };
+    // A stale block is cleaned once per call (the call's own reconcile counts), then re-checked (P3).
+    const stale = await this.journal().findOne({ ...pending, _id: { $nin: [...reconciled] }, ...LEASE_EXPIRED });
+    if (stale) {
+      reconciled.add(stale._id);
+      await this.cleanupOrphan(stale, 2, op).catch(error =>
+        this.logger.warn(`could not clean up provisioning record ${stale._id} on "${collectionName}": ${error}`),
+      );
+    }
+    const orphan = await this.journal().findOne(pending);
     if (orphan) {
       throw new MastraError({
         id: createVectorErrorId('MONGODB', op, 'INDEX_DELETING'),
@@ -2191,7 +2255,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // (The effective values are finalized after reading any existing registry entry:
     // classification is sticky and the write policy is preserved on refresh.)
 
-    await this.reconcile(targetCollection);
+    const reconciled = await this.reconcile(targetCollection);
     let collection;
     let collectionCreated = false;
     try {
@@ -2504,6 +2568,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             ...(effectiveIsByo ? {} : { textSearchIndexName: textSearchIndexName ?? defaultTextSearchIndex }),
           },
           pin.generation,
+          reconciled,
         );
       let vector: Awaited<ReturnType<MongoDBVector['provisionSearchIndex']>>;
       try {
@@ -2681,7 +2746,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.indexTargets.delete(indexName);
     const target = await this.resolveIndexTarget(indexName);
     const { collectionName } = target;
-    await this.reconcile(collectionName);
+    const reconciled = await this.reconcile(collectionName);
     // A field-mapped index must not collide with the auto-created dynamic index (which would
     // no-op the field mapping), and two logical indexes on the SAME collection must not collide
     // with each other (FIX 6), so the default name includes the logical indexName.
@@ -2841,6 +2906,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               'CREATE_SEARCH_INDEX',
               { textSearchIndexName: name },
               p0!.pin.generation,
+              reconciled,
             );
             await this.testHooks?.beforeSearchIndexProvision?.(indexName);
           },

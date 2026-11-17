@@ -1291,6 +1291,45 @@ describe('provisioning protocol', () => {
       expect(await searchIndexNames(db, coll)).toEqual([]);
     });
 
+    it('P-CRASH-d: a crash after the proof is recorded by the reconciler, idempotently', async () => {
+      const coll = await byoColl('pcrashd');
+      const vec = `${coll}_vector_index`;
+      await crashAt(coll, 'beforeRecordOwnership');
+      const [j] = await docsOn(coll);
+      expect(j).toMatchObject({ state: 'created', indexId: expect.any(String) });
+      await reconcile(b, coll);
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toEqual([]);
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds).toEqual([{ name: vec, id: j!.indexId }]);
+    });
+
+    it('P-CRASH-e: a crash before the orphan drop is resumed by the reconciler, which drops R once', async () => {
+      const coll = await byoColl('pcrashe');
+      const vec = `${coll}_vector_index`;
+      const c = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'j-crash' });
+      await c.connect();
+      const proven = pause();
+      const dropping = pause();
+      hooks(c, { leaseMs: 0, beforeRecordOwnership: proven.hook, beforeOrphanDrop: dropping.hook });
+      void createByo(c, coll).catch(() => {});
+      await reached(proven);
+      const [j] = await docsOn(coll);
+      // The registration goes, so the proven index takes the P7c path.
+      await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+      proven.release.resolve();
+      await reached(dropping);
+      await c.disconnect();
+      expect(await docsOn(coll)).toMatchObject([{ state: 'orphaned', dropDecided: true, indexId: j!.indexId }]);
+      const { drops } = recordDrops(b);
+      await reconcile(b, coll);
+      await reconcile(b, coll);
+      expect(drops).toEqual([{ collectionName: coll, name: vec, id: j!.indexId }]);
+      expect(await docsOn(coll)).toEqual([]);
+      await waitFor(async () => (await listedId(db, coll, vec)) === undefined);
+    });
+
     it('RF-STANDALONE: provisioning on a standalone server fails, rolls back and leaves no journal doc', async () => {
       const uri = 'mongodb://localhost:27017';
       const dbName = uniqueName('standalone');
@@ -1569,8 +1608,8 @@ describe('provisioning protocol', () => {
         });
       });
 
-      /** A vector index `N` on a fresh collection, and an `orphaned` cleanup record for it (lease active). */
-      async function seedOrphan(prefix: string) {
+      /** A vector index `N` on a fresh collection, and an `orphaned` cleanup record for it (lease active by default). */
+      async function seedOrphan(prefix: string, leaseUntil = new Date(Date.now() + 300_000)) {
         const coll = await byoColl(prefix);
         await createRawSearchIndex(db, coll, 'N', {
           fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }],
@@ -1587,7 +1626,7 @@ describe('provisioning protocol', () => {
           role: 'vector',
           state: 'orphaned',
           indexId: r,
-          leaseUntil: new Date(Date.now() + 300_000),
+          leaseUntil,
           createdAt: new Date(),
         };
         await seedJournal(db, doc);
@@ -1722,12 +1761,155 @@ describe('provisioning protocol', () => {
           expect(idOf(e, 'N')).toBe(now);
         } else {
           // Or refused while R is still being removed, and rolled back.
-          expect(result).toBeInstanceOf(Error);
+          expect([
+            createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+            createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'),
+          ]).toContain(result?.id);
           expect(e).toBeNull();
         }
         // C was written after B's durable decision, so it does not block B's drop (R13); the checker
         // instead verifies after the test that C is not left on the dropped R.
         expect(checker.violations).toEqual([]);
+      });
+
+      describe('P-RECON-RACE', () => {
+        /** Run `reconcile` on stores a and b, both parked at `seam` until both arrived. */
+        async function bothAt(seam: string, coll: string) {
+          const pa = pause();
+          const pb = pause();
+          hooks(a, { [seam]: pa.hook });
+          hooks(b, { [seam]: pb.hook });
+          const runs = [reconcile(a, coll), reconcile(b, coll)];
+          try {
+            await reached(pa);
+            await reached(pb);
+          } finally {
+            pa.release.resolve();
+            pb.release.resolve();
+          }
+          await Promise.all(runs);
+        }
+
+        it('two reconcilers on one created record record ownership once', async () => {
+          const coll = await byoColl('preconrc');
+          const vec = `${coll}_vector_index`;
+          await crashAt(coll, 'beforeRecordOwnership');
+          const [j] = await docsOn(coll);
+          const rev = (await entry(coll))!.rev;
+          const logsA = captureLogs(a);
+          const logsB = captureLogs(b);
+          await bothAt('beforeRecordOwnership', coll);
+          const e = await entry(coll);
+          expect(e?.ownsVectorIndex).toBe(true);
+          expect(e?.indexIds).toEqual([{ name: vec, id: j!.indexId }]);
+          expect(e?.rev).toBe(rev + 1);
+          expect(await docsOn(coll)).toEqual([]);
+          expect([...logsA.warn, ...logsA.error, ...logsB.warn, ...logsB.error]).toEqual([]);
+        });
+
+        it('two reconcilers on one orphaned record drop R by id, without error', async () => {
+          const { coll, r } = await seedOrphan('preconro', new Date(0));
+          const logsA = captureLogs(a);
+          const logsB = captureLogs(b);
+          const drops = [a, b].map(s => recordDrops(s).drops);
+          await bothAt('beforeOrphanDrop', coll);
+          // Both follow the one durable decision (R11); a drop by id is idempotent, so the second is a no-op.
+          const all = drops.flat();
+          expect(all.length).toBeGreaterThan(0);
+          for (const d of all) expect(d).toEqual({ collectionName: coll, name: 'N', id: r });
+          expect(await docsOn(coll)).toEqual([]);
+          expect([...logsA.warn, ...logsA.error, ...logsB.warn, ...logsB.error]).toEqual([]);
+          await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+        });
+      });
+
+      describe.each(['beforeProof', 'beforeRecordOwnership', 'afterOrphanMarked', 'beforeOrphanDrop'])(
+        'P-RECON-LIVE (%s)',
+        seam => {
+          it('a reconciler running while the op is parked past its lease ends as the sequential run', async () => {
+            const coll = await byoColl('preconlive');
+            const vec = `${coll}_vector_index`;
+            const orphan = seam === 'afterOrphanMarked' || seam === 'beforeOrphanDrop';
+            const proven = pause();
+            const p = pause();
+            hooks(a, { leaseMs: 0, ...(orphan ? { beforeRecordOwnership: proven.hook } : {}), [seam]: p.hook });
+            const call = create(a, coll).catch(e => e);
+            try {
+              if (orphan) {
+                await reached(proven);
+                // The registration goes, so the op takes the P7c path.
+                await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+                proven.release.resolve();
+              }
+              await reached(p);
+              await reconcile(b, coll);
+            } finally {
+              proven.release.resolve();
+              p.release.resolve();
+            }
+            const result: any = await call;
+            if (orphan) {
+              expect(result?.message).toBe(P7C);
+              expect(await entry(coll)).toBeNull();
+              await waitFor(async () => (await listedId(db, coll, vec)) === undefined);
+            } else {
+              expect(result).toBeUndefined();
+              const e = await entry(coll);
+              expect(e?.ownsVectorIndex).toBe(true);
+              expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+            }
+            expect(await docsOn(coll)).toEqual([]);
+            expect(checker.violations).toEqual([]);
+          });
+        },
+      );
+
+      it('P-STALE-ORPHAN: a stale record whose drop fails refuses the attach with M8; a retry runs the cleanup', async () => {
+        const { coll, r, doc } = await seedOrphan('pstaleorph', new Date(0));
+        const logs = captureLogs(a);
+        const { drops } = recordDrops(a);
+        hooks(a, {
+          leaseMs: 0,
+          beforeOrphanDrop: async () => {
+            throw new Error('injected drop failure');
+          },
+        });
+        const refused: any = await attachN(coll).catch(e => e);
+        expect(refused?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+        expect(refused?.message).toBe(m8(coll, doc._id));
+        expect(logs.error).toHaveLength(1);
+        expect(logs.error[0]).toContain(doc._id);
+        expect(await entry(`${coll}_c`)).toBeNull();
+        expect(await listedId(db, coll, 'N')).toBe(r);
+        delete (a as any).testHooks.beforeOrphanDrop;
+        await attachN(coll);
+        expect(drops).toEqual([{ collectionName: coll, name: 'N', id: r }]);
+        expect(await docsOn(coll)).toEqual([]);
+        const e = await entry(`${coll}_c`);
+        expect(e?.searchIndexName).toBe('N');
+        expect(idOf(e, 'N')).not.toBe(r);
+        expect(logs.error).toHaveLength(1);
+      });
+
+      it('P-STALE-ORPHAN (handshake): a stale record the call did not reconcile is cleaned once, then re-checked', async () => {
+        const { coll, r, doc } = await seedOrphan('pstaleorphh');
+        await db.collection(JOURNAL).deleteOne({ _id: doc._id as any });
+        const p = pause();
+        hooks(a, { beforePendingDropCheck: p.hook });
+        const c = attachN(coll).catch(e => e);
+        try {
+          // After the call's own reconcile and P0: only the handshake can see it.
+          await reached(p);
+          await seedJournal(db, { ...doc, leaseUntil: new Date(0) });
+        } finally {
+          p.release.resolve();
+        }
+        expect(await c).toBeUndefined();
+        const e = await entry(`${coll}_c`);
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(e?.indexIds).toEqual([{ name: 'N', id: r }]);
+        expect(await docsOn(coll)).toEqual([]);
+        expect(await listedId(db, coll, 'N')).toBe(r);
       });
 
       describe('P-ATTACH-ORPHAN', () => {

@@ -256,8 +256,15 @@ export function installInvariantChecker(
       const decided = await db
         .collection(JOURNAL, primary)
         .findOne({ collectionName, name, indexId: id, state: 'orphaned', dropDecided: true });
-      if (decided) decidedDrops.push({ collectionName, name, id });
-      else if (users.length)
+      if (decided) {
+        decidedDrops.push({ collectionName, name, id });
+        // R13 exempts registrations written after the decision, never one that records this incarnation.
+        const holders = docs.filter(
+          d => d.deleting !== true && d.indexIds?.some((e: Document) => e.name === name && e.id === id),
+        );
+        if (holders.length)
+          violations.push(`dropped "${name}" (id ${id}) on "${collectionName}" recorded by ${holders.map(d => d._id)}`);
+      } else if (users.length)
         violations.push(`dropped "${name}" (id ${id}) on "${collectionName}" referenced by ${users}`);
     });
     return { store, hook };
