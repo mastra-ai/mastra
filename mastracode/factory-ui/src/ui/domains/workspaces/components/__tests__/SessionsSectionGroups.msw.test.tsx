@@ -14,7 +14,6 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import {
   closeSessionProperties,
-  groupSessionsByBoard,
   openNestedSessionProperty,
   openSessionProperties,
   openSessionProperty,
@@ -86,7 +85,6 @@ const releaseItems = [releaseOld, releaseNew].map(release => ({
 }));
 
 beforeEach(() => {
-  groupSessionsByBoard();
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, () =>
@@ -193,12 +191,12 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Release Preview sessions' })).toBeNull());
     expect(groupRegions()).toEqual(['Work sessions', 'User sessions']);
-    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
     await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
-    await waitFor(() => expect(groupRegions()).toEqual(['All sessions']));
+    await waitFor(() => expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']));
     expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
@@ -267,7 +265,7 @@ describe('Sessions sidebar groups', () => {
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
     await closeSessionProperties(user);
 
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
   it("never lists a custom board's terminal-phase session as Idle while the board catalog loads", async () => {

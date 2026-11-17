@@ -1,5 +1,24 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.6
+
+### Patch Changes
+
+- Fixed custom OpenAI-compatible providers so they only ever authenticate with the API key saved on the provider itself. ([#29879](https://github.com/mastra-ai/mastra/pull/29879))
+
+  - A custom provider is no longer given the saved credential of another provider when their names match (for example a custom provider called "OpenAI").
+  - A Mastra Gateway model (`mastra/...`) never runs on a custom provider that shares its id, with or without a gateway key.
+  - Requests to a custom provider no longer follow redirects, so its API key is never sent on to another address.
+  - A custom provider without an API key now works when sign-in is enabled, instead of failing with a missing credential error.
+
+  If a custom provider in `settings.json` has no `apiKey` and relied on a key you saved for the provider it is named after (for example with `/api-keys`), set `apiKey` on the custom provider itself.
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938), [`464810d`](https://github.com/mastra-ai/mastra/commit/464810dcf84b942fbcc34e9171585b3d01f36ce2)]:
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/pg@1.37.0-alpha.3
+  - @mastra/client-js@1.60.1-alpha.5
+  - @mastra/libsql@1.31.0-alpha.2
+
 ## 1.19.1-alpha.5
 
 ### Patch Changes

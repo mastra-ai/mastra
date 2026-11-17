@@ -1,0 +1,69 @@
+{
+  "name": "@mastra/platform",
+  "version": "0.1.0-alpha.0",
+  "description": "Mastra Platform hosted Memory, Knowledge, Browser, and workspace clients",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "build:lib": "pnpm build",
+    "build:watch": "pnpm build --watch",
+    "test:unit": "vitest run",
+    "test": "pnpm test:unit",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@types/node": "22.20.1",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "tsdown": "0.22.9",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:",
+    "@mastra/pg": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.82.0-0 <2.0.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/platform"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/platform-workspace": "workspace:*",
+    "@mastra/stagehand": "workspace:*"
+  }
+}

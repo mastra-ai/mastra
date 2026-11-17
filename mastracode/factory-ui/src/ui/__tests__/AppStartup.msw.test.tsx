@@ -168,7 +168,7 @@ describe('Opening Factory', () => {
       models: USABLE_MODEL,
       cards: STARTER_COUNTS,
     },
-    { page: 'Settings', path: '/factories/factory-1/settings/preferences', cards: [] },
+    { page: 'Settings', path: '/factories/factory-1/settings/account', cards: [] },
     {
       page: 'Work before a repository is linked',
       path: '/factories/factory-1/work',
