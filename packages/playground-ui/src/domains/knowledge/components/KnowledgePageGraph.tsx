@@ -1005,7 +1005,7 @@ export function KnowledgePageGraph(props: KnowledgePageGraphProps) {
         <p
           role="status"
           data-testid="knowledge-graph-loading"
-          className="text-ui-sm pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-muted-foreground shadow-overlay"
+          className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-body-sm text-muted-foreground shadow-overlay"
         >
           Loading pages…
         </p>

@@ -497,7 +497,7 @@ export function KnowledgePageDetail({
             </div>
           )}
           {page.description ? (
-            <Txt variant="body" tone="muted">
+            <Txt variant="body" tone="muted" className={`wrap-anywhere ${compact ? 'line-clamp-3' : 'line-clamp-6'}`}>
               {page.description}
             </Txt>
           ) : null}
@@ -593,7 +593,7 @@ export function KnowledgePageDetail({
                           shown?.[index]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
                         }}
                       >
-                        {heading.text}
+                        <span className="line-clamp-2 wrap-anywhere">{heading.text}</span>
                       </button>
                     </li>
                   ))}
