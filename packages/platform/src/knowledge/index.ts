@@ -15,7 +15,9 @@ export interface PlatformKnowledgeOptions extends Omit<
   'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
 > {
   accessToken?: string;
+  /** Platform project whose Knowledge instance to use when `instanceId` is unset. Falls back to `MASTRA_PROJECT_ID`; a project token names its own project. */
   projectId?: string;
+  /** Falls back to `MASTRA_KNOWLEDGE_INSTANCE_ID`. Unset, the project's one instance is looked up on first use. */
   instanceId?: string;
   /**
    * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `https://knowledge-api.mastra.ai`.
@@ -89,11 +91,14 @@ function decode<T>(text: string): T {
 }
 
 class RemoteKnowledgeStorage extends KnowledgeStorage {
+  #endpoint?: Promise<string>;
+
   constructor(
-    private readonly endpoint: string,
+    private readonly resolveEndpoint: () => Promise<string>,
     private readonly token: string,
+    storageIsolationKey?: string,
   ) {
-    super({ storageIsolationKey: endpoint });
+    super({ storageIsolationKey });
     return new Proxy(this, {
       get(target, key) {
         if (typeof key === 'string' && operations.includes(key as (typeof operations)[number])) {
@@ -105,8 +110,17 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
+  // Resolved once; a failed lookup isn't cached, so the next operation asks again rather than guessing.
+  private endpoint(): Promise<string> {
+    this.#endpoint ??= this.resolveEndpoint().catch(error => {
+      this.#endpoint = undefined;
+      throw error;
+    });
+    return this.#endpoint;
+  }
+
   private async request(operation: string, input?: unknown): Promise<unknown> {
-    const response = await fetch(`${this.endpoint}/operations/${operation}`, {
+    const response = await fetch(`${await this.endpoint()}/operations/${operation}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.token}`,
@@ -197,6 +211,35 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   }
 }
 
+/** The project's single Knowledge instance: from the token's project, or `projectId` for an org key. */
+async function resolveInstanceId(base: string, token: string, projectId: string | undefined): Promise<string> {
+  const response = await fetch(projectId ? `${base}?projectId=${encodeURIComponent(projectId)}` : base, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await response.text();
+  let body: { id?: unknown; detail?: unknown } = {};
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') body = parsed;
+  } catch {
+    // Gateways can return non-JSON error pages.
+  }
+  if (!response.ok) {
+    const detail = typeof body.detail === 'string' ? body.detail : text;
+    throw Object.assign(
+      new Error(
+        `PlatformKnowledge could not find the project's Knowledge instance (${response.status})${detail ? `: ${detail}` : ''}`,
+      ),
+      { status: response.status },
+    );
+  }
+  if (typeof body.id !== 'string' || !body.id) {
+    throw new Error('Knowledge service answered the instance lookup without an instance id');
+  }
+  return body.id;
+}
+
 const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
@@ -209,8 +252,9 @@ export class PlatformKnowledge extends Knowledge {
       process.env.MASTRA_PLATFORM_ACCESS_TOKEN ??
       process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
+    const projectId = options.projectId ?? process.env.MASTRA_PROJECT_ID;
     const apiUrl = options.apiUrl ?? (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ?? DEFAULT_API_URL;
-    if (!token || !instanceId) {
+    if (!token) {
       throw new Error(
         'PlatformKnowledge requires a Knowledge token or Platform access token, and a Knowledge instance ID',
       );
@@ -222,10 +266,22 @@ export class PlatformKnowledge extends Knowledge {
       apiUrl: _apiUrl,
       ...config
     } = options;
-    const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(instanceId)}`;
+    const base = `${apiUrl.replace(/\/$/, '')}/v1/knowledge`;
+    const instanceEndpoint = (id: string) => `${base}/${encodeURIComponent(id)}`;
+    // Without an instance ID, the project's one instance is looked up on first use: the constructor is sync.
+    const resolveEndpoint = instanceId
+      ? async () => instanceEndpoint(instanceId)
+      : async () => instanceEndpoint(await resolveInstanceId(base, token, projectId));
     const storage = new MastraCompositeStore({
-      id: `platform-knowledge-${instanceId}`,
-      domains: { knowledge: new RemoteKnowledgeStorage(endpoint, token) },
+      id: 'platform-knowledge',
+      domains: {
+        knowledge: new RemoteKnowledgeStorage(
+          resolveEndpoint,
+          token,
+          // Until resolved, only this store is known to share its backend with itself.
+          instanceId ? instanceEndpoint(instanceId) : undefined,
+        ),
+      },
     });
     super({
       ...config,

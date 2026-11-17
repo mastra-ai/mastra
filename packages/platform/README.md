@@ -10,7 +10,7 @@ npm install @mastra/platform
 
 ## Usage
 
-Set `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`). `PlatformMemory` also needs `MASTRA_MEMORY_INSTANCE_ID` and `PlatformKnowledge` needs `MASTRA_KNOWLEDGE_INSTANCE_ID`; the example below uses both, so set both IDs. Obtain your instance IDs and credentials from Mastra Platform.
+Set `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`). `PlatformMemory` also needs `MASTRA_MEMORY_INSTANCE_ID`. `PlatformKnowledge` uses `MASTRA_KNOWLEDGE_INSTANCE_ID` when set; otherwise it finds your project's Knowledge instance on first use, from a project access token or from `MASTRA_PROJECT_ID` with an organization secret key. Obtain your instance IDs and credentials from Mastra Platform.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
