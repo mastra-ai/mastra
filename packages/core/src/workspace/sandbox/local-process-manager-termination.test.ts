@@ -193,6 +193,27 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
     return { handle, childPid };
   }
 
+  it('keeps the run abort signal wired while a left-behind child is still running', async () => {
+    const controller = new AbortController();
+    const handle = await sandbox.processes.spawn('sleep 30 & echo "CHILD $!"; echo started', {
+      abortSignal: controller.signal,
+    });
+
+    const result = await handle.wait();
+
+    // The child still holds the output, so `wait()` has settled but the handle
+    // still counts as running and must still answer the run's abort signal.
+    const childPid = Number(/CHILD (\d+)/.exec(result.stdout)?.[1]);
+    expect(childPid).toBeGreaterThan(0);
+    strayPids.push(childPid);
+    expect(handle.exitCode).toBeUndefined();
+    expect(isAlive(childPid)).toBe(true);
+
+    controller.abort();
+
+    expect(await waitForExit(childPid, 500)).toBe(true);
+  });
+
   it('still kills the child a command left behind after wait() has returned', async () => {
     const { handle, childPid } = await leaveChildBehind();
 
