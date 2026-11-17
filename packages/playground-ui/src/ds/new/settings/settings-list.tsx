@@ -10,7 +10,15 @@ function SettingsListBar({
   ...props
 }: ComponentProps<'div'> & { tone: 'title' | 'muted'; action?: ReactNode }) {
   return (
-    <div className={cn('flex min-h-8 items-center justify-between gap-3', className)} {...props}>
+    <div
+      className={cn(
+        // As tall as a `SettingsRow` (label + one-line description) plus the 13px the card puts above and below each
+        // row, since this row's own box includes that padding. Keeps a list's first row level with the settings above it.
+        'flex min-h-8 items-center justify-between gap-3 sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5+--spacing(6.5))]',
+        className,
+      )}
+      {...props}
+    >
       <div
         className={cn(
           'min-w-0 truncate',
