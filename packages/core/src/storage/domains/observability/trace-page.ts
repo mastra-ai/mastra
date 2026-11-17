@@ -282,7 +282,7 @@ export async function readTracePage(
         await source.context(
           traceId,
           incomingToken,
-          !initialSelection.anchorSpanId && !initialSelection.spanIds && !initialSelection.search,
+          !incomingToken && !initialSelection.anchorSpanId && !initialSelection.spanIds && !initialSelection.search,
         ),
       )
     : undefined;
@@ -324,7 +324,8 @@ export async function readTracePage(
       unavailableAncestors: boolean;
     },
   ): Promise<TracePageResponse> => {
-    // Explicit-ID cursors depend on the requested positions, never on fetched membership.
+    // The explicit-ID fast path fingerprints requested positions, independent of fetched membership.
+    // Flattened/family selections also fingerprint the topology found for those IDs.
     if (continuation && continuation.fingerprint !== fingerprint)
       throw new TracePageError('TRACE_CHANGED', 'Selection or request scope changed; restart this selection');
     if (continuation && offset >= ids.length)
@@ -513,7 +514,7 @@ export async function readTracePage(
         if (!processed)
           throw new TracePageError(
             'PAYLOAD_TOO_LARGE',
-            `Span '${spanId}' exceeds maxBytes; request structure or use the single-span endpoint`,
+            `Response metadata and the first result ('${spanId}') exceed maxBytes; increase maxBytes, request structure, or use the single-span endpoint`,
           );
         break;
       }

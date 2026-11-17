@@ -232,9 +232,10 @@ describe('bounded trace exploration', () => {
     };
     const src: TracePageSource = {
       ...source(rows),
-      context: async (_, token) => {
+      context: async (_, token, includeRoots) => {
+        if (token && includeRoots) throw new Error('Root metadata must only be read when opening a snapshot');
         if (token && token !== context.readToken) throw new Error('Wrong window');
-        return context;
+        return { ...context, roots: includeRoots ? context.roots : [] };
       },
     };
     const only = await readTracePage(src, 'trace', { mode: 'context' });
