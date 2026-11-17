@@ -246,16 +246,16 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
-  it('links each card on its board when a public URL is configured', async () => {
+  it('links each card to the page that opens its session when a public URL is configured', async () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
     try {
       const { run } = setup({ items: rows });
       const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
       expect(result.items.find(row => row.id === 'a')?.url).toBe(
-        'https://factory.example.com/factories/project-1/work?item=a',
+        'https://factory.example.com/factories/project-1/cards/a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/boards/release?item=c',
+        'https://factory.example.com/factories/project-1/cards/c',
       );
     } finally {
       vi.unstubAllEnvs();

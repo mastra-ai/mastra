@@ -120,22 +120,12 @@ describe('resolveIntake', () => {
     expect(resolution).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
   });
 
-  it('forces the evaluator from the option first, then a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
+  it('forces the evaluator from a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
     // Nothing forced: each project uses its own setting.
-    expect(intakeEvaluatorFrom(undefined, {})).toBeUndefined();
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
-      evaluator: 'intake-order',
-      source: 'env',
-    });
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'route-list' })).toEqual({
-      evaluator: 'route-list',
-      source: 'env',
-    });
-    expect(intakeEvaluatorFrom('route-list', { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
-      evaluator: 'route-list',
-      source: 'option',
-    });
+    expect(intakeEvaluatorFrom({})).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('intake-order');
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'route-list' })).toBe('route-list');
   });
 });
 

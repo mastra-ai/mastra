@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.50.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/code-sdk@1.19.1-alpha.7
+
+## 0.50.1-alpha.6
+
+### Patch Changes
+
+- Added an ESM-only `mastracode/run-tui` export so a launcher can start the Mastra Code TUI with extra session options, such as Knowledge and its scopes: ([#30371](https://github.com/mastra-ai/mastra/pull/30371))
+
+  ```ts
+  import { runTui } from 'mastracode/run-tui';
+
+  await runTui({ createMastraCode: { knowledge: { key: 'team', instance: knowledge }, scopes: ['org:acme'] } });
+  ```
+
+  Options given here replace the values Mastra Code would pass for the same keys, and apply to the interactive local TUI only. The `mastracode` command behaves as before.
+
+- Updated dependencies [[`944bb3a`](https://github.com/mastra-ai/mastra/commit/944bb3ab0fdcd23debbc4090d50c7abdcfacc874), [`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938), [`464810d`](https://github.com/mastra-ai/mastra/commit/464810dcf84b942fbcc34e9171585b3d01f36ce2)]:
+  - @mastra/code-sdk@1.19.1-alpha.6
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/pg@1.37.0-alpha.3
+  - @mastra/libsql@1.31.0-alpha.2
+
 ## 0.50.1-alpha.5
 
 ### Patch Changes

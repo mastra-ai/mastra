@@ -399,6 +399,8 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
   /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /** Called for each binding this sweep revoked. */
+  onRevoked?: (binding: FactoryRunBindingRecord) => void;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -1156,6 +1158,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_org_thread_idx',
         columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      // Prompt-time checkout trust reads a session's whole binding history, on any thread.
+      { name: 'factory_run_bindings_org_session_idx', columns: ['org_id', 'session_id'] },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -3560,6 +3564,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row !== null;
   }
 
+  /** Every binding a session ever held, revoked ones included, oldest first; never grants agent authority. */
+  async listRunBindingsForSession(input: { orgId: string; sessionId: string }): Promise<FactoryRunBindingRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_run_bindings',
+        { org_id: input.orgId, session_id: input.sessionId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toBinding);
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
@@ -3626,7 +3641,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
         if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          try {
+            item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          } catch (error) {
+            // One unreadable card must not end the sweep for every binding after it.
+            // Nothing is known about this card, so its binding stays for the next sweep.
+            console.error(
+              `[factory] stale-binding sweep could not read card ${binding.workItemId}`,
+              error instanceof Error ? error.message : error,
+            );
+            continue;
+          }
           itemCache.set(key, item);
         }
         // Terminal-ness comes from the installed board via the host-wired
@@ -3644,7 +3669,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (result) revoked += 1;
+      if (result) {
+        revoked += 1;
+        input.onRevoked?.(binding);
+      }
     }
     return revoked;
   }

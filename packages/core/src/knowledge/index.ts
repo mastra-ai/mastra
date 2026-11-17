@@ -18,6 +18,7 @@ import type {
 } from './declarations';
 import {
   addKnowledgeNote,
+  moveKnowledgePage,
   removeKnowledgeNote,
   removeKnowledgePage,
   updateKnowledgeNote,
@@ -25,6 +26,7 @@ import {
 } from './host-writes';
 import type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
@@ -146,7 +148,8 @@ export class Knowledge extends MastraBase {
    * rules reach in one hop. Undeclared principals throw; an empty list reads nothing. Never `'all'`.
    * Pass the result as `read` to the store's read methods.
    */
-  readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+    await this.#runtime.resolve();
     return this.#runtime.readScopeFor(principals);
   }
 
@@ -160,18 +163,19 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  explainAccess(
+  async explainAccess(
     runScopes: readonly string[],
     target: { scope: string } | { page: string },
   ): Promise<KnowledgeAccessExplanation> {
+    await this.#runtime.resolve();
     return this.#runtime.explainAccess(runScopes, target);
   }
 
   /**
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
-   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the address of
-   * the scope page's tree parent, needed for rules that bind through `belongsTo`. Declared config
-   * only; it reads no storage. For browsing UIs that draw access between scopes.
+   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
+   * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
+   * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
    *
    * @experimental
    */
@@ -196,7 +200,8 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  renameScopeDeclaration(from: string, to: string): Promise<number> {
+  async renameScopeDeclaration(from: string, to: string): Promise<number> {
+    await this.#runtime.resolve();
     return this.#runtime.renameScopeDeclaration(from, to);
   }
 
@@ -255,6 +260,21 @@ export class Knowledge extends MastraBase {
    */
   removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
     return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Moves the page at `scope#path`, with its subtree, under the page at `parent` (a key path; left
+   * out, the top of the scope), in `toScope` when given. The page keeps its id, notes, pins and
+   * vectors; paths below it change, and links by path are re-resolved. Throws
+   * `KnowledgeNotFoundError` for a missing page or parent, and refuses a page declared in config, a
+   * move into its own subtree, a key the new parent already has, and a move past the depth limit.
+   * Host-only, like {@link Knowledge.upsertPage}. Not retried: a concurrent write to the page
+   * between the read and the move throws.
+   *
+   * @experimental
+   */
+  movePage(input: KnowledgeMovePageInput): Promise<KnowledgePage> {
+    return moveKnowledgePage(this.#hostWriter(), input);
   }
 
   /**
@@ -534,6 +554,7 @@ export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 export type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 export type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,

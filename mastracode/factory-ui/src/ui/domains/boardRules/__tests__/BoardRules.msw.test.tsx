@@ -4,12 +4,13 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { BoardRules } from '../components/BoardRules';
 import { FACTORY_ID, PROJECT_URL, rule, ruleId, serveRules } from './fixtures/rulesServer';
 
-const OPENED = 'Issue opened';
+const OPENED = 'Work item opened';
 
 function renderRules(boardId = 'work') {
   return renderWithProviders(
@@ -56,21 +57,20 @@ describe('Board rules', () => {
     renderRules();
 
     const regions = await screen.findAllByRole('region');
-    expect(regions[0]).toHaveAccessibleName('Issues');
+    expect(regions[0]).toHaveAccessibleName('Work items');
     expect(regions[1]).toHaveAccessibleName(OPENED);
     expect(ruleNames(OPENED)).toEqual(['Bugs go to Triage', 'Everything else goes to Intake', 'Never checked']);
-    expect(ruleNames('Issue closed')).toEqual(['Closed issues go to Done']);
-    expect(await lane(OPENED).findByRole('link', { name: 'checked last, after Release Preview' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/work/intake#intake-order`,
-    );
+    expect(ruleNames('Work item closed')).toEqual(['Closed issues go to Done']);
+    expect(
+      await lane(OPENED).findByRole('link', { name: 'checked last, after Release Preview (no board after it)' }),
+    ).toHaveAttribute('href', `/factories/${FACTORY_ID}/work/intake#intake-order`);
     // A rule under one that takes every item is never reached.
     expect(
       within(lane(OPENED).getByRole('listitem', { name: 'Never checked' })).getByText(
         'Never reached: rule 2 above matches every item.',
       ),
     ).toBeVisible();
-    expect(lane('Issue reopened').getByText('No rules: the card stays where it is')).toBeVisible();
+    expect(lane('Work item reopened').getByText('No rules: the card stays where it is')).toBeVisible();
   });
 
   it('ends the pull request lane at a rule testing only the kind for pull requests only, as cards still move below it', async () => {
@@ -250,7 +250,7 @@ describe('Board rules', () => {
     expect(open.queryByText(/Someone else changed this rule first/)).not.toBeInTheDocument();
   });
 
-  it('groups lanes into issues and pull requests, with the intake note on the two lanes new items arrive on', async () => {
+  it('groups lanes into work items and pull requests, with the intake note on the two lanes new items arrive on', async () => {
     serveRules({ rules: [bugs(), closed()], order: ['release', 'work'] });
     renderRules();
 
@@ -258,12 +258,12 @@ describe('Board rules', () => {
       within(screen.getByRole('region', { name }))
         .getAllByRole('region')
         .map(region => region.getAttribute('aria-label'));
-    await screen.findByRole('region', { name: 'Issues' });
-    expect(lanesIn('Issues')).toEqual([
-      'Issue opened',
-      'Issue reopened',
-      'Issue labels or assignees change',
-      'Issue closed',
+    await screen.findByRole('region', { name: 'Work items' });
+    expect(lanesIn('Work items')).toEqual([
+      'Work item opened',
+      'Work item reopened',
+      'Work item labels or assignees change',
+      'Work item closed',
     ]);
     expect(lanesIn('Pull requests')).toEqual([
       'Pull request opened',
@@ -275,27 +275,30 @@ describe('Board rules', () => {
       'Pull request closed unmerged',
     ]);
     expect(
-      lane('Pull request opened').getByText('Links to its issue’s card if one exists; otherwise filed as a new card.'),
+      lane('Pull request opened').getByText(
+        'Links to its issue’s work item if one exists; otherwise creates a new work item.',
+      ),
     ).toBeVisible();
 
-    const note = 'No card yet: checked last, after Release Preview; first matching rule files it on this board.';
-    // Intake files a new issue on Issue opened and a pull request with no card on Pull request opened. A reopened
-    // issue with no card comes back through Issue opened, and a label change never files one.
-    for (const label of ['Issue opened', 'Pull request opened']) {
+    const note =
+      'Creates new work items: checked last, after Release Preview (no board after it); first matching rule files it on this board.';
+    // Intake files a new issue on Work item opened and a pull request with no card on Pull request opened. A reopened
+    // issue with no card comes back through Work item opened, and a label change never files one.
+    for (const label of ['Work item opened', 'Pull request opened']) {
       expect(
         await lane(label).findByText((_, element) => element?.tagName === 'P' && element.textContent === note),
       ).toBeVisible();
     }
     for (const label of [
-      'Issue reopened',
-      'Issue labels or assignees change',
+      'Work item reopened',
+      'Work item labels or assignees change',
       'Pull request reopened',
       'Pull request labels or assignees change',
-      'Issue closed',
+      'Work item closed',
       'Pull request merged',
       'Review requested',
     ]) {
-      expect(lane(label).queryByText(/No card yet/)).not.toBeInTheDocument();
+      expect(lane(label).queryByText(/Creates new work items/)).not.toBeInTheDocument();
     }
   });
 
@@ -309,13 +312,13 @@ describe('Board rules', () => {
     await screen.findByRole('region', { name: OPENED });
     for (const label of [OPENED, 'Pull request opened']) {
       const row = within(await lane(label).findByRole('listitem', { name: 'Old intake rule' }));
-      expect(row.getByText('Issue or pull request opened (legacy)')).toBeVisible();
+      expect(row.getByText('Work item or pull request opened (legacy)')).toBeVisible();
     }
 
     await user.click(lane(OPENED).getByRole('button', { name: 'Edit conditions of Old intake rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
-    expect(dialog.getByText(/Also listens on “Issue or pull request opened \(legacy\)”/)).toBeVisible();
+    expect(dialog.getByText(/Also listens on “Work item or pull request opened \(legacy\)”/)).toBeVisible();
     await user.click(dialog.getByRole('button', { name: /Review/ }));
     const name = dialog.getByRole('textbox', { name: 'Name' });
     await user.clear(name);
@@ -342,10 +345,18 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    const name = 'Issue labels or assignees change';
+    const name = 'Work item labels or assignees change';
     await screen.findByRole('region', { name });
     expect(lane(name).getByText('Label added has hotfix')).toBeVisible();
     expect(screen.queryByText(/event\.labels/i)).not.toBeInTheDocument();
+  });
+
+  it('says a new item on the last board in intake order goes to Not routed', async () => {
+    serveRules({ rules: [bugs()], order: ['release', 'work'] });
+    renderRules();
+
+    await screen.findByRole('region', { name: OPENED });
+    expect(await lane(OPENED).findByText('Otherwise: Not routed (no board after this one)')).toBeVisible();
   });
 
   it('groups the rule builder triggers the same way, under the same names', async () => {
@@ -354,7 +365,7 @@ describe('Board rules', () => {
     renderRules();
 
     await user.click(
-      within(await screen.findByRole('region', { name: 'Issue closed' })).getByRole('button', { name: 'Add rule' }),
+      within(await screen.findByRole('region', { name: 'Work item closed' })).getByRole('button', { name: 'Add rule' }),
     );
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
@@ -362,23 +373,23 @@ describe('Board rules', () => {
       within(dialog.getByRole('group', { name: group }))
         .getAllByRole('checkbox')
         .map(box => box.textContent);
-    expect(checkboxes('Issues')).toHaveLength(4);
-    expect(checkboxes('Issues')[0]).toContain('Issue opened');
+    expect(checkboxes('Work items')).toHaveLength(4);
+    expect(checkboxes('Work items')[0]).toContain('Work item opened');
     expect(checkboxes('Pull requests')).toHaveLength(7);
     expect(checkboxes('Pull requests')[0]).toContain(
-      'Pull request openedLinks to its issue’s card if one exists; otherwise filed as a new card.',
+      'Pull request openedLinks to its issue’s work item if one exists; otherwise creates a new work item.',
     );
   });
 
-  it('says an item no rule here takes goes on to the next board, then Not routed', async () => {
-    serveRules({ rules: [bugs()] });
+  it('names the board an item no rule here takes goes on to, then Not routed', async () => {
+    serveRules({ rules: [bugs()], order: ['work', 'release'] });
     renderRules();
 
-    const footer = 'Otherwise: checked by the next board, then Not routed';
+    const footer = 'Otherwise: checked by Release Preview next, then Not routed';
     await screen.findByRole('region', { name: OPENED });
-    expect(lane(OPENED).getByText(footer)).toBeVisible();
+    expect(await lane(OPENED).findByText(footer)).toBeVisible();
     expect(lane('Pull request opened').getByText(footer)).toBeVisible();
-    expect(lane('Issue reopened').queryByText(footer)).not.toBeInTheDocument();
+    expect(lane('Work item reopened').queryByText(footer)).not.toBeInTheDocument();
   });
 
   it('adds a rule for new items on this board, above the rule taking everything else', async () => {
@@ -429,7 +440,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Every card/ }));
@@ -441,7 +452,7 @@ describe('Board rules', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
     expect(sent.filter(request => request.method === 'POST' && request.path === '')).toHaveLength(1);
-    await waitFor(() => expect(ruleNames('Issue closed')).toHaveLength(2));
+    await waitFor(() => expect(ruleNames('Work item closed')).toHaveLength(2));
   });
 
   it('moves a card-move rule earlier among this board’s rules only', async () => {
@@ -480,7 +491,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('radio', { name: 'Release Preview' }));
@@ -492,7 +503,7 @@ describe('Board rules', () => {
     expect(sent.find(request => request.method === 'PATCH')?.body).toMatchObject({
       target: { boardKey: 'work', phaseKey: 'queued', moveToBoardKey: 'release' },
     });
-    const row = within(lane('Issue closed').getByRole('listitem', { name: 'Closed issues go to Done' }));
+    const row = within(lane('Work item closed').getByRole('listitem', { name: 'Closed issues go to Done' }));
     expect(
       await row.findByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }),
     ).toHaveTextContent('Release Preview›Queued');
@@ -511,7 +522,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('radio', { name: 'Release Preview' }));
@@ -547,8 +558,8 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
-    const row = within(lane('Issue closed').getByRole('listitem', { name: 'Closed issues go to Done' }));
+    await screen.findByRole('region', { name: 'Work item closed' });
+    const row = within(lane('Work item closed').getByRole('listitem', { name: 'Closed issues go to Done' }));
     expect(
       await row.findByText('Skipped 3 times in the last 30 days: phase "done" doesn\'t take cards from "triage".'),
     ).toBeVisible();
@@ -563,7 +574,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     const current = state.rules[0];
     if (current) state.rules[0] = { ...current, name: 'Renamed by a teammate', revision: current.revision + 1 };
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
@@ -586,7 +597,7 @@ describe('Board rules', () => {
         .filter(request => request.method === 'PATCH')
         .map(request => (request.body as { expectedRevision: number }).expectedRevision),
     ).toEqual([1, 2]);
-    expect(ruleNames('Issue closed')).toEqual(['Renamed by a teammate']);
+    expect(ruleNames('Work item closed')).toEqual(['Renamed by a teammate']);
   });
 
   it('lets a rule on a reopened issue send the card to another board, and keeps that board when another event is added', async () => {
@@ -600,11 +611,11 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue reopened' });
+    await screen.findByRole('region', { name: 'Work item reopened' });
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Reopened go to Release' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
-    await user.click(dialog.getByRole('checkbox', { name: /Issue labels or assignees change/ }));
+    await user.click(dialog.getByRole('checkbox', { name: /Work item labels or assignees change/ }));
     await user.click(dialog.getByRole('button', { name: /Move to/ }));
     expect(dialog.getByRole('radio', { name: 'Release Preview' })).toBeChecked();
     await user.click(dialog.getByRole('button', { name: /Review/ }));
@@ -633,11 +644,11 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
-    await user.click(dialog.getByRole('checkbox', { name: /Issue reopened/ }));
+    await user.click(dialog.getByRole('checkbox', { name: /Work item reopened/ }));
     await user.click(dialog.getByRole('button', { name: 'Continue' }));
     await user.click(dialog.getByRole('radio', { name: /Every card/ }));
     await user.click(dialog.getByRole('button', { name: 'Continue' }));
@@ -650,9 +661,9 @@ describe('Board rules', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
     await waitFor(() =>
-      expect(ruleNames('Issue reopened')).toEqual(['Back to Planning', 'Every reopened card goes to Intake']),
+      expect(ruleNames('Work item reopened')).toEqual(['Back to Planning', 'Every reopened card goes to Intake']),
     );
-    expect(ruleNames('Issue closed')).toEqual(['Back to Planning', 'Every closed card goes to Done']);
+    expect(ruleNames('Work item closed')).toEqual(['Back to Planning', 'Every closed card goes to Done']);
   });
 
   it('lets a rule continue once an unfinished condition is dropped by choosing every item', async () => {
@@ -660,7 +671,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
@@ -673,12 +684,56 @@ describe('Board rules', () => {
     expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 
+  it('filters on the project’s own sources, picking fields A to Z and a pull request as yes or no', async () => {
+    serveRules({ rules: [closed()] });
+    server.use(
+      http.get('*/web/factory/projects', () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra'), listedRepository('repo-2', 'acme/app')],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRules();
+
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
+    await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
+    await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
+    await user.click(dialog.getByRole('button', { name: 'Add condition' }));
+
+    await user.click(dialog.getByRole('combobox', { name: 'Field' }));
+    const fields = (await screen.findAllByRole('option')).map(option => option.textContent ?? '');
+    expect(fields).toEqual([...fields].sort((a, b) => a.localeCompare(b)));
+    expect(fields).toEqual(expect.arrayContaining(['Source', 'Has pull request']));
+    for (const gone of ['State', 'Integration', 'Provider', 'Source kind', 'Closed issue has a pull request']) {
+      expect(fields).not.toContain(gone);
+    }
+    await user.click(screen.getByRole('option', { name: 'Has pull request' }));
+    await user.click(dialog.getByRole('radio', { name: 'No' }));
+    expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
+
+    await user.click(dialog.getByRole('button', { name: 'Add condition' }));
+    await user.click(dialog.getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository, team or project' }));
+    await user.click(dialog.getByRole('combobox', { name: 'Value' }));
+    await user.keyboard('mas');
+    expect(await screen.findByRole('option', { name: 'mastra-ai/mastra' })).toBeVisible();
+    expect(screen.queryByRole('option', { name: 'acme/app' })).not.toBeInTheDocument();
+  });
+
   it('picks a board with the arrow keys, as one radio group', async () => {
     serveRules({ rules: [closed()] });
     const user = userEvent.setup();
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     const work = dialog.getByRole('radio', { name: 'Work (this board)' });
@@ -713,7 +768,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { rerender } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
     await screen.findByRole('dialog', { name: 'Edit rule' });
     rerender(
@@ -722,8 +777,179 @@ describe('Board rules', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('warns a rule on a pull request event also matches outside authors, and adds the trusted condition in one click', async () => {
+    const pushes = rule({
+      id: ruleId('pushes'),
+      name: 'Pushes re-review',
+      on: ['pull_request.synchronized'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+    });
+    const { sent } = serveRules({ rules: [everythingElse(), pushes] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Pushes re-review' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
+    const warning = 'Also matches pull requests from outside authors.';
+    expect(dialog.getByText(warning)).toBeVisible();
+
+    await user.click(dialog.getByRole('button', { name: 'Add: Pull request trusted is yes' }));
+    await waitFor(() => expect(dialog.queryByText(warning)).not.toBeInTheDocument());
+    await user.click(dialog.getByRole('button', { name: 'Save rule' }));
+    await waitForMutationsIdle(client);
+
+    expect(sent.find(request => request.method === 'PATCH')?.body).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }] },
+      expectedRevision: pushes.revision,
+    });
+  });
+
+  it('keeps the outside-author warning off rules on issue events and off older gated rules', async () => {
+    const gated = rule({
+      id: ruleId('gated'),
+      name: 'Requested reviews go to Review',
+      on: ['pull_request.review_requested'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+      outsiderPullRequestsGated: true,
+    });
+    serveRules({ rules: [closed(), gated] });
+    const user = userEvent.setup();
+    renderRules();
+
+    const warning = 'Also matches pull requests from outside authors.';
+    await screen.findByRole('region', { name: 'Work item closed' });
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
+    expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+    // The older rule still skips outsiders, so the builder has nothing to warn about.
+    await user.click(screen.getByRole('button', { name: 'Edit conditions of Requested reviews go to Review' }));
+    expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
+  });
+
+  it("notes an older rule skips outside authors' pull requests, and lets them match on request", async () => {
+    const pushes = rule({
+      id: ruleId('pushes'),
+      name: 'Pushes re-review',
+      on: ['pull_request.synchronized'],
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+      outsiderPullRequestsGated: true,
+    });
+    const { sent } = serveRules({ rules: [pushes] });
+    const user = userEvent.setup();
+    const { client } = renderRules();
+
+    const item = within(
+      await within(await screen.findByRole('region', { name: 'Pull request gets new commits' })).findByRole(
+        'listitem',
+        { name: 'Pushes re-review' },
+      ),
+    );
+    expect(item.getByText(/Skips outside authors. pull requests \(older rule\)/)).toBeVisible();
+
+    await user.click(item.getByRole('button', { name: 'Let outside authors match' }));
+    await waitForMutationsIdle(client);
+
+    expect(sent.find(request => request.method === 'PATCH')?.body).toEqual({
+      outsiderPullRequestsGated: false,
+      expectedRevision: 1,
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('listitem', { name: 'Pushes re-review' })).queryByText(/older rule/),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("hides the older-rule note once the rule's own conditions test the pull request's trust", async () => {
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('gated-trusting'),
+          name: 'Trusted pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }] },
+          target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null },
+          outsiderPullRequestsGated: true,
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    expect(screen.queryByText(/older rule/)).not.toBeInTheDocument();
+  });
+
+  it('keeps rules under an older gated rule reachable, as outside authors’ pull requests fall through it', async () => {
+    const PUSHES = 'Pull request gets new commits';
+    const target = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null };
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('gated-all'),
+          name: 'Pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: null,
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-gated'),
+          name: 'Docs pushes wait in Triage',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'triage' },
+        }),
+        rule({
+          id: ruleId('gated-below-gated'),
+          name: 'Old docs pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('closed-all'),
+          name: 'Closed pull requests cancel',
+          on: ['pull_request.closed'],
+          when: null,
+          target: { ...target, phaseKey: 'canceled' },
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-closed'),
+          name: 'Closed docs cancel too',
+          on: ['pull_request.closed'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'canceled' },
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: PUSHES });
+    // The gated rule skips outside authors' pull requests, so the rule below still catches those.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Docs pushes wait in Triage' })).queryByText(/Never reached/),
+    ).not.toBeInTheDocument();
+    // A gated rule below it skips the same pull requests: trusted ones stop at the catch-all,
+    // outside authors' fall through both, so nothing ever reaches it.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Old docs pushes re-review' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
+    // Closing settles the pull request whoever wrote it: there the gate holds nothing back.
+    expect(
+      within(lane('Pull request closed unmerged').getByRole('listitem', { name: 'Closed docs cancel too' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
   });
 
   it('turns a rule off, which marks it skipped', async () => {
@@ -736,7 +962,7 @@ describe('Board rules', () => {
 
     expect(sent.find(request => request.method === 'PATCH')?.body).toEqual({ enabled: false, expectedRevision: 1 });
     expect(
-      await within(lane('Issue closed').getByRole('listitem', { name: 'Closed issues go to Done' })).findByText(
+      await within(lane('Work item closed').getByRole('listitem', { name: 'Closed issues go to Done' })).findByText(
         'Off, skipped',
       ),
     ).toBeVisible();
