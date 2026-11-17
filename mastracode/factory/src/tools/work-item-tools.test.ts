@@ -9,6 +9,7 @@ import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-item
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL } from './permissions.js';
 import { createFactoryReadTools } from './read-tools.js';
+import { workItemReportRecipients } from './reports.js';
 import type { FactoryToolScope } from './scope.js';
 import { createFactoryWorkItemTools } from './work-item-tools.js';
 
@@ -581,6 +582,7 @@ describe('decisions', () => {
       decisionId: DECISION_ID,
       status: 'retry',
       workItemId: item.id,
+      url: null,
     });
   });
 
@@ -867,6 +869,81 @@ describe("a card's work requested from a chat", () => {
       env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review', rerun: true }),
     ).rejects.toThrow('needs a person in this turn');
     expect((await env.runs(card.id)).map(record => record.status)).toEqual(['proposed']);
+  });
+
+  // Slack, 2026-11-16: the session approved the held review run and said it would post when the
+  // review finished, but approving didn't follow the card, so the review's report never reached it.
+  it("follows the card whose held run it approves, so the run's report reaches this chat", async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    onTestFinished(() => void vi.unstubAllEnvs());
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+    const [held] = await env.runs(card.id);
+
+    await expect(
+      env.run('factory_resolve_proposal', { decisionId: held!.id, action: 'approve' }),
+    ).resolves.toMatchObject({
+      workItemId: card.id,
+      status: 'pending',
+      url: `https://factory.example.com/factories/project-1/work?item=${card.id}`,
+    });
+
+    // Who the card's review session reports to when its run ends.
+    expect(
+      await workItemReportRecipients(env.workItems, {
+        orgId: 'org-1',
+        workItemId: card.id,
+        senderSessionId: 'review-session',
+      }),
+    ).toEqual([{ sessionId: 'session-1', threadId: 'thread-1' }]);
+  });
+
+  it("follows the card whose failed run it retries, so the retry's report reaches this chat", async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+    const [held] = await env.runs(card.id);
+    // Approved on the board by someone else, then failed before a session started.
+    const now = new Date();
+    await env.workItems.approveDeferredDecision('org-1', 'project-1', held!.id, now, 'someone-else');
+    await env.workItems.claimDeferredDecisions({
+      ownerId: 'dispatcher',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 10,
+    });
+    await env.workItems.failDeferredDecision({
+      id: held!.id,
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      ownerId: 'dispatcher',
+      now,
+      availableAt: now,
+      lastError: 'No session for the review run.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    await expect(env.run('factory_retry_decision', { decisionId: held!.id })).resolves.toMatchObject({
+      workItemId: card.id,
+    });
+
+    expect(
+      await workItemReportRecipients(env.workItems, {
+        orgId: 'org-1',
+        workItemId: card.id,
+        senderSessionId: 'review-session',
+      }),
+    ).toEqual([{ sessionId: 'session-1', threadId: 'thread-1' }]);
+  });
+
+  it('does not follow a card whose held run it dismisses', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+    const [held] = await env.runs(card.id);
+
+    await env.run('factory_resolve_proposal', { decisionId: held!.id, action: 'dismiss' });
+
+    expect(await env.workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: card.id })).toEqual([]);
   });
 
   it('lists the stages the card can move to, and that its own stage can run again', async () => {
