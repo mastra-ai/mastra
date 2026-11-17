@@ -158,11 +158,19 @@ export async function create(args: CreateArgs): Promise<void> {
       pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
       throw err;
     }
-    const { pinned, unresolved } = pinResult;
+    const { pinned, unresolved, failed } = pinResult;
+    // Run the check from the project so npm reads the same .npmrc as the lookup.
+    const checkTag = (name: string) => `${cdStep}npm view ${name} dist-tags`;
+    if (failed.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`${checkTag(failed[0]!)}\` to check that the registry is reachable and the tag exists.`,
+      );
+    }
     if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
       pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
       throw new Error(
-        `No Mastra packages are published under the "${tag}" tag. Run \`npm view ${unresolved[0]} dist-tags\` to see the available tags.`,
+        `No Mastra packages are published under the "${tag}" tag. Run \`${checkTag(unresolved[0]!)}\` to see the available tags.`,
       );
     }
     // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease

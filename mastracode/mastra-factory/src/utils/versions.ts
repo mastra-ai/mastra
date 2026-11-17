@@ -14,6 +14,14 @@ export interface PinResult {
   pinned: Record<string, string>;
   /** Mastra packages that have no published version under the tag; left as the template had them. */
   unresolved: string[];
+  /** Mastra packages whose registry lookup failed; package.json is left untouched when any did. */
+  failed: string[];
+}
+
+/** Reports only well-known dist-tags to analytics; custom tags may identify a user. */
+export function versionTagForAnalytics(tag: string | undefined): string | undefined {
+  if (!tag) return undefined;
+  return tag === 'latest' || tag === 'alpha' ? tag : 'custom';
 }
 
 /**
@@ -22,12 +30,6 @@ export interface PinResult {
  * install uses that release channel. Templates declare these as `latest`, so
  * without this an install always takes the stable channel.
  */
-/** Reports only well-known dist-tags to analytics; custom tags may identify a user. */
-export function versionTagForAnalytics(tag: string | undefined): string | undefined {
-  if (!tag) return undefined;
-  return tag === 'latest' || tag === 'alpha' ? tag : 'custom';
-}
-
 export async function pinMastraPackages(projectPath: string, tag: string): Promise<PinResult> {
   const pkgPath = path.join(projectPath, 'package.json');
   const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8')) as Record<string, unknown>;
@@ -45,11 +47,7 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   );
 
   const failed = resolved.filter(([, result]) => result.failed).map(([name]) => name);
-  if (failed.length > 0) {
-    throw new Error(
-      `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`npm view ${failed[0]} dist-tags\` to check that the registry is reachable and the tag exists.`,
-    );
-  }
+  if (failed.length > 0) return { pinned: {}, unresolved: [], failed };
 
   const pinned: Record<string, string> = {};
   const unresolved: string[] = [];
@@ -67,7 +65,7 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   }
 
   await fs.writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
-  return { pinned, unresolved };
+  return { pinned, unresolved, failed };
 }
 
 /**
