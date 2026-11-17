@@ -57,7 +57,7 @@ export function ThreadPage() {
   return (
     <ChatSessionBoundary threadId={threadId}>
       <PageTitle />
-      <WorkspaceFilesProvider page={SESSION_PANEL}>
+      <WorkspaceFilesProvider page={workspace.workspacePath ? SESSION_PANEL : undefined}>
         <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
       </WorkspaceFilesProvider>
     </ChatSessionBoundary>

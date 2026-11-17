@@ -24,6 +24,7 @@ import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { boardOf } from '../domains/factory/boardFlow';
 import { currentItemStage } from '../domains/factory/boardStages';
 import { CardDraftActions } from '../domains/factory/components/CardDraftActions';
+import { CardOverview } from '../domains/factory/components/CardOverview';
 import { CardStageBar } from '../domains/factory/components/CardStageBar';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
@@ -31,8 +32,12 @@ import type { WorkItem } from '../domains/factory/services/workItems';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
 import type { FactoryProject } from '../domains/workspaces/services/github';
-
-const DRAFT_TITLE = 'New session';
+import { PanelSubject } from '../domains/workspace-viewer/components/PanelSubject';
+import { WorkspaceFilesToggle } from '../domains/workspace-viewer/components/WorkspaceFilesToggle';
+import { WorkspacePanelDock } from '../domains/workspace-viewer/components/WorkspacePanelDock';
+import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
+import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/WorkspacePanelContext';
+import { SkeletonRows } from '../ui/SkeletonRows';
 
 export function CardDraftPage() {
   const {
@@ -64,7 +69,7 @@ function CardDraftContent({
 
   if (card.isLoadingError) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
+      <ChatPageLayout>
         <div className={draftPageClass}>
           <EmptyState
             as="h2"
@@ -83,7 +88,7 @@ function CardDraftContent({
   }
   if (card.data === null) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
+      <ChatPageLayout>
         <div className={draftPageClass}>
           <EmptyState
             as="h2"
@@ -102,7 +107,7 @@ function CardDraftContent({
   }
   if (!card.data || catalog.isPending || !factory) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
+      <ChatPageLayout>
         <div className={draftPageClass} aria-busy="true">
           <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
           <Skeleton className="h-36 w-full rounded-xl" />
@@ -117,17 +122,59 @@ function CardDraftContent({
   const session = cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
   if (session) return <Navigate replace to={threadPath(factoryId, session)} />;
 
+  const panel: WorkspacePanelPage = {
+    subject: lead => <PanelSubject lead={lead} title={item.title} />,
+    overview: () => (
+      <CardDraftOverview factory={factory} item={item} boards={catalog.data} boardsFailed={catalog.isLoadingError} />
+    ),
+  };
+
   return (
-    <ChatPageLayout
-      title={DRAFT_TITLE}
-      headerCenter={board && <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />}
-    >
-      {guards.missingModel || guards.missingCredential ? (
-        <DraftStart heading={item.title} guards={guards} />
-      ) : (
-        <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />
-      )}
-    </ChatPageLayout>
+    <WorkspaceFilesProvider page={panel}>
+      <ChatPageLayout
+        headerCenter={board && <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />}
+        headerActions={<WorkspaceFilesToggle />}
+        dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
+      >
+        {guards.missingModel || guards.missingCredential ? (
+          <DraftStart heading={item.title} guards={guards} />
+        ) : (
+          <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />
+        )}
+      </ChatPageLayout>
+    </WorkspaceFilesProvider>
+  );
+}
+
+function CardDraftOverview({
+  factory,
+  item,
+  boards,
+  boardsFailed,
+}: {
+  factory: FactoryProject;
+  item: WorkItem;
+  boards: readonly InstalledBoardInfo[] | undefined;
+  boardsFailed: boolean;
+}) {
+  const lookup = useCardSessionRepository(factory.id, item);
+  if (lookup.isPending) return <SkeletonRows label="Loading overview" rows={4} className="p-3" />;
+
+  const resolved = lookup.data?.status === 'resolved' ? lookup.data : undefined;
+  const repository =
+    resolved && factory.repositories.find(linked => linked.projectRepositoryId === resolved.projectRepositoryId);
+  return (
+    <CardOverview
+      item={item}
+      sessionItems={[item]}
+      factoryId={factory.id}
+      boards={boards}
+      boardsFailed={boardsFailed}
+      repository={repository}
+      repositoryFailed={lookup.isError}
+      subscriptions={[]}
+      pullRequestsFailed={false}
+    />
   );
 }
 

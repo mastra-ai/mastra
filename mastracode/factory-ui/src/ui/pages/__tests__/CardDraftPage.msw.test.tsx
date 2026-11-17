@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
@@ -34,6 +34,22 @@ const linearCard = {
   },
 };
 
+const PULL_REQUEST_NUMBER = 30647;
+const PULL_REQUEST_URL = `https://github.com/acme/app/pull/${PULL_REQUEST_NUMBER}`;
+const PULL_REQUEST_BODY = 'Stops the unhandled rejection when a stream aborts.';
+const pullRequestCard = {
+  ...linearCard,
+  title: 'fix(core): stop the unhandled rejection',
+  externalSource: {
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: String(PULL_REQUEST_NUMBER),
+    url: PULL_REQUEST_URL,
+  },
+  metadata: { githubPullRequestNumber: PULL_REQUEST_NUMBER, number: PULL_REQUEST_NUMBER, state: 'open' },
+  workItem: null,
+};
+
 function stubCard(metadata: Record<string, string | boolean> = linearCard.metadata) {
   const runStarts: unknown[] = [];
   server.use(
@@ -63,19 +79,51 @@ function renderAt(path: string) {
   return { router, ...renderWithProviders(<RouterProvider router={router} />, createQueryClient()) };
 }
 
+function stubPageWidth(width: number) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, width, 800));
+}
+
 describe('a card without a session', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('opens on a draft titled after the card that creates nothing until the first prompt', async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();
     const { router } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
 
     expect(await screen.findByRole('heading', { level: 2, name: linearCard.title })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'New session' })).not.toBeInTheDocument();
     expect(router.state.location.pathname).toMatch(
       new RegExp(`^/factories/${FACTORY_ID}/cards/${CARD_ID}/new/[0-9a-f-]{36}$`),
     );
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
     expect(route.createBodies).toEqual([]);
     expect(runStarts).toEqual([]);
+  });
+
+  it("shows the card's pull request and description in the session panel before any session exists", async () => {
+    stubPageWidth(1200);
+    const route = stubDraftRoute();
+    stubCard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [pullRequestCard] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:repository/prs/:number`, ({ params }) =>
+        HttpResponse.json({ number: Number(params.number), description: PULL_REQUEST_BODY }),
+      ),
+    );
+    renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+
+    const panel = await screen.findByRole('complementary', { name: 'Session panel' });
+    const card = await within(panel).findByRole('region', { name: 'Card' });
+    expect(await within(card).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` })).toHaveAttribute(
+      'href',
+      PULL_REQUEST_URL,
+    );
+    expect(await within(card).findByText(PULL_REQUEST_BODY)).toBeInTheDocument();
+    expect(within(panel).queryByRole('region', { name: 'Workspace' })).not.toBeInTheDocument();
+    expect(route.createBodies).toEqual([]);
   });
 
   it("offers the card's next step on the draft and moves the card into it", async () => {
