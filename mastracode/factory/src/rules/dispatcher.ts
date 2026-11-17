@@ -1155,8 +1155,22 @@ export class FactoryDecisionDispatcher {
         now,
         // A run parked on a person, or resumed after one answered, is alive however
         // old its binding is. The session must still be on the binding's thread: its
-        // suspension and run state belong to that thread. Lookup failures revoke.
+        // suspension and run state belong to that thread. A failed session lookup revokes.
         keep: async binding => {
+          // Age alone says nothing about a card that is still open in the phase this
+          // binding works: the session is between turns, not leaked. Revoking it takes
+          // the card's tools and updates away, and the card then sits until a person
+          // moves it. A run starting for the card elsewhere still replaces the binding.
+          try {
+            if (await this.#worksOpenCard(binding)) return true;
+          } catch (error) {
+            // Not knowing is no reason to cut a session off: the next sweep asks again.
+            console.warn(
+              `Factory stale-binding sweep kept binding card=${binding.workItemId} session=${binding.sessionId}: could not read its card`,
+              sanitizeDispatchError(error),
+            );
+            return true;
+          }
           try {
             const session = await this.#controller.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
@@ -1165,11 +1179,23 @@ export class FactoryDecisionDispatcher {
             return false;
           }
         },
+        onRevoked: binding =>
+          console.info(
+            `Factory stale-binding sweep revoked binding card=${binding.workItemId} session=${binding.sessionId} role=${binding.role}`,
+          ),
       });
       if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
     } catch (error) {
       console.error('Factory stale-binding sweep failed', sanitizeDispatchError(error));
     }
+  }
+
+  /** Whether the binding's card sits in a working phase that the binding's role runs. */
+  async #worksOpenCard(binding: FactoryRunBindingRecord): Promise<boolean> {
+    const item = await this.#storage.get({ orgId: binding.orgId, id: binding.workItemId });
+    if (!item || item.stages.length !== 1) return false;
+    const phase = (await this.#boards.load(binding)).get(boardForWorkItem(item))?.phases[item.stages[0]!];
+    return phase?.kind === 'working' && phase.runner.context === binding.role;
   }
 
   #track(pool: Set<Promise<void>>, dispatch: Promise<void>): Promise<void> {
