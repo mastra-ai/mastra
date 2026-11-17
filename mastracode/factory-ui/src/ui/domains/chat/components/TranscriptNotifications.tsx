@@ -180,8 +180,7 @@ const NOTIFICATION_SOURCE_NAMES: Record<string, string> = {
 
 /** A readable name for a notification source; unknown sources fall back to their id in sentence case. */
 export function notificationSourceName(source: string): string {
-  const known = NOTIFICATION_SOURCE_NAMES[source];
-  if (known) return known;
+  if (Object.hasOwn(NOTIFICATION_SOURCE_NAMES, source)) return NOTIFICATION_SOURCE_NAMES[source];
   const words = source.replace(/[-_]+/g, ' ').trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : source;
 }

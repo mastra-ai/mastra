@@ -113,5 +113,23 @@ describe('Transcript notifications', () => {
       const summary = within(screen.getByRole('group', { name: 'Notification summary' }));
       expect(summary.getByText('No pending notifications')).toBeVisible();
     });
+
+    it('names a source that collides with a built-in object key from its id', () => {
+      renderEntries([
+        {
+          kind: 'notification_summary',
+          id: 'summary',
+          message: '__proto__: 1',
+          pending: 1,
+          bySource: JSON.parse('{"__proto__": 1}') as Record<string, number>,
+          byPriority: { low: 1 },
+          notificationIds: ['1'],
+        },
+      ]);
+
+      const summary = within(screen.getByRole('group', { name: 'Notification summary' }));
+      expect(summary.getByText('1 new')).toBeVisible();
+      expect(summary.getByText('Proto')).toBeVisible();
+    });
   });
 });
