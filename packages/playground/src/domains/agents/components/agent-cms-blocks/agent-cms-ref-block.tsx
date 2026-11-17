@@ -6,7 +6,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/c
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
@@ -15,8 +15,8 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
@@ -182,7 +182,7 @@ const RefBlockContent = ({
                       )}
                     >
                       <Icon className="h-3! w-3!">
-                        <IconChevronBottom />
+                        <IconChevronDownMedium />
                       </Icon>
                     </button>
                   </PopoverTrigger>
@@ -269,7 +269,7 @@ const RefBlockContent = ({
 
             {(isDraft || hasUnpublishedEdits) && (
               <div className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
-                <IconExclamationTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <IconExclamationTriangle className="mt-0.5 size-icon-sm shrink-0" aria-hidden="true" />
                 <Txt as="span" variant="meta">
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'

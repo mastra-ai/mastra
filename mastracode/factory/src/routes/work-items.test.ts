@@ -61,25 +61,24 @@ const audit: AuditEmitter = {
     }
   },
 };
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { BoardPhasesResponse } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { WorkItemRoutesDeps } from './work-items.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
-  running: ReadonlySet<string> = new Set(),
   // Work as projects stored before new projects' Work dropped Triage: these tests walk its lanes.
   boardRegistry: BoardRegistry = createTriageWorkRegistry(),
-  parked: ReadonlySet<string> = new Set(),
+  sessionRepository?: WorkItemRoutesDeps['sessionRepository'],
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -95,6 +94,8 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
         configVersion: 'factory-config-v1',
@@ -103,11 +104,8 @@ function buildApp(
         audit: auditRecorder,
       }),
       startCoordinator,
-      liveSessions: {
-        isRunning: sessionId => running.has(sessionId),
-        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
-        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
-      },
+      sessionRepository,
+      liveSessions: { parked: () => undefined, parkedIn: () => [] },
     }).routes(),
   );
   return app;
@@ -187,7 +185,6 @@ describe('installed board catalog', () => {
       orgUser,
       undefined,
       undefined,
-      new Set(),
       withWork ? createBoardRegistry({ boards: [board] }) : boardRegistryOf([board]),
     );
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
@@ -228,7 +225,7 @@ describe('installed board catalog', () => {
   });
 
   it("names the phase playing each part of each board's pull request loop", async () => {
-    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const app = buildApp(orgUser, undefined, undefined, createBoardRegistry());
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     // Factory's Work has no Triage, so its flow names none.
@@ -277,7 +274,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [, planning, shipping] = body.boards[0].phases;
@@ -303,7 +300,7 @@ describe('installed board catalog', () => {
         shipped: { name: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([board]));
     const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
     expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
     const [queued, drafting] = body.boards[0].phases;
@@ -312,7 +309,7 @@ describe('installed board catalog', () => {
   });
 
   it('supports an empty installation', async () => {
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([]));
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(await response.json()).toEqual({ boards: [] });
   });
@@ -411,7 +408,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       },
     });
     const boardRegistry = boardRegistryOf([releaseBoard]);
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
+    const app = buildApp(orgUser, undefined, undefined, boardRegistry);
     const importedItems = [
       {
         externalSource: {
@@ -669,7 +666,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([releaseBoard]));
 
     const response = await app.request(`/web/factory/work-items/${item.id}`, {
       method: 'PATCH',
@@ -700,7 +697,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       initialPhase: 'backlog',
       phases: { backlog: { title: 'Backlog', kind: 'resting' } },
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard, supportBoard]));
+    const app = buildApp(orgUser, undefined, undefined, boardRegistryOf([releaseBoard, supportBoard]));
 
     const responses = await Promise.all([
       app.request(`/web/factory/work-items/${item.id}`, {
@@ -947,6 +944,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(stayed.status).toBe(200);
     expect(await decisionCount()).toBe(1);
 
+    await finishQueuedRunsForTests(seed.workItems);
     const reentered = await transition(
       { id: item.id, revision: (await stayed.json()).result.revision },
       { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },
@@ -960,6 +958,100 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item, { board: 'review' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-request', () => {
+  async function issueWithPullRequests() {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:7:issue:1' } }),
+    );
+    const { workItem } = await res.json();
+    const attach = (
+      number: number,
+      state: string,
+      cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    ) =>
+      seed.workItems.attachSource({
+        orgId: 'org1',
+        id: workItem.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: `github:7:pull-request:${number}` },
+        metadata: { githubPullRequestNumber: number, state },
+        cardMetadata,
+      });
+    await attach(2, 'open', metadata => ({
+      ...metadata,
+      pullRequestHeadSha: 'abc',
+      untrustedPullRequests: ['github:pull-request:github:7:pull-request:2'],
+    }));
+    await attach(3, 'closed');
+    return (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))!;
+  }
+  const pick = (item: { id: string; revision: number }, pullRequest: number, expectedRevision = item.revision) =>
+    json('PUT', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/working-pull-request`, {
+      pullRequest,
+      expectedRevision,
+    });
+
+  it("makes an outsider's linked pull request the card's working one when a person picks it", async () => {
+    const item = await issueWithPullRequests();
+    auditRecorded = [];
+
+    const res = await pick(item, 2);
+
+    expect(res.status).toBe(200);
+    const stored = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect(stored?.metadata).toMatchObject({ openPullRequestNumber: 2, pullRequestHeadSha: null });
+    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:pull-request:github:7:pull-request:2']);
+    expect(auditRecorded).toContainEqual(expect.objectContaining({ action: 'factory.work_item.updated' }));
+  });
+
+  it('refuses a pull request that is not linked to the card, or is closed', async () => {
+    const item = await issueWithPullRequests();
+
+    expect(await (await pick(item, 9)).json()).toMatchObject({ error: 'pull_request_not_linked' });
+    expect(await (await pick(item, 3)).json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick when the pull request closes while the pick is being made', async () => {
+    const item = await issueWithPullRequests();
+    const update = seed.workItems.update.bind(seed.workItems);
+    const closing = vi.spyOn(seed.workItems, 'update').mockImplementationOnce(async input => {
+      // The provider closes it after the endpoint read the card; closing touches the source, not the card's revision.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: 'pull-request:github:7:pull-request:2',
+        patch: { state: 'closed' },
+      });
+      return update(input);
+    });
+
+    const res = await pick(item, 2);
+
+    closing.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick made against an older revision of the card', async () => {
+    const item = await issueWithPullRequests();
+
+    const res = await pick(item, 2, item.revision - 1);
+
+    expect(res.status).toBe(409);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
   });
 });
 
@@ -2187,53 +2279,12 @@ describe('run activity on the work-item listing', () => {
     expect(second.item.sessions.execute).toMatchObject({ sessionId: 'session-execute', startedBy: 'u2' });
   });
 
-  it('reports the listed cards whose session has a run in flight', async () => {
-    await startRun('session-running');
-    await startRun('session-idle');
-
-    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-running'])).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-    );
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.workItems).toHaveLength(2);
-    expect(body.runningSessionIds).toEqual(['session-running']);
-    expect(body.parkedSessionIds).toEqual([]);
-  });
-
-  it('reports the listed cards whose session waits on an answer', async () => {
-    await startRun('session-parked');
-    await startRun('session-idle');
-
-    const res = await buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      undefined,
-      new Set(['session-parked']),
-    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
-
-    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
-  });
-
-  it('reports no activity for a session that belongs to no card in the project', async () => {
-    await startRun('session-idle');
-
-    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-elsewhere'])).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-    );
-
-    expect((await res.json()).runningSessionIds).toEqual([]);
-  });
-
   describe('repeat reads of an unchanged board', () => {
     const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
 
-    it('answers 304 without a body while the cards and their activity are unchanged', async () => {
+    it('answers 304 without a body while the cards are unchanged', async () => {
       await startRun('session-running');
-      const app = buildApp(orgUser, undefined, undefined, new Set(['session-running']));
+      const app = buildApp(orgUser);
 
       const first = await app.request(listPath());
       const etag = first.headers.get('etag');
@@ -2257,25 +2308,6 @@ describe('run activity on the work-item listing', () => {
       expect(after.status).toBe(200);
       expect(after.headers.get('etag')).not.toBe(etag);
       expect((await after.json()).workItems[0].title).toBe('Renamed');
-    });
-
-    it('sends the board again once a run starts or parks on an unchanged card', async () => {
-      await startRun('session-a');
-      const running = new Set<string>();
-      const parked = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running, undefined, parked);
-      const idle = (await app.request(listPath())).headers.get('etag')!;
-
-      running.add('session-a');
-      const started = await app.request(listPath(), { headers: { 'if-none-match': idle } });
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-a']);
-
-      running.delete('session-a');
-      parked.add('session-a');
-      const parkedRes = await app.request(listPath(), { headers: { 'if-none-match': idle } });
-      expect(parkedRes.status).toBe(200);
-      expect((await parkedRes.json()).parkedSessionIds).toEqual(['session-a']);
     });
 
     it('gzips the body for clients that accept it', async () => {
@@ -2511,10 +2543,10 @@ describe('run activity on the work-item listing', () => {
     const scopedPath = (...sessionIds: string[]) =>
       `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
 
-    it('lists the card that holds the session, and the activity of that card only', async () => {
+    it('lists the card that holds the session', async () => {
       const mine = await startRun('session-mine');
       await startRun('session-other');
-      const app = buildApp(orgUser, undefined, undefined, new Set(['session-mine', 'session-other']));
+      const app = buildApp(orgUser);
 
       const res = await app.request(scopedPath('session-mine'));
 
@@ -2522,7 +2554,6 @@ describe('run activity on the work-item listing', () => {
       const body = await res.json();
       expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
       expect(body.workItems.map((item: { id: string }) => item.id)).toEqual([mine.id]);
-      expect(body.runningSessionIds).toEqual(['session-mine']);
     });
 
     it('lists the cards of every session named, in board order', async () => {
@@ -2578,19 +2609,6 @@ describe('run activity on the work-item listing', () => {
       expect((await changed.json()).workItems[0].title).toBe('Renamed');
     });
 
-    it('sends the session’s card again once its run starts', async () => {
-      await startRun('session-mine');
-      const running = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running);
-      const idle = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
-
-      running.add('session-mine');
-      const started = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': idle } });
-
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
-    });
-
     it('refuses a blank session id rather than sending the whole board', async () => {
       await startRun('session-mine');
 
@@ -2603,19 +2621,12 @@ describe('run activity on the work-item listing', () => {
   describe('the cards holding a session (?scope=sessions)', () => {
     const sessionsPath = () => `${boardPath()}?scope=sessions`;
 
-    it('lists every card holding a session with its activity, in board order, without the cards holding none', async () => {
+    it('lists every card holding a session, in board order, without the cards holding none', async () => {
       const first = await startRun('session-first');
       await createCard('unstarted');
       const second = await startRun('session-second');
       const board = await listedIds(await buildApp(orgUser).request(boardPath()));
-      const app = buildApp(
-        orgUser,
-        undefined,
-        undefined,
-        new Set(['session-first']),
-        undefined,
-        new Set(['session-second']),
-      );
+      const app = buildApp(orgUser);
 
       const res = await app.request(sessionsPath());
 
@@ -2625,8 +2636,6 @@ describe('run activity on the work-item listing', () => {
       expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
         board.filter(id => id === first.id || id === second.id),
       );
-      expect(body.runningSessionIds).toEqual(['session-first']);
-      expect(body.parkedSessionIds).toEqual(['session-second']);
     });
 
     it('brings the pull request pushed from a session’s branch, though it holds no session', async () => {
@@ -2657,25 +2666,6 @@ describe('run activity on the work-item listing', () => {
       const changed = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
       expect(changed.status).toBe(200);
       expect((await changed.json()).workItems[0].title).toBe('Renamed');
-    });
-
-    it('sends the list again each time a run starts or stops on an unchanged card', async () => {
-      await startRun('session-mine');
-      const running = new Set<string>();
-      const app = buildApp(orgUser, undefined, undefined, running);
-      const idle = (await app.request(sessionsPath())).headers.get('etag')!;
-
-      running.add('session-mine');
-      const started = await app.request(sessionsPath(), { headers: { 'if-none-match': idle } });
-      expect(started.status).toBe(200);
-      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
-
-      running.delete('session-mine');
-      const stopped = await app.request(sessionsPath(), {
-        headers: { 'if-none-match': started.headers.get('etag')! },
-      });
-      expect(stopped.status).toBe(200);
-      expect((await stopped.json()).runningSessionIds).toEqual([]);
     });
 
     it.each([
@@ -3176,7 +3166,7 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       },
       transitionPolicy: () => undefined,
     });
-    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry({ boards: [release] }));
+    const app = buildApp(orgUser, undefined, undefined, createBoardRegistry({ boards: [release] }));
     const filed = await app.request(itemsPath(), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -3467,34 +3457,6 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
 
       expect(byId.workItems).toMatchObject([{ id: card.id, version: phases.phases[0]?.cards[0]?.version }]);
     });
-
-    it('reports which sessions of the named cards run or wait, and none of an unlisted card', async () => {
-      const start = async (sessionId: string) => {
-        await seed.workItems.prepareRunStart({
-          orgId: 'org1',
-          userId: 'u1',
-          factoryProjectId: PROJECT_ID,
-          workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
-          role: 'execute',
-          session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
-          resourceId: sessionId,
-          kickoffKey: `kickoff-${sessionId}`,
-          kickoffMessage: null,
-        });
-      };
-      await start('session-older');
-      at('2026-11-01T10:01:00Z');
-      await start('session-newer');
-      const sessions = new Set(['session-older', 'session-newer']);
-      const app = buildApp(orgUser, undefined, undefined, sessions, undefined, new Set(['session-newer']));
-
-      const firstOnly = await read('limit=1', app);
-      const both = await read('', app);
-
-      expect(firstOnly).toMatchObject({ runningSessionIds: ['session-newer'], parkedSessionIds: ['session-newer'] });
-      expect(both.runningSessionIds.toSorted()).toEqual(['session-newer', 'session-older']);
-      expect(both.parkedSessionIds).toEqual(['session-newer']);
-    });
   });
 
   describe('asked again by a board that kept the answer', () => {
@@ -3735,7 +3697,7 @@ describe('audit events', () => {
     return (await res.json()).workItem;
   }
 
-  it('records work_item.created on POST with actor, project, and target', async () => {
+  it('records work_item.opened on POST with actor, project, and target', async () => {
     const item = await createItem();
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
@@ -3871,5 +3833,71 @@ describe('parseUpdateWorkItem', () => {
     expect(parseUpdateWorkItem({})).toBeNull();
     expect(parseUpdateWorkItem({ stages: ['done'] })).toEqual({ stages: ['done'] });
     expect(parseUpdateWorkItem({ url: null })).toBeNull();
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/:workItemId/session-repository', () => {
+  async function createItem() {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    return (await res.json()).workItem as { id: string };
+  }
+
+  const ask = (
+    sessionRepository: WorkItemRoutesDeps['sessionRepository'],
+    path: string,
+    user: typeof orgUser = orgUser,
+  ) => buildApp(user, undefined, undefined, undefined, sessionRepository).request(path);
+
+  it('sends the repository the server files a session under, without the unnamed candidates', async () => {
+    const item = await createItem();
+    const sessionRepository = vi.fn(async () => ({
+      status: 'resolved' as const,
+      projectRepositoryId: 'link-1',
+      slug: 'acme/app',
+      unnamed: { repositories: ['acme/app', 'acme/web'] },
+    }));
+    const res = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'resolved', projectRepositoryId: 'link-1', slug: 'acme/app' });
+    expect(sessionRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        item: expect.objectContaining({ id: item.id }),
+      }),
+    );
+  });
+
+  it('sends why a card has no repository', async () => {
+    const item = await createItem();
+    const hint = 'Source-control repository 1 is not linked to this Factory.';
+    const res = await ask(
+      async () => ({ status: 'unlinked', hint }),
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'unlinked', hint });
+  });
+
+  it('404s for a card of another project or org without resolving it', async () => {
+    const item = await createItem();
+    const homeProject = PROJECT_ID;
+    const sessionRepository = vi.fn();
+    await seedProject('org1');
+    const otherProject = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(otherProject.status).toBe(404);
+    const otherOrg = await ask(
+      sessionRepository,
+      `/web/factory/projects/${homeProject}/work-items/${item.id}/session-repository`,
+      { workosId: 'u9', organizationId: 'org2' },
+    );
+    expect(otherOrg.status).toBe(404);
+    expect(sessionRepository).not.toHaveBeenCalled();
   });
 });

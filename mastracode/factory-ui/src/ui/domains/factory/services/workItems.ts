@@ -15,6 +15,7 @@ import type {
   BoardPhasesResponse,
   WorkItemFilterOptions,
   WorkItemListResponse,
+  WorkItemSessionRepository,
   WorkItemStarters,
 } from '../../../../api/types';
 import { requestJson } from './request';
@@ -36,38 +37,8 @@ export function isPullRequestSource(source: string): source is 'github-pr' | 'gi
 }
 
 /** The pull and merge requests a card carries, oldest first: its own, or those attached to its issue. */
-export function cardPullRequestSources(item: Pick<WorkItem, 'workItem'>): NonNullable<WorkItemRow['sources']> {
+function cardPullRequestSources(item: Pick<WorkItem, 'workItem'>): NonNullable<WorkItemRow['sources']> {
   return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
-}
-
-export type CardPullRequestSource = NonNullable<WorkItemRow['sources']>[number];
-
-export function sourcePullRequestNumber(source: CardPullRequestSource): number | undefined {
-  const metadata = source.metadata ?? {};
-  const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
-}
-
-function openPullRequestSource(source: CardPullRequestSource): boolean {
-  const state = source.state ?? source.metadata?.state;
-  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
-}
-
-/**
- * The pull request attached to an issue card that Review (`pr-review`) looks at: the one the card points
- * at, else the newest open one, else the newest. Mirrors the server's `reviewedPullRequest`.
- */
-export function attachedPullRequestSource(
-  item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
-): CardPullRequestSource | undefined {
-  if (isPullRequestSource(item.source)) return undefined;
-  const sources = cardPullRequestSources(item);
-  const pointer = item.metadata.openPullRequestNumber;
-  return (
-    sources.find(source => typeof pointer === 'number' && sourcePullRequestNumber(source) === pointer) ??
-    sources.filter(openPullRequestSource).at(-1) ??
-    sources.at(-1)
-  );
 }
 
 /** Whether the card carries a pull or merge request, as its own source or one attached to its issue. */
@@ -236,18 +207,33 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
   return source.url ?? null;
 }
 
+export function cardLink({
+  externalSource,
+  workItemUrl,
+}: {
+  externalSource: ExternalWorkItemSource | null;
+  workItemUrl: string | null | undefined;
+}): { source: WorkItemSource; url: string | null } {
+  const source = sourceFromExternalSource(externalSource);
+  return {
+    source,
+    url:
+      source === 'slack-thread'
+        ? externalSourceUrl(externalSource)
+        : (workItemUrl ?? externalSourceUrl(externalSource)),
+  };
+}
+
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
   const { factoryProjectId, externalSource, metadata, description, triageType, acceptedAt, ...rest } = item;
+  const { source, url } = cardLink({ externalSource, workItemUrl: item.workItem?.url });
   return {
     ...rest,
     githubProjectId: factoryProjectId,
-    source: sourceFromExternalSource(externalSource),
+    source,
     sourceKey: externalSource?.externalId ?? null,
     title: item.workItem?.title ?? item.title,
-    url:
-      sourceFromExternalSource(externalSource) === 'slack-thread'
-        ? externalSourceUrl(externalSource)
-        : (item.workItem?.url ?? externalSourceUrl(externalSource)),
+    url,
     metadata: metadata ?? {},
     description: description ?? null,
     triageType: triageType ?? null,
@@ -277,16 +263,9 @@ export interface UpdateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * The board as of one read: its cards, plus the sessions running on them right
- * then. Both come from the same response so a card and its run marker can
- * never disagree.
- */
+/** The cards of one read. */
 export interface BoardSnapshot {
   workItems: WorkItem[];
-  runningSessionIds: string[];
-  /** Sessions parked on a tool until someone answers, read live with the cards. */
-  parkedSessionIds: string[];
   /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
   total?: number;
 }
@@ -317,16 +296,11 @@ export async function listWorkItems(
         : only,
   );
   // No id and no source asked for: no card. Sent bare, the request would read the whole project.
-  if (params.size === 0) return { workItems: [], runningSessionIds: [], parkedSessionIds: [] };
-  const { workItems, runningSessionIds, parkedSessionIds, total } = await requestJson<
+  if (params.size === 0) return { workItems: [] };
+  const { workItems, total } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
   >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`, { signal });
-  return {
-    workItems: workItems.map(fromWireWorkItem),
-    runningSessionIds: runningSessionIds ?? [],
-    parkedSessionIds: parkedSessionIds ?? [],
-    ...(total === undefined ? {} : { total }),
-  };
+  return { workItems: workItems.map(fromWireWorkItem), ...(total === undefined ? {} : { total }) };
 }
 
 /** The board read's answer. It holds the cards' bodies only when they were asked for. */
@@ -386,6 +360,18 @@ export function fetchWorkItemStarters(
   return requestJson(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/starters`, {
     signal,
   });
+}
+
+export function getWorkItemSessionRepository(
+  baseUrl: string,
+  factoryProjectId: string,
+  workItemId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemSessionRepository> {
+  return requestJson(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items/${encodeURIComponent(workItemId)}/session-repository`,
+    { signal },
+  );
 }
 
 /** When the project's cards were created and completed since `since`, and how many cards it has in all. */

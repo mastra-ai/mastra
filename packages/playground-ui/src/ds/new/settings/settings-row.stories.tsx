@@ -154,10 +154,9 @@ export const SeveralControls: Story = {
 export const WideControl: Story = {
   render: () => (
     <>
-      <SettingsRow label="Avatar" description="Shown next to the organization name.">
-        <Input className="w-64" placeholder="https://example.com/avatar.png" />
-        <Button variant="primary">Save</Button>
-        <Button>Cancel</Button>
+      <SettingsRow label="Webhook" description="Receives an event when a deploy finishes.">
+        <Input className="w-80" defaultValue="https://hooks.example.com/deploys/acme-production" />
+        <Button>Send test</Button>
       </SettingsRow>
       <SettingsRow label="Notifications" description="Notify when a run finishes">
         <Switch defaultChecked />

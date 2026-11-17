@@ -9,7 +9,7 @@ import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
 import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
@@ -194,9 +194,9 @@ export function PropertyFilterCreator({
                 className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
-                <IconArrowLeft className="size-4" />
+                <IconArrowLeft className="size-icon-md" />
               </button>
-              <IconFilter1 className="size-4 shrink-0 text-muted-foreground" />
+              <IconFilter1 className="size-icon-md shrink-0 text-muted-foreground" />
               <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
@@ -359,11 +359,11 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <IconChevronRight className="text-muted-foreground" />}
+          {open && <IconChevronRightMedium className="text-muted-foreground" />}
           <span className="truncate">{field.label}</span>
           {!open && (
             <span className={cn(menuItemTrailingIconClass, 'text-muted-foreground')}>
-              <IconChevronRight />
+              <IconChevronRightMedium />
             </span>
           )}
         </FilterMenuButton>

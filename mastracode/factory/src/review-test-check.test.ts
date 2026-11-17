@@ -14,7 +14,14 @@ import { createIsolatedFactoryPostgresForTests } from './storage/test-utils.js';
 
 const prepareMock = vi.hoisted(() =>
   vi.fn(async (config: Record<string, unknown>) => ({
-    base: { controller: { onSessionCreated: vi.fn(), setChannels: vi.fn(), queryThreadById: vi.fn() } },
+    base: {
+      controller: {
+        onSessionCreated: vi.fn(() => () => {}),
+        onSessionDeleted: vi.fn(() => () => {}),
+        setChannels: vi.fn(),
+        queryThreadById: vi.fn(),
+      },
+    },
     mastraArgs: { __capturedConfig: config },
     finalize: vi.fn(async () => {}),
   })),

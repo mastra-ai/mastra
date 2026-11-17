@@ -3,7 +3,7 @@ import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
 import { Button } from '@/ds/components/Button';
 import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
-import { IconArrowTopBottom } from '@/ds/icons/central/IconArrowTopBottom';
+import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ export type DataListSort = 'asc' | 'desc';
 const sortIcons = {
   asc: IconArrowUp,
   desc: IconArrowDown,
-  none: IconArrowTopBottom,
+  none: IconArrowsUpDown,
 };
 
 const sortLabels = {

@@ -86,6 +86,11 @@ export function repositoryElsewhere(
     : undefined;
 }
 
+/** A repository by its own name, without the owner or group: `mastra` for `mastra-ai/mastra`. */
+function repositoryName(repository: string): string {
+  return repository.slice(repository.lastIndexOf('/') + 1);
+}
+
 export function referenceLabel(
   { kind, sigil, number, repository }: CodeHostReference,
   contextRepository?: string,
@@ -100,13 +105,27 @@ const CODE_HOST_REFERENCES: Partial<Record<WorkItemSource, Pick<CodeHostReferenc
   'gitlab-pr': CHANGE_REQUEST_TERMS.gitlab,
 };
 
+function codeHostReference(item: IdentifiableItem, identifier: string): CodeHostReference | undefined {
+  const codeHost = CODE_HOST_REFERENCES[item.source];
+  const key = codeHost && /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier);
+  return codeHost && key ? { ...codeHost, number: key[2], repository: key[1] } : undefined;
+}
+
 export function workItemReference(item: IdentifiableItem, contextRepository?: string): string | undefined {
   const identifier = workItemIdentifier(item);
   const codeHost = CODE_HOST_REFERENCES[item.source];
   if (identifier === undefined || !codeHost) return identifier;
-  const key = /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier);
-  if (!key) return codeHost.kind;
-  return referenceLabel({ ...codeHost, number: key[2], repository: key[1] }, contextRepository);
+  const reference = codeHostReference(item, identifier);
+  return reference ? referenceLabel(reference, contextRepository) : codeHost.kind;
+}
+
+/** A work item's key without the repository owner, for links whose source icon already tells an issue from a PR: `app#42`, `ENG-123`. */
+export function workItemShortReference(item: IdentifiableItem): string | undefined {
+  const identifier = workItemIdentifier(item);
+  if (identifier === undefined) return undefined;
+  const reference = codeHostReference(item, identifier);
+  if (!reference) return workItemReference(item);
+  return `${reference.repository === undefined ? '' : repositoryName(reference.repository)}${reference.sigil}${reference.number}`;
 }
 
 export function workItemMeta(item: WorkItem, contextRepository?: string): readonly string[] {

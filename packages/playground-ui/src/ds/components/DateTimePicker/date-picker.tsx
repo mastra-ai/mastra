@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { DayPicker, getDefaultClassNames } from 'react-day-picker';
 import type { ChevronProps, DayButton } from 'react-day-picker';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
@@ -81,7 +81,7 @@ const navButton = cn(
 );
 
 function CalendarChevron({ orientation, className }: ChevronProps) {
-  const Icon = orientation === 'left' ? IconChevronLeft : IconChevronRight;
+  const Icon = orientation === 'left' ? IconChevronLeftMedium : IconChevronRightMedium;
   return <Icon className={cn('size-4', className)} />;
 }
 

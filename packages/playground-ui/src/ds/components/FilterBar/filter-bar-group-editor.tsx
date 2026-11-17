@@ -233,7 +233,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       )}
     >
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <IconFolder1 className="size-3.5 text-muted-foreground" />
+        <IconFolder1 className="size-icon-sm text-muted-foreground" />
         <Txt as="span" variant="label" tone="ink">
           Group
         </Txt>

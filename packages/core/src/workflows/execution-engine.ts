@@ -18,6 +18,7 @@ import type {
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
   WorkflowStateTracingContext,
+  WorkflowStepResults,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -53,6 +54,12 @@ export interface ExecutionEngineOptions {
    * See `WorkflowOptions.persistResumeClaim`.
    */
   persistResumeClaim?: boolean;
+
+  /**
+   * Skips reading a stored `canceled` status. See `WorkflowOptions.localCancellationOnly`.
+   * @internal
+   */
+  localCancellationOnly?: boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -156,7 +163,7 @@ export abstract class ExecutionEngine extends MastraBase {
     status: WorkflowRunStatus;
     result?: any;
     error?: any;
-    steps: Record<string, StepResult<any, any, any, any>>;
+    steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
     tripwire?: any;
     runId: string;
     workflowId: string;
@@ -263,7 +270,7 @@ export abstract class ExecutionEngine extends MastraBase {
     /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
     storageVersion?: 1 | 2;
     /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
   }): Promise<TOutput>;

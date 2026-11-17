@@ -1,4 +1,5 @@
 import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,15 +7,13 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { listedRepository } from '../../../../../e2e/ui/factory-projects';
+import { isStubbedProjectRead } from '../../../../../e2e/ui/board-reads';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { recordProviderListRequests } from '../../../../../e2e/ui/provider-list-requests';
-import { releaseBoard, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
-import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
+import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { createQueryClient } from '../../../../query-client';
 import type { WorkItem } from '../../factory/services/workItems';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
 import {
@@ -46,7 +45,6 @@ const THREAD_IDS_THE_CHAT_MUST_LIST_TO_STAY_MOUNTED = [
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
-  sessionsCreatedFor: string[];
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   providerListRequests: string[];
@@ -56,7 +54,6 @@ interface SearchRequestState {
 }
 
 interface StubSearchOptions {
-  activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
   failSessionAttempts?: number;
   /** How many reads of the cards holding a session fail before one answers. */
@@ -87,15 +84,7 @@ function projectListResponse(repositories: Record<string, ProjectListRepository[
 }
 
 function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepository[] {
-  if (options.activeFactoryHasRepositories === false) return [];
-  if (!options.activeRepositories) return factoryRepositories[ACTIVE_FACTORY_ID];
-  return options.activeRepositories.map(repository =>
-    listedRepository(repository.projectRepositoryId, repository.slug, {
-      integrationId: repository.provider ?? 'github',
-      externalId: repository.externalId ?? null,
-      branch: 'main',
-    }),
-  );
+  return options.activeFactoryHasRepositories === false ? [] : factoryRepositories[ACTIVE_FACTORY_ID];
 }
 
 const noFeedStream = http.get(
@@ -107,7 +96,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
-    sessionsCreatedFor: [],
     created: [],
     transitions: [],
     providerListRequests: recordProviderListRequests(),
@@ -127,6 +115,9 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/session-repository`, () =>
+      HttpResponse.json({ status: 'unlinked', hint: 'No repository in this search stub.' }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
       return project
@@ -135,10 +126,13 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
       const query = new URL(request.url).searchParams;
-      state.workItemQueries.push(query.toString());
-      if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      const appRead = !isStubbedProjectRead(request);
+      if (appRead) state.workItemQueries.push(query.toString());
+      if (appRead && options.failWorkItems) {
+        return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
+      }
       const sessionCardReads = state.workItemQueries.filter(asked => asked === 'scope=sessions').length;
-      if (query.get('scope') === 'sessions' && sessionCardReads <= (options.failSessionCardAttempts ?? 0)) {
+      if (appRead && query.get('scope') === 'sessions' && sessionCardReads <= (options.failSessionCardAttempts ?? 0)) {
         return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       }
       const cards = String(params.factoryProjectId) === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems) : [];
@@ -164,13 +158,15 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
       const factoryProjectId = String(params.factoryProjectId);
-      state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
-      if (options.sessionsGate) {
-        request.signal.addEventListener('abort', () => options.onSessionsAbort?.(), { once: true });
-        await options.sessionsGate;
-      }
-      if (state.sessionRequests[factoryProjectId] <= (options.failSessionAttempts ?? 0)) {
-        return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+      if (!isStubbedProjectRead(request)) {
+        state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
+        if (options.sessionsGate) {
+          request.signal.addEventListener('abort', () => options.onSessionsAbort?.(), { once: true });
+          await options.sessionsGate;
+        }
+        if (state.sessionRequests[factoryProjectId] <= (options.failSessionAttempts ?? 0)) {
+          return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+        }
       }
       const repositoryIds =
         factoryProjectId === ACTIVE_FACTORY_ID ? [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID] : [OTHER_REPOSITORY_ID];
@@ -182,7 +178,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
       async ({ request, params }) => {
         state.createSessionRequests += 1;
-        state.sessionsCreatedFor.push(String(params.projectRepositoryId));
         const body = (await request.json()) as { branch?: string };
         return HttpResponse.json({
           session: {
@@ -312,7 +307,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   return state;
 }
 
-function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
+function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/account`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
   renderWithProviders(
@@ -378,89 +373,12 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
-  describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
-    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
-      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
-        const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
-          projectRepositoryId: `${provider}-repo-${index}`,
-          provider,
-          externalId: String(index),
-          slug: `${provider}-org/repo-${index}`,
-        }));
-        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
-        const otherRepository: LinkedRepositoryPayload = {
-          projectRepositoryId: 'other-provider-repo',
-          provider: otherProvider,
-          slug: 'other-provider/repo',
-        };
-        const item: WorkItem = {
-          ...workItems[3],
-          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
-          board: 'release',
-          stages: ['shipped'],
-          metadata: {},
-        };
-        const requests = stubSearchApi({
-          workItems: [item],
-          activeRepositories: [otherRepository, ...sourceRepositories],
-        });
-        const patches: unknown[] = [];
-        const starts: unknown[] = [];
-        server.use(
-          http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-          http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
-            HttpResponse.json({ boards: [releaseBoard] }),
-          ),
-          http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
-            patches.push(await request.json());
-            return HttpResponse.json({ workItem: toWireWorkItem(item) });
-          }),
-          http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-            starts.push(await request.json());
-            return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
-          }),
-        );
-        const user = userEvent.setup();
-        renderSearchRoute(entryPoint === 'board' ? `/factories/${ACTIVE_FACTORY_ID}/boards/release` : undefined);
-        const search = entryPoint === 'search' ? await openWithShortcut() : undefined;
-        const results = search ? within(search) : screen;
-        if (search) await user.click(await results.findByText(item.title));
-        else await user.click(await screen.findByRole('button', { name: 'Start session' }));
-
-        if (count === 0) {
-          expect(
-            await screen.findByText("No repository matching this card's provider is linked to this Factory."),
-          ).toBeInTheDocument();
-          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-          expect(requests.createSessionRequests).toBe(0);
-          expect(patches).toEqual([]);
-          expect(starts).toEqual([]);
-          return;
-        }
-        if (count > 1) {
-          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
-          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
-            count,
-          );
-          expect(requests.createSessionRequests).toBe(0);
-          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
-        }
-        await waitFor(() => expect(starts).toHaveLength(1));
-        expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
-        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
-        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-        if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
-      });
-    });
-  });
-
   it('opens with Mod+K on the labeled, focused command input and hands focus back on close', async () => {
     stubSearchApi();
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await screen.findByRole('heading', { name: 'Preferences' });
+    await screen.findByRole('heading', { name: 'My account' });
     const settingsNavigation = await screen.findByRole('navigation', { name: 'Settings sections' });
     const focusedBeforeSearch = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
     act(() => focusedBeforeSearch.focus());
@@ -558,7 +476,7 @@ describe('Global search', () => {
       'Work',
       'Pull requests',
       'Rules',
-      'Preferences',
+      'My account',
       'Manage Factory',
       'Connections',
       'Repositories',
@@ -649,19 +567,15 @@ describe('Global search', () => {
     expect(within(dialog).queryByText('not filed')).not.toBeInTheDocument();
   });
 
-  it('opens on warm sessions without refetching them, and reads the cards in parts instead of the board', async () => {
+  it('reads its sessions and the cards holding them once when it opens, never the board', async () => {
     const requests = stubSearchApi();
-    const { client } = renderSearchRoute();
-
-    await client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID));
-    expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
+    renderSearchRoute();
 
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
     await screen.findByText('Bump the command palette dependencies');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    // The sidebar already read the cards holding a session: the palette shares that read.
     expect(requests.workItemQueries.toSorted()).toEqual(['scope=sessions', 'started=false&q=']);
   });
 
@@ -799,40 +713,6 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /^Work items\s*2$/ })).toBeInTheDocument();
   });
 
-  it('keeps search open while choosing a repository for an unattributed work item', async () => {
-    const item = {
-      ...workItems[3],
-      board: 'custom',
-      metadata: { number: 777 },
-    };
-    const requests = stubSearchApi({ workItems: [item] });
-    const patches: unknown[] = [];
-    const starts: unknown[] = [];
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
-        patches.push(await request.json());
-        return HttpResponse.json({ workItem: toWireWorkItem(item) });
-      }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
-    const user = userEvent.setup();
-    renderSearchRoute();
-    const search = await openWithShortcut();
-    await user.click(await within(search).findByText(item.title));
-
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(search).toBeInTheDocument();
-    expect(requests.createSessionRequests).toBe(0);
-    expect(patches).toHaveLength(0);
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
-    await waitFor(() => expect(starts).toHaveLength(1));
-    await waitFor(() => expect(search).not.toBeInTheDocument());
-  });
-
   it('opens the session a listed card gained since, instead of starting another', async () => {
     const listed = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     const cards = [listed];
@@ -860,22 +740,15 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
-  it('starts a session on a listed card that a later update pushed out of the search', async () => {
+  it('opens the draft of a listed card that a later update pushed out of the search', async () => {
     const cards: WorkItem[] = Array.from({ length: 21 }, (_, index) => ({
       ...unstartedCard(`backlog-${index}`, `Backlog chore ${index}`, `2026-07-${String(index + 1).padStart(2, '0')}`),
       board: 'custom',
       metadata: { repository: 'mastra-ai/mastra' },
     }));
-    stubSearchApi({ workItems: cards });
-    const starts: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
+    const requests = stubSearchApi({ workItems: cards });
     const user = userEvent.setup();
-    renderSearchRoute();
+    const { router } = renderSearchRoute();
     const search = await openWithShortcut();
     // The last of the 20 the search lists.
     const row = await within(search).findByText('Backlog chore 1');
@@ -884,37 +757,26 @@ describe('Global search', () => {
     cards[0] = { ...cards[0], updatedAt: '2026-08-01T10:00:00.000Z' };
     await user.click(row);
 
-    await waitFor(() =>
-      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-1' }) })]),
-    );
-    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Backlog chore 1' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${ACTIVE_FACTORY_ID}/cards/backlog-1/new/`));
+    expect(requests.createSessionRequests).toBe(0);
   });
 
   // Technical: a server older than `workItemId` ignores it and sends the whole board, which holds the card.
-  it('starts a session on the card clicked when the server sends the whole board whatever is asked', async () => {
+  it('opens the draft of the card clicked when the server sends the whole board whatever is asked', async () => {
     const cards: WorkItem[] = ['first', 'second', 'third'].map((name, index) => ({
       ...unstartedCard(`backlog-${name}`, `Backlog chore ${name}`, `2026-07-0${3 - index}`),
       board: 'custom',
       metadata: { repository: 'mastra-ai/mastra' },
     }));
     stubSearchApi({ workItems: cards, serverNarrowsBySessionOnly: true });
-    const starts: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
     const user = userEvent.setup();
     renderSearchRoute();
     const search = await openWithShortcut();
 
     await user.click(await within(search).findByText('Backlog chore third'));
 
-    await waitFor(() =>
-      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-third' }) })]),
-    );
-    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Backlog chore third' })).toBeInTheDocument();
   });
 
   it('says a listed card was deleted since, and starts nothing on it', async () => {
@@ -947,17 +809,17 @@ describe('Global search', () => {
   });
 
   it('reports a session failure while retaining navigation and Factories, then recovers on retry', async () => {
-    const requests = stubSearchApi({ failSessionAttempts: 2 });
+    const requests = stubSearchApi({ failSessionAttempts: 1 });
     const user = userEvent.setup();
     renderSearchRoute();
     const dialog = await openWithShortcut();
 
     expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
     expect(within(dialog).getByText('Mastra Factory')).toBeInTheDocument();
-    expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2);
+    expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
-    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(3));
+    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2));
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
     expect(screen.queryByText('Sessions could not be loaded.')).not.toBeInTheDocument();
   });
@@ -1059,10 +921,10 @@ describe('Global search', () => {
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
-  it('finds a board card with no session by identifier and moves it into its lane', async () => {
+  it('finds a board card with no session by identifier and opens it, moving nothing', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    renderSearchRoute();
+    const { router } = renderSearchRoute();
     const dialog = await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
@@ -1077,161 +939,14 @@ describe('Global search', () => {
 
     await user.click(card);
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    expect(requests.transitions[0]).toMatchObject({
-      itemId: 'work-item-unstarted-review',
-      body: { board: 'work', stage: 'pr-review', cause: 'card_action' },
-    });
-    expect(requests.createSessionRequests).toBe(0);
-  });
-
-  it('toasts the reason when the move it fired is refused, after the palette has closed', async () => {
-    stubSearchApi();
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`, () =>
-        HttpResponse.json({ result: { status: 'rejected', reason: 'Reviewing is paused for this repository.' } }),
-      ),
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Bump the command palette dependencies' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toMatch(
+      new RegExp(`^/factories/${ACTIVE_FACTORY_ID}/cards/work-item-unstarted-review/new/`),
     );
-    const user = userEvent.setup();
-    renderSearchRoute();
-    await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-    await user.click(await screen.findByText('Bump the command palette dependencies'));
-
-    expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
-  });
-
-  function stubAutomationStartingRunOn(workItemId: string) {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
-        HttpResponse.json({
-          decisions: [
-            {
-              id: 'decision-queued-run',
-              evaluationId: 'evaluation-queued-run',
-              workItemId,
-              type: 'invokeSkill',
-              status: 'pending',
-              attempts: 0,
-              failureOccurrence: 0,
-              source: null,
-              failureCode: null,
-              canRetry: true,
-              lastError: null,
-              createdAt: '2026-07-18T00:00:00.000Z',
-              updatedAt: '2026-07-18T00:01:00.000Z',
-              completedAt: null,
-            },
-          ],
-        }),
-      ),
-    );
-  }
-
-  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
-    const requests = stubSearchApi();
-    stubAutomationStartingRunOn('work-item-unstarted-review');
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    await openWithShortcut();
-    await screen.findByText('Review command palette PR');
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-
-    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-    await user.click(await screen.findByText('Bump the command palette dependencies'));
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
     expect(requests.transitions).toEqual([]);
-  });
-
-  it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
-    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
-    const requests = stubSearchApi({ workItems: [item] });
-    stubAutomationStartingRunOn(item.id);
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const search = await openWithShortcut();
-    const card = await within(search).findByText(item.title);
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-
-    await user.click(card);
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
-    expect(requests.transitions).toEqual([]);
-  });
-
-  it('refuses a second move of a card whose first move from search is still in flight', async () => {
-    const requests = stubSearchApi();
-    let releaseTransition = () => {};
-    const transitionGate = new Promise<void>(resolve => {
-      releaseTransition = resolve;
-    });
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
-        async ({ params }) => {
-          requests.transitions.push({ itemId: String(params.itemId), body: {} });
-          await transitionGate;
-          return HttpResponse.json({ result: { status: 'rejected', reason: 'Released by the test.' } });
-        },
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const pickCard = async () => {
-      await openWithShortcut();
-      await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
-      await user.click(await screen.findByText('Bump the command palette dependencies'));
-    };
-
-    await pickCard();
-    await waitFor(() => expect(requests.transitions).toHaveLength(1));
-    await pickCard();
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(requests.transitions).toHaveLength(1);
-    releaseTransition();
-    await waitForMutationsIdle(client);
-  });
-
-  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
-    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
-    stubSearchApi({ workItems: [item] });
-    const starts: unknown[] = [];
-    let releaseStart = () => {};
-    const startGate = new Promise<void>(resolve => {
-      releaseStart = resolve;
-    });
-    server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, () =>
-        HttpResponse.json({ workItem: toWireWorkItem(item) }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
-        starts.push(await request.json());
-        await startGate;
-        return HttpResponse.json({ threadId: 'thread-search' });
-      }),
-    );
-    const user = userEvent.setup();
-    const { client } = renderSearchRoute();
-    const search = await openWithShortcut();
-    await user.click(await within(search).findByText(item.title));
-    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
-    await waitFor(() => expect(starts).toHaveLength(1));
-
-    await user.click(within(search).getByText(item.title));
-
-    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
-    releaseStart();
-    await waitForMutationsIdle(client);
-    expect(starts).toHaveLength(1);
   });
 
   it('scopes results to board cards with no session', async () => {
@@ -1251,26 +966,6 @@ describe('Global search', () => {
     expect(screen.queryByText('Review command palette PR')).not.toBeInTheDocument();
     expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
   });
-
-  // A card in more than one phase sits in its furthest one, as its card label says.
-  it.each([[['planning']], [['triage', 'planning']]])(
-    "starts a card with no session in %j from the phase it sits in, not its board's first phase",
-    async stages => {
-      const planning = { ...workItems.find(item => item.id === 'work-item-unstarted-issue')!, stages };
-      const requests = stubSearchApi({ workItems: [planning] });
-      const user = userEvent.setup();
-      renderSearchRoute();
-      await openWithShortcut();
-
-      await user.click(await screen.findByText('Palette keyboard traps focus on mobile'));
-
-      await waitFor(() => expect(requests.transitions).toHaveLength(1));
-      expect(requests.transitions[0]).toMatchObject({
-        itemId: 'work-item-unstarted-issue',
-        body: { stage: 'planning' },
-      });
-    },
-  );
 
   it('lists a pull request already filed as a card only once', async () => {
     stubSearchApi();
@@ -1299,7 +994,7 @@ describe('Global search', () => {
     expect(requests.providerListRequests).toEqual([]);
   });
 
-  it('keeps the sessions request alive when the notification observer also consumes it', async () => {
+  it('cancels its read of the sessions when the dialog closes, as nothing else on the page reads them', async () => {
     let releaseSessions = () => {};
     const sessionsGate = new Promise<void>(resolve => {
       releaseSessions = resolve;
@@ -1312,8 +1007,7 @@ describe('Global search', () => {
     await openWithShortcut();
     await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(onAbort).not.toHaveBeenCalled();
+    await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
     releaseSessions();
   });
 
@@ -1330,7 +1024,7 @@ describe('Global search', () => {
 
   it('selects Settings with origin state and closes without creating a session', async () => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();
@@ -1373,7 +1067,7 @@ describe('Global search', () => {
     },
   ])('selects $title on the declared route and closes search', async ({ title, path, preservesOrigin }) => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();

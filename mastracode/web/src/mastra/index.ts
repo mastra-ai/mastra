@@ -54,6 +54,13 @@ function positiveInt(raw: string | undefined): number | undefined {
   return parsed;
 }
 
+function nonNegativeInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) return undefined;
+  return parsed;
+}
+
 function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer {
   const key = Buffer.from(encodedKey, 'base64');
   if (key.byteLength !== 32) throw new Error(`${name} must contain base64-encoded 32-byte keys.`);
@@ -427,10 +434,12 @@ export const factory = new MastraFactory({
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,
-  // Per-replica cap on concurrent Factory background dispatches. Unset means
-  // the dispatcher default; invalid and non-positive values are ignored.
+  // Per-replica caps on concurrent Factory background dispatches, and the
+  // reserve for people's replies on top of it. Unset means the dispatcher
+  // default; invalid values are ignored (and a non-positive run cap too).
   dispatcher: {
     maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
+    maxInteractiveInFlight: nonNegativeInt(process.env.MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and

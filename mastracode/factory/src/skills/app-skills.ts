@@ -28,15 +28,19 @@ export function assertFactorySkills(skills: unknown): readonly InlineSkill[] {
   return Object.freeze([...skills]);
 }
 
+const NO_PROJECT_SKILLS: ReadonlySet<string> = new Set();
+
 /**
  * Problems with the skills board phases name in `runner.skill`, found at
  * startup instead of when a card first enters the phase. A skill is found when
- * it is a code skill, a folder skill in the app's `factory-skills/`, or bundled.
+ * it is a code skill, a folder skill in the app's `factory-skills/`, bundled,
+ * or one of `projectSkills`, the skills a project created for its own boards.
  */
 export function findBoardSkillProblems(
   boards: BoardRegistry,
   codeSkills: readonly InlineSkill[],
   localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
+  projectSkills: ReadonlySet<string> = NO_PROJECT_SKILLS,
 ): string[] {
   const codeNames = new Set(codeSkills.map(skill => skill.name));
   const problems: string[] = [];
@@ -48,10 +52,11 @@ export function findBoardSkillProblems(
       const found =
         codeNames.has(skill) ||
         FACTORY_SKILL_NAMES.has(skill) ||
+        projectSkills.has(skill) ||
         (localSkillsPath !== undefined && existsSync(join(localSkillsPath, skill, 'SKILL.md')));
       if (!found) {
         problems.push(
-          `${where} runs skill '${skill}', but no such skill exists. Pass it in MastraFactory({ skills }) or add factory-skills/${skill}/SKILL.md.`,
+          `${where} runs skill '${skill}', but no such skill exists. Pass it in MastraFactory({ skills }), add factory-skills/${skill}/SKILL.md, or create it in Settings › Skills.`,
         );
       } else if (REVIEW_ONLY_FACTORY_SKILLS.has(skill) && context !== 'review') {
         problems.push(

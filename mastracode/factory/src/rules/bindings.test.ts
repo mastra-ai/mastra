@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
@@ -7,7 +7,10 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-async function prepareBinding(storage: WorkItemsStorage, options: { issue?: number; kickoffKey?: string } = {}) {
+async function prepareBinding(
+  storage: WorkItemsStorage,
+  options: { issue?: number; kickoffKey?: string; sessionId?: string } = {},
+) {
   const issue = options.issue ?? 1;
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -27,7 +30,11 @@ async function prepareBinding(storage: WorkItemsStorage, options: { issue?: numb
       },
     },
     role: 'work',
-    session: { sessionId: 'session-1', branch: `factory/issue-${issue}`, threadId: 'thread-1' },
+    session: {
+      sessionId: options.sessionId ?? 'session-1',
+      branch: `factory/issue-${issue}`,
+      threadId: 'thread-1',
+    },
     resourceId: 'resource-1',
     kickoffKey: options.kickoffKey ?? 'kickoff-1',
     kickoffMessage: null,
@@ -244,6 +251,42 @@ describe('Factory run binding authority', () => {
           keep: async () => true,
         }),
       ).resolves.toBe(1);
+    });
+
+    it('carries on to the next binding when one card cannot be read', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const unreadable = await prepareBinding(storage);
+      // Its own session: a second run in the same session would replace the first assignment.
+      const finished = await prepareBinding(storage, { issue: 2, kickoffKey: 'kickoff-2', sessionId: 'session-2' });
+      await storage.update({
+        orgId: 'org-1',
+        id: finished.item.id,
+        userId: 'user-1',
+        patch: { stages: ['done'] },
+      });
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const get = storage.get.bind(storage);
+      const read = vi.spyOn(storage, 'get').mockImplementation(async input => {
+        if (input.id === unreadable.item.id) throw new Error('connection lost');
+        return get(input);
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
+      ).resolves.toBe(1);
+      read.mockRestore();
+
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, unreadable.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, finished.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'revoked' }),
+      ]);
+      expect(error).toHaveBeenCalledWith(
+        `[factory] stale-binding sweep could not read card ${unreadable.item.id}`,
+        'connection lost',
+      );
+      error.mockRestore();
     });
 
     it('revokes fresh bindings whose work item reached a terminal stage', async () => {

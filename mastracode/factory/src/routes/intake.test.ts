@@ -7,6 +7,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
+import type { IntakeRoutesDeps } from './intake.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -54,7 +55,11 @@ const integrations = [
   { id: 'linear', intake: linear },
 ];
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, intakeIntegrations = integrations) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  intakeIntegrations = integrations,
+  onSourcesSelected?: IntakeRoutesDeps['onSourcesSelected'],
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -68,6 +73,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
       intake: seed.intake,
       projects: seed.projects,
       integrations: intakeIntegrations,
+      ...(onSourcesSelected ? { onSourcesSelected } : {}),
     }).routes(),
   );
   return app;
@@ -121,6 +127,29 @@ describe('intake configuration', () => {
           linear: { enabled: false, sources: null },
         },
       },
+    ]);
+  });
+
+  it('reports only the sources a save newly selects, so their existing items can be brought in', async () => {
+    const onSourcesSelected = vi.fn();
+    const app = buildApp(orgUser, integrations, onSourcesSelected);
+    const put = (config: unknown) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+    await put({ github: { enabled: true, sourceIds: ['acme/app'] } });
+    await put({
+      github: { enabled: true, sourceIds: ['acme/app', 'acme/api'] },
+      linear: { enabled: false, sourceIds: null },
+    });
+    await put({ github: { enabled: true, sourceIds: ['acme/api'] } });
+
+    expect(onSourcesSelected.mock.calls).toEqual([
+      [{ orgId: 'org1', integrationId: 'github', sourceIds: ['acme/app'] }],
+      [{ orgId: 'org1', integrationId: 'github', sourceIds: ['acme/api'] }],
     ]);
   });
 
