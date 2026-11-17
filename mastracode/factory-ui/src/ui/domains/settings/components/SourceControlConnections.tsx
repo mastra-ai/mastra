@@ -5,7 +5,7 @@ import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { IntegrationItem } from './IntegrationItem';
 import {
-  AddPlatformAccountRow,
+  AddPlatformAccountButton,
   connectionName,
   PlatformConnectButton,
   PlatformManageLink,
@@ -116,12 +116,12 @@ function GitLabConnectionRows() {
               <>
                 {needsReauth && <PlatformReconnectButton provider="gitlab" connectionId={connection.id} />}
                 {last && <PlatformManageLink provider="gitlab" />}
+                {last && <AddPlatformAccountButton provider="gitlab" />}
               </>
             ) : undefined}
           </IntegrationItem>
         );
       })}
-      <AddPlatformAccountRow provider="gitlab" />
     </>
   );
 }

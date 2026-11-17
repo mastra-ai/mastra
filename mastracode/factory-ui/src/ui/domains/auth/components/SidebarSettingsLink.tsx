@@ -39,7 +39,7 @@ export function SidebarSettingsLink() {
 
   const account = auth.data;
   const userName = signedInName(account);
-  const url = settingsSectionPath(factoryId, 'preferences');
+  const url = settingsSectionPath(factoryId, 'account');
   const backToAppState = settingsOpen ? location.state : { from: location };
 
   return (

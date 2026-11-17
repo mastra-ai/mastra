@@ -1,6 +1,5 @@
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
@@ -48,14 +47,9 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
   const everything = useUnstartedSearch(factoryId, '');
   const unstarted = search.data?.cards ?? NO_CARDS;
 
-  // Kept across renders that load nothing new, so what is derived from it downstream is too.
-  const loaded = useMemo(() => [...withSessions, ...unstarted], [withSessions, unstarted]);
-
   return {
     withSessions,
     unstarted,
-    /** Every card either read loaded, for acting on a row. */
-    loaded,
     count: everything.data?.total ?? 0,
     pending: sessionCards.isLoading || search.isLoading,
     failed: sessionCards.isError || search.isError,

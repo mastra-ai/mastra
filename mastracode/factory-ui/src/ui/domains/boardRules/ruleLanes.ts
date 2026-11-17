@@ -27,9 +27,9 @@ export const LANE_EVENTS: readonly RuleEvent[] = STATUS_EVENTS;
 /** The events a new item arrives on: an issue on `work_item.opened`, a pull request with no issue card on `pull_request.opened`. */
 const ARRIVAL_LANES: readonly RuleEvent[] = ['work_item.opened', 'pull_request.opened'];
 
-/** Lanes in two sections, as the events split: `work_item.*` are issues, `pull_request.*` are pull requests. */
+/** Lanes in two sections, as the events split: `work_item.*` are work items, `pull_request.*` are pull requests. */
 export const LANE_SECTIONS: readonly { title: string; events: readonly RuleEvent[] }[] = [
-  { title: 'Issues', events: LANE_EVENTS.filter(event => !event.startsWith('pull_request.')) },
+  { title: 'Work items', events: LANE_EVENTS.filter(event => !event.startsWith('pull_request.')) },
   { title: 'Pull requests', events: LANE_EVENTS.filter(event => event.startsWith('pull_request.')) },
 ];
 
@@ -47,33 +47,33 @@ interface LaneText {
 
 const LANE_TEXT: Record<string, LaneText> = {
   [LEGACY_OPENED_EVENT]: {
-    label: 'Issue or pull request opened (legacy)',
-    description: 'Takes new issues and pull requests with no card yet.',
+    label: 'Work item or pull request opened (legacy)',
+    description: 'Takes new work items and pull requests with no card yet.',
     icon: Inbox,
   },
   'work_item.opened': {
-    label: 'Issue opened',
-    description: 'A new issue arrives.',
+    label: 'Work item opened',
+    description: 'A new issue arrives and creates a work item.',
     icon: Inbox,
   },
   'work_item.reopened': {
-    label: 'Issue reopened',
-    description: 'A closed issue is opened again.',
+    label: 'Work item reopened',
+    description: 'A closed work item is opened again.',
     icon: RotateCcw,
   },
   'work_item.updated': {
-    label: 'Issue labels or assignees change',
-    description: 'Someone adds or removes a label or an assignee on an issue.',
+    label: 'Work item labels or assignees change',
+    description: 'Someone adds or removes a label or an assignee on a work item.',
     icon: PencilLine,
   },
   'work_item.closed': {
-    label: 'Issue closed',
-    description: 'The card’s issue is closed.',
+    label: 'Work item closed',
+    description: 'The card’s work item is closed.',
     icon: CircleCheck,
   },
   'pull_request.opened': {
     label: 'Pull request opened',
-    description: 'Links to its issue’s card if one exists; otherwise filed as a new card.',
+    description: 'Links to its issue’s work item if one exists; otherwise creates a new work item.',
     icon: GitPullRequest,
   },
   'pull_request.reopened': {
@@ -218,7 +218,7 @@ function requiredKinds(rule: IntakeRouteInfo): string[] {
   );
 }
 
-/** Where a board sits in intake order, in words: "Checked after Ship, before Work". */
+/** Where a board sits in intake order, in words, naming the boards on both sides: "Checked after Ship, before Work". */
 export function intakePosition(order: readonly { boardKey: string; name: string }[], boardKey: string): string {
   const at = order.findIndex(board => board.boardKey === boardKey);
   if (at === -1) return 'Not in the intake order yet';
@@ -226,7 +226,24 @@ export function intakePosition(order: readonly { boardKey: string; name: string 
   const before = order[at - 1]?.name;
   const after = order[at + 1]?.name;
   if (before && after) return `Checked after ${before}, before ${after}`;
-  return before ? `Checked last, after ${before}` : `Checked first, before ${after}`;
+  return before
+    ? `Checked last, after ${before} (no board after it)`
+    : `Checked first (no board before it), before ${after}`;
+}
+
+/**
+ * Where a new item no rule on this board takes goes next: "Otherwise: checked by Work next, then Not routed", or
+ * "…by Work next, then the boards after it, then Not routed" when more than one board follows. Falls back to a generic
+ * line while the intake order is loading or doesn't list the board.
+ */
+export function arrivalFallback(order: readonly { boardKey: string; name: string }[] | undefined, boardKey: string) {
+  const at = order?.findIndex(board => board.boardKey === boardKey) ?? -1;
+  if (!order || at === -1) return 'Otherwise: checked by the next board, then Not routed';
+  const next = order[at + 1]?.name;
+  if (!next) return 'Otherwise: Not routed (no board after this one)';
+  return at + 2 < order.length
+    ? `Otherwise: checked by ${next} next, then the boards after it, then Not routed`
+    : `Otherwise: checked by ${next} next, then Not routed`;
 }
 
 /** 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th". */

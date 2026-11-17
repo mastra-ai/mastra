@@ -939,6 +939,11 @@ const workItemListQuerySchema = z
 
 const countSchema = z.number().int().nonnegative();
 
+export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
+  z.object({ status: z.literal('unlinked'), hint: z.string() }),
+]);
+
 /** What the draft page's starter buttons count on the project's default board. */
 export const workItemStartersResponseSchema = z.object({
   failed: countSchema,
@@ -1070,9 +1075,6 @@ export const boardPhasesResponseSchema = z.object({
   matchingTotal: countSchema,
   /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
   workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
-  /** Among the named cards. */
-  runningSessionIds: z.array(z.string()),
-  parkedSessionIds: z.array(z.string()),
 });
 
 /** What the board's filter menus offer, read over every card of the project. */
@@ -1226,18 +1228,18 @@ export const sessionRowsResponseSchema = z.object({
   boards: z.array(z.string()),
   /** People who own some row, whatever the filters. */
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
-  /** Some session is still coming up: the answer changes without anything else telling the reader. */
-  settling: z.boolean(),
 });
 
 export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
-  /** Sessions of a card whose run waits on a person's answer. */
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
-  initializingSessionIds: z.array(z.string()),
-  /** Cards with a session working, and with one waiting on a person. */
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),
-  settling: z.boolean(),
 });
 
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
@@ -1472,6 +1474,8 @@ const skillNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
 const skillResponseSchema = z.object({ skill: entitySchema });
+/** `skill` is null when the request deleted a skill the project created. */
+const skillRevertResponseSchema = z.object({ skill: entitySchema.nullable() });
 
 /** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
 function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
@@ -1492,6 +1496,12 @@ export const skillOverrideBodySchema = z
  */
 export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
+/** A new skill's SKILL.md must load under the name it is created with, exactly as the runtime validates it. */
+export const skillCreateBodySchema = z
+  .object({ name: skillNameSchema, content: skillContentSchema })
+  .strict()
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
@@ -1860,14 +1870,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items',
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
-      runningSessionIds: z.array(z.string()),
-      parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
       /** Names this read of the whole board. Absent when the next read must list it whole again. */
@@ -1911,7 +1919,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
   sessionActivity: {
     method: 'GET',
     path: '/web/factory/projects/:id/session-activity',
-    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    description: "List which of a project's sessions are running or waiting on a person, and each card's status",
     pathSchema: projectPathSchema,
     responseSchema: sessionActivityResponseSchema,
   },
@@ -1957,6 +1965,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
       expectedRevision: z.number().int().nonnegative(),
     }),
     responseSchema: workItemResponseSchema,
+  },
+  workItemSessionRepository: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/session-repository',
+    description: "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemSessionRepositoryResponseSchema,
   },
   workItemStart: {
     method: 'POST',
@@ -2067,10 +2082,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: z.object({ projectId: uuidSchema.optional() }),
     responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
+  skillCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/skills',
+    description: 'Create a skill for one Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: skillCreateBodySchema,
+    responseSchema: skillResponseSchema,
+  },
   skillOverrideSave: {
     method: 'PUT',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Save a project's edited SKILL.md for a Factory skill",
+    description: "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     pathSchema: skillPathSchema,
     bodySchema: skillOverrideBodySchema,
     responseSchema: skillResponseSchema,
@@ -2078,9 +2101,10 @@ export const FACTORY_ROUTE_CONTRACTS = {
   skillOverrideRevert: {
     method: 'DELETE',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    description:
+      "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     pathSchema: skillPathSchema,
-    responseSchema: skillResponseSchema,
+    responseSchema: skillRevertResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

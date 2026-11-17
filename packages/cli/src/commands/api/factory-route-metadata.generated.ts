@@ -76,7 +76,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "skillOverrideRevert",
     "method": "DELETE",
     "path": "/web/factory/projects/:id/skills/:name",
-    "description": "Revert a project's edited Factory skill to its original SKILL.md",
+    "description": "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     "pathParams": [
       "id",
       "name"
@@ -473,7 +473,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "sessionActivity",
     "method": "GET",
     "path": "/web/factory/projects/:id/session-activity",
-    "description": "List which of a project's sessions are running, waiting on a person or coming up",
+    "description": "List which of a project's sessions are running or waiting on a person, and each card's status",
     "pathParams": [
       "id"
     ],
@@ -515,7 +515,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemList",
     "method": "GET",
     "path": "/web/factory/projects/:id/work-items",
-    "description": "List Factory work items and running sessions",
+    "description": "List Factory work items",
     "pathParams": [
       "id"
     ],
@@ -531,6 +531,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "bodyParams": [],
     "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
+    "contractKey": "workItemSessionRepository",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/:workItemId/session-repository",
+    "description": "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    "pathParams": [
+      "id",
+      "workItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -1094,6 +1111,25 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "POST /web/factory/projects/:id/skills": {
+    "contractKey": "skillCreate",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/skills",
+    "description": "Create a skill for one Factory project",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "content",
+      "name"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/work-items": {
     "contractKey": "workItemCreate",
     "method": "POST",
@@ -1209,7 +1245,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "skillOverrideSave",
     "method": "PUT",
     "path": "/web/factory/projects/:id/skills/:name",
-    "description": "Save a project's edited SKILL.md for a Factory skill",
+    "description": "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     "pathParams": [
       "id",
       "name"
@@ -1397,11 +1433,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "skill": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -2756,18 +2799,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ],
             "additionalProperties": {}
           }
-        },
-        "runningSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "parkedSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       },
       "required": [
@@ -2775,9 +2806,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "related",
         "relatedTotal",
         "boardTotal",
-        "matchingTotal",
-        "runningSessionIds",
-        "parkedSessionIds"
+        "matchingTotal"
       ],
       "$defs": {
         "__schema0": {
@@ -4816,7 +4845,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "type": "string"
           }
         },
-        "initializingSessionIds": {
+        "cardStatuses": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "working",
+              "initializing",
+              "idle",
+              "done"
+            ]
+          }
+        },
+        "sessionHeldCardIds": {
           "type": "array",
           "items": {
             "type": "string"
@@ -4836,17 +4881,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "working",
             "waiting"
           ]
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
         "runningSessionIds",
         "parkedSessionIds",
-        "initializingSessionIds",
-        "cards",
-        "settling"
+        "cardStatuses",
+        "sessionHeldCardIds",
+        "cards"
       ],
       "$defs": {
         "__schema0": {
@@ -5145,9 +5187,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "userId"
             ]
           }
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
@@ -5155,8 +5194,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "matching",
         "groups",
         "boards",
-        "owners",
-        "settling"
+        "owners"
       ],
       "$defs": {
         "__schema0": {
@@ -5543,18 +5581,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "additionalProperties": {}
           }
         },
-        "runningSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "parkedSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "total": {
           "type": "integer",
           "minimum": 0,
@@ -5574,9 +5600,72 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         }
       },
       "required": [
-        "workItems",
-        "runningSessionIds",
-        "parkedSessionIds"
+        "workItems"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "resolved"
+            },
+            "projectRepositoryId": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "projectRepositoryId",
+            "slug"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unlinked"
+            },
+            "hint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "hint"
+          ]
+        }
       ]
     }
   },
@@ -12475,6 +12564,66 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": {}
     }
   },
+  "POST /web/factory/projects/:id/skills": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "content": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "name",
+        "content"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/work-items": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -13266,6 +13415,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "sessionActivity": "GET /web/factory/projects/:id/session-activity",
   "sessionRows": "GET /web/factory/projects/:id/session-rows",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "workItemSessionRepository": "GET /web/factory/projects/:id/work-items/:workItemId/session-repository",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemFilterOptions": "GET /web/factory/projects/:id/work-items/filter-options",
   "workItemStarters": "GET /web/factory/projects/:id/work-items/starters",
@@ -13295,6 +13445,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteAgain": "POST /web/factory/projects/:id/intake/not-routed/:decisionId/route-again",
   "intakeTest": "POST /web/factory/projects/:id/intake/test",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
+  "skillCreate": "POST /web/factory/projects/:id/skills",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",

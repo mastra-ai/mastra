@@ -323,7 +323,7 @@ A classifier without constructor-configured questions can't be used as a workflo
           },
           {
             name: 'suspend',
-            type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>',
+            type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string | string[] }) => Promise<void>',
             description: 'Function to pause workflow execution',
           },
           {
@@ -358,7 +358,6 @@ A classifier without constructor-configured questions can't be used as a workflo
           {
             name: 'requestContext',
             type: 'RequestContext',
-            isOptional: true,
             description: 'Request Context for dependency injection and contextual information.',
           },
           {
@@ -366,7 +365,6 @@ A classifier without constructor-configured questions can't be used as a workflo
             type: 'number',
             description:
               'The retry count for this specific step, it automatically increases each time the step is retried',
-            isOptional: true,
           },
         ],
       },

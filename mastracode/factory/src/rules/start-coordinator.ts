@@ -11,7 +11,7 @@ import { hydrateFactorySession, resolveFactorySessionModel } from '../session/fa
 import {
   isRunRepositoryInstruction,
   repositoryChosenByRun,
-  resolveRunRepository,
+  resolveRunRepositoryFromIntake,
   runRepositoryInstruction,
 } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -210,19 +210,17 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
     const runItem = storedItem ?? {
       metadata: request.workItem.input.metadata ?? null,
       workItem: { metadata: request.workItem.input.metadata ?? null },
     };
     // A card that names no repository runs in the session's own repository,
     // and its agent determines from the card which repository to work in.
-    const repository = await resolveRunRepository({
+    const repository = await resolveRunRepositoryFromIntake(this.#intake, {
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       item: runItem,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
       boundProjectRepositoryId: sourceSession.projectRepositoryId,
     });
     if (repository.status === 'unlinked') {
