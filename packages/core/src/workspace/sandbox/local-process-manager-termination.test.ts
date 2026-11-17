@@ -211,7 +211,7 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager wait after th
 
     controller.abort();
 
-    expect(await waitForExit(childPid, 500)).toBe(true);
+    expect(await waitForExit(childPid)).toBe(true);
   });
 
   it('still kills the child a command left behind after wait() has returned', async () => {
