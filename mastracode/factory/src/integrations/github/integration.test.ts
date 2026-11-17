@@ -782,9 +782,9 @@ describe('GithubIntegration capability surface', () => {
         data: { id: 91, pull_request_url: `https://api.github.com/repos/acme/app/pulls/${pullNumber}` },
       }));
     const page = (hasNextPage: boolean, endCursor: string | null = null) => ({ hasNextPage, endCursor });
-    const thread = (id: string, commentIds: number[], comments = page(false)) => ({
+    const thread = (id: string, commentIds: Array<number | string>, comments = page(false)) => ({
       id,
-      comments: { nodes: commentIds.map(databaseId => ({ databaseId })), pageInfo: comments },
+      comments: { nodes: commentIds.map(commentId => ({ fullDatabaseId: String(commentId) })), pageInfo: comments },
     });
     const threadsPage = (threads: ReturnType<typeof thread>[], pageInfo = page(false)) => ({
       repository: { pullRequest: { reviewThreads: { nodes: threads, pageInfo } } },
@@ -833,9 +833,9 @@ describe('GithubIntegration capability surface', () => {
         .fn()
         .mockResolvedValueOnce(threadsPage([thread('T1', [10], page(true, 'comments-1')), thread('T2', [20])]))
         .mockResolvedValueOnce({
-          node: { comments: { nodes: [{ databaseId: 12 }], pageInfo: page(true, 'comments-2') } },
+          node: { comments: { nodes: [{ fullDatabaseId: '12' }], pageInfo: page(true, 'comments-2') } },
         })
-        .mockResolvedValueOnce({ node: { comments: { nodes: [{ databaseId: 91 }], pageInfo: page(false) } } })
+        .mockResolvedValueOnce({ node: { comments: { nodes: [{ fullDatabaseId: '91' }], pageInfo: page(false) } } })
         .mockResolvedValueOnce({ unresolveReviewThread: { thread: { id: 'T1' } } });
       const { github } = setup(graphql);
 
@@ -877,6 +877,27 @@ describe('GithubIntegration capability surface', () => {
 
       expect(graphql).toHaveBeenCalledTimes(2);
       expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T2' });
+    });
+
+    it('matches comment ids above the 32-bit GraphQL Int range', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', ['3000000000'])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T1' } } });
+      const getReviewComment = vi.fn(async () => ({
+        data: { id: 3000000000, pull_request_url: 'https://api.github.com/repos/acme/app/pulls/34' },
+      }));
+      const { github } = setup(graphql, getReviewComment);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '3000000000',
+        resolved: true,
+      });
+
+      expect(graphql).toHaveBeenNthCalledWith(1, expect.stringContaining('fullDatabaseId'), expect.anything());
+      expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T1' });
     });
 
     it('explains what to do when no thread holds the comment', async () => {

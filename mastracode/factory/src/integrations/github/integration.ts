@@ -1759,7 +1759,7 @@ const REVIEW_THREADS_QUERY = `
           nodes {
             id
             comments(first: $pageSize) {
-              nodes { databaseId }
+              nodes { fullDatabaseId }
               pageInfo { hasNextPage endCursor }
             }
           }
@@ -1775,7 +1775,7 @@ const REVIEW_THREAD_COMMENTS_QUERY = `
     node(id: $threadId) {
       ... on PullRequestReviewThread {
         comments(first: $pageSize, after: $cursor) {
-          nodes { databaseId }
+          nodes { fullDatabaseId }
           pageInfo { hasNextPage endCursor }
         }
       }
@@ -1801,7 +1801,8 @@ interface GraphqlPageInfo {
 }
 
 interface GraphqlReviewThreadComments {
-  nodes: Array<{ databaseId: number | null } | null> | null;
+  // GitHub serializes the BigInt scalar as a string.
+  nodes: Array<{ fullDatabaseId: string | null } | null> | null;
   pageInfo: GraphqlPageInfo;
 }
 
@@ -1821,7 +1822,8 @@ interface ReviewThreadCommentsResponse {
 }
 
 function containsComment(comments: GraphqlReviewThreadComments, commentId: number): boolean {
-  return (comments.nodes ?? []).some(comment => comment?.databaseId === commentId);
+  const id = String(commentId);
+  return (comments.nodes ?? []).some(comment => comment?.fullDatabaseId === id);
 }
 
 /**
