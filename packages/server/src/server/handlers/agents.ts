@@ -681,8 +681,7 @@ export async function getSerializedAgentTools(
 
         const outputSchema = schemaToJsonSchema(
           resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
@@ -690,8 +689,7 @@ export async function getSerializedAgentTools(
 
         const requestContextSchema = schemaToJsonSchema(
           resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
@@ -1782,6 +1780,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -1899,6 +1898,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -1972,6 +1972,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -2195,6 +2196,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -2455,8 +2457,7 @@ async function handleAgentMessageRoute({
   invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
-    | undefined;
+    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
@@ -2539,8 +2540,9 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
         ...params,
         methodName: 'sendMessage',
         invoke: (agent, target) => {
-          stripClientAuthoredTurnMarks([params.message]);
-          return agent.sendMessage(params.message, target);
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.sendMessage(sanitized[0] as typeof params.message, target);
         },
       });
     } catch (error) {
@@ -2568,8 +2570,9 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
         ...params,
         methodName: 'queueMessage',
         invoke: (agent, target) => {
-          stripClientAuthoredTurnMarks([params.message]);
-          return agent.queueMessage(params.message, target);
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.queueMessage(sanitized[0] as typeof params.message, target);
         },
       });
     } catch (error) {
@@ -3061,6 +3064,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -4077,6 +4081,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       validateBody({ messages });
       // A client must not be able to mark its own message as an authored turn.
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((params as { context?: unknown }).context);
 
       // Authorization: context values take precedence over client-provided values
       let authorizedMemoryOption = params.memory;

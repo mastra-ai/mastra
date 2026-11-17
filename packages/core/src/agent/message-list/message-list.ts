@@ -501,8 +501,7 @@ export class MessageList {
 
   private removeMatchingTransientSignals(incoming: MastraDBMessage): void {
     const incomingMeta = incoming.content.metadata?.signal as
-      | { id?: string; type?: string; tagName?: string }
-      | undefined;
+      { id?: string; type?: string; tagName?: string } | undefined;
     // The stored copy's parts gain bookkeeping fields (e.g. a per-part `createdAt` stamp)
     // during conversion, so compare contents with those stripped.
     const serializeParts = (parts: MastraDBMessage['content']['parts']) =>
@@ -514,8 +513,7 @@ export class MessageList {
       if (!isTransientSignalMessage(existing)) continue;
 
       const existingMeta = existing.content.metadata?.signal as
-        | { id?: string; type?: string; tagName?: string }
-        | undefined;
+        { id?: string; type?: string; tagName?: string } | undefined;
 
       const sameId = existing.id === incoming.id;
       const sameLogicalSignal =
@@ -747,17 +745,20 @@ export class MessageList {
       metadata: { createdAt },
     };
 
+    // Signals never carry an authored turn, so every turn tag in their text is escaped.
     return [
-      convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
-        memoryInfo: this.memoryInfo,
-        newMessageId: () => message.id,
-        generateCreatedAt: (_messageSource, start) => {
-          if (start instanceof Date) return start;
-          if (typeof start === 'string' || typeof start === 'number') return new Date(start);
-          return createdAt;
-        },
-        dbMessages: this.messages,
-      }),
+      sealUserTurnMessage(
+        convertInputToMastraDBMessage(promptMessage as MessageInput, 'input', {
+          memoryInfo: this.memoryInfo,
+          newMessageId: () => message.id,
+          generateCreatedAt: (_messageSource, start) => {
+            if (start instanceof Date) return start;
+            if (typeof start === 'string' || typeof start === 'number') return new Date(start);
+            return createdAt;
+          },
+          dbMessages: this.messages,
+        }),
+      ),
     ];
   }
 

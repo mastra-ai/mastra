@@ -51,47 +51,58 @@ export function sandboxAttributeForProxy(requested: string, sandboxUrl: string, 
 
 // A string, not a function, so the bundler cannot inject helpers the iframe does not have.
 const INJECT_GUEST_HTML = `function injectGuestHtml(html, csp, hostOrigin) {
-  function sources(list) {
+  var hostName = '';
+  try { hostName = new URL(hostOrigin).hostname.toLowerCase(); } catch (error) {}
+  function sources(list, allowSockets) {
     if (!Array.isArray(list)) return [];
     var out = [];
     for (var i = 0; i < list.length; i++) {
       var entry = list[i];
       if (typeof entry !== 'string') continue;
       var trimmed = entry.trim();
-      if (!trimmed || /[\\s;,]/.test(trimmed)) continue;
+      if (!trimmed || /[\\s;,*]/.test(trimmed)) continue;
       var url;
       try { url = new URL(trimmed); } catch (error) { continue; }
-      if (url.origin === 'null' || url.origin === hostOrigin) continue;
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') continue;
-      if (url.protocol === 'http:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') continue;
-      if (out.indexOf(url.origin) === -1) out.push(url.origin);
+      if (url.origin === 'null') continue;
+      var secure = url.protocol === 'https:' || (allowSockets && url.protocol === 'wss:');
+      var plain = url.protocol === 'http:' || (allowSockets && url.protocol === 'ws:');
+      if (!secure && !plain) continue;
+      var name = url.hostname.toLowerCase();
+      if (plain && name !== 'localhost' && name !== '127.0.0.1') continue;
+      // CSP upgrades http/ws to https/wss, so any scheme on the Studio host would reach Studio.
+      if (name === hostName) continue;
+      var origin = url.protocol + '//' + url.host;
+      if (out.indexOf(origin) === -1) out.push(origin);
     }
     return out;
   }
-  var connect = sources(csp && csp.connectDomains);
-  var resources = sources(csp && csp.resourceDomains);
-  var frames = sources(csp && csp.frameDomains);
-  var bases = sources(csp && csp.baseUriDomains);
-  var resourceSrc = ['data:', 'blob:', 'https:'].concat(resources).join(' ');
-  var scriptSrc = "'unsafe-inline' 'unsafe-eval' blob: data:" + (resources.length ? ' ' + resources.join(' ') : '');
-  var styleSrc = "'unsafe-inline'" + (resources.length ? ' ' + resources.join(' ') : '');
+  var connect = sources(csp && csp.connectDomains, true);
+  var resources = sources(csp && csp.resourceDomains, false);
+  var frames = sources(csp && csp.frameDomains, false);
+  var bases = sources(csp && csp.baseUriDomains, false);
+  var resourceSrc = ['data:', 'blob:'].concat(resources).join(' ');
+  var scriptSrc = \"'unsafe-inline' 'unsafe-eval' blob: data:\" + (resources.length ? ' ' + resources.join(' ') : '');
+  var styleSrc = \"'unsafe-inline'\" + (resources.length ? ' ' + resources.join(' ') : '');
   var policy = [
-    "default-src 'none'",
+    \"default-src 'none'\",
     'script-src ' + scriptSrc,
     'style-src ' + styleSrc,
     'img-src ' + resourceSrc,
     'font-src ' + resourceSrc,
     'media-src ' + resourceSrc,
-    'connect-src ' + (connect.length ? connect.join(' ') : "'none'"),
-    'frame-src ' + (frames.length ? frames.join(' ') : "'none'"),
-    'base-uri ' + (bases.length ? bases.join(' ') : "'none'"),
-    "form-action 'none'",
-    "object-src 'none'"
+    'connect-src ' + (connect.length ? connect.join(' ') : \"'none'\"),
+    'frame-src ' + (frames.length ? frames.join(' ') : \"'none'\"),
+    'base-uri ' + (bases.length ? bases.join(' ') : \"'none'\"),
+    \"form-action 'none'\",
+    \"object-src 'none'\"
   ].join('; ');
-  var meta = '<meta http-equiv="Content-Security-Policy" content="' + policy.replace(/"/g, '&quot;') + '">';
-  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, function (match) { return match + meta; });
-  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, function (match) { return match + '<head>' + meta + '</head>'; });
-  return '<!DOCTYPE html><html><head>' + meta + '</head><body>' + html + '</body></html>';
+  // Parse without running scripts, so comments or decoy tags cannot move the policy out of the real head.
+  var doc = new DOMParser().parseFromString(html, 'text/html');
+  var meta = doc.createElement('meta');
+  meta.setAttribute('http-equiv', 'Content-Security-Policy');
+  meta.setAttribute('content', policy);
+  doc.head.insertBefore(meta, doc.head.firstChild);
+  return '<!DOCTYPE html>' + doc.documentElement.outerHTML;
 }`;
 
 /**
@@ -120,7 +131,6 @@ export function sandboxProxyHtml(hostOrigin: string): string {
   var GUEST_SANDBOX = ${guestSandbox};
   var injectGuestHtml = ${INJECT_GUEST_HTML};
   var frame = null;
-  var accepted = false;
   var queue = [];
   function relay(data){
     if (!frame || frame.getAttribute('data-ready') !== '1' || !frame.contentWindow) {
@@ -135,22 +145,26 @@ export function sandboxProxyHtml(hostOrigin: string): string {
     if (event.source === window.parent) {
       if (event.origin !== HOST) return;
       if (data.method === 'ui/notifications/sandbox-resource-ready') {
-        if (accepted) return;
         var params = data.params || {};
         if (typeof params.html !== 'string') return;
-        accepted = true;
-        frame = document.createElement('iframe');
-        frame.setAttribute('sandbox', GUEST_SANDBOX);
-        frame.setAttribute('referrerpolicy', 'no-referrer');
-        frame.style.cssText = 'width:100%;height:100%;border:none;background:transparent';
-        frame.addEventListener('load', function(){
-          if (!frame.getAttribute('srcdoc')) return;
-          frame.setAttribute('data-ready', '1');
+        // New HTML replaces the guest frame; queued messages belonged to the old document.
+        if (frame) {
+          frame.remove();
+          queue.length = 0;
+        }
+        var guest = document.createElement('iframe');
+        frame = guest;
+        guest.setAttribute('sandbox', GUEST_SANDBOX);
+        guest.setAttribute('referrerpolicy', 'no-referrer');
+        guest.style.cssText = 'width:100%;height:100%;border:none;background:transparent';
+        guest.addEventListener('load', function(){
+          if (frame !== guest || !guest.getAttribute('srcdoc')) return;
+          guest.setAttribute('data-ready', '1');
           var pending = queue.splice(0, queue.length);
-          for (var i = 0; i < pending.length; i++) frame.contentWindow.postMessage(pending[i], '*');
+          for (var i = 0; i < pending.length; i++) guest.contentWindow.postMessage(pending[i], '*');
         });
-        frame.srcdoc = injectGuestHtml(params.html, params.csp, HOST);
-        document.body.appendChild(frame);
+        guest.srcdoc = injectGuestHtml(params.html, params.csp, HOST);
+        document.body.appendChild(guest);
         return;
       }
       relay(data);

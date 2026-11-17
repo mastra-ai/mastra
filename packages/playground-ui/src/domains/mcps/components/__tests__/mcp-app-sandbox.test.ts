@@ -59,6 +59,45 @@ describe('MCP app sandbox', () => {
     expect(html).not.toContain(HOST);
   });
 
+  it('keeps wss connect sources and rejects sources that could match Studio', () => {
+    const html = injectGuestHtml(
+      '<p>hi</p>',
+      {
+        connectDomains: [
+          'wss://realtime.service.com',
+          'https://*.example',
+          'http://studio.example',
+          'ws://studio.example',
+        ],
+        resourceDomains: ['*', 'https:'],
+      },
+      HOST,
+    );
+
+    expect(html).toContain('connect-src wss://realtime.service.com');
+    expect(html).not.toContain('studio.example');
+    expect(html).not.toContain('*.example');
+    expect(html).toMatch(/img-src data: blob:;/);
+  });
+
+  it('does not allow every https origin for images, fonts or media', () => {
+    const html = injectGuestHtml('<p>hi</p>', undefined, HOST);
+
+    expect(html).not.toMatch(/(img|font|media)-src[^;]*https:/);
+  });
+
+  it('puts the policy in the parsed head even when the markup has a decoy head', () => {
+    const html = injectGuestHtml(
+      '<!-- <head> --><html><head><title>t</title></head><body><script>fetch("x")</script></body></html>',
+      undefined,
+      HOST,
+    );
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    expect(doc.head.firstElementChild?.getAttribute('http-equiv')).toBe('Content-Security-Policy');
+    expect(html.indexOf('Content-Security-Policy')).toBeLessThan(html.indexOf('<script>'));
+  });
+
   it('serves a proxy that does not write guest HTML into the Studio document', () => {
     const proxy = sandboxProxyHtml(HOST);
 

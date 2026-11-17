@@ -67,6 +67,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, scopes: _scopes, ...rest } = params;
       validateBody({ messages });
       stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
