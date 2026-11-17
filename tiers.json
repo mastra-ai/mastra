@@ -4100,10 +4100,10 @@
       "reason": "seed-rule-b"
     },
     "mastracode/factory/src/integrations/platform/github/integration.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-17",
+      "last_failure": "2026-11-17",
+      "reason": "versioning-fail"
     },
     "mastracode/factory/src/integrations/platform/gitlab/event-worker.test.ts": {
       "tier": "out",
