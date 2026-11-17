@@ -215,6 +215,10 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       const result = await restarted;
       expect(executions).toEqual([`A:${run.runId}`]);
       expect(result.status).toBe('failed');
+      if (result.status === 'failed') {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toBe('step failed');
+      }
       expect(await workflowsStore.getWorkflowRunById({ workflowName: 'recoverable-wf', runId: run.runId })).toEqual(
         storedAfterSettle,
       );
