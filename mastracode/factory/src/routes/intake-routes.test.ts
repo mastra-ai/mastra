@@ -161,8 +161,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const base = `${projectPath}/intake-routes`;
     const scope = { orgId, factoryProjectId: project.id };
     if (!seeded) {
-      // Last first, so no delete moves (and re-revisions) a route still to delete.
-      for (const route of (await a.boards.listIntakeRoutes(scope)).toReversed()) {
+      for (const route of await a.boards.listIntakeRoutes(scope)) {
         await a.boards.deleteIntakeRoute(scope, route.id, { expectedRevision: route.revision });
       }
     }
@@ -736,6 +735,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base)).toEqual([
       expect.objectContaining({ name: 'B', enabled: true, revision: 2 }),
     ]);
+  });
+
+  it('deleting a rule leaves the other rules untouched, so an edit opened before the delete still saves', async () => {
+    const { base, replicaA } = await setup();
+    const created: Route[] = [];
+    for (const name of ['a', 'b', 'c', 'd', 'e']) {
+      created.push((await replicaA.send('POST', base, { name, when: DOCS, target: WORK })).body.intakeRoute as Route);
+    }
+
+    expect((await replicaA.send('DELETE', `${base}/${created[1]!.id}?expectedRevision=1`)).status).toBe(204);
+
+    // The rules after the deleted one keep their order and the revision other editors hold.
+    const after = await list(replicaA.send, base);
+    expect(after.map(route => [route.name, route.revision])).toEqual([
+      ['a', 1],
+      ['c', 1],
+      ['d', 1],
+      ['e', 1],
+    ]);
+    // An editor that loaded rule "e" before the delete saves without a stale-revision 409.
+    expect(
+      (await replicaA.send('PATCH', `${base}/${created[4]!.id}`, { name: 'e2', expectedRevision: 1 })).status,
+    ).toBe(200);
   });
 
   it('reorders routes only when given exactly the current set', async () => {

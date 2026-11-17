@@ -17,7 +17,7 @@ export function PausedLinearWorkspace({
   count: number;
   reconnect: LinearReconnectResult;
   onRetry: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   return (
     <SettingsRow
@@ -39,15 +39,17 @@ export function PausedLinearWorkspace({
           </Button>
         )}
         <LinearWorkspaceControl workspace={workspace} targeted />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<TrashIcon />}
-          aria-label={`Remove sources from ${workspace.name}`}
-          onClick={onRemove}
-        >
-          Remove
-        </Button>
+        {onRemove && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<TrashIcon />}
+            aria-label={`Remove sources from ${workspace.name}`}
+            onClick={onRemove}
+          >
+            Remove
+          </Button>
+        )}
       </div>
     </SettingsRow>
   );

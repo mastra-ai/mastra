@@ -11,8 +11,8 @@ import { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../hooks/useIntakeOrder';
 import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
+import { boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { phaseOptions, reorderWithin } from '../ruleTargets';
-import { INTAKE_ORDER_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
 import { intakePosition, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
@@ -193,10 +193,7 @@ function BoardLanes({
                       No card yet:{' '}
                       {position && (
                         <>
-                          <Link
-                            to={settingsSectionPath(factoryId, 'intake', INTAKE_ORDER_ANCHOR)}
-                            className="underline"
-                          >
+                          <Link to={boardIntakePath(factoryId, board.id, INTAKE_ORDER_ANCHOR)} className="underline">
                             {position.charAt(0).toLowerCase() + position.slice(1)}
                           </Link>
                           ;{' '}

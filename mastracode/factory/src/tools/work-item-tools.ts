@@ -404,7 +404,7 @@ export function createFactoryWorkItemTools(
       execute: async ({ workItem }) => {
         const item = await requireItem(workItem);
         const removed = await deps.workItems.unsubscribeFromWorkItem({
-          orgId: scope.orgId,
+          ...project,
           workItemId: item.id,
           sessionId: scope.sessionId,
         });

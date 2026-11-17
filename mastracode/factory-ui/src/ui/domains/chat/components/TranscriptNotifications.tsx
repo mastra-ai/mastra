@@ -11,6 +11,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -154,11 +155,7 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
           {outcome}
         </Txt>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        render={<Link to={`/factories/${factoryId}/workspaces/${waiting.sessionId}/threads/${waiting.threadId}`} />}
-      >
+      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
         Open session
       </Button>
     </div>

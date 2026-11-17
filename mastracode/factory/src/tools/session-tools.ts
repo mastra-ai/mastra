@@ -10,6 +10,8 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
+import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
+import { customProviderOwner } from '../routes/custom-provider-source.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -22,7 +24,7 @@ import {
   resolveFactorySessionModel,
 } from '../session/factory-session.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
-import { resolveRunRepository } from '../session/work-item-repository.js';
+import { resolveRunRepositoryFromIntake } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -136,6 +138,13 @@ export function createFactorySessionTools(
     const modelScope = policy.tenant.credentialScope ?? 'user';
     const orgId = policy.tenant.orgId ?? scope.orgId;
     const customProviders = tenantCatalog.customProviders;
+    // The list model resolution uses for this session, so the tool never
+    // offers a custom model the session cannot run. A tenant catalog only
+    // exists with sign-in on.
+    const customProviderOwnerForSession = customProviderOwner(
+      { orgId, userId: policy.tenant.userId, credentialScope: modelScope },
+      /* authEnabled */ true,
+    );
     const usable = (
       await buildModelCatalog({
         controller,
@@ -146,12 +155,15 @@ export function createFactorySessionTools(
           modelScope,
         }),
         deploymentProviders: tenantCatalog.deploymentProviders,
-        listCustomProviders: customProviders
-          ? async () => {
-              await customProviders.ensureReady();
-              return customProviders.list({ orgId });
-            }
-          : undefined,
+        listCustomProviders:
+          customProviders && customProviderOwnerForSession
+            ? async () => {
+                await customProviders.ensureReady();
+                return (await customProviders.list(customProviderOwnerForSession)).filter(
+                  provider => !customEndpointUrlProblem(provider.url),
+                );
+              }
+            : undefined,
       })
     ).map(model => model.id);
     for (const id of usable) known.add(id);
@@ -477,7 +489,7 @@ export function createFactorySessionTools(
     } catch (error) {
       if (!alreadyFollowing) {
         await deps.workItems.unsubscribeFromWorkItem({
-          orgId: scope.orgId,
+          ...followScope,
           workItemId: item.id,
           sessionId: scope.sessionId,
         });
@@ -568,14 +580,12 @@ export function createFactorySessionTools(
   }
 
   async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
-    const intakeConfig = await deps.intake?.getConfig({ orgId: scope.orgId, integrationIds: ['linear'] });
     // A card that names no repository starts in the environment's first one; its agent determines the right one.
-    const repository = await resolveRunRepository({
+    const repository = await resolveRunRepositoryFromIntake(deps.intake, {
       sourceControl,
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
       item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'unlinked') throw new Error(repository.hint);
     return repository.projectRepositoryId;

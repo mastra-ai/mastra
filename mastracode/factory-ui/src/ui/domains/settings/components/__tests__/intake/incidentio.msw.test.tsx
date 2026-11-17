@@ -99,9 +99,6 @@ describe('IntakeSection incidentio', () => {
       const section = await screen.findByRole('region', { name: 'incident.io' });
       expect(await within(section).findByText('incident.io API key configured on this server')).toBeInTheDocument();
       expect(within(section).queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
-      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
-      expect(toggle).toBeChecked();
-      expect(toggle).toBeEnabled();
       expect(await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' })).toBeEnabled();
       expect(await screen.findByLabelText('Factory for Incident follow-ups (acme)')).toBeInTheDocument();
     });
@@ -138,9 +135,6 @@ describe('IntakeSection incidentio', () => {
       const section = await screen.findByRole('region', { name: 'incident.io' });
       expect(await within(section).findByText('incident.io API key configured on this server')).toBeInTheDocument();
       expect(within(section).queryByText("Couldn't load incident.io connections.")).not.toBeInTheDocument();
-      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
-      expect(toggle).toBeChecked();
-      expect(toggle).toBeEnabled();
       expect(await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' })).toBeEnabled();
     });
 
@@ -168,7 +162,7 @@ describe('IntakeSection incidentio', () => {
 
       renderIntakeSection();
 
-      await screen.findByRole('switch', { name: 'Sync GitHub issues' });
+      await screen.findByRole('region', { name: 'GitHub' });
       expect(screen.queryByRole('region', { name: 'incident.io' })).not.toBeInTheDocument();
       expect(sourceRequests).toBe(0);
     });

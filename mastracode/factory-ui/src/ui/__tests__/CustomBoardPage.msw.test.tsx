@@ -79,9 +79,7 @@ function renderBoard(
       HttpResponse.json({ enabled: Boolean(linear), connected: Boolean(linear), workspace: null }),
     ),
     http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
-    http.get('*/web/factory/projects/:id/work-items', () =>
-      HttpResponse.json({ workItems, runningSessionIds: [], parkedSessionIds: [] }),
-    ),
+    http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems })),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);

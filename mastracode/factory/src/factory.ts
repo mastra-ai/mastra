@@ -78,6 +78,11 @@ import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptanc
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
+  SEED_GITHUB_ISSUE_SOURCES_MIGRATION,
+  linkedGithubProjectRepositoryIds,
+  linkedGithubSlugsByOrg,
+} from './integrations/github/issue-intake.js';
+import {
   recordFactoryPullRequestProvenance,
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
@@ -91,10 +96,20 @@ import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import {
+  buildConnectToolListRoute,
+  buildConnectToolsRoute,
+  buildPlatformConnectRoutes,
+} from './integrations/platform/connect/routes.js';
+import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
+import {
+  platformConnectTools,
+  projectConnectTools,
+  resolveToolsInTime,
+} from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -173,6 +188,7 @@ import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
+import { shareSessionListChanges } from './session-list-changes.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -530,16 +546,15 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   return new PlatformFactorySandbox();
 }
 
-function platformConnectProjectId(): string | undefined {
-  if (!hasPlatformCredentials()) return undefined;
+/**
+ * The Platform project whose Mastra Connect connections this Factory uses, or
+ * the one piece of setup that's missing. Independent of the `tools` option:
+ * Settings › Tools lists the project's connections either way.
+ */
+function platformConnectSetup(): { projectId: string } | { missing: ConnectToolsSetupMissing } {
+  if (!hasPlatformCredentials()) return { missing: 'no_credentials' };
   const projectId = process.env.MASTRA_PROJECT_ID?.trim();
-  if (!projectId) {
-    console.warn(
-      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
-    );
-    return undefined;
-  }
-  return projectId;
+  return projectId ? { projectId } : { missing: 'no_project_id' };
 }
 
 function warnIgnoredMcpConfig(): void {
@@ -642,6 +657,7 @@ export class MastraFactory {
   #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
+  #unsubscribeSessionListChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -1001,6 +1017,10 @@ export class MastraFactory {
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
     this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
+    this.#unsubscribeSessionListChanges = shareSessionListChanges(eventBus, {
+      sourceControl: sourceControlStorage,
+      workItems: workItemsStorage,
+    });
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -1235,6 +1255,37 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    const sourceControlReady = storage.isDomainReady('source-control');
+    // Issues only become cards from repositories selected in Work Intake; every linked repository brought them in
+    // before, so select those once to keep that.
+    if (storage.isDomainReady('intake') && sourceControlReady) {
+      await intakeStorage
+        .addSourcesOnce({
+          migration: SEED_GITHUB_ISSUE_SOURCES_MIGRATION,
+          integrationId: 'github',
+          sourcesByOrg: () => linkedGithubSlugsByOrg(sourceControlStorage.forIntegration('github')),
+        })
+        .catch(error => {
+          console.error(
+            '[factory] Failed to select linked GitHub repositories for issue intake; retrying next boot:',
+            error,
+          );
+        });
+    }
+    if (storage.isDomainReady('intake')) {
+      await intakeStorage
+        .addSourcesOnce({
+          migration: SELECT_VANTA_VULNERABILITIES_MIGRATION,
+          integrationId: 'vanta',
+          sourcesByOrg: async () => vantaOrgsSyncingWithoutSource(await intakeStorage.listConfigs()),
+        })
+        .catch(error => {
+          console.error(
+            '[factory] Failed to select Vanta vulnerabilities for orgs syncing them; retrying next boot:',
+            error,
+          );
+        });
+    }
     // Sessions from before shared resources ran under their own id. Move them
     // onto their Factory or owner in the background: it can take minutes on a
     // remote database, and an unmoved session keeps working under its own id
@@ -1780,9 +1831,34 @@ export class MastraFactory {
           return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
         },
       });
-    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const connectSetup = platformConnectSetup();
+    const connectToolsSource = this.#config.tools === undefined ? 'default' : 'custom';
+    if (connectToolsSource === 'default' && 'missing' in connectSetup && connectSetup.missing === 'no_project_id') {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+      );
+    }
     const sessionTools =
-      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
+      this.#config.tools ?? ('projectId' in connectSetup ? platformConnectTools(connectSetup.projectId) : undefined);
+    const configuredTools = this.#config.tools;
+    // What Settings › Tools lists: the same tools a session resolves, before Factory's default filters.
+    const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
+      'projectId' in connectSetup
+        ? {
+            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            projectId: connectSetup.projectId,
+            toolsSource: connectToolsSource,
+            resolveTools:
+              configuredTools === undefined
+                ? projectConnectTools(connectSetup.projectId)
+                : async ({ requestContext }: { requestContext: RequestContext }) =>
+                    resolveToolsInTime(
+                      Promise.resolve(
+                        typeof configuredTools === 'function' ? configuredTools({ requestContext }) : configuredTools,
+                      ),
+                    ),
+          }
+        : connectSetup;
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2244,6 +2320,32 @@ export class MastraFactory {
             domains,
             integrations: integrationRegistrations,
             intakeReady,
+            ...(githubIntegration && sourceControlReady
+              ? {
+                  onIntakeSourcesSelected: ({ orgId, integrationId, sourceIds }) => {
+                    if (integrationId !== 'github') return;
+                    void (async () => {
+                      const projectRepositoryIds = await linkedGithubProjectRepositoryIds(
+                        sourceControlStorage.forIntegration('github'),
+                        orgId,
+                        sourceIds,
+                      );
+                      for (const projectRepositoryId of projectRepositoryIds) {
+                        await githubIntegration
+                          .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId })
+                          .catch(error => {
+                            console.warn(
+                              `[factory] Failed to bring in issues from newly selected repository ${projectRepositoryId}:`,
+                              error,
+                            );
+                          });
+                      }
+                    })().catch(error => {
+                      console.warn('[factory] Failed to bring in issues from newly selected repositories:', error);
+                    });
+                  },
+                }
+              : {}),
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
@@ -2354,12 +2456,8 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
-          buildConnectToolsRoute(
-            routeAuth,
-            connectToolsProjectId
-              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
-              : undefined,
-          ),
+          buildConnectToolsRoute(routeAuth, connectToolsList),
+          buildConnectToolListRoute(routeAuth, connectToolsList),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
@@ -2674,6 +2772,9 @@ export class MastraFactory {
       const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
       this.#unsubscribeLinkedRepositoryChanges = undefined;
       await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
+      const unsubscribeSessionListChanges = this.#unsubscribeSessionListChanges;
+      this.#unsubscribeSessionListChanges = undefined;
+      await unsubscribeSessionListChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

@@ -84,15 +84,15 @@ function renderApp(
     // No ambient handler: the sidebar's sessions, the chat's permissions, the
     // composer's model defaults and the board's intake.
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-rows`, () =>
-      HttpResponse.json({ total: 0, matching: 0, groups: [], boards: [], owners: [], settling: false }),
+      HttpResponse.json({ total: 0, matching: 0, groups: [], boards: [], owners: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-activity`, () =>
       HttpResponse.json({
         runningSessionIds: [],
         parkedSessionIds: [],
-        initializingSessionIds: [],
+        cardStatuses: {},
+        sessionHeldCardIds: [],
         cards: { working: 0, waiting: 0 },
-        settling: false,
       }),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () => HttpResponse.json({})),

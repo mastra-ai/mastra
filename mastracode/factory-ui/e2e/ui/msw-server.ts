@@ -24,6 +24,9 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient custom endpoints: every provider list reads them next to the
+  // catalog above. Custom-endpoint tests override it with `server.use(...)`.
+  http.get('*/web/config/custom-providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
@@ -67,6 +70,10 @@ export const server = setupServer(
   http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // incident.io intake is optional; feature tests override this ambient 404.
   http.get('*/web/incidentio/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  // Ambient tool list for the Mastra Connect tools section; tool-list tests override it with `server.use(...)`.
+  http.get('*/web/integrations/platform/connect-tools/tools', () =>
+    HttpResponse.json({ toolsSource: 'default', tools: [] }),
+  ),
   // A server without Platform machine credentials mounts no platform connect
   // routes; the ambient 404 hides the provider sections. Provider connection
   // tests override these with `server.use(...)`.

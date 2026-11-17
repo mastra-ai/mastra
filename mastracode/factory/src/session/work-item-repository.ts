@@ -1,3 +1,4 @@
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
@@ -52,19 +53,22 @@ async function listLinkedRepositories(args: {
   return linked;
 }
 
+const PROVIDER_REPOSITORY_IDS = new Map([
+  ['github', { key: 'githubRepositoryId', label: 'GitHub' }],
+  ['gitlab', { key: 'gitlabProjectId', label: 'GitLab' }],
+]);
+
 function getExternalRepositoryId(integrationId: string, metadata: Record<string, unknown>): string | undefined {
-  let id: unknown;
-  switch (integrationId) {
-    case 'github':
-      id = metadata.githubRepositoryId;
-      break;
-    case 'gitlab':
-      id = metadata.gitlabProjectId;
-      break;
-    default:
-      return undefined;
-  }
+  const provider = PROVIDER_REPOSITORY_IDS.get(integrationId);
+  const id = provider ? metadata[provider.key] : undefined;
   return id == null ? undefined : String(id);
+}
+
+function otherProviderLabel(integrationId: string, metadata: Record<string, unknown>): string | undefined {
+  for (const [id, provider] of PROVIDER_REPOSITORY_IDS) {
+    if (id !== integrationId && metadata[provider.key] != null) return provider.label;
+  }
+  return undefined;
 }
 
 /**
@@ -88,11 +92,17 @@ function resolvedRepository(repository: LinkedRepository): WorkItemRepositoryRes
   return { status: 'resolved', projectRepositoryId: repository.projectRepositoryId, slug: repository.slug };
 }
 
+const PROVIDER_ITEM_URL = /^https?:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:issues|pull|merge_requests)\/\d+(?:[/?#]|$)/;
+
+function repositoryNameFromUrl(url: string | null | undefined): string | undefined {
+  return url ? PROVIDER_ITEM_URL.exec(url)?.[1] : undefined;
+}
+
 export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> };
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> & { url?: string | null } };
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;
@@ -109,6 +119,15 @@ export async function resolveWorkItemRepository(args: {
     if (match) return resolvedRepository(match);
   }
 
+  const otherProvider =
+    externalRepositorySignal === undefined ? otherProviderLabel(sourceControl.integrationId, metadata) : undefined;
+  if (otherProvider !== undefined) {
+    return {
+      status: 'unlinked',
+      hint: `This card comes from ${otherProvider}, and no ${otherProvider} repository is linked to this Factory.`,
+    };
+  }
+
   if (repositorySignal) {
     const match = findRepositoryBySlug(linked, repositorySignal);
     return match
@@ -117,9 +136,12 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (externalRepositorySignal !== undefined) {
+    const name = repositoryNameFromUrl(item.workItem.url);
     return {
       status: 'unlinked',
-      hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
+      hint: name
+        ? `Repository ${name} is not linked to this Factory.`
+        : `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
     };
   }
 
@@ -189,6 +211,14 @@ export async function resolveRunRepository(
     return { status: 'unlinked', hint: 'None of the repositories linked to this Factory is in its environment.' };
   }
   return { status: 'resolved', projectRepositoryId: primary.link.id, slug: primary.repository.slug, unnamed };
+}
+
+export async function resolveRunRepositoryFromIntake(
+  intake: Pick<IntakeStorage, 'getConfig'> | undefined,
+  args: Omit<Parameters<typeof resolveRunRepository>[0], 'linearRepositoryMap'>,
+): Promise<RunRepositoryResolution> {
+  const intakeConfig = await intake?.getConfig({ orgId: args.orgId, integrationIds: ['linear'] });
+  return resolveRunRepository({ ...args, linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject });
 }
 
 /** Card metadata recording the `repository` a run chose for a card that named none. */
