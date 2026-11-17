@@ -9249,6 +9249,24 @@ describe('review status comment lifecycle', () => {
     expect(comments()[0]!.body).not.toContain('reviewing.gif');
   });
 
+  it('says why a review attempt failed in fixed public wording, never the provider text', async () => {
+    const providerError = Object.assign(new Error('Rate limit hit for org org-secret-42 on key sk-live-abcdef'), {
+      name: 'AI_APICallError',
+      statusCode: 429,
+      url: 'https://internal-gateway.example/v1/messages',
+    });
+    const { comments } = await reviewRun('review-status-public-reason', {
+      agentEndReason: 'error',
+      runError: providerError,
+    });
+
+    const body = comments()[0]!.body;
+    expect(body).toContain('`Agent run ended in error (the model provider rate-limited the run)`');
+    expect(body).not.toContain('org-secret-42');
+    expect(body).not.toContain('sk-live');
+    expect(body).not.toContain('internal-gateway');
+  });
+
   it('shows a retryable failure as queued again, then the retry finishes the same comment', async () => {
     const run = await reviewRun('review-status-retry', { agentEndReason: 'error' });
     expect((await run.storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });

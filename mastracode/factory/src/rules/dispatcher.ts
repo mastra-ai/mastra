@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
-import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
+import { classifyProviderError } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
@@ -80,6 +80,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
+import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -186,16 +187,6 @@ function httpStatus(error: unknown): number | undefined {
   return 'status' in error && typeof error.status === 'number' ? error.status : undefined;
 }
 
-function causeOf(error: unknown): unknown {
-  return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
-}
-
-function isProviderCallError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  if ('name' in error && typeof error.name === 'string' && PROVIDER_CALL_ERROR_NAME.test(error.name)) return true;
-  return 'statusCode' in error || 'responseBody' in error;
-}
-
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
   const lower = message.toLowerCase();
   if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
@@ -209,8 +200,8 @@ function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCo
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
-  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
-  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
+  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`, { cause: error });
+  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`, { cause: error });
 }
 
 /** A run in the review seat: a pull request review, unless it is the card's board's self-review. */
@@ -1252,7 +1243,7 @@ export class FactoryDecisionDispatcher {
         await this.#reviewStatus(failed ?? record, record.decision, {
           phase: terminal ? 'failed' : 'retrying',
           endedAt: new Date(),
-          reason: factoryDispatchFailureMetadata(failureCode).label,
+          reason: publicFailureReason(failureCode, error),
         });
       }
     }
