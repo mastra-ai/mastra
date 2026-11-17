@@ -1651,7 +1651,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         output,
         (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
         agent.getPubSub(),
-        streamOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+        {
+          continuation: streamOptions?.closeOnSuspend ? undefined : 'across-suspension',
+          // The run's steps register under its registry entry, so the runtime can tell when a sibling tool call of a
+          // suspended step is still running.
+          stepOwner: () => getRunRegistryEntry(runId, mastra),
+        },
       );
 
       // 4. Return stream result - attach extra properties to output for compatibility
@@ -2237,7 +2242,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           output,
           resumeStreamOptions,
           agent.getPubSub(),
-          resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+          {
+            continuation: resumeOptions?.closeOnSuspend ? undefined : 'across-suspension',
+            stepOwner: () => getRunRegistryEntry(runId, mastra),
+          },
         );
       }
 

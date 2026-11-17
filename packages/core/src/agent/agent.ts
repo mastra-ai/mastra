@@ -60,6 +60,7 @@ import {
   getScopeStreamSlot,
   untilIdleHandlesBackgroundTask,
 } from '../loop/shared/stream-until-idle-helpers';
+import { findLatestSuspendedAutoResume } from '../loop/suspended-run-auto-resume';
 import type { AgentLoopResumeClaim } from '../loop/types';
 import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -11560,6 +11561,11 @@ export class Agent<
     if (persistedReturnScorerData !== undefined) {
       mergedStreamOptions.returnScorerData = loopStreamOptions.returnScorerData = persistedReturnScorerData;
     }
+    // Same precedence. The resume's own value, or else the run's, is also what the thread runtime keeps for the run.
+    const runAutoResume = streamOptions?.autoResumeSuspendedTools ?? findLatestSuspendedAutoResume(existingSnapshot);
+    if (runAutoResume !== undefined) {
+      mergedStreamOptions.autoResumeSuspendedTools = loopStreamOptions.autoResumeSuspendedTools = runAutoResume;
+    }
 
     if (snapshotMemoryInfo?.threadId) {
       mergedStreamOptions.memory = {
@@ -11696,7 +11702,12 @@ export class Agent<
       await agentThreadStreamRuntime.registerRun(
         this as Agent<any, any, any, any>,
         result.result as unknown as MastraModelOutput<OUTPUT>,
-        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        // The resume's own value or the run's, not the default merged in: the thread runtime keeps the run's when
+        // this is left out, as for a snapshot written before the run's value was persisted (#30190).
+        {
+          ...preparedOptions,
+          autoResumeSuspendedTools: runAutoResume,
+        } as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
       );
 
@@ -11781,6 +11792,11 @@ export class Agent<
       options?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
     if (persistedReturnScorerData !== undefined) {
       mergedOptions.returnScorerData = loopOptions.returnScorerData = persistedReturnScorerData;
+    }
+    const persistedAutoResume =
+      options?.autoResumeSuspendedTools === undefined ? findLatestSuspendedAutoResume(existingSnapshot) : undefined;
+    if (persistedAutoResume !== undefined) {
+      mergedOptions.autoResumeSuspendedTools = loopOptions.autoResumeSuspendedTools = persistedAutoResume;
     }
     const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
       callScopes: options?.scopes,

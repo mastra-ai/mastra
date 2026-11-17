@@ -484,6 +484,49 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
+type RunMemoryOption = AgentExecutionOptions<any>['memory'];
+
+/**
+ * The memory a resume that names no thread continues its run with: the run's thread and resource, the run's
+ * settings, and on top of those every setting the resume passes itself (`options` merged key by key, so a resume
+ * that sets only `lastMessages` or `readOnly` keeps the rest).
+ */
+function resumeMemoryOnOwnThread({
+  run,
+  resume,
+  threadId,
+  resourceId,
+}: {
+  run: RunMemoryOption;
+  resume: RunMemoryOption;
+  threadId: string;
+  resourceId: string | undefined;
+}): NonNullable<RunMemoryOption> {
+  const options = run?.options || resume?.options ? { ...run?.options, ...resume?.options } : undefined;
+  return {
+    ...run,
+    ...resume,
+    thread: run?.thread ?? threadId,
+    resource: run?.resource ?? resourceId,
+    ...(options ? { options } : {}),
+  };
+}
+
+/**
+ * The options a resume leaves on its run's record. Resume callers hand over the resume's own
+ * `autoResumeSuspendedTools`, not the agent default merged in, so `undefined` means the resume left it out. The run
+ * then keeps the value it started with: a run that turned auto-resume off keeps holding a queued message for an
+ * explicit resume after it parks again. Callers that resume a run rebuilt from storage pass the run's persisted value
+ * instead, since this process has no record of it. (#30190)
+ */
+function keepRunAutoResume<OUTPUT>(
+  resume: AgentExecutionOptions<OUTPUT>,
+  run: Pick<AgentExecutionOptions<any>, 'autoResumeSuspendedTools'> | undefined,
+): AgentExecutionOptions<OUTPUT> {
+  if (resume.autoResumeSuspendedTools !== undefined || run?.autoResumeSuspendedTools === undefined) return resume;
+  return { ...resume, autoResumeSuspendedTools: run.autoResumeSuspendedTools };
+}
+
 type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
@@ -712,6 +755,9 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
+  // Signal IDs this runtime took from its queues as a turn's input. A copy of one forwarded back from another
+  // process is never admitted again, so one message starts at most one turn here. (#30190)
+  startedSignalIdsByThread: Map<string, Set<string>>;
   pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
@@ -1017,6 +1063,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     locallyQueuedSignalIdsByThread: new Map(),
+    startedSignalIdsByThread: new Map(),
     pendingSignalListenersByRunId: new Map(),
     preRunSignalsByThread: new Map(),
     lostRunsByThread: new Map(),
@@ -1424,7 +1471,7 @@ export class AgentThreadStreamRuntime {
       // A durable run's steps register under its registry entry instead; abandoning the run already aborted them.
       const preparedRun = state.preparedRunsById.get(runId);
       const controller = preparedRun?.abortController ?? record.segmentAbortController;
-      const stepOwners = [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
+      const stepOwners = this.#runStepOwners(state, record);
       const executing =
         (!!preparedRun && record.lifecycle !== 'suspended') || stepOwners.some(owner => hasRunningRunStep(owner));
       const abortController = executing ? controller : undefined;
@@ -2161,11 +2208,15 @@ export class AgentThreadStreamRuntime {
    * queued idle signals.
    */
   #hasPendingThreadWork(state: AgentThreadRuntimeState, key: string): boolean {
+    return this.#hasPendingRunInput(state, key) || (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0;
+  }
+
+  /** Queued input for the thread's current run: sent signals and continuations, not work queued for after it. */
+  #hasPendingRunInput(state: AgentThreadRuntimeState, key: string): boolean {
     return (
       (state.pendingSignalsByThread.get(key)?.length ?? 0) > 0 ||
       (state.preRunSignalsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0
+      (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0
     );
   }
 
@@ -2192,7 +2243,10 @@ export class AgentThreadStreamRuntime {
       if (data?.type === 'signal-enqueued') {
         if (
           (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
-          subscription.admittedSignalIds.has(data.signal.id)
+          subscription.admittedSignalIds.has(data.signal.id) ||
+          // Another process can forward a message this runtime already ran, e.g. one sent here while that process
+          // was resuming the run: running it again would answer it twice.
+          state.startedSignalIdsByThread.get(key)?.has(data.signal.id)
         )
           return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
@@ -2204,6 +2258,10 @@ export class AgentThreadStreamRuntime {
         if (!answersTo(runId)) {
           return;
         }
+        // Another process resumed the run and executes it, so its follow-ups are that execution's input, wherever
+        // they were sent. A copy kept here would run as a second reply turn once that execution's turn ends and this
+        // stale record is released. (#30190)
+        if (state.threadRunsById.get(runId)?.registeredElsewhere) return;
         const queues = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         if (
           [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
@@ -2218,6 +2276,13 @@ export class AgentThreadStreamRuntime {
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
+        // Input from another process can be the answer a run parked here is waiting for.
+        const record = state.threadRunsById.get(runId);
+        if (record) {
+          void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(error =>
+            this.#logParkedRunReleaseFailure(record, error),
+          );
+        }
       } else if (data?.type === 'user-message-presentation') {
         const { chunk } = data;
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
@@ -2394,6 +2459,7 @@ export class AgentThreadStreamRuntime {
     subscription.ownedRunIds.clear();
     subscription.admittedSignalIds.clear();
     state.locallyQueuedSignalIdsByThread.delete(key);
+    state.startedSignalIdsByThread.delete(key);
     if (subscription.observers) return;
     state.threadControlSubscriptions.delete(key);
     subscription.unsubscribe();
@@ -3583,6 +3649,24 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /** Signals taken from this runtime's queues as a turn's input; `#forgetStartedSignals` undoes it on a requeue. */
+  #recordStartedSignals(state: AgentThreadRuntimeState, key: string, signals: readonly CreatedAgentSignal[]) {
+    if (signals.length === 0) return;
+    const ids = state.startedSignalIdsByThread.get(key) ?? new Set<string>();
+    for (const signal of signals) {
+      ids.delete(signal.id);
+      ids.add(signal.id);
+    }
+    // Bound memory like the local queue record: evict oldest first.
+    while (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.values().next().value!);
+    state.startedSignalIdsByThread.set(key, ids);
+  }
+
+  #forgetStartedSignals(state: AgentThreadRuntimeState, key: string, signals: readonly CreatedAgentSignal[]) {
+    const ids = state.startedSignalIdsByThread.get(key);
+    for (const signal of signals) ids?.delete(signal.id);
+  }
+
   #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
     ids.delete(signalId);
@@ -4380,6 +4464,82 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * With `autoResumeSuspendedTools`, the next turn is what resumes a run parked on
+   * a tool's suspend(): the model reads the user's answer from the new message.
+   * The parked run itself never drains its queue, so a message queued onto it
+   * would be reported delivered and never run (#30190). Once the run has parked,
+   * queued messages start the next turn the way a stream call on the thread
+   * would; the parked run keeps its record and stays resumable.
+   *
+   * Without auto-resume, the message keeps waiting for the explicit resume (an
+   * AgentController prompt waits for its answer), and a run parked on a tool
+   * approval keeps holding the thread: consent arrives through the approval APIs.
+   *
+   * Only input for the run starts the turn: a sent message or a continuation.
+   * Work queued for after the run (`queueMessage`, `queueSignal`) waits for the
+   * run to end, as it does when queued after the run parked.
+   */
+  async #startQueuedTurnAfterParkedRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+  ): Promise<void> {
+    // The options the decision below reads. A resume of this record replaces them (`continueRun`), and can park the
+    // run again with auto-resume off while this check awaits; that park checks again with the new options.
+    const options = record.streamOptions;
+    const canStart = () =>
+      // A resume registers a new record under the run id; that one holds the thread now.
+      state.threadRunsById.get(record.runId) === record &&
+      record.streamOptions === options &&
+      record.lifecycle === 'suspended' &&
+      // A resume that another process registered executes the run there; this record only looks parked. A follow-up
+      // sent here is only forwarded to that process (`#queueForActiveRun`), which runs the reply turn once.
+      !record.registeredElsewhere &&
+      !this.#isApprovalSuspendedRun(state, record.runId) &&
+      // Shutdown hands parked runs back as they are; it starts no new turns.
+      !state.shutdownStreams.has(record.streamId) &&
+      this.#hasPendingRunInput(state, key);
+    if (!canStart()) return;
+    // A call's own option wins over the agent's default, as when the run was started.
+    const autoResume =
+      options.autoResumeSuspendedTools ??
+      (await record.agent.getDefaultOptions({ requestContext: options.requestContext })).autoResumeSuspendedTools;
+    if (!autoResume || !canStart()) return;
+    // A step that raises a suspension can end its segment while a sibling tool call of that step still runs. The
+    // next turn waits for it rather than run beside it on the thread.
+    let owners = this.#runStepOwners(state, record);
+    while (canStart() && owners.some(owner => hasRunningRunStep(owner))) {
+      await Promise.all(owners.map(owner => new Promise<void>(resolve => whenRunStepsSettle(owner, resolve))));
+      owners = this.#runStepOwners(state, record);
+    }
+    if (!canStart()) return;
+    this.#releaseSupersededParkedRun(state, this.#getPubSub(pubsub), key, record.runId);
+  }
+
+  /**
+   * The message that triggered the release was already answered `deliver`, so a failure here would otherwise
+   * leave it queued on the parked run with no trace.
+   */
+  #logParkedRunReleaseFailure(record: AgentThreadRunRecord<any>, error: unknown): void {
+    record.agent.__getLogger?.()?.error('Could not start the queued turn for a run parked on a suspended tool', {
+      runId: record.runId,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      error,
+    });
+  }
+
+  /**
+   * The objects the steps of a run register under while they run: the abort signal of its prepared run or current
+   * segment, and a durable run's registry entry.
+   */
+  #runStepOwners(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>): object[] {
+    const controller = state.preparedRunsById.get(record.runId)?.abortController ?? record.segmentAbortController;
+    return [controller?.signal, record.stepOwner?.()].filter(owner => owner !== undefined);
+  }
+
+  /**
    * A parked run no longer holds its thread, so its answer resumes it on a new
    * stream. Subscribers reading its open stream, or with it still queued, move on
    * to the runs queued behind it.
@@ -4616,6 +4776,7 @@ export class AgentThreadStreamRuntime {
     state.suspensionMetadataByRunId.clear();
     state.pendingSignalsByThread.clear();
     state.locallyQueuedSignalIdsByThread.clear();
+    state.startedSignalIdsByThread.clear();
     state.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
@@ -4701,7 +4862,8 @@ export class AgentThreadStreamRuntime {
   /**
    * Queues a signal for in-loop draining by a same-agent run that is already in
    * flight here, so it becomes that run's next model input instead of waiting for
-   * the run to finish.
+   * the run to finish. If the run is parked on a suspension that auto-resume
+   * answers, the signal starts the next turn instead.
    */
   #queueForActiveRun(
     state: AgentThreadRuntimeState,
@@ -4710,10 +4872,23 @@ export class AgentThreadStreamRuntime {
     record: AgentThreadRunRecord<any>,
     signal: CreatedAgentSignal,
   ) {
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    if (record.registeredElsewhere) {
+      // Another process resumed the run and executes it, so the signal is that execution's input: it admits it from
+      // the `signal-enqueued` below, and runs the reply turn itself if the run parked there. No copy stays here: a
+      // copy would start a second reply turn once that execution's turn ends and this stale record is released.
+      // (#30190)
+      this.#publish(pubsub, key, {
+        type: 'signal-enqueued',
+        runId: record.runId,
+        signal: this.#serializeSignal(signal),
+        sourceId: this.#getSourceId(),
+      });
+      return;
+    }
     const queue = state.pendingSignalsByThread.get(key) ?? [];
     queue.push(signal);
     state.pendingSignalsByThread.set(key, queue);
-    this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
     this.#publish(pubsub, key, {
@@ -4723,6 +4898,9 @@ export class AgentThreadStreamRuntime {
       sourceId: this.#getSourceId(),
     });
     this.#watchThreadRunCompletion(state, pubsub, key, record);
+    void this.#startQueuedTurnAfterParkedRun(state, pubsub, key, record).catch(error =>
+      this.#logParkedRunReleaseFailure(record, error),
+    );
   }
 
   #publishPendingUserMessage(
@@ -4960,13 +5138,21 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
     claim?: AgentThreadRunClaim & { generation?: number },
   ): boolean {
-    const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
-    if (!threadId) return false;
-
     const state = this.#getState(pubsub);
     this.#sweepStaleSuspendedRecords(state, pubsub);
-    const key = this.#threadKey(resourceId, threadId);
     const existing = state.threadRunsById.get(output.runId);
+    const named = this.#getThreadTarget(streamOptions);
+    // A resume can name only its run, as Inngest's `approveToolCall({ runId, toolCallId })` does. It continues on the
+    // thread the run holds; otherwise the answered approval stays recorded and the run never gives up the thread
+    // to a follow-up queued behind it. (#30190)
+    // A resume that names another resource is not this run's; it keeps the old path and registers separately.
+    const continuesOwnThread =
+      !named.threadId &&
+      existing !== undefined &&
+      (named.resourceId === undefined || named.resourceId === existing.resourceId);
+    const { threadId, resourceId } = continuesOwnThread ? existing : named;
+    if (!threadId) return false;
+    const key = this.#threadKey(resourceId, threadId);
     if (
       !existing?.continuation?.canContinue() ||
       existing.agent !== agent ||
@@ -4986,7 +5172,20 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
-    existing.streamOptions = streamOptions;
+    // A resume that names no thread keeps the run's thread and resource, and the memory settings it does not pass
+    // itself, so the turns it starts later keep them too.
+    const resumeOptions = keepRunAutoResume(streamOptions, existing.streamOptions);
+    existing.streamOptions = continuesOwnThread
+      ? {
+          ...resumeOptions,
+          memory: resumeMemoryOnOwnThread({
+            run: existing.streamOptions.memory,
+            resume: streamOptions.memory,
+            threadId,
+            resourceId,
+          }),
+        }
+      : resumeOptions;
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
     if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
@@ -5113,6 +5312,8 @@ export class AgentThreadStreamRuntime {
     } else {
       this.#clearSuspendedRun(state, output.runId);
     }
+    // A resume that registers a new record replaces the run's record under the same run id.
+    const runOptions = keepRunAutoResume(streamOptions, state.threadRunsById.get(output.runId)?.streamOptions);
 
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
@@ -5127,7 +5328,7 @@ export class AgentThreadStreamRuntime {
       lifecycle: 'running',
       threadId,
       resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      streamOptions: runOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,
@@ -5404,6 +5605,10 @@ export class AgentThreadStreamRuntime {
       runId: record.runId,
       streamId: record.streamId,
     });
+    // A message queued while the run was still working starts the next turn now.
+    void this.#startQueuedTurnAfterParkedRun(this.#getState(pubsub), pubsub, key, record).catch(error =>
+      this.#logParkedRunReleaseFailure(record, error),
+    );
   }
 
   #watchThreadRunCompletion(
@@ -5657,6 +5862,7 @@ export class AgentThreadStreamRuntime {
         if (queue.length === 0) {
           state.pendingSignalsByThread.delete(key);
         }
+        this.#recordStartedSignals(state, key, [signal]);
 
         // Hand the lease from the finished run to this drained run before
         // streaming, so the lease key never goes empty during the handoff. If the
@@ -5698,6 +5904,8 @@ export class AgentThreadStreamRuntime {
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
           state.preRunSignalsByThread.delete(key);
+          // The signal starts no turn here: it is forwarded to the owner or requeued.
+          this.#forgetStartedSignals(state, key, [signal]);
           if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             const ownerRunId = threadLeaseRunId(owns.owner);
             // Forwarding is a handoff: the signal is no longer locally cancellable.
@@ -5780,6 +5988,7 @@ export class AgentThreadStreamRuntime {
         ...(state.pendingSignalsByThread.get(key) ?? []),
       ];
       if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
+      if (signal) this.#forgetStartedSignals(state, key, [signal]);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -6231,6 +6440,7 @@ export class AgentThreadStreamRuntime {
     }
 
     signalsByThread.delete(key);
+    this.#recordStartedSignals(state, key, queue);
     return queue;
   }
 

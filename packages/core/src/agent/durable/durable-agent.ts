@@ -12,6 +12,7 @@ import {
   untilIdleHandlesBackgroundTask,
 } from '../../loop/shared/stream-until-idle-helpers';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
+import { findLatestSuspendedAutoResume } from '../../loop/suspended-run-auto-resume';
 import {
   createTimeoutAbortSignal,
   DEADLINE_SAVE_CLAIM_HOLD_MS,
@@ -3715,6 +3716,8 @@ export class DurableAgent<
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
+    // The run's latest `autoResumeSuspendedTools`, read back from storage when this process holds no record of it.
+    let coldRunAutoResume: boolean | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -3850,6 +3853,8 @@ export class DurableAgent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
+      // A resume can override the value the run started with, so the one persisted with its latest suspension comes first.
+      coldRunAutoResume = findLatestSuspendedAutoResume(snapshot) ?? workflowInput.options?.autoResumeSuspendedTools;
       const memory = threadId
         ? {
             ...options?.memory,
@@ -3949,6 +3954,13 @@ export class DurableAgent<
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
+    }
+    // The segment's `autoResumeSuspendedTools`, which its next suspension persists: the resume's own value, else the
+    // run's latest. Left unset, the run keeps the value in its workflow input. (#30190)
+    const segmentAutoResume =
+      options?.autoResumeSuspendedTools ?? (coldSnapshot ? coldRunAutoResume : entry.autoResumeSuspendedTools);
+    for (const reg of new Set([entry, globalEntryForContext])) {
+      if (reg && segmentAutoResume !== undefined) reg.autoResumeSuspendedTools = segmentAutoResume;
     }
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
@@ -4419,6 +4431,9 @@ export class DurableAgent<
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
       runId,
+      // The resume's own value, not the default merged in: the thread runtime keeps the run's when this is left
+      // out. A run rebuilt from storage has no record here, so it keeps the latest value persisted for it (#30190).
+      autoResumeSuspendedTools: options?.autoResumeSuspendedTools ?? coldRunAutoResume,
     } as AgentExecutionOptions<TOutput>;
     const continued = agentThreadStreamRuntime.continueRun(
       this as unknown as Agent<any, any, any, any>,
