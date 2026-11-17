@@ -1,49 +1,34 @@
-name: Preview Playground UI packages
+name: Playground UI snapshot
 
-# Publishes Playground UI and the workspace packages it ships with to pkg.pr.new on every
-# commit that changes them, so Platform can try a UI change a couple of minutes after a push:
+# Publishes a snapshot of Playground UI and the workspace packages it ships with to pkg.pr.new
+# whenever a push changes the UI, so Platform can install it a couple of minutes later:
 #
 #   https://pkg.pr.new/@mastra/playground-ui@<short sha>
 #
 # The packages are published together, so their dependencies on each other point at the same
-# commit's builds. Nothing goes to npm, and npm's 5-minute metadata cache never applies.
+# commit's builds. pkg.pr.new posts the URLs on the pull request. Nothing goes to npm, so there's
+# no wait for npm's metadata cache. Run it by hand for a branch whose UI didn't change (e.g. a
+# core-only change Platform needs), or to republish a commit whose snapshot expired.
 #
 # pkg.pr.new deletes a build a month after its last download, and every build after six months
-# (stackblitz-labs/pkg.pr.new, server/routes/publish.post.ts). That suits previews; a version
-# Platform ships to production should still come from npm.
+# (stackblitz-labs/pkg.pr.new, server/routes/publish.post.ts).
 #
-# The pkg-pr-new GitHub App must be installed on the repository (https://github.com/apps/pkg-pr-new).
+# Needs the pkg-pr-new GitHub App on this repository (https://github.com/apps/pkg-pr-new).
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - packages/playground-ui/**
-      - observability/mastra/**
       - packages/mcp-apps-components/**
-      - client-sdks/ai-sdk/**
-      - client-sdks/client-js/**
-      - client-sdks/react/**
-      - packages/core/**
-      - packages/schema-compat/**
-      # client-js generates its route types from @mastra/server.
-      - packages/server/**
-      - pnpm-lock.yaml
-      - .github/workflows/pkg-pr-new.yml
+      - .github/workflows/playground-snapshot.yml
   push:
     branches: [main]
     paths:
       - packages/playground-ui/**
-      - observability/mastra/**
       - packages/mcp-apps-components/**
-      - client-sdks/ai-sdk/**
-      - client-sdks/client-js/**
-      - client-sdks/react/**
-      - packages/core/**
-      - packages/schema-compat/**
-      - packages/server/**
-      - pnpm-lock.yaml
-      - .github/workflows/pkg-pr-new.yml
+      - .github/workflows/playground-snapshot.yml
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -55,13 +40,12 @@ jobs:
   publish:
     name: Publish to pkg.pr.new
     # Pull requests from forks don't publish under this repository's name.
-    if: github.repository == 'mastra-ai/mastra' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: starsling-ubuntu-26.04
+    if: github.repository == 'mastra-ai/mastra' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    # GitHub-hosted runners are free for this public repository.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      # Mounts the StarSling Disks pnpm store (see .github/actions/setup-pnpm-node).
-      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -78,7 +62,8 @@ jobs:
         with:
           install-dependencies: 'false'
 
-      # Only what the build needs: 28 of the workspace's ~195 projects.
+      # Only what the build needs: 28 of the workspace's ~195 projects. client-js generates its
+      # route types from @mastra/server, so its dependencies are installed too.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter mastra-turbo --filter '@mastra/playground-ui...' --filter '@mastra/observability...' --filter '@mastra/mcp-apps-components...' --filter '@mastra/server...'
 
@@ -104,6 +89,7 @@ jobs:
           npm install --prefix "$dir" --no-save --no-audit --no-fund "$tarball"
           echo "$dir/node_modules/.bin" >> "$GITHUB_PATH"
 
+      # The same packages the npm playground snapshot published.
       - name: Publish to pkg.pr.new
         run: >-
           pkg-pr-new publish --pnpm --commentWithSha --packageManager=pnpm --no-template
