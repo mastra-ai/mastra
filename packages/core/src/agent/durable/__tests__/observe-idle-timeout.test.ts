@@ -1,7 +1,9 @@
+import type { ReadableStream } from 'node:stream/web';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../execution-fence';
 import {
   createDurableAgentStream,
   emitChunkEvent,
@@ -89,6 +91,33 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
     }) as DurableAgentStreamResult<any>;
+
+  it.each(['finish', 'abort', 'error'] as const)(
+    'still times out after rejecting a superseded %s terminal',
+    async type => {
+      const runId = `superseded-${type}-idle`;
+      const stream = makeStream(runId, {
+        idleTimeoutMs: IDLE,
+        onTerminalEvent: async () => {
+          throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+            runId,
+            agentId: 'idle-agent',
+            executionId: 'superseded-execution',
+          });
+        },
+      });
+      const reader = readFullStream(stream.output.fullStream);
+      await stream.ready;
+      try {
+        await pubsub.publish(`agent.stream.${runId}`, { type, runId, data: finishData });
+        await stream.waitForEventDelivery();
+        expect(await settleWithin(reader.done, IDLE * 10)).toBe('done');
+        expect(reader.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+      } finally {
+        stream.detach();
+      }
+    },
+  );
 
   it('terminates on silence when isAlive returns false', async () => {
     // Locks in: a producerless topic (no terminal event) does NOT hang — after

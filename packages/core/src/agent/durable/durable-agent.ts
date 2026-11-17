@@ -5791,7 +5791,9 @@ export class DurableAgent<
           observedFence &&
           (this.#unverifiedReaderFences.has(observedFence) ||
             !observedFence.ownsRunTopics() ||
-            getRunRegistryEntry(runId, this.#mastra) !== observedEntry)
+            getRunRegistryEntry(runId, this.#mastra)?.executionFence !== observedFence ||
+            (localEntry &&
+              (this.#runRegistry.get(runId) !== localEntry || localEntry.executionFence !== observedFence)))
         ) {
           return;
         }
