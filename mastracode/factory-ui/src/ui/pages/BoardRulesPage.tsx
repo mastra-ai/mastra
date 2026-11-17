@@ -45,7 +45,9 @@ export function BoardRulesPage() {
           <PageHeader>
             <PageHeader.Title>Rules</PageHeader.Title>
             <PageHeader.Description>
-              What happens to issues and pull requests on this board. In each lane the first matching rule wins.
+              What happens to work items and pull requests on this board. In each lane the first matching rule wins.
+              Only Work item opened and Pull request opened create work items; every other lane only sees work items
+              already on this board, so a rule there can safely take every card.
             </PageHeader.Description>
           </PageHeader>
           <div className="mt-3">

@@ -199,7 +199,7 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     label: 'Event',
     strict: true,
     options: [
-      { value: 'work_item.opened', label: 'Issue opened' },
+      { value: 'work_item.opened', label: 'Work item opened' },
       { value: 'work_item.closed', label: 'Closed' },
       { value: 'work_item.reopened', label: 'Reopened' },
       { value: 'work_item.updated', label: 'Labels or assignees changed' },

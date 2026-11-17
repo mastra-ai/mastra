@@ -12,8 +12,8 @@ const order = [
 describe('intakePosition', () => {
   it.each([
     [order, 'work', 'Checked after Ship, before Docs'],
-    [order, 'ship', 'Checked first, before Work'],
-    [order, 'docs', 'Checked last, after Work'],
+    [order, 'ship', 'Checked first (no board before it), before Work'],
+    [order, 'docs', 'Checked last, after Work (no board after it)'],
     [order.slice(0, 1), 'ship', 'The only board intake checks'],
     [order, 'release', 'Not in the intake order yet'],
   ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(intakePosition(boards, boardKey)).toBe(text));
