@@ -564,9 +564,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
         const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
-        // With no policy, keep the gate earlier versions gave a fresh call handed a sibling's
-        // payload (`main`'s `suspendedForApproval`): a run stored before function policies left a
-        // stand-in has nothing else that says its calls need approval.
+        // With no policy, a fresh call handed a sibling's approval payload still asks, as it did before
+        // suspend data was matched to its call: a run stored before function policies left a stand-in
+        // has nothing else that says its calls need approval. A delegated approval never gated a sibling.
         const siblingSuspendData = executionContext.suspendData as
           | { requireToolApproval?: unknown; suspendedToolRunId?: unknown }
           | undefined;
