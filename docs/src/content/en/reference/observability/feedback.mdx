@@ -192,7 +192,7 @@ Returns one feedback record by ID. The response's `feedback` field is `null` whe
 const { feedback } = await mastraClient.getFeedback('feedback-1')
 ```
 
-Observability storage exposes the same lookup as `await storage.getFeedbackById(feedbackId)`, which resolves to the `FeedbackRecord` or `null`.
+Observability storage exposes the same lookup as `await storage.getFeedbackById(feedbackId)`, which resolves to the `FeedbackRecord` or `null`. The PostgreSQL, ClickHouse, DuckDB, and in-memory observability stores support it. Other stores, such as LibSQL, throw `OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED`, and the client request fails instead of returning `null`.
 
 ## List feedback
 

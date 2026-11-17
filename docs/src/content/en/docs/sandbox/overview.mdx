@@ -294,7 +294,7 @@ Each callback receives the process `pid` and, when available, the `toolCallId`, 
 
 By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 
-The `timeout` input of `execute_command` also applies to background commands: the process is stopped after that many seconds. The tool description tells agents to omit `timeout` for dev servers and other commands meant to keep running.
+The `timeout` input of `execute_command` also applies to background commands: the process is stopped after that many seconds. When `timeout` is omitted, the sandbox provider's default applies, for example 30 seconds for `LocalSandbox` and 300 seconds for `E2BSandbox`, so omitting it doesn't guarantee the process runs indefinitely. The tool description tells agents to omit `timeout` for dev servers and other commands meant to keep running.
 
 For the full `SandboxProcessManager` API, including programmatic process spawning, output, and standard input, see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 

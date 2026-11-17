@@ -39,7 +39,7 @@ switch (result.status) {
 
 The result object contains:
 
-- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, `'paused'`, `'tripwire'`, `'running'`, `'waiting'`, `'pending'`, `'canceled'`, `'bailed'`, or `'skipped'`
+- `status` - The workflow status: `'success'`, `'failed'`, `'suspended'`, `'paused'`, or `'tripwire'`
 - `result` - The workflow output (when status is `'success'`)
 - `error` - Error details (when status is `'failed'`)
 - `steps` - Individual step results with their status and output
@@ -95,7 +95,7 @@ const orderWorkflow = createWorkflow({
 
 The `onFinish` callback receives:
 
-- `status` - The workflow status
+- `status` - The workflow status, typed as `WorkflowRunStatus`: `'running'`, `'success'`, `'failed'`, `'tripwire'`, `'suspended'`, `'waiting'`, `'pending'`, `'canceled'`, `'bailed'`, `'paused'`, or `'skipped'`
 - `result` - The workflow output (on success)
 - `error` - Error details (on failure)
 - `steps` - Individual step results
@@ -264,7 +264,7 @@ const step1 = createStep({
 })
 ```
 
-In this example, a `404` response fails the step on the first attempt. Other failed responses throw a regular `Error`, so the step retries up to three times.
+In this example, a `404` response fails the step on the first attempt. Other failed responses throw a regular `Error`. The step retries up to three times.
 
 ## Conditional branching
 
