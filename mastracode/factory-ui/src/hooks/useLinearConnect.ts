@@ -69,7 +69,7 @@ export function useMigrateLinearMutation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.linearStatus() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.linearProjects() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.linearTeams() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() }),
+        queryClient.invalidateQueries({ queryKey: ['linear', 'issue'] }),
       ]),
   });
 }
