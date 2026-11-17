@@ -4,7 +4,9 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 
+import { loadSettings, MASTRA_GATEWAY_DEFAULT_URL } from '@mastra/code-sdk/onboarding/settings';
 import { parseError } from '@mastra/code-sdk/utils/errors';
+import type { ParsedError } from '@mastra/code-sdk/utils/errors';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -105,7 +107,7 @@ export function showFormattedError(
     | Error,
 ): void {
   const error = 'error' in event ? event.error : event;
-  const parsed = parseError(error);
+  const parsed = parseError(error, { gatewayBaseUrl: configuredGatewayBaseUrl() });
 
   // Show the main error message
   let errorText = `Error: ${parsed.message}`;
@@ -133,9 +135,11 @@ export function showFormattedError(
   const om = state.local?.session.om;
   const omRole = /reflect/i.test(error.message) ? om?.reflector : om?.observer;
   const hint = withOMGuidance(
-    state.factory && parsed.type === 'auth'
-      ? `Add the provider credential in Factory (${state.factory.url})`
-      : getErrorHint(parsed.type),
+    parsed.source === 'gateway'
+      ? getGatewayErrorHint(parsed)
+      : state.factory && parsed.type === 'auth'
+        ? `Add the provider credential in Factory (${state.factory.url})`
+        : getErrorHint(parsed.type),
     isObservationalMemoryError ? omRole?.modelId() : undefined,
   );
   if (hint) {
@@ -152,6 +156,28 @@ function withOMGuidance(typeHint: string | null, omModelId: string | undefined):
   return [`Observational Memory is using ${omModelId}`, typeHint, 'Use /memory to choose another OM model']
     .filter(Boolean)
     .join('. ');
+}
+
+/** The Mastra Gateway URL model requests use, so its refusals can be told apart from provider errors. */
+function configuredGatewayBaseUrl(): string {
+  let baseUrl: string | undefined;
+  try {
+    baseUrl = loadSettings().memoryGateway?.baseUrl;
+  } catch {
+    // Unreadable settings fall back to the environment and the hosted default, like model resolution.
+  }
+  return baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? MASTRA_GATEWAY_DEFAULT_URL;
+}
+
+function getGatewayErrorHint(parsed: ParsedError): string | null {
+  switch (parsed.type) {
+    case 'quota':
+      return 'Check your credits and budgets in Mastra billing for the organization that owns the Gateway key';
+    case 'auth':
+      return 'Use /models to choose another model';
+    default:
+      return getErrorHint(parsed.type);
+  }
 }
 
 function getErrorHint(errorType: string): string | null {
