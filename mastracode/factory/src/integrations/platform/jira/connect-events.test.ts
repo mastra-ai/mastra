@@ -231,6 +231,7 @@ describe('PlatformJiraIntegration through the events worker', () => {
     let saved: unknown = null;
     const worker = new PlatformEventsWorker({
       events: jira.binding.connect.events,
+      projectId: platform.projectId,
       storage: {
         integrationId: 'platform-events',
         settings: {
