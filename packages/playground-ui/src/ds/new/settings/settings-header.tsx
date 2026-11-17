@@ -4,14 +4,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-// Section titles and descriptions sit 10px inside the card's edge, like a settings page's title. In a form (or a
-// field) outside a settings page, a title heads a group of fields, so it lines up with their labels and takes
-// their color. The defaults are custom properties, so a caller's `ps-*` or `text-*` class still wins.
+// On a settings page (`SettingsLayout`), section titles and descriptions sit 10px inside the card's edge, in line with
+// the inset page title, and titles are muted. Anywhere else (forms, other pages) they line up with the page's left edge
+// and field labels, in the label color. The defaults are custom properties, so a caller's `ps-*` or `text-*` still wins.
 // Written out in full (not composed) so Tailwind finds the classes.
 const settingsInset =
-  '[--settings-inset:--spacing(2.5)] [&:is(form_*,[data-slot=field]_*):not([data-slot=settings-layout]_*)]:[--settings-inset:0px] ps-(--settings-inset)';
+  '[--settings-inset:0px] in-data-[slot=settings-layout]:[--settings-inset:--spacing(2.5)] ps-(--settings-inset)';
 const settingsTitleColor =
-  '[--settings-title-color:var(--muted-foreground)] [&:is(form_*,[data-slot=field]_*):not([data-slot=settings-layout]_*)]:[--settings-title-color:var(--foreground)] text-(color:--settings-title-color)';
+  '[--settings-title-color:var(--foreground)] in-data-[slot=settings-layout]:[--settings-title-color:var(--muted-foreground)] text-(color:--settings-title-color)';
 
 const SettingsTitleIdContext = createContext<string | undefined>(undefined);
 

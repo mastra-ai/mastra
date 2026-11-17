@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed section titles in forms (`SettingsTitle` next to field labels, as on the create project pages) sitting 10px to the right of the field labels and in a dimmer color. In a form or a field outside a settings page, the title now lines up with the labels and uses their color. Settings pages are unchanged.
+Fixed section titles (`SettingsTitle`, `SettingsDescription`) sitting 10px to the right of everything around them outside settings pages, such as field labels on Platform's create project forms and page titles on billing. Outside a `SettingsLayout`, section titles now line up with the page's left edge and use the field labels' color. Settings pages are unchanged.
