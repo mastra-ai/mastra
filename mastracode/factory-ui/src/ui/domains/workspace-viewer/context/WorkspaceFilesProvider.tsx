@@ -38,7 +38,7 @@ export function WorkspaceFilesProvider({ page, children }: { page?: WorkspacePan
   const readsChanges = panelToggle?.open === true || (Boolean(workspacePath) && awakeWorkspace === workspacePath);
   const setOpen = (next: boolean) => setToggled({ layoutRevision, open: next });
 
-  const hasContent = Boolean(workspacePath) || page !== undefined;
+  const hasContent = Boolean(workspacePath && threadId) || page !== undefined;
   const docked = open && canDock && hasContent;
   const hasDocked = canDock || layoutRevision > 0;
   const moved = layoutRevision > 0 || toggled !== undefined;

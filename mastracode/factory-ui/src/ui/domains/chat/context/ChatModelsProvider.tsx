@@ -20,13 +20,56 @@ export function ChatModelsProvider({
   children: ReactNode;
   initialDraftModelId?: string;
 }) {
-  const { draftSessionId, sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { state } = useChatConnection();
-  // A thread shows its draft's model until the session reports one.
+  const { draftSessionId } = useChatSessionContext();
   const [draftModelId, setDraftModelId] = useState(initialDraftModelId);
-  const { projectQuery, modelScope, catalogTarget, sessionModelsQuery } = useChatModelScope();
+  const draft = useDraftModels(draftModelId, setDraftModelId);
+  const live = useLiveModels(draftModelId);
+  return <ChatModelsContext.Provider value={draftSessionId ? draft : live}>{children}</ChatModelsContext.Provider>;
+}
+
+function useDraftModels(draftModelId: string | undefined, setDraftModelId: (modelId: string) => void): ChatModelsApi {
+  const { projectQuery, modelScope, catalogTarget } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
+  const defaultModelId = routedDefaultModelId(modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
+  const personalDefaultUsed = modelScope !== 'factory';
+  const usesFallback = !defaultModelId;
+  return {
+    activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
+    defaultModelId,
+    pendingModelId: undefined,
+    isLoading:
+      projectQuery.isPending ||
+      (personalDefaultUsed && defaultModelQuery.isPending) ||
+      (usesFallback && fallbackModelQuery.isPending),
+    error:
+      projectQuery.error ??
+      (personalDefaultUsed ? defaultModelQuery.error : null) ??
+      (usesFallback ? fallbackModelQuery.error : null) ??
+      undefined,
+    setModel: modelId => {
+      setDraftModelId(modelId);
+      return Promise.resolve();
+    },
+  };
+}
+
+function useLiveModels(draftModelId: string | undefined): ChatModelsApi {
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { state } = useChatConnection();
+  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
+  const defaultModelQuery = useDefaultModelQuery();
+  const localDefaultModelId = routedDefaultModelId(modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
+  const defaultModelId = sessionModelsQuery.isSuccess
+    ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
+      undefined)
+    : undefined;
   const {
     mutateAsync: switchModel,
     isPending: switching,
@@ -37,45 +80,12 @@ export function ChatModelsProvider({
     baseUrl,
     enabled: sessionEnabled,
   });
-  const localDefaultModelId = routedDefaultModelId(modelScope, {
-    factory: projectQuery.data?.defaultModelId,
-    personal: defaultModelQuery.data?.modelId,
-  });
-
-  if (draftSessionId) {
-    const personalDefaultUsed = modelScope !== 'factory';
-    const usesFallback = !localDefaultModelId;
-    const draft: ChatModelsApi = {
-      activeModelId: draftModelId ?? localDefaultModelId ?? fallbackModelQuery.data,
-      defaultModelId: localDefaultModelId,
-      pendingModelId: undefined,
-      isLoading:
-        projectQuery.isPending ||
-        (personalDefaultUsed && defaultModelQuery.isPending) ||
-        (usesFallback && fallbackModelQuery.isPending),
-      error:
-        projectQuery.error ??
-        (personalDefaultUsed ? defaultModelQuery.error : null) ??
-        (usesFallback ? fallbackModelQuery.error : null) ??
-        undefined,
-      setModel: modelId => {
-        setDraftModelId(modelId);
-        return Promise.resolve();
-      },
-    };
-    return <ChatModelsContext.Provider value={draft}>{children}</ChatModelsContext.Provider>;
-  }
-
-  const live: ChatModelsApi = {
+  return {
     activeModelId: state?.modelId ?? draftModelId,
-    defaultModelId: sessionModelsQuery.isSuccess
-      ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
-        undefined)
-      : undefined,
+    defaultModelId,
     pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),
   };
-  return <ChatModelsContext.Provider value={live}>{children}</ChatModelsContext.Provider>;
 }

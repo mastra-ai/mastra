@@ -1,23 +1,18 @@
 import { useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useWorkItemQuery } from '../../../../hooks/useWorkItems';
-import type { SessionFrameSlots } from '../../chat/components/SessionFrame';
 import { PanelSubject } from '../../workspace-viewer/components/PanelSubject';
-import { boardOf } from '../boardFlow';
 import { CardDraftOverview } from '../components/CardDraftOverview';
 import { CardStageBar } from '../components/CardStageBar';
+import type { SessionFrameSlots } from '../components/SessionRouteFrame';
+import { useDraftCard } from './useDraftCard';
 
 export function useCardDraftFrame(workItemId: string | undefined): SessionFrameSlots | undefined {
-  const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const card = useWorkItemQuery(factoryId, workItemId);
-  const catalog = useBoardCatalog(factoryId);
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const { catalog, item, board } = useDraftCard(factoryId, workItemId);
   const factory = useFactoryQuery(factoryId).data;
   if (!workItemId) return undefined;
 
-  const item = catalog.isPending ? undefined : (card.data ?? undefined);
-  const board = item && boardOf(catalog.data, item);
   return {
     panel:
       item && factory

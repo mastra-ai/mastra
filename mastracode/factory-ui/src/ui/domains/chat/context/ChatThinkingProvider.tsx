@@ -21,11 +21,43 @@ export function ChatThinkingProvider({
   children: ReactNode;
   initialDraftThinkingLevel?: ThinkingLevelSetting;
 }) {
-  const { draftSessionId, sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { catalogTarget, modelScope, sessionModelsQuery } = useChatModelScope();
+  const { draftSessionId } = useChatSessionContext();
+  const draft = useDraftThinking(initialDraftThinkingLevel);
+  const live = useLiveThinking();
+  return <ChatThinkingContext.Provider value={draftSessionId ? draft : live}>{children}</ChatThinkingContext.Provider>;
+}
+
+function useDraftThinking(initialOverride: ThinkingLevelSetting | undefined): ChatThinkingApi {
+  const { catalogTarget, modelScope } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const defaultModelQuery = useDefaultModelQuery();
-  const [draftOverride, setDraftOverride] = useState(initialDraftThinkingLevel);
+  const [override, setOverride] = useState(initialOverride);
+  const { level, thinkingDefault, loadError } = useEffectiveThinkingLevel({
+    modelId: activeModelId,
+    modelScope,
+    override,
+    catalogTarget,
+    personalDefault: defaultModelQuery.data?.thinkingLevel,
+    personalDefaultError: defaultModelQuery.error,
+  });
+  return {
+    level,
+    thinkingDefault,
+    loadError,
+    override,
+    setLevel: async next => {
+      setOverride(next);
+    },
+    resetLevel: async () => {
+      setOverride(undefined);
+    },
+  };
+}
+
+function useLiveThinking(): ChatThinkingApi {
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { catalogTarget, modelScope, sessionModelsQuery } = useChatModelScope();
+  const { activeModelId } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -34,39 +66,17 @@ export function ChatThinkingProvider({
   };
   const settingsQuery = useAgentControllerSettings(sessionArgs);
   const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(sessionArgs);
-  const drafting = Boolean(draftSessionId);
-  const override = drafting ? draftOverride : settingsQuery.data?.thinkingLevel;
+  const override = settingsQuery.data?.thinkingLevel;
   const effective = useEffectiveThinkingLevel({
     modelId: activeModelId,
     modelScope,
     override,
     catalogTarget,
-    personalDefault: drafting
-      ? defaultModelQuery.data?.thinkingLevel
-      : sessionModelsQuery.isSuccess
-        ? (sessionModelsQuery.data.personalThinkingLevel ?? null)
-        : undefined,
-    personalDefaultError: drafting ? defaultModelQuery.error : sessionModelsQuery.error,
+    personalDefault: sessionModelsQuery.isSuccess ? (sessionModelsQuery.data.personalThinkingLevel ?? null) : undefined,
+    personalDefaultError: sessionModelsQuery.error,
   });
-
-  if (drafting) {
-    const draft: ChatThinkingApi = {
-      level: effective.level,
-      thinkingDefault: effective.thinkingDefault,
-      loadError: effective.loadError,
-      override,
-      setLevel: async next => {
-        setDraftOverride(next);
-      },
-      resetLevel: async () => {
-        setDraftOverride(undefined);
-      },
-    };
-    return <ChatThinkingContext.Provider value={draft}>{children}</ChatThinkingContext.Provider>;
-  }
-
   const settingsLoaded = settingsQuery.data !== undefined;
-  const live: ChatThinkingApi = {
+  return {
     level: settingsLoaded ? effective.level : undefined,
     thinkingDefault: effective.thinkingDefault,
     loadError: settingsLoaded ? effective.loadError : (settingsQuery.error ?? undefined),
@@ -78,5 +88,4 @@ export function ChatThinkingProvider({
       await updateSettings({ thinkingLevel: null });
     },
   };
-  return <ChatThinkingContext.Provider value={live}>{children}</ChatThinkingContext.Provider>;
 }

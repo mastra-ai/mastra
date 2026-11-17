@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import type { SessionFrameSlots } from '../../chat/components/SessionFrame';
+import type { SessionFrameSlots } from '../components/SessionRouteFrame';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';

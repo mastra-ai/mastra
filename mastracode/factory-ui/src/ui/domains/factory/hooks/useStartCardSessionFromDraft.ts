@@ -1,12 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useState } from 'react';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import type { WorkItemSessionRepository } from '../../../../api/types';
 import { addCachedSession, invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import type { DraftSessionStart } from '../../chat/context/DraftSessionStartContext';
-import { continueTranscript } from '../../chat/context/transcriptKey';
+import { useContinueIntoThread } from '../../chat/context/transcriptKey';
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useChatThinking } from '../../chat/context/useChatThinking';
@@ -14,7 +14,6 @@ import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { startPromptHandoff } from '../../chat/hooks/useHandoffPrompt';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { stashHandoffFiles } from '../../chat/services/handoffFiles';
-import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { createUserSession, getUserSession } from '../../workspaces/services/user-sessions';
 import { itemSessionSpec } from '../boardItems';
@@ -32,13 +31,14 @@ export function useStartCardSessionFromDraft(
   factory: FactoryProject | undefined,
   item: WorkItem | undefined,
   sessionRepository: WorkItemSessionRepository | undefined,
-): DraftSessionStart & { started: boolean } {
-  const { sessionId: draftSessionId, baseUrl } = useChatSessionContext();
+): DraftSessionStart & { ownsSession: (sessionId: string) => boolean } {
+  const { baseUrl } = useChatSessionContext();
   const { activeModelId, defaultModelId, setModel } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { localUser, failLocalUser } = useChatTranscript();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const continueIntoThread = useContinueIntoThread();
+  const [createdSessionId, setCreatedSessionId] = useState<string>();
   const target: CardStart | undefined =
     factory && item && sessionRepository?.status === 'resolved'
       ? { factory, item, repository: sessionRepository }
@@ -49,6 +49,7 @@ export function useStartCardSessionFromDraft(
       const metadata = item.workItem ? {} : (item.metadata ?? {});
       const { branch, threadTitle } = itemSessionSpec(item);
       const { sessionId } = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
+      setCreatedSessionId(sessionId);
       await startFactoryRun(baseUrl, factory.id, {
         sessionId,
         threadTitle,
@@ -92,21 +93,21 @@ export function useStartCardSessionFromDraft(
     const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
     // The thread shows this model until its session reports one.
     void setModel(activeModelId);
-    continueTranscript({ sessionId: draftSessionId }, { sessionId, threadId: sessionId });
-    void navigate(threadPath(factoryId, { sessionId, threadId: sessionId }), {
-      replace: true,
-      state: startPromptHandoff(sessionId, prompt, {
+    continueIntoThread(
+      factoryId,
+      { sessionId, threadId: sessionId },
+      startPromptHandoff(sessionId, prompt, {
         shownMessageId,
         modelId: draftKeepsServerDefaults ? undefined : activeModelId,
         thinkingLevel: thinkingLevelOverride,
       }),
-    });
+    );
   };
 
   return {
-    ready: target !== undefined && !startSession.isPending,
-    // A failed Start may already have bound the card; the draft stays to show the failure.
-    started: !startSession.isIdle,
+    ready: target !== undefined && (startSession.isIdle || startSession.isError),
+    // A failed Start may already have bound the card to its session; the draft stays to show the failure.
+    ownsSession: sessionId => startSession.isPending || sessionId === createdSessionId,
     start,
   };
 }

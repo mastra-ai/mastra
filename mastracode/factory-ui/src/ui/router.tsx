@@ -13,8 +13,9 @@
  */
 import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
-import type { DataRouter, RouteObject } from 'react-router';
+import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
+import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
@@ -247,11 +248,11 @@ function CardDraftRedirect() {
   return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices, isPageShown?: () => boolean): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services, isPageShown);
-  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
+export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?: () => boolean): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services, holdsNavigation);
+  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch, shouldRevalidate?: ShouldRevalidateFunction) => ({
     element: <Page />,
-    ...loadOnEntry(prefetch, Page),
+    ...loadOnEntry(prefetch, Page, shouldRevalidate),
   });
 
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
@@ -297,13 +298,11 @@ export function createAppRoutes(services?: RouteLoaderServices, isPageShown?: ()
                           children: [
                             {
                               path: 'workspaces/:sessionId/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame),
-                              shouldRevalidate: reloadOnAnotherThread,
+                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'user/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame),
-                              shouldRevalidate: reloadOnAnotherThread,
+                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'cards/:workItemId/new/:draftSessionId',
@@ -381,6 +380,11 @@ export function createAppRouter(
 ) {
   // The first load's loaders can run inside `createRouter`, before `router` is assigned.
   let router: DataRouter | undefined;
-  router = createRouter(createAppRoutes(services, () => router?.state.initialized === true));
+  router = createRouter(createAppRoutes(services, () => holdsNavigation(router)));
   return router;
+}
+
+/** A prompt handoff continues the page on screen, so only other in-app navigations wait for their reads. */
+function holdsNavigation(router: DataRouter | undefined): boolean {
+  return router?.state.initialized === true && !opensWithPrompt(router.state.navigation.location?.state);
 }

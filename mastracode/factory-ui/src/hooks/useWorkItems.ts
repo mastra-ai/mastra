@@ -290,19 +290,24 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
 }
 
 /** One card by id, for a page that shows it off the board. */
-export function workItemQueryOptions(baseUrl: string, factoryProjectId: string, workItemId: string | undefined) {
+export function workItemQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  workItemId: string | undefined,
+) {
   return queryOptions({
     queryKey: queryKeys.workItem(factoryProjectId, workItemId),
-    queryFn: workItemId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { workItemId: [workItemId] })
-      : skipToken,
+    queryFn:
+      factoryProjectId && workItemId
+        ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { workItemId: [workItemId] })
+        : skipToken,
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
     select: (board: BoardSnapshot) => board.workItems.find(card => card.id === workItemId) ?? null,
   });
 }
 
-export function useWorkItemQuery(factoryProjectId: string, workItemId: string | undefined) {
+export function useWorkItemQuery(factoryProjectId: string | undefined, workItemId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(workItemQueryOptions(baseUrl, factoryProjectId, workItemId));
 }

@@ -8,54 +8,43 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
 import { useEffect, useEffectEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
-import { useWorkItemQuery } from '../../hooks/useWorkItems';
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
 import { SessionView } from '../domains/chat/components/SessionView';
-import { continueTranscript } from '../domains/chat/context/transcriptKey';
-import { useChatSessionContext } from '../domains/chat/context/useChatSessionContext';
+import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
-import { boardOf } from '../domains/factory/boardFlow';
 import { currentItemStage } from '../domains/factory/boardStages';
 import { CardDraftActions } from '../domains/factory/components/CardDraftActions';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
+import { useDraftCard } from '../domains/factory/hooks/useDraftCard';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
-import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
+import { factoryHomePath } from '../domains/workspaces/services/factoryPaths';
 
 export function CardDraftPage({ workItemId }: { workItemId: string }) {
   const { factoryId = '', workItemId: routedWorkItemId } = useParams<{ factoryId: string; workItemId?: string }>();
   const guards = useDraftModelGuards(factoryId, 'factory');
-  const card = useWorkItemQuery(factoryId, workItemId);
-  const catalog = useBoardCatalog(factoryId);
+  const { card, item, board } = useDraftCard(factoryId, workItemId);
   const factory = guards.activeFactory;
-  const item = card.data ?? undefined;
   const unconfigured = guards.missingModel || guards.missingCredential !== undefined;
-  const drafting = Boolean(routedWorkItemId && item && factory && !catalog.isPending && !unconfigured);
+  const drafting = Boolean(routedWorkItemId && item && factory && !unconfigured);
   const sessionRepository = useCardSessionRepository(factoryId, drafting ? item : undefined);
   const draftStart = useStartCardSessionFromDraft(
     factory,
     item,
-    sessionRepository.error ? undefined : sessionRepository.data,
+    sessionRepository.error || sessionRepository.isPlaceholderData ? undefined : sessionRepository.data,
   );
-  const { sessionId: draftSessionId } = useChatSessionContext();
-  const navigate = useNavigate();
-  const board = item && !catalog.isPending ? boardOf(catalog.data, item) : undefined;
-  const cardSession =
-    item && !catalog.isPending
-      ? cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '')
-      : undefined;
-  const startOpensItsThread = draftStart.started;
-  const openedSession = routedWorkItemId && !startOpensItsThread ? cardSession : undefined;
+  const continueIntoThread = useContinueIntoThread();
+  const cardSession = item && cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
+  const openedSession =
+    routedWorkItemId && cardSession && !draftStart.ownsSession(cardSession.sessionId) ? cardSession : undefined;
   const openedSessionId = openedSession?.sessionId;
   const openedThreadId = openedSession?.threadId;
-  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) => {
-    continueTranscript({ sessionId: draftSessionId }, session);
-    void navigate(threadPath(factoryId, session), { replace: true });
-  });
+  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) =>
+    continueIntoThread(factoryId, session),
+  );
   useEffect(() => {
     if (openedSessionId && openedThreadId) openThread({ sessionId: openedSessionId, threadId: openedThreadId });
   }, [openedSessionId, openedThreadId]);
@@ -96,7 +85,7 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       </div>
     );
   }
-  if (!item || catalog.isPending || !factory) {
+  if (!item || !factory) {
     return (
       <div className={draftPageClass} aria-busy="true">
         <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
@@ -108,7 +97,7 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
 
   return (
     <SessionView
-      start={draftStart}
+      start={openedSession ? { ...draftStart, ready: false } : draftStart}
       openingSession={Boolean(openedSession)}
       emptyState={
         <section className={emptyThreadClass} aria-labelledby="card-draft-title">

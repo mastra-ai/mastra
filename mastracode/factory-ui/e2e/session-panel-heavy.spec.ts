@@ -14,8 +14,11 @@ async function boxOf(locator: Locator) {
   return box;
 }
 
-async function openPanel(page: Page) {
-  await page.goto(`/factories/${HEAVY.factoryId}/workspaces/${HEAVY.sessionId}/threads/${HEAVY.threadId}`);
+async function openPanel(
+  page: Page,
+  path = `/factories/${HEAVY.factoryId}/workspaces/${HEAVY.sessionId}/threads/${HEAVY.threadId}`,
+) {
+  await page.goto(path);
   const toggle = page.getByRole('button', { name: 'Session panel' });
   if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
@@ -226,19 +229,20 @@ test.describe('Session panel with a heavy session', () => {
         HttpResponse.json({ status: 'resolved', projectRepositoryId: HEAVY.repositoryId, slug: 'mastra-ai/mastra' }),
       ),
     );
-    await page.goto(`/factories/${HEAVY.factoryId}/cards/card-c2`);
+    const panel = await openPanel(page, `/factories/${HEAVY.factoryId}/cards/card-c2`);
     await expect(page.getByRole('heading', { name: 'No model available' })).toBeVisible();
-    const toggle = page.getByRole('button', { name: 'Session panel' });
-    if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
     const setup = page.getByText('Chats in this Factory run on your own keys');
-    const panel = page.getByTestId('workspace-files-card');
+    const panelWidths: number[] = [];
 
     for (const width of [1600, 1400]) {
       await page.setViewportSize({ width, height: 1000 });
       await transitionsEnd(page);
       const text = await boxOf(setup);
-      expect(text.x + text.width).toBeLessThan((await boxOf(panel)).x);
+      const panelBox = await boxOf(panel);
+      expect(text.x + text.width).toBeLessThan(panelBox.x);
+      panelWidths.push(panelBox.width);
       await page.screenshot({ path: testInfo.outputPath(`card-draft-setup-${width}.png`) });
     }
+    expect(panelWidths[1]).toBeLessThan(panelWidths[0] ?? 0);
   });
 });

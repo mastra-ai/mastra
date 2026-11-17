@@ -12,13 +12,8 @@ import { useComposerImagesState } from '../context/useComposerImagesState';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
-
-interface PromptHandoff {
-  handoffPrompt: string;
-  handoffModelId?: string;
-  handoffThinkingLevel?: ThinkingLevelSetting;
-  handoffShownMessageId?: string;
-}
+import { readHandoffPrompt } from '../services/promptHandoff';
+import type { PromptHandoff } from '../services/promptHandoff';
 
 interface HandoffModel {
   modelId?: string;
@@ -57,18 +52,6 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   if (!isRecord(state)) return undefined;
   const value = state[key];
   return typeof value === 'string' && value ? value : undefined;
-}
-
-// An image-only first prompt hands off an empty string, so only a missing field means "no handoff".
-function readHandoffPrompt(state: unknown): string | undefined {
-  if (!isRecord(state)) return undefined;
-  const value = state.handoffPrompt;
-  return typeof value === 'string' ? value : undefined;
-}
-
-/** A thread opened with a first prompt to send: its session may still be being created. */
-export function opensWithPrompt(state: unknown): boolean {
-  return readHandoffPrompt(state) !== undefined;
 }
 
 function toOutgoing(files: PendingImage[]) {
@@ -124,7 +107,7 @@ export function useHandoffPrompt(): void {
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
   const shownMessageId = readHandoffField(location.state, 'handoffShownMessageId');
-  const promptShown = transcript.entries.some(entry => entry.id === shownMessageId);
+  const promptShown = shownMessageId !== undefined && transcript.entries.some(entry => entry.id === shownMessageId);
 
   useEffect(() => {
     if (handedOff.current) return;

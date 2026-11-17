@@ -1,9 +1,9 @@
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { useCardSessionRepository } from '../hooks/useCardSessionRepository';
+import { linkedSessionRepository } from '../hooks/useSessionRepository';
 import type { WorkItem } from '../services/workItems';
-import { CardOverview } from './CardOverview';
+import { CardOverview, OverviewSkeleton } from './CardOverview';
 
 export function CardDraftOverview({
   factory,
@@ -17,11 +17,9 @@ export function CardDraftOverview({
   boardsFailed: boolean;
 }) {
   const lookup = useCardSessionRepository(factory.id, item);
-  if (lookup.isPending) return <SkeletonRows label="Loading overview" rows={4} className="p-3" />;
+  if (lookup.isPending) return <OverviewSkeleton />;
 
-  const resolved = lookup.data?.status === 'resolved' ? lookup.data : undefined;
-  const repository =
-    resolved && factory.repositories.find(linked => linked.projectRepositoryId === resolved.projectRepositoryId);
+  const { repository } = linkedSessionRepository(factory, lookup.data?.status === 'resolved' ? lookup.data : undefined);
   return (
     <CardOverview
       item={item}

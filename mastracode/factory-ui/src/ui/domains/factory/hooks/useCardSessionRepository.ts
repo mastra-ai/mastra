@@ -1,4 +1,4 @@
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
@@ -10,6 +10,8 @@ export function useCardSessionRepository(factoryId: string, card: Pick<WorkItem,
   return useQuery({
     queryKey: queryKeys.workItemSessionRepository(factoryId, card?.id, card?.updatedAt),
     queryFn: card ? ({ signal }) => getWorkItemSessionRepository(baseUrl, factoryId, card.id, signal) : skipToken,
+    // Keyed by the card's revision, so a card refresh shows the last answer until the new one lands.
+    placeholderData: keepPreviousData,
     staleTime: 0,
     refetchOnWindowFocus: true,
   });

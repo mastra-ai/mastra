@@ -31,7 +31,7 @@ export function SessionView({
   return (
     <SessionEffects workspacePath={workspacePath}>
       <PageTitle />
-      <DraftSessionStartContext.Provider value={start ?? null}>
+      <DraftSessionStartContext.Provider value={start}>
         <SessionChatSurface
           secondaryBar={<GoalPanel />}
           emptyState={emptyState}

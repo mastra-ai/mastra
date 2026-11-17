@@ -218,7 +218,7 @@ describe('ThreadPage header', () => {
     expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
   });
 
-  it("shows the next card's stage as soon as the sidebar switches to that card's session", async () => {
+  it("shows the next card's stage as soon as its session opens, before the card's refresh answers", async () => {
     stubThreadRoute();
     const nextSessionId = 'sess-3';
     const nextPath = `/factories/${FACTORY_ID}/workspaces/${nextSessionId}/threads/${nextSessionId}`;

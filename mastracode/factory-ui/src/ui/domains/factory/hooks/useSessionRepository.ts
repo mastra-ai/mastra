@@ -14,14 +14,18 @@ interface SessionRepository {
   failed: boolean;
 }
 
+export function repositoryProvider(repository: LinkedRepositoryPayload | undefined): ChangeRequestProvider {
+  return repository?.provider === 'gitlab' ? 'gitlab' : 'github';
+}
+
 export function linkedSessionRepository(
   factory: FactoryProject | undefined,
-  session: FactoryUserSession | undefined,
+  session: Pick<FactoryUserSession, 'projectRepositoryId'> | undefined,
 ): Pick<SessionRepository, 'repository' | 'provider'> {
   const repository = factory?.repositories.find(
     candidate => candidate.projectRepositoryId === session?.projectRepositoryId,
   );
-  return { repository, provider: repository?.provider === 'gitlab' ? 'gitlab' : 'github' };
+  return { repository, provider: repositoryProvider(repository) };
 }
 
 export function useSessionRepository(): SessionRepository {

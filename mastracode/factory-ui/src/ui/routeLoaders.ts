@@ -55,16 +55,20 @@ export interface RouteLoaderServices {
 
 export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<void>;
 
-export function createLoadOnEntry(services: RouteLoaderServices | undefined, isPageShown?: () => boolean) {
-  return function loadOnEntry(prefetch?: Prefetch, page?: LazyPageComponent) {
+export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
+  return function loadOnEntry(
+    prefetch?: Prefetch,
+    page?: LazyPageComponent,
+    shouldRevalidate: ShouldRevalidateFunction = () => false,
+  ) {
     if (!services) return {};
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
         const reads = prefetch?.(services, args);
-        return isPageShown?.() ? reads : undefined;
+        return holdsNavigation?.() ? reads : undefined;
       },
-      shouldRevalidate: () => false,
+      shouldRevalidate,
     };
   };
 }
@@ -199,23 +203,38 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
 
 const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
 
-export const loadSessionFrame: Prefetch = async ({ queryClient, api }, { params }) => {
+export const loadSessionFrame: Prefetch = async (services, { params }) => {
+  const { queryClient, api } = services;
   const { factoryId, threadId } = params;
   const sessionId = params.sessionId ?? threadId;
   if (!factoryId || !sessionId || !threadId) return;
+  const cardReads = params.sessionId
+    ? [
+        queryClient
+          .query({
+            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...CACHED_UNLESS_INVALIDATED,
+          })
+          .catch(noop),
+        queryClient
+          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .catch(noop),
+      ]
+    : [];
+  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+};
+
+async function loadSessionSubscriptions(
+  { queryClient, api }: RouteLoaderServices,
+  factoryId: string,
+  sessionId: string,
+  threadId: string,
+) {
   const [factories, session] = await Promise.all([
     queryClient.query({ ...factoriesQueryOptions(api.baseUrl), ...CACHED_UNLESS_INVALIDATED }).catch(() => undefined),
     queryClient
       .query({ ...userSessionQueryOptions(api.baseUrl, sessionId), ...CACHED_UNLESS_INVALIDATED })
       .catch(() => undefined),
-    params.sessionId &&
-      queryClient
-        .query({
-          ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
-          ...CACHED_UNLESS_INVALIDATED,
-        })
-        .catch(noop),
-    queryClient.query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED }).catch(noop),
   ]);
   const factory = factories?.find(candidate => candidate.id === factoryId);
   const { repository, provider } = linkedSessionRepository(factory, session);
@@ -226,7 +245,7 @@ export const loadSessionFrame: Prefetch = async ({ queryClient, api }, { params 
       ...CACHED_UNLESS_INVALIDATED,
     })
     .catch(noop);
-};
+}
 
 export const reloadOnAnotherThread: ShouldRevalidateFunction = ({ currentParams, nextParams }) =>
   currentParams.sessionId !== nextParams.sessionId || currentParams.threadId !== nextParams.threadId;
