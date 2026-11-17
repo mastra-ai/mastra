@@ -13,8 +13,25 @@ const script = fileURLToPath(new URL('./publish-packages.mjs', import.meta.url))
 // packument; the script GETs `/<name>/<version>` to see what's already there.
 // PUT responses are delayed so concurrent publishes overlap, and every PUT is
 // checked against the dependencies that had finished publishing when it arrived.
-async function startRegistry(t, { published = [], failPut = {}, hangPut = {}, dependencies = {} } = {}) {
+//
+// `tlogConflict` answers a package's next N PUTs with the 409 npm's provenance
+// signing gets from the sigstore transparency log. With `uploadedDespiteConflict`
+// the version still lands, but GETs only see it `lagMs` later, like npm's CDN.
+async function startRegistry(
+  t,
+  {
+    published = [],
+    failPut = {},
+    hangPut = {},
+    dependencies = {},
+    tlogConflict = {},
+    uploadedDespiteConflict = false,
+    lagMs = 0,
+  } = {},
+) {
   const versions = new Set(published);
+  const visibleAt = new Map();
+  const conflicts = new Map(Object.entries(tlogConflict));
   const failures = new Map(Object.entries(failPut));
   const hangs = new Map(Object.entries(hangPut));
   const state = { puts: [], inFlight: 0, maxInFlight: 0, publishedBeforeDependency: [], versions, failures };
@@ -26,7 +43,8 @@ async function startRegistry(t, { published = [], failPut = {}, hangPut = {}, de
       if (req.method === 'GET') {
         const [, scope, rest] = req.url.match(/^\/(@[^%]+)%2f(.+)$/) ?? [];
         const id = scope ? `${scope}/${decodeURIComponent(rest).replace('/', '@')}` : '';
-        res.writeHead(versions.has(id) ? 200 : 404, { 'content-type': 'application/json' });
+        const visible = versions.has(id) && Date.now() >= (visibleAt.get(id) ?? 0);
+        res.writeHead(visible ? 200 : 404, { 'content-type': 'application/json' });
         res.end('{}');
         return;
       }
@@ -41,6 +59,26 @@ async function startRegistry(t, { published = [], failPut = {}, hangPut = {}, de
       for (const dep of dependencies[name] ?? []) {
         if (![...versions].some(id => id.startsWith(`${dep}@`)))
           state.publishedBeforeDependency.push(`${name} before ${dep}`);
+      }
+      if (versions.has(`${name}@${version}`)) {
+        res.writeHead(403, { 'content-type': 'application/json' });
+        res.end('{"error":"You cannot publish over the previously published versions"}');
+        return;
+      }
+      if (conflicts.get(name)) {
+        conflicts.set(name, conflicts.get(name) - 1);
+        if (uploadedDespiteConflict) {
+          versions.add(`${name}@${version}`);
+          visibleAt.set(`${name}@${version}`, Date.now() + lagMs);
+        }
+        res.writeHead(409, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error:
+              '[TLOG_CREATE_ENTRY_ERROR] error creating tlog entry - (409) an equivalent entry already exists in the transparency log',
+          }),
+        );
+        return;
       }
       state.inFlight++;
       state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
@@ -140,7 +178,7 @@ test('a release that fails partway can be re-run and publishes only what is left
 
   assert.equal(first.status, 1, first.output);
   assert.match(first.output, /Failed to publish @fx\/memory@1\.0\.0 after 3 attempts/);
-  assert.match(first.output, /Not published because they come after a failed package: @fx\/server/);
+  assert.match(first.output, /Not published because a dependency failed: @fx\/server@1\.0\.0 \(needs @fx\/memory\)/);
   assert.deepEqual([...registry.state.versions].sort(), ['@fx/core@1.0.0', '@fx/stable@1.0.0', '@fx/voice@1.0.0']);
 
   // npm recovers.
@@ -189,4 +227,59 @@ test('a re-run after everything is published does nothing', async t => {
   assert.equal(status, 0, output);
   assert.equal(registry.state.puts.length, 0);
   assert.match(output, /nothing to publish/);
+});
+
+test('a transparency-log 409 for a version that did reach npm counts as published once npm shows it', async t => {
+  const registry = await startRegistry(t, {
+    tlogConflict: { '@fx/voice': 1 },
+    uploadedDespiteConflict: true,
+    lagMs: 3000,
+    dependencies: releaseDependencies,
+  });
+  const cwd = makeWorkspace(t, registry.url, releasePackages);
+
+  const { status, output } = await run(cwd, registry.url, [], { PUBLISH_REGISTRY_LAG_MS: '6000' });
+
+  assert.equal(status, 0, output);
+  assert.match(output, /Published @fx\/voice@1\.0\.0 .*reported a failure but is on the registry/);
+  assert.equal(registry.state.puts.filter(put => put.name === '@fx/voice').length, 1);
+});
+
+test('a transparency-log 409 for a version npm does not have is retried with a longer backoff', async t => {
+  const registry = await startRegistry(t, { tlogConflict: { '@fx/voice': 4 }, dependencies: releaseDependencies });
+  const cwd = makeWorkspace(t, registry.url, releasePackages);
+
+  const { status, output } = await run(cwd, registry.url, [], { PUBLISH_REGISTRY_LAG_MS: '0' });
+
+  assert.equal(status, 0, output);
+  assert.equal(registry.state.puts.filter(put => put.name === '@fx/voice').length, 5);
+  assert.ok(registry.state.versions.has('@fx/voice@1.0.0'));
+  // RETRY_DELAY_MS is 10 here: an ordinary failure waits 10, 20; a signing failure 20, 40, 80, 160.
+  assert.match(output, /Retrying @fx\/voice@1\.0\.0 \(attempt 1 of 6 failed, provenance signing; next in 0\.02s\)/);
+  assert.match(output, /attempt 4 of 6 failed, provenance signing; next in 0\.16s/);
+});
+
+test('a package that fails does not stop packages that do not depend on it', async t => {
+  // core ← memory ← server, and core ← tools ← cli: cli is a level after memory but doesn't need it.
+  const packages = [
+    { name: '@fx/core' },
+    { name: '@fx/memory', dependencies: { '@fx/core': 'workspace:*' } },
+    { name: '@fx/server', peerDependencies: { '@fx/memory': 'workspace:*' } },
+    { name: '@fx/tools', dependencies: { '@fx/core': 'workspace:*' } },
+    { name: '@fx/cli', dependencies: { '@fx/tools': 'workspace:*' } },
+  ];
+  const registry = await startRegistry(t, {
+    failPut: { '@fx/memory': Infinity },
+    dependencies: { ...releaseDependencies, '@fx/tools': ['@fx/core'], '@fx/cli': ['@fx/tools'] },
+  });
+  const cwd = makeWorkspace(t, registry.url, packages);
+
+  const { status, output } = await run(cwd, registry.url);
+
+  assert.equal(status, 1, output);
+  assert.deepEqual([...registry.state.versions].sort(), ['@fx/cli@1.0.0', '@fx/core@1.0.0', '@fx/tools@1.0.0']);
+  assert.deepEqual(registry.state.publishedBeforeDependency, []);
+  assert.match(output, /Failed: @fx\/memory@1\.0\.0/);
+  assert.match(output, /Not published because a dependency failed: @fx\/server@1\.0\.0 \(needs @fx\/memory\)/);
+  assert.match(output, /Published 3 of 5 package\(s\)/);
 });
