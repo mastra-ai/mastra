@@ -21,6 +21,11 @@ const FAILURE_METADATA = {
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
   run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },
   run_incomplete: { canRetry: true, label: 'Agent run ended before completing the working phase' },
+  // A person pressed Stop. Retrying on our own would undo the stop they asked
+  // for and re-send the kickoff and the stage-move notice, so the dispatcher
+  // stops here; the card reads as stopped and the stage can be started again on
+  // purpose.
+  run_stopped: { canRetry: true, autoRetry: false, label: 'Stopped by a person' },
   skill_delivery_ambiguous: { canRetry: false, label: 'Factory skill delivery could not be confirmed' },
   run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
