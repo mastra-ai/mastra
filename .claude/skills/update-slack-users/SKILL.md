@@ -15,7 +15,7 @@ description: Update .github/slack-users.json, the GitHub login to Slack member I
 
 CI alerts look GitHub logins up in this file. One example is the test-tier escape alert built by `scripts/test-tiers/attribute.mjs`. A listed login becomes a Slack tag (`<@U012AB3CD4E>`), and an unlisted one is printed as a plain `@login`. So a missing entry is harmless, but a wrong entry tags the wrong person. **Leave someone out rather than guess.**
 
-Who an alert tags: the author of the PR that broke something. When a bot opened that PR, the alert tags a person instead: the human who merged it, then the humans who approved it, then the human credited on the most commits (including `Co-authored-by` trailers). It falls back to `@here` only when it can't tell who the person is. So the map needs everyone who authors, merges, approves or co-authors changes on `main`.
+Who an alert tags: the author of the PR that broke something. When a bot opened that PR, the alert tags a person instead: the human who merged it, then the humans who approved it, then the human credited on the most commits (including `Co-authored-by` trailers). It falls back to `@here` only when it can't tell who the person is. So the map needs everyone who authors, merges or approves PRs on `main`, everyone co-credited on `main`, and everyone credited on a bot PR's own commits.
 
 ## What you need
 
@@ -44,9 +44,8 @@ work=$(mktemp -d)
     to=$(date -u -v-$(( w*7 ))d +%F 2>/dev/null || date -u -d "$(( w*7 )) days ago" +%F)
     for try in 1 2 3 4; do
       gh pr list --repo mastra-ai/mastra --state merged --base main --limit 1000 \
-        --search "merged:$from..$to" --json author,mergedBy,reviews \
-        --jq '.[] | (.author.login, .mergedBy.login, (.reviews[] | select(.state=="APPROVED") | .author.login))' \
-        > "$work/week-$w.txt" && break
+        --search "merged:$from..$to" --json number,author,mergedBy,reviews \
+        > "$work/week-$w.json" && break
       [ "$try" = 4 ] && { echo "week $w failed: stop and run step 1 again" >&2; exit 1; }
       sleep 10
     done
@@ -56,7 +55,33 @@ work=$(mktemp -d)
 
 If it prints `week ... failed`, stop: the list is missing that week.
 
-Add co-authors credited on `main` through GitHub noreply addresses, both `<id>+<login>@users.noreply.github.com` and the older `<login>@users.noreply.github.com` (the same forms the alert reads). If the fetch fails, stop rather than read a stale `origin/main`:
+Take the authors, mergers and approvers from those PRs, and note which PRs a bot opened:
+
+```bash
+jq -r '.[] | (.author.login, .mergedBy.login, (.reviews[] | select(.state=="APPROVED") | .author.login)) // empty' \
+  "$work"/week-*.json > "$work/prs.txt"
+jq -r '.[] | select(.author.is_bot) | .number' "$work"/week-*.json | sort -un > "$work/bot-prs.txt"
+```
+
+For a bot PR, the alert's last rung credits the people on the PR's own commits: each commit's author, and each `Co-authored-by` noreply address in its message. A squash merge can drop both from `main`, so read them from each bot PR's commits. Every page is fetched, a failing PR is retried, and the loop stops if it still fails:
+
+```bash
+(
+  while read -r pr; do
+    for try in 1 2 3 4; do
+      gh api --paginate --slurp "repos/mastra-ai/mastra/pulls/$pr/commits?per_page=100" > "$work/commits.json" && break
+      [ "$try" = 4 ] && { echo "commits of #$pr failed: stop and run this step again" >&2; exit 1; }
+      sleep 10
+    done
+    jq -r 'add[] | (.author.login // empty), (.commit.message | scan("(?im)^co-authored-by:.*<(?:[0-9]+\\+)?([^@<>\\s]+)@users\\.noreply\\.github\\.com>\\s*$") | .[0])' \
+      "$work/commits.json" || exit 1
+  done < "$work/bot-prs.txt"
+) > "$work/bot-commits.txt"
+```
+
+If it prints `commits of ... failed`, stop: the list is missing that PR's people.
+
+Then add co-authors credited on `main` through GitHub noreply addresses, both `<id>+<login>@users.noreply.github.com` and the older `<login>@users.noreply.github.com` (the same forms the alert reads). If the fetch fails, stop rather than read a stale `origin/main`:
 
 ```bash
 git fetch -q origin main || { echo "fetch failed: stop" >&2; false; } &&
@@ -68,7 +93,7 @@ git log origin/main --since=90.days --format=%B \
 Keep only people, with their GitHub profile name. `gh pr list` drops the `[bot]` suffix from app accounts, so you can't spot them by name. Ask GitHub for each login's account type instead: apps return 404, bots `Bot` and organisations `Organization`. Retry a lookup that fails with anything other than 404, and stop if it still fails: a silently dropped login would quietly lose a person.
 
 ```bash
-sort -u "$work"/week-*.txt "$work/coauthors.txt" | grep -v '^$' | while read -r login; do
+sort -u "$work/prs.txt" "$work/bot-commits.txt" "$work/coauthors.txt" | grep -v '^$' | while read -r login; do
   for try in 1 2 3 4; do
     if user=$(gh api "users/$login" 2>"$work/err"); then
       jq -c 'select(.type == "User") | {login, name}' <<<"$user"
@@ -83,7 +108,7 @@ done > "$work/people.jsonl"
 
 If the loop stops with `lookup failed`, run it again; don't continue with a partial list.
 
-Expect around 150 people.
+Expect around 175 people.
 
 ### 2. Fetch the Slack users
 
