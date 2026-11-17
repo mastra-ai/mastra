@@ -5,6 +5,7 @@ import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
 import { Link, Navigate, useParams } from 'react-router';
 
@@ -27,6 +28,7 @@ import { CardStageBar } from '../domains/factory/components/CardStageBar';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import type { WorkItem } from '../domains/factory/services/workItems';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 
@@ -143,11 +145,6 @@ function CardDraft({
   useGlobalShortcuts();
   const sessionRepository = useCardSessionRepository(factory.id, item.id);
   const draftStart = useStartCardSessionFromDraft(item, sessionRepository.error ? undefined : sessionRepository.data);
-  const repositoryProblem = sessionRepository.error
-    ? `Could not find this card's repository: ${sessionRepository.error.message}`
-    : sessionRepository.data?.status === 'unlinked'
-      ? sessionRepository.data.hint
-      : undefined;
 
   return (
     <DraftSessionStartContext.Provider value={draftStart}>
@@ -164,12 +161,48 @@ function CardDraft({
             </Txt>
             <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
               {configurationError && <ConfigurationErrorNotice error={configurationError} />}
-              {repositoryProblem && <Notice variant="warning">{repositoryProblem}</Notice>}
+              <CardRepositoryNotice factoryId={factory.id} lookup={sessionRepository} />
               {board && <CardDraftActions factory={factory} item={item} board={board} />}
             </div>
           </section>
         }
       />
     </DraftSessionStartContext.Provider>
+  );
+}
+
+function CardRepositoryNotice({
+  factoryId,
+  lookup,
+}: {
+  factoryId: string;
+  lookup: ReturnType<typeof useCardSessionRepository>;
+}) {
+  if (lookup.error) {
+    return (
+      <Notice
+        variant="warning"
+        action={
+          <Notice.Button onClick={() => void lookup.refetch()} disabled={lookup.isFetching}>
+            Retry <IconArrowRotateClockwise />
+          </Notice.Button>
+        }
+      >
+        {`Could not find this card's repository: ${lookup.error.message}`}
+      </Notice>
+    );
+  }
+  if (lookup.data?.status !== 'unlinked') return null;
+  return (
+    <Notice
+      variant="warning"
+      action={
+        <Notice.Button render={<Link to={settingsSectionPath(factoryId, 'repositories')} />}>
+          Open repository settings
+        </Notice.Button>
+      }
+    >
+      {lookup.data.hint}
+    </Notice>
   );
 }

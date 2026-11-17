@@ -241,7 +241,7 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
-  it("says why nothing can start when the card's repository is not linked to the Factory", async () => {
+  it("says why nothing can start when the card's repository is not linked, and leads to repository settings", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();
     const hint = 'Source-control repository acme/elsewhere is not linked to this Factory.';
@@ -260,9 +260,13 @@ describe('a card without a session', () => {
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
     expect(route.createBodies).toEqual([]);
     expect(runStarts).toEqual([]);
+    expect(screen.getByRole('link', { name: 'Open repository settings' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/repositories`,
+    );
   });
 
-  it("says why nothing can start when the card's repository cannot be looked up", async () => {
+  it("says why nothing can start when the card's repository cannot be looked up, and starts once a retry finds it", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();
     server.use(
@@ -280,6 +284,16 @@ describe('a card without a session', () => {
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
     expect(route.createBodies).toEqual([]);
     expect(runStarts).toEqual([]);
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
+        HttpResponse.json({ status: 'resolved', projectRepositoryId: 'repository-draft-handoff', slug: 'acme/app' }),
+      ),
+    );
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.queryByText(/Could not find this card's repository/)).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
   });
 
   it("stops the start when a later lookup of the card's repository fails", async () => {
