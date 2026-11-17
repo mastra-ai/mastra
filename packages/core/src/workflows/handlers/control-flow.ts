@@ -1307,7 +1307,7 @@ export async function executeForeach(
             stepResults: { ...stepResults, [stepId]: runningWithProgress() },
             foreachItems: { stepId, indices },
             // A copy: an item that ends while the write is in flight removes the foreach's entry
-            // from the shared `activeStepsPath`, and storage v1 serializes it only when it writes.
+            // from the shared `activeStepsPath`, which the store reads only when it writes.
             executionContext: { ...executionContext, activeStepsPath: { ...executionContext.activeStepsPath } },
             workflowStatus: 'running',
             requestContext,
