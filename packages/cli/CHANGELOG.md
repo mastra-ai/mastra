@@ -1,5 +1,11 @@
 # mastra
 
+## 1.40.1-alpha.1
+
+### Patch Changes
+
+- GitHub avatars on Factory cards and in the board's people filter now load from GitHub's avatar image host instead of github.com. Before, every avatar was a separate, uncached request to github.com, so a large board could push GitHub to rate-limit your IP and block your own github.com pages for a while. ([#30755](https://github.com/mastra-ai/mastra/pull/30755))
+
 ## 1.40.1-alpha.0
 
 ### Patch Changes
