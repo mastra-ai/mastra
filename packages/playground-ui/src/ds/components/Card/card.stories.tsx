@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { Badge } from '../Badge';
 import { Button } from '../Button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardLink, CardTitle } from './Card';
+import { SectionCard } from '../SectionCard';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardInset, CardLink, CardTitle } from './Card';
 
 const meta: Meta<typeof Card> = {
   title: 'Layout/Card',
@@ -77,6 +78,49 @@ export const InteractiveLinks: Story = {
           <CardDescription className="mt-1">Keeps native link semantics.</CardDescription>
         </CardContent>
       </CardLink>
+    </div>
+  ),
+};
+
+const insetRows = [
+  { label: 'Source', value: 'Acme Linear' },
+  { label: 'Schedule', value: 'Daily at 03:00 UTC' },
+  { label: 'Enrich pages', description: 'Relates new pages to ones already in Knowledge', value: 'On' },
+];
+
+function InsetRows() {
+  return (
+    <CardInset>
+      {insetRows.map(row => (
+        <div key={row.label} className="flex items-center justify-between gap-4 p-3">
+          <div className="min-w-0">
+            <p className="text-body-sm text-foreground">{row.label}</p>
+            {row.description ? <p className="text-caption text-muted-foreground">{row.description}</p> : null}
+          </div>
+          <span className="shrink-0 text-body-sm text-muted-foreground">{row.value}</span>
+        </div>
+      ))}
+    </CardInset>
+  );
+}
+
+export const Inset: Story = {
+  render: args => (
+    <div className="grid w-[min(32rem,calc(100vw-2rem))] gap-6">
+      <Card {...args}>
+        <CardHeader className="pt-3">
+          <CardTitle>Add importer</CardTitle>
+          <CardDescription>
+            Syncs a connection's documents into Knowledge as pages your agents can read.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <InsetRows />
+        </CardContent>
+      </Card>
+      <SectionCard title="Importer" description="Settings for the Acme Linear importer">
+        <InsetRows />
+      </SectionCard>
     </div>
   ),
 };
