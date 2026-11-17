@@ -1054,9 +1054,12 @@ export class ExecutionFence implements RunFenceScope {
     this.#stopTrackingIfQuiet();
   }
 
-  /** Forget this fence once its heartbeat can no longer report on the claim. */
+  /**
+   * Forget this fence once its heartbeat can no longer report on the claim. A lost fence is forgotten at once, even with
+   * a renewal still pending: loss is final, and a renewal that never answers would otherwise keep it tracked forever.
+   */
   #stopTrackingIfQuiet(): void {
-    if (this.#heartbeat || this.#renewalInFlight) return;
+    if (this.#heartbeat || (this.#renewalInFlight && !this.#lossError)) return;
     const key = claimKey(this.runId, this.claim);
     const fences = renewingFencesByClaim.get(key);
     fences?.delete(this);
