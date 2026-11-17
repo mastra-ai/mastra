@@ -221,6 +221,73 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
+  it("keeps the conversation and the composer when the card's next step opens its session", async () => {
+    const route = stubDraftRoute();
+    stubCard();
+    const threadPath = `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`;
+    const triage = { sessionId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID, branch: 'factory/linear-eng-42' };
+    let moved = false;
+    let answerHistory = () => {};
+    const historyAnswered = new Promise<void>(resolve => {
+      answerHistory = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [moved ? { ...linearCard, sessions: { triage } } : linearCard] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`, ({ params }) => {
+        moved = true;
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: String(params.itemId),
+            revision: 9,
+            stage: 'triage',
+            decisions: [],
+          },
+        });
+      }),
+      http.get(
+        `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/threads/:threadId/messages`,
+        async () => {
+          await historyAnswered;
+          return HttpResponse.json({
+            messages: [
+              {
+                id: 'investigation',
+                role: 'assistant',
+                createdAt: '2026-08-07T09:00:01.000Z',
+                content: { format: 2, parts: [{ type: 'text', text: 'Looking into ENG-42' }] },
+              },
+            ],
+          });
+        },
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${OTHER_DRAFT_SESSION_ID}`);
+    const suggested = await screen.findByRole('group', { name: 'Suggested actions' });
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    const conversation = screen.getByRole('region', { name: 'Conversation' });
+
+    await user.click(within(suggested).getByRole('button', { name: 'Investigate' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(threadPath));
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
+    expect(screen.getByRole('region', { name: 'Conversation' })).toBe(conversation);
+    expect(within(conversation).queryByText('No session yet. Your first message starts one.')).not.toBeInTheDocument();
+    answerHistory();
+    expect(await within(conversation).findByText('Looking into ENG-42')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it("starts the card's session on its branch with the first prompt, then opens the thread of the session the server gave", async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();

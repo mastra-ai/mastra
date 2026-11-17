@@ -1,7 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
+import { useContext, useEffectEvent, useLayoutEffect, useReducer } from 'react';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
@@ -47,7 +47,8 @@ export function ChatTranscriptProvider({
     dispatchRuntime({ type: 'reset', threadId: nextThreadId, state });
   };
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
-  useEffect(() => {
+  // Before paint: a transcript continued into another thread would show its empty state until the merge.
+  useLayoutEffect(() => {
     if (initialMessages === undefined) return;
     mergeWindow(initialMessages);
   }, [initialMessages]);

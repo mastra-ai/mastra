@@ -27,6 +27,7 @@ const activityTail: TranscriptTail = stretchLive => <ActivityLine stretchLive={s
 interface SessionChatSurfaceProps {
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
+  openingSession?: boolean;
   composerLabel: string;
   /** Leads the status row above the composer. */
   composerStatus?: ReactNode;
@@ -36,6 +37,7 @@ interface SessionChatSurfaceProps {
 export function SessionChatSurface({
   secondaryBar,
   emptyState,
+  openingSession = false,
   composerLabel,
   composerStatus,
   contentOverlay,
@@ -44,7 +46,8 @@ export function SessionChatSurface({
   // Fixed at mount: the thread drops the handoff from its state once it sends.
   const [continuesDraft] = useState(() => opensWithPrompt(location.state));
   const { busy, loadMore, transcript } = useChatTranscript();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
+  const { historyInitializing, preparing: threadPreparing } = useChatMessagePreparation();
+  const preparing = threadPreparing || openingSession;
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
   const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
 

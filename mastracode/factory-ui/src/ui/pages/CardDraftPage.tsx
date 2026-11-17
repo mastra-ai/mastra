@@ -7,13 +7,16 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
-import { Link, Navigate, useParams } from 'react-router';
+import { useEffect, useEffectEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useWorkItemQuery } from '../../hooks/useWorkItems';
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
 import { SessionView } from '../domains/chat/components/SessionView';
+import { continueTranscript } from '../domains/chat/context/transcriptKey';
+import { useChatSessionContext } from '../domains/chat/context/useChatSessionContext';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
 import { boardOf } from '../domains/factory/boardFlow';
 import { currentItemStage } from '../domains/factory/boardStages';
@@ -38,9 +41,27 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
     item,
     sessionRepository.error ? undefined : sessionRepository.data,
   );
+  const { sessionId: draftSessionId } = useChatSessionContext();
+  const navigate = useNavigate();
+  const board = item && !catalog.isPending ? boardOf(catalog.data, item) : undefined;
+  const cardSession =
+    item && !catalog.isPending
+      ? cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '')
+      : undefined;
+  // A Start opens its own thread, with its prompt.
+  const openedSession = routedWorkItemId && !draftStart.started ? cardSession : undefined;
+  const openedSessionId = openedSession?.sessionId;
+  const openedThreadId = openedSession?.threadId;
+  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) => {
+    continueTranscript({ sessionId: draftSessionId }, session);
+    void navigate(threadPath(factoryId, session), { replace: true });
+  });
+  useEffect(() => {
+    if (openedSessionId && openedThreadId) openThread({ sessionId: openedSessionId, threadId: openedThreadId });
+  }, [openedSessionId, openedThreadId]);
 
-  const startOpenedThread = !routedWorkItemId;
-  if (startOpenedThread) return <SessionView emptyState={<EmptyThreadState />} />;
+  const threadOpened = !routedWorkItemId;
+  if (threadOpened) return <SessionView emptyState={<EmptyThreadState />} />;
   if (card.isLoadingError) {
     return (
       <div className={draftPageClass}>
@@ -83,16 +104,12 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       </div>
     );
   }
-
-  const board = boardOf(catalog.data, item);
-  const session = cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
-  // A card that gained a session elsewhere opens it instead of a second one. A Start here opens it with its prompt.
-  if (session && !draftStart.started) return <Navigate replace to={threadPath(factoryId, session)} />;
-  if (unconfigured) return <DraftStart heading={item.title} guards={guards} />;
+  if (unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
 
   return (
     <SessionView
       start={draftStart}
+      openingSession={Boolean(openedSession)}
       emptyState={
         <section className={emptyThreadClass} aria-labelledby="card-draft-title">
           <Logo size="md" aria-label="Mastra Code" />

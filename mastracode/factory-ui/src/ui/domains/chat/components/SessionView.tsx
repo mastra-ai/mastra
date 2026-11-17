@@ -18,7 +18,15 @@ import { SessionChatSurface } from './SessionChatSurface';
 import { TeammateSessionLine } from './TeammateSessionLine';
 import { ThreadRailLayer } from './ThreadRailLayer';
 
-export function SessionView({ start, emptyState }: { start?: DraftSessionStart; emptyState: ReactNode }) {
+export function SessionView({
+  start,
+  openingSession = false,
+  emptyState,
+}: {
+  start?: DraftSessionStart;
+  openingSession?: boolean;
+  emptyState: ReactNode;
+}) {
   const { workspacePath } = useThreadWorkspacePath();
   return (
     <SessionEffects workspacePath={workspacePath}>
@@ -27,6 +35,7 @@ export function SessionView({ start, emptyState }: { start?: DraftSessionStart; 
         <SessionChatSurface
           secondaryBar={<GoalPanel />}
           emptyState={emptyState}
+          openingSession={openingSession}
           composerLabel="Thread composer"
           composerStatus={<TeammateSessionLine />}
           contentOverlay={<ThreadRailSlot />}
