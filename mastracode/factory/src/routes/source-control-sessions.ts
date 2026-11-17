@@ -498,7 +498,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const factoryProjectId = c.req.param('id');
         const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
         if (!project) return c.json({ error: 'Factory not found' }, 404);
-        return c.json({ sessions: await options.projectSessions({ orgId, factoryProjectId: project.id, userId }) });
+        const sessions = await options.projectSessions({ orgId, factoryProjectId: project.id });
+        return c.json({ sessions: sessions.seenBy(userId).sessions });
       },
     }),
     // Approve or decline the tool call a card's phase session waits on, from the card or a

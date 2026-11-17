@@ -132,7 +132,7 @@ describe('Factory route contracts', () => {
     };
     const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
     const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
-    const listed = { workItems: [legacy], runningSessionIds: [], parkedSessionIds: [] };
+    const listed = { workItems: [legacy] };
     expect(list.parse(listed)).toEqual(listed);
     expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
     expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
@@ -293,8 +293,6 @@ describe('Factory route contracts', () => {
             },
           },
         ],
-        runningSessionIds: ['session-1'],
-        parkedSessionIds: ['session-2'],
       }).success,
     ).toBe(true);
     expect(

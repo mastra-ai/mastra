@@ -30,8 +30,10 @@ interface CardControlsInput {
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
   retryingDecisionId?: string;
-  /** Live status of the card's bound sessions. */
+  /** The card's marker: the status its row in the sidebar shows. */
   sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
   onApproveProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   onMove: (toStage: string) => void;
@@ -50,6 +52,7 @@ export function cardControls({
   approvingDecisionId,
   retryingDecisionId,
   sessionStatus,
+  sessionHolds,
   onApproveProposal,
   onRetryDecision,
   onMove,
@@ -69,6 +72,7 @@ export function cardControls({
     queuePosition,
     transitionReason,
     sessionStatus,
+    sessionHolds,
     held: awaitsTriageDecision(item, columnStage, definition),
   });
   const { status } = state;

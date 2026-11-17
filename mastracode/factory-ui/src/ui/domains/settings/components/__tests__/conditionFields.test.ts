@@ -58,7 +58,7 @@ describe('condition rows', () => {
 
   it('read a rule back in words', () => {
     expect(describeRule(selfReviewRule)).toBe(
-      '((author is trusted) or (labels contains effort:low or labels contains effort:medium)) and card has no open pull request',
+      '((author is trusted) or (labels contains effort:low or labels contains effort:medium)) and card has no pull request',
     );
   });
 
@@ -70,9 +70,32 @@ describe('condition rows', () => {
     };
 
     expect(label('item.trusted', false)).toBe('Outside author');
-    expect(label('source.kind', 'pull_request')).toBe('Pull request');
-    expect(label('source.integration', 'incidentio')).toBe('incident.io');
+    expect(label('source.provider', 'incidentio')).toBe('incident.io');
     expect(label('event.reason', 'canceled')).toBe('Not planned');
+  });
+
+  it('offer each fact once, by the name a person picks it by, A to Z', () => {
+    const labels = conditionFields(intakeRouteFacts(['work_item.closed', 'work_item.updated'])).map(
+      field => field.label,
+    );
+    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b)));
+    expect(labels).toEqual(expect.arrayContaining(['Source', 'Has pull request']));
+    for (const gone of ['State', 'Integration', 'Provider', 'Source kind', 'Closed issue has a pull request']) {
+      expect(labels).not.toContain(gone);
+    }
+  });
+
+  it('still read rules on facts the picker no longer offers', () => {
+    expect(
+      describeRule({
+        operator: 'AND',
+        conditions: [
+          { field: 'source.integration', operator: 'equals', value: 'github' },
+          { field: 'source.kind', operator: 'equals', value: 'issue' },
+          { field: 'closedIssue.hasPullRequest', operator: 'equals', value: true },
+        ],
+      }),
+    ).toBe('Integration is GitHub and source kind is issue and closed issue has a pull request');
   });
 
   const CHANGES = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];

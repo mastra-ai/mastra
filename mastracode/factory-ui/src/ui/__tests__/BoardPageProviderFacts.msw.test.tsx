@@ -11,6 +11,22 @@ import { nativeFactsCard, providerFactsCard } from './fixtures/providerFactsCard
 import { stubWorkBoard } from './workBoardStubs';
 
 describe('native card facts', () => {
+  it('shows a hand-filed card number in the list, where it has no upstream link to carry it', async () => {
+    stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+        HttpResponse.json({
+          workItems: [{ ...nativeFactsCard, metadata: { ...nativeFactsCard.metadata, cardNumber: 12 } }],
+        }),
+      ),
+    );
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/work?layout=list'] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const card = await screen.findByTestId('work-item-card');
+    expect(within(card).getByText('#12', { exact: true })).toBeVisible();
+  });
+
   describe('when a label filter matches a persisted native card', () => {
     it.each(['board', 'list'])('keeps its label visible in the filtered %s', async layout => {
       stubWorkBoard();
@@ -42,12 +58,13 @@ describe('native card facts', () => {
 });
 
 it.each([
-  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'list', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
+  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app'], reference: 'app#73', link: 'app#73' },
+  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app', 'acme/docs'], reference: 'app#73', link: 'app#73' },
 ])(
   'shows source facts in $layout without provider lookups beyond routine intake browsing, as $reference among $repositories',
-  async ({ layout, repositories, reference }) => {
+  async ({ layout, repositories, reference, link }) => {
     const projectUrl = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
     const providerRequests: string[] = [];
     server.use(
@@ -91,6 +108,7 @@ it.each([
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
     expect(card).toHaveTextContent(reference);
+    expect(within(card).getByRole('link', { name: `Open in GitHub: ${link}` })).toBeVisible();
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();

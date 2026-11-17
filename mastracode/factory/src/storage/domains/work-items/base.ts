@@ -24,8 +24,8 @@ import {
   recordWorkItemSplitComplete,
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { AnnouncedLists } from '../../announced-lists.js';
 import { ensureLegacyCollections } from '../../legacy-collections.js';
-import { ProbedList, probeNewest } from '../../probed-list.js';
 import {
   BoardScopes,
   bumpBoardVersions,
@@ -399,6 +399,8 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
   /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
   keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
+  /** Called for each binding this sweep revoked. */
+  onRevoked?: (binding: FactoryRunBindingRecord) => void;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -1156,6 +1158,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_org_thread_idx',
         columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      // Prompt-time checkout trust reads a session's whole binding history, on any thread.
+      { name: 'factory_run_bindings_org_session_idx', columns: ['org_id', 'session_id'] },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -1326,7 +1330,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  readonly #projectSubscriptions = new ProbedList<WorkItemSubscription>();
+  readonly projectSubscriptions = new AnnouncedLists<WorkItemSubscription>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -3560,6 +3564,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row !== null;
   }
 
+  /** Every binding a session ever held, revoked ones included, oldest first; never grants agent authority. */
+  async listRunBindingsForSession(input: { orgId: string; sessionId: string }): Promise<FactoryRunBindingRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_run_bindings',
+        { org_id: input.orgId, session_id: input.sessionId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toBinding);
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
@@ -3626,7 +3641,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);
         if (item === undefined) {
-          item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          try {
+            item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
+          } catch (error) {
+            // One unreadable card must not end the sweep for every binding after it.
+            // Nothing is known about this card, so its binding stays for the next sweep.
+            console.error(
+              `[factory] stale-binding sweep could not read card ${binding.workItemId}`,
+              error instanceof Error ? error.message : error,
+            );
+            continue;
+          }
           itemCache.set(key, item);
         }
         // Terminal-ness comes from the installed board via the host-wired
@@ -3644,7 +3669,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (result) revoked += 1;
+      if (result) {
+        revoked += 1;
+        input.onRevoked?.(binding);
+      }
     }
     return revoked;
   }
@@ -4207,6 +4235,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         reason: input.reason,
         created_at: new Date(),
       });
+      this.projectSubscriptions.announce({ orgId: row.org_id, factoryProjectId: row.factory_project_id });
       return toWorkItemSubscription(row);
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
@@ -4219,18 +4248,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Stop a session following a work item. Returns whether it was following. */
   async unsubscribeFromWorkItem({
     orgId,
+    factoryProjectId,
     workItemId,
     sessionId,
   }: {
     orgId: string;
+    factoryProjectId: string;
     workItemId: string;
     sessionId: string;
   }): Promise<boolean> {
     const deleted = await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {
       org_id: orgId,
+      factory_project_id: factoryProjectId,
       work_item_id: workItemId,
       session_id: sessionId,
     });
+    if (deleted > 0) this.projectSubscriptions.announce({ orgId, factoryProjectId });
     return deleted > 0;
   }
 
@@ -4265,18 +4298,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<readonly WorkItemSubscription[]> {
     const ops = super.ops;
     const where = { org_id: orgId, factory_project_id: factoryProjectId };
-    return this.#projectSubscriptions.read(
-      `${orgId}\u0000${factoryProjectId}`,
-      () => probeNewest(ops, FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, 'created_at'),
-      async () =>
-        (
-          await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
-            orderBy: [
-              ['created_at', 'asc'],
-              ['id', 'asc'],
-            ],
-          })
-        ).map(toWorkItemSubscription),
+    return this.projectSubscriptions.read({ orgId, factoryProjectId }, async () =>
+      (
+        await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
+          orderBy: [
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+        })
+      ).map(toWorkItemSubscription),
     );
   }
 
@@ -4327,12 +4357,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    let unfollowed = false;
+    const card = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      unfollowed = false;
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
-      await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
+      unfollowed =
+        (await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id })) > 0;
       if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
@@ -4346,5 +4379,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
+    if (card && unfollowed) this.projectSubscriptions.announce({ orgId, factoryProjectId: card.factoryProjectId });
+    return card;
   }
 }

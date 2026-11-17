@@ -237,6 +237,9 @@ describe('Factory board list layout', () => {
     stubWorkBoard();
     const transitions: { itemId: string; stage: string }[] = [];
     server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/session-repository`, () =>
+        HttpResponse.json({ status: 'unlinked', hint: 'No repository in this board stub.' }),
+      ),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
         async ({ params, request }) => {

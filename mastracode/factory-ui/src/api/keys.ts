@@ -86,6 +86,7 @@ export const queryKeys = {
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
+  connectToolList: () => ['connect-tools', 'tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
@@ -106,6 +107,19 @@ export const queryKeys = {
   intakeNotRouted: (factoryProjectId: string | undefined) =>
     ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  // Not under the board's key: card rewrites there expect a board snapshot.
+  workItemSessionRepository: (
+    factoryProjectId: string | undefined,
+    workItemId: string | undefined,
+    cardUpdatedAt: string | undefined,
+  ) =>
+    [
+      'factory',
+      'work-item-session-repository',
+      factoryProjectId ?? null,
+      workItemId ?? null,
+      cardUpdatedAt ?? null,
+    ] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>

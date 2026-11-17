@@ -1,5 +1,115 @@
 # @mastra/factory
 
+## 0.29.0-alpha.7
+
+### Patch Changes
+
+- The **Activity** sort in the Factory sidebar now orders sessions that share a status by their last update instead of their creation date, the same as **Last updated** does. An older session that was updated since no longer sinks below a newer one that was left alone. ([#30656](https://github.com/mastra-ai/mastra/pull/30656))
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/code-sdk@1.19.1-alpha.7
+
+## 0.29.0-alpha.6
+
+### Minor Changes
+
+- Added personal custom providers. A custom OpenAI-compatible endpoint is now saved either for yourself or for your organization, the same way provider API keys are. ([#29879](https://github.com/mastra-ai/mastra/pull/29879))
+
+  - **Personal endpoints** are visible only to you and are used by your personal sessions.
+  - **Organization endpoints** are used by work that runs on the organization's credentials. Adding, editing or removing one now requires an organization admin.
+  - Custom endpoints are added from the **Add provider** dialog and listed with the other providers. The separate "Custom providers" section is gone.
+  - Editing an endpoint without retyping its API key keeps the saved key, as long as the URL stays on the same host. Moving it to another host asks for the key again.
+  - Adding an endpoint under a name that is already in use is refused instead of replacing the existing one. So are names reserved for a built-in provider, its sign-in, or the Mastra Gateway (for example "OpenAI", "OpenAI Codex" or "Mastra Gateway").
+  - A Factory hosted on the Mastra platform only calls custom endpoints at a public HTTPS address. Saving one on plain HTTP, `localhost`, a private network or the cloud metadata address is refused with a message explaining why. Local and self-hosted Factories can still use endpoints on their own machine or network, such as Ollama or vLLM.
+
+  **Before you upgrade**
+
+  - Organization endpoints no longer apply to personal sessions. Add the endpoint again as a personal one to keep using it there.
+  - On a hosted Factory, endpoints saved earlier on a local or plain-HTTP address are marked "URL not allowed" and their models are no longer offered. Edit them to a public HTTPS address.
+  - Review your organization's endpoints. One named like a built-in provider (for example "OpenAI") still takes over that provider's models; remove it or rename it.
+
+  The custom provider routes take a `scope` (`user` by default, or `org`). Saving with `previousId` edits that provider; saving without it adds one:
+
+  ```http
+  POST /web/config/custom-providers
+  { "name": "My gateway", "url": "https://llm.example.com/v1", "models": ["my-model"], "scope": "org" }
+
+  DELETE /web/config/custom-providers/my-gateway?scope=org
+  ```
+
+- Work Intake: what you select is what comes in. ([#30625](https://github.com/mastra-ai/mastra/pull/30625))
+
+  - **One list per service, no sync switches.** Settings → Work Intake lists each connected service with its selected sources and an Add account button. A service with nothing selected brings in nothing. Dependabot alerts keep their own switch.
+  - **GitHub issues follow the list.** New GitHub issues become cards only for repositories in the GitHub list. Pull requests still come from every linked repository. On upgrade, every repository already linked to a Factory is added to the list once, so nothing stops arriving. Linking a repository adds it to the list unless the request sends `selectIntake: false`, and adding a repository to the list brings in its open issues.
+    To link a repository without bringing in its issues:
+
+    ```http
+    POST /web/factory/projects/:projectId/source-control-connections/:connectionId/repositories
+    { "repository": { "externalId": "99", "slug": "acme/app" }, "selectIntake": false }
+    ```
+
+  - **Vanta follows its selection.** Vulnerabilities sync only while the Vanta source is selected. Organizations whose Vanta sync was on with nothing selected get the source selected once on upgrade.
+  - **Routing has its own page.** The intake order and the Not routed list moved from Settings to Routing in board settings.
+
+- Fixed Factory server memory growing with every session it ever opened. Factory now unloads a session from server memory when it stops the session's sandbox (a card leaving a phase's context or finishing), and after 30 minutes without activity. Sessions that are running, waiting on an approval or answer, open in a browser tab, or running a background process in their sandbox stay loaded. Unloading keeps the thread, its messages, the session row and the sandbox, and the session's next message, run, wake or opened tab loads it again. Without `auth`, a deferred wake for an unloaded session waits until something else loads it, as it does after a restart. ([#30612](https://github.com/mastra-ai/mastra/pull/30612))
+
+  Change the timeout with `idleSessionUnload`, or pass `false` to keep every session loaded:
+
+  ```ts
+  const factory = new MastraFactory({
+    storage,
+    idleSessionUnload: { idleMs: 60 * 60_000, sweepIntervalMs: 5 * 60_000 },
+  });
+  ```
+
+- Asking a Factory session to work on a card now goes through the board, the way the board's own buttons do. Before, asking a Slack or web session to "review" a pull request that already had a card often ended in a side session posting its review in the chat, while the card's own review waited for approval. ([#30628](https://github.com/mastra-ai/mastra/pull/30628))
+
+  - `factory_transition_work_item` takes `rerun: true` to run the stage a card is already in again, as the board's **Start** button does. The run counts as approved by the person asking, and a busy card is refused as on the board. A rerun needs a person in the turn. Without `rerun`, a request for the card's own stage changes nothing and says whether its run is waiting for approval. The result now includes the card's `url`.
+  - Asking for a side session still starts one. The tools now steer a plain "review this pull request" to the pull request's card, and keep side sessions for what people ask to run in one and for work no stage does, such as pushing fixes to a pull request.
+  - Every tool that takes a work item also accepts the issue or pull request it tracks: its link, `owner/repo#12`, `group/project!7`, or a tracker key such as `ENG-42`. With several repositories linked, the link finds the right card where a bare `#12` might not. `factory_list_work_items` takes the same references as its query.
+  - `factory_inspect_work_item` lists the card's stage, whether it can run again, and the stages its board lets it move to next.
+  - `factory_start_session` only starts side sessions. Its `workItem` and `role` inputs are removed: they started a card's role without the board's rules, such as which stage the card is in and whether it is busy.
+
+### Patch Changes
+
+- Added `GET /web/factory/projects/:id/work-items/:workItemId/session-repository`. It returns the repository a session on the card starts in, resolved with the same rules as the card's runs, or the reason the card has none. ([#30609](https://github.com/mastra-ai/mastra/pull/30609))
+
+- Fixed reopened pull request review sessions loading the pull request's AGENTS.md and CLAUDE.md as trusted instructions. After a review card finished and the server restarted or unloaded the session, a new message in that session read instruction files from the pull request branch. Sessions that ever ran pull request or review work now keep reading instructions from the base branch, or read none when the trusted branch can't be determined. ([#30612](https://github.com/mastra-ai/mastra/pull/30612))
+
+- **Settings › Tools** can now list each Mastra Connect connection's tools. The new `GET /web/integrations/platform/connect-tools/tools` route resolves the tools a session started by the signed-in user would get: Factory's default Connect tools, or what the `tools` option returns. It marks tools that ask for approval and lists the default tools Factory leaves out because they delete or archive. When the tools can't be resolved, it answers 502 `tools_unavailable` with the reason. ([#30610](https://github.com/mastra-ai/mastra/pull/30610))
+
+- Fixed **Settings › Tools** saying Mastra Connect tools are off when a Factory sets the `tools` option, even when that option uses Connect tools (#30579). The page now lists the Platform project's connections whenever the Factory has Platform credentials and `MASTRA_PROJECT_ID`, and says that session tools come from code. When either one is missing, the page names it instead of listing every possible cause. ([#30607](https://github.com/mastra-ai/mastra/pull/30607))
+
+- Reduced the work the Factory server does to keep the session sidebar and board up to date, and fixed session latency timestamps on LibSQL. ([#30648](https://github.com/mastra-ai/mastra/pull/30648))
+
+  - Projects without a linked repository no longer rebuild their session list on every sidebar poll.
+  - Session activity now sorts only the cards that are running, waiting or held by a session, instead of every card on the board.
+  - A session's first materialize, first message and first command times are now recorded once when several Factory processes share one LibSQL database, so a later write no longer replaces the first recorded time.
+
+- Fixed slow reading of the pull request number from GitHub card keys that contain very long runs of digits. The number returned is unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
+- New, renamed and hidden sessions now show up in teammates' sidebars right away, instead of after up to a minute, and the sidebar no longer polls while a session starts. The `session-rows` and `session-activity` answers no longer include `settling`: every change to either answer now sends a frame on the project's feed. ([#30617](https://github.com/mastra-ai/mastra/pull/30617))
+
+- Fixed deleting an intake rule being slow on remote databases and breaking other open rule edits. A delete now removes only the deleted rule instead of rewriting every rule after it, so the remaining rules keep their order and revision and edits opened before the delete still save. ([#30613](https://github.com/mastra-ai/mastra/pull/30613))
+
+- Approving a held Factory run with `factory_resolve_proposal`, or retrying a failed one with `factory_retry_decision`, now makes the session follow the run's card, as moving the card already did. Before, a Slack session that approved a card's review could promise to post the result and then never hear how the review ended. Both results now include the card's `url`. ([#30637](https://github.com/mastra-ai/mastra/pull/30637))
+
+- Fixed board cards showing a different session status than the sidebar. A card with a suggested run and a running session now shows it waits on you on the board too, and a card with one working and one starting session shows it working. ([#30624](https://github.com/mastra-ai/mastra/pull/30624))
+
+- Fixed Factory starting a card's session in a repository the card doesn't come from. When a card's repository wasn't linked to the Factory, the draft started the session in the first linked repository and wrote that repository onto the card. The draft now asks the server which repository the card's session uses, and when there is none it shows why, for example "Repository acme/docs is not linked to this Factory.", starts nothing, and links to repository settings. When the lookup itself fails, the draft offers Retry. ([#30609](https://github.com/mastra-ai/mastra/pull/30609))
+
+  A card from GitHub in a Factory whose repositories are all on GitLab, or the reverse, is now refused the same way instead of starting in that Factory's repository, even when a repository there has the same name.
+
+- Improved sidebar performance in projects with many sessions. The Factory now builds the session list once and reuses it for everyone until a session, card or follow changes, so each sidebar request uses about a third of the server CPU it did. ([#30616](https://github.com/mastra-ai/mastra/pull/30616))
+
+- Fixed the session status in Factory's sidebar and board. A person's own session now shows "Waiting on you" while its agent waits for their answer, instead of "Working". A session now shows "Working" while it runs on a thread opened after its first one, such as a new thread or a Slack conversation. A session shows "Initializing" only while a run waits on its first setup, so a session whose setup never finished, or that never ran, no longer stays stuck on "Initializing". ([#30627](https://github.com/mastra-ai/mastra/pull/30627))
+
+- Updated dependencies [[`944bb3a`](https://github.com/mastra-ai/mastra/commit/944bb3ab0fdcd23debbc4090d50c7abdcfacc874), [`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`b1ba914`](https://github.com/mastra-ai/mastra/commit/b1ba914ea1f79fc5e691d4d68471aa1e20279b6e), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/code-sdk@1.19.1-alpha.6
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/connect@1.4.1-alpha.2
+
 ## 0.29.0-alpha.5
 
 ### Minor Changes

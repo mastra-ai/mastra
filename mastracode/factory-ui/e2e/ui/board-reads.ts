@@ -157,8 +157,6 @@ export interface StubbedProject {
   workItems: readonly unknown[];
   boards: ReadonlyArray<{ id: string; phases: ReadonlyArray<{ id: string }> }>;
   userId: string;
-  runningSessionIds?: readonly string[];
-  parkedSessionIds?: readonly string[];
 }
 
 export function queryValues(url: URL, name: string): string[] | undefined {
@@ -205,14 +203,9 @@ export function answerBoardPhases(request: Request, project: StubbedProject, boa
     project.userId,
     card => versions.get(card.id) ?? '',
   );
-  const namedSessionIds = new Set(
-    named.flatMap(card => Object.values(card.sessions).map(session => session.sessionId)),
-  );
   return HttpResponse.json({
     ...body,
     ...(withBodies ? { workItems: named.map(card => wireById.get(card.id)) } : {}),
-    runningSessionIds: (project.runningSessionIds ?? []).filter(id => namedSessionIds.has(id)),
-    parkedSessionIds: (project.parkedSessionIds ?? []).filter(id => namedSessionIds.has(id)),
   });
 }
 
@@ -221,11 +214,7 @@ export function answerWorkItemFilterOptions(workItems: readonly unknown[]): Resp
   return HttpResponse.json(workItemFilterOptions(workItems.map(storedCard)));
 }
 
-const stubbedListSchema = z.object({
-  workItems: z.array(z.unknown()).default([]),
-  runningSessionIds: z.array(z.string()).optional(),
-  parkedSessionIds: z.array(z.string()).optional(),
-});
+const stubbedListSchema = z.object({ workItems: z.array(z.unknown()).default([]) });
 const stubbedCatalogSchema = z.object({
   boards: z.array(z.object({ id: z.string(), phases: z.array(z.object({ id: z.string() })) })),
 });

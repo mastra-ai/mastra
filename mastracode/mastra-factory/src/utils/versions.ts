@@ -14,6 +14,14 @@ export interface PinResult {
   pinned: Record<string, string>;
   /** Mastra packages that have no published version under the tag; left as the template had them. */
   unresolved: string[];
+  /** Mastra packages whose registry lookup failed; package.json is left untouched when any did. */
+  failed: string[];
+}
+
+/** Reports only well-known dist-tags to analytics; custom tags may identify a user. */
+export function versionTagForAnalytics(tag: string | undefined): string | undefined {
+  if (!tag) return undefined;
+  return tag === 'latest' || tag === 'alpha' ? tag : 'custom';
 }
 
 /**
@@ -22,12 +30,6 @@ export interface PinResult {
  * install uses that release channel. Templates declare these as `latest`, so
  * without this an install always takes the stable channel.
  */
-/** Reports only well-known dist-tags to analytics; custom tags may identify a user. */
-export function versionTagForAnalytics(tag: string | undefined): string | undefined {
-  if (!tag) return undefined;
-  return tag === 'latest' || tag === 'alpha' ? tag : 'custom';
-}
-
 export async function pinMastraPackages(projectPath: string, tag: string): Promise<PinResult> {
   const pkgPath = path.join(projectPath, 'package.json');
   const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8')) as Record<string, unknown>;
@@ -44,9 +46,12 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
     [...names].sort().map(async name => [name, await resolveDistTag(name, tag, projectPath)] as const),
   );
 
+  const failed = resolved.filter(([, result]) => result.failed).map(([name]) => name);
+  if (failed.length > 0) return { pinned: {}, unresolved: [], failed };
+
   const pinned: Record<string, string> = {};
   const unresolved: string[] = [];
-  for (const [name, version] of resolved) {
+  for (const [name, { version }] of resolved) {
     if (version) pinned[name] = version;
     else unresolved.push(name);
   }
@@ -60,10 +65,14 @@ export async function pinMastraPackages(projectPath: string, tag: string): Promi
   }
 
   await fs.writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
-  return { pinned, unresolved };
+  return { pinned, unresolved, failed };
 }
 
-async function resolveDistTag(name: string, tag: string, cwd: string): Promise<string | undefined> {
+/**
+ * `failed` means the registry lookup itself failed, which callers must not
+ * mistake for the package simply having no release under the tag.
+ */
+async function resolveDistTag(name: string, tag: string, cwd: string): Promise<{ version?: string; failed?: true }> {
   try {
     const { stdout } = await x('npm', ['view', name, 'dist-tags', '--json'], {
       throwOnError: true,
@@ -73,8 +82,8 @@ async function resolveDistTag(name: string, tag: string, cwd: string): Promise<s
     });
     const tags = JSON.parse(stdout) as Record<string, unknown>;
     const version = tags[tag];
-    return typeof version === 'string' && version ? version : undefined;
+    return typeof version === 'string' && version ? { version } : {};
   } catch {
-    return undefined;
+    return { failed: true };
   }
 }

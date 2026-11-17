@@ -243,10 +243,5 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
   } else if (ids.length > 0) {
     listed = cards.filter(card => ids.includes(card.id));
   }
-  return {
-    workItems: listed.map(toWireWorkItem),
-    runningSessionIds: [],
-    parkedSessionIds: [],
-    ...(total === undefined ? {} : { total }),
-  };
+  return { workItems: listed.map(toWireWorkItem), ...(total === undefined ? {} : { total }) };
 }

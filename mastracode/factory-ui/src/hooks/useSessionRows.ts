@@ -1,11 +1,12 @@
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 import { hashKey, queryOptions, skipToken, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { SessionRowsRequest } from '../api/types';
 import { fetchSessionActivity, fetchSessionRows } from '../ui/domains/workspaces/services/sessionRowReads';
-import { UNMATERIALIZED_POLL_MS } from './useWorkspaces';
+import { STATUS_MARKER_BY_ACTIVITY } from '../ui/domains/workspaces/services/sessionRows';
 
 export function sessionRowsQueryOptions(
   baseUrl: string,
@@ -19,7 +20,6 @@ export function sessionRowsQueryOptions(
       : skipToken,
     // Refreshed by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
-    refetchInterval: query => (query.state.data?.settling ? UNMATERIALIZED_POLL_MS : false),
   });
 }
 
@@ -28,7 +28,6 @@ export function sessionActivityQueryOptions(baseUrl: string, factoryProjectId: s
     queryKey: queryKeys.sessionActivity(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => fetchSessionActivity(baseUrl, factoryProjectId, signal) : skipToken,
     refetchOnWindowFocus: true,
-    refetchInterval: query => (query.state.data?.settling ? UNMATERIALIZED_POLL_MS : false),
   });
 }
 
@@ -49,4 +48,30 @@ export function useSessionRowsQuery(factoryProjectId: string | undefined, reques
 export function useSessionActivityQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(sessionActivityQueryOptions(baseUrl, factoryProjectId));
+}
+
+export interface CardSessions {
+  /** Each card's marker, by card id: the status its row in the sidebar shows. */
+  statuses: ReadonlyMap<string, SessionRowStatus>;
+  /** The cards one of whose sessions is coming up, running, or parked on a person. */
+  held: ReadonlySet<string>;
+  /** Whether the last read of them answered: until then, a card missing from `held` may still be held. */
+  current: boolean;
+}
+
+export function useCardSessions(factoryProjectId: string | undefined): CardSessions {
+  const { data: activity, isSuccess: current } = useSessionActivityQuery(factoryProjectId);
+  return useMemo(
+    () => ({
+      statuses: new Map(
+        Object.entries(activity?.cardStatuses ?? {}).flatMap(([cardId, status]) => {
+          const marker = STATUS_MARKER_BY_ACTIVITY[status];
+          return marker === undefined ? [] : [[cardId, marker] as const];
+        }),
+      ),
+      held: new Set(activity?.sessionHeldCardIds),
+      current,
+    }),
+    [activity, current],
+  );
 }

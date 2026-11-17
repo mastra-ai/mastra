@@ -415,13 +415,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot over a new database on %s', backend => {
   /** Tables an earlier release created only to carry its data forward. */
-  const LEGACY_TABLES = [
-    'work_items',
-    'factory_work_item_split_state',
-    'intake_settings',
-    'intake_source_bindings',
-    'intake_data_migrations',
-  ];
+  const LEGACY_TABLES = ['work_items', 'factory_work_item_split_state', 'intake_settings', 'intake_source_bindings'];
 
   async function boot(open: () => FactoryStorage) {
     const storage = open();

@@ -65,7 +65,9 @@ describe.for(
           pkgName === '@mastra/factory' ||
           pkgName === '@mastra/server-adapters-test-suite' ||
           pkgName === 'mastra' ||
-          pkgName.startsWith('@internal/'),
+          pkgName.startsWith('@internal/') ||
+          // ESM only: the TUI boot imports @mastra/code-sdk subpaths, which have no require condition.
+          (pkgName === 'mastracode' && importPath === './run-tui'),
       )('should use .cjs and .d.ts or .d.cts extensions when using require', async () => {
         if (importPath === './package.json') {
           return;

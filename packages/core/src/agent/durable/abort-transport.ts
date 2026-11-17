@@ -15,8 +15,8 @@
 import type { PubSub } from '../../events';
 import { isMastraTimeoutError, MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
-import { subscribeToAbortRequests } from '../streams/abort-transport';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
 export { publishAbortRequest, requestAcknowledgedAbort, subscribeToAbortRequests } from '../streams/abort-transport';
@@ -70,33 +70,19 @@ export async function ensureRemoteAbortListener(
   // would otherwise both pass the check and install duplicate subscriptions.
   entry.remoteAbortListenerInstalled = true;
 
-  let unsubscribe: () => Promise<void>;
+  const publisher = getRunStreamPublisher(runId, entry, mastra);
+  const listener = publisher.listenForAbort(pubsub, () => {
+    const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
+    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+  });
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
-      const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
-      if (controller && !controller.signal.aborted) {
-        controller.abort(new Error('Aborted'));
-      }
-    });
+    await listener.ready;
   } catch (error) {
-    // Release the claim so the next step in this run can retry. Leaving it set
-    // would make the run permanently deaf to remote aborts after one transient
-    // pubsub failure.
+    await listener.detach();
+    // Release the claim so the next step retries a transient subscription failure.
     entry.remoteAbortListenerInstalled = false;
     throw error;
   }
-
-  // Chain onto the entry's existing cleanup rather than replacing it: the
-  // registry's dispose hook only calls `cleanup()`, and other owners of the
-  // entry have their own teardown registered there.
-  const previousCleanup = entry.cleanup;
-  entry.cleanup = () => {
-    try {
-      previousCleanup?.();
-    } finally {
-      void unsubscribe();
-    }
-  };
 }
 
 /** Controllers this module created for a worker that had none, as opposed to an owner's controller wired to its `abort()`. */
