@@ -672,6 +672,7 @@ function SelectedPage({
   onSelect,
   highlightMentionOf,
   compact,
+  onOpenPage,
 }: {
   source: KnowledgeExplorerSource;
   pageId: string;
@@ -679,6 +680,7 @@ function SelectedPage({
   onSelect: (pageId: string) => void;
   highlightMentionOf?: string;
   compact?: boolean;
+  onOpenPage?: () => void;
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
@@ -705,6 +707,7 @@ function SelectedPage({
   return (
     <KnowledgePageDetail
       compact={compact}
+      onOpenPage={onOpenPage}
       page={detail.data.page}
       notes={detail.data.notes}
       pin={detail.data.pin ?? undefined}
@@ -1539,6 +1542,10 @@ export function KnowledgePageExplorer({
                           onSelect={selectFromSearch}
                           highlightMentionOf={highlightMentionOf}
                           compact
+                          onOpenPage={() => {
+                            focusTabOnPageOpen.current = true;
+                            openPage(drawerShownId);
+                          }}
                         />
                       </div>
                     </DataPanel>
