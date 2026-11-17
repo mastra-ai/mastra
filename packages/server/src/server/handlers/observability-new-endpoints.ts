@@ -1899,6 +1899,13 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
 });
 
 export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1907,6 +1914,13 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
 });
 
 export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
   responseSchema: getEntityNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1917,6 +1931,13 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
 });
 
 export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1925,6 +1946,13 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
 });
 
 export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1933,6 +1961,13 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
 });
 
 export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
   responseSchema: getTagsResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1958,6 +1993,13 @@ const getObservabilityCapabilitiesResponseSchema = z.object({
 // even on an @mastra/core too old for the newer observability endpoints.
 export const GET_CAPABILITIES = createRoute({
   ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  // Only the observability explorer MCP App calls it (as an app-only tool), to learn which views the store supports.
+  mcp: {
+    toolset: 'observability',
+    name: 'get_observability_capabilities',
+    description: 'Which optional observability APIs the observability store supports.',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseType: 'json',
   responseSchema: getObservabilityCapabilitiesResponseSchema,
   tags: ['Observability'],
