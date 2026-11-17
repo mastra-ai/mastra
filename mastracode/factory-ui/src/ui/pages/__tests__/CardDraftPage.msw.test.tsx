@@ -5,10 +5,10 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createQueryClient } from '../../../query-client';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
-import { createAppRoutes } from '../../router';
+import { createAppRouter } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -85,8 +85,11 @@ function stubCard(metadata: Record<string, string | boolean> = linearCard.metada
 }
 
 function renderAt(path: string) {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return { router, ...renderWithProviders(<RouterProvider router={router} />, createQueryClient()) };
+  const queryClient = createQueryClient();
+  const router = createAppRouter({ queryClient, api: TEST_API }, routes =>
+    createMemoryRouter(routes, { initialEntries: [path] }),
+  );
+  return { router, ...renderWithProviders(<RouterProvider router={router} />, queryClient) };
 }
 
 function stubPageWidth(width: number) {
@@ -221,7 +224,8 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
-  it("keeps the conversation and the composer when the card's next step opens its session", async () => {
+  it("keeps the conversation, the composer, the card's stage and the panel when the card's next step opens its session", async () => {
+    stubPageWidth(1200);
     const route = stubDraftRoute();
     stubCard();
     const threadPath = `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`;
@@ -231,10 +235,21 @@ describe('a card without a session', () => {
     const historyAnswered = new Promise<void>(resolve => {
       answerHistory = resolve;
     });
+    let answerThreadReads = () => {};
+    const threadReadsAnswered = new Promise<void>(resolve => {
+      answerThreadReads = resolve;
+    });
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [moved ? { ...linearCard, sessions: { triage } } : linearCard] }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.has('sessionId') && router.state.location.pathname === threadPath) {
+          await threadReadsAnswered;
+        }
+        return HttpResponse.json({ workItems: [moved ? { ...linearCard, sessions: { triage } } : linearCard] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/subscriptions`, async () => {
+        if (router.state.location.pathname === threadPath) await threadReadsAnswered;
+        return HttpResponse.json({ subscriptions: [] });
+      }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`, ({ params }) => {
         moved = true;
         return HttpResponse.json({
@@ -264,6 +279,16 @@ describe('a card without a session', () => {
           });
         },
       ),
+      http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, () => HttpResponse.json({ description: null })),
+      http.get(`${TEST_BASE_URL}/web/workspace/changes`, ({ request }) =>
+        HttpResponse.json({
+          workspacePath: new URL(request.url).searchParams.get('workspacePath'),
+          available: true,
+          additions: 0,
+          deletions: 0,
+          changes: [],
+        }),
+      ),
       http.get(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
         () => new HttpResponse(null, { status: 404 }),
@@ -274,6 +299,8 @@ describe('a card without a session', () => {
     const suggested = await screen.findByRole('group', { name: 'Suggested actions' });
     const composer = screen.getByRole('textbox', { name: 'Message' });
     const conversation = screen.getByRole('region', { name: 'Conversation' });
+    const stage = screen.getByRole('group', { name: 'Card stage' });
+    const panel = screen.getByRole('complementary', { name: 'Session panel' });
 
     await user.click(within(suggested).getByRole('button', { name: 'Investigate' }));
 
@@ -285,6 +312,10 @@ describe('a card without a session', () => {
     });
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
     expect(screen.getByRole('region', { name: 'Conversation' })).toBe(conversation);
+    expect(screen.getByRole('group', { name: 'Card stage' })).toBe(stage);
+    expect(screen.getByRole('complementary', { name: 'Session panel' })).toBe(panel);
+    expect(within(panel).getByRole('region', { name: 'Card' })).toBeInTheDocument();
+    answerThreadReads();
     answerHistory();
     expect(await within(conversation).findByText('Looking into ENG-42')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);

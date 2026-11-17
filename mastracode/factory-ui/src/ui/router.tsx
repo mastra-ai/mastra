@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
-import type { RouteObject } from 'react-router';
+import type { DataRouter, RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
@@ -31,6 +31,7 @@ import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
+  loadSessionFrame,
   prefetchBoard,
   prefetchCardDraft,
   prefetchComposer,
@@ -40,6 +41,7 @@ import {
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
   prefetchSidebar,
+  reloadOnAnotherThread,
   retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
@@ -245,8 +247,8 @@ function CardDraftRedirect() {
   return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services);
+export function createAppRoutes(services?: RouteLoaderServices, isPageShown?: () => boolean): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services, isPageShown);
   const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
     element: <Page />,
     ...loadOnEntry(prefetch, Page),
@@ -293,8 +295,16 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         {
                           ...lazyRoute(SessionLayout),
                           children: [
-                            { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(SessionPage) },
-                            { path: 'user/threads/:threadId', ...lazyRoute(SessionPage) },
+                            {
+                              path: 'workspaces/:sessionId/threads/:threadId',
+                              ...lazyRoute(SessionPage, loadSessionFrame),
+                              shouldRevalidate: reloadOnAnotherThread,
+                            },
+                            {
+                              path: 'user/threads/:threadId',
+                              ...lazyRoute(SessionPage, loadSessionFrame),
+                              shouldRevalidate: reloadOnAnotherThread,
+                            },
                             {
                               path: 'cards/:workItemId/new/:draftSessionId',
                               ...lazyRoute(SessionPage, prefetchCardDraft),
@@ -365,6 +375,12 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   ];
 }
 
-export function createAppRouter(services: RouteLoaderServices) {
-  return createBrowserRouter(createAppRoutes(services));
+export function createAppRouter(
+  services: RouteLoaderServices,
+  createRouter: (routes: RouteObject[]) => DataRouter = createBrowserRouter,
+) {
+  // The first load's loaders can run inside `createRouter`, before `router` is assigned.
+  let router: DataRouter | undefined;
+  router = createRouter(createAppRoutes(services, () => router?.state.initialized === true));
+  return router;
 }

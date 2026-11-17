@@ -1,10 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { noop, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import type { WorkItemSessionRepository } from '../../../../api/types';
-import { sessionWorkItemsQueryOptions } from '../../../../hooks/useWorkItems';
 import { addCachedSession, invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import type { DraftSessionStart } from '../../chat/context/DraftSessionStartContext';
 import { continueTranscript } from '../../chat/context/transcriptKey';
@@ -19,7 +18,6 @@ import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { createUserSession, getUserSession } from '../../workspaces/services/user-sessions';
 import { itemSessionSpec } from '../boardItems';
-import { pullRequestSubscriptionsQuery } from '../services/githubSubscriptions';
 import { startFactoryRun } from '../services/workItems';
 import type { WorkItem } from '../services/workItems';
 
@@ -61,16 +59,7 @@ export function useStartCardSessionFromDraft(
           input: { source: item.source, sourceKey: item.sourceKey, title: item.title, url: null, metadata },
         },
       });
-      const provider =
-        factory.repositories.find(linked => linked.projectRepositoryId === repository.projectRepositoryId)?.provider ??
-        'github';
-      // Read after the start, which binds the card, so the thread opens on its resource, cards, and pull requests.
-      const [session] = await Promise.all([
-        getUserSession(baseUrl, sessionId),
-        queryClient.query(sessionWorkItemsQueryOptions(baseUrl, factory.id, sessionId)).catch(noop),
-        queryClient.query(pullRequestSubscriptionsQuery(baseUrl, sessionId, sessionId, provider, true)).catch(noop),
-      ]);
-      return session;
+      return getUserSession(baseUrl, sessionId);
     },
     onSettled: (_session, _error, { factory }) =>
       queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factory.id) }),
