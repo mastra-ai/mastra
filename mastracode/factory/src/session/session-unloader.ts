@@ -7,7 +7,31 @@ export interface UnloadableSession {
   readonly run: { isRunning(): boolean };
   readonly stream: { isActive(): boolean };
   readonly suspensions: { hasPending(): boolean };
+  getWorkspace?(): UnloadableWorkspace | undefined;
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
+}
+
+interface UnloadableWorkspace {
+  readonly sandbox?: {
+    readonly status?: string;
+    readonly processes?: { list(): Promise<Array<{ running: boolean }>> };
+  };
+}
+
+/**
+ * Whether the session's sandbox runs a process its process manager tracks, such as a dev server
+ * the agent started. The handle lives in this process: a reloaded session gets a new sandbox
+ * object that no longer lists it, so the agent could neither read its output nor stop it.
+ * Only a running sandbox is asked, because listing would start a stopped one.
+ */
+async function hasRunningProcess(session: UnloadableSession): Promise<boolean> {
+  const sandbox = session.getWorkspace?.()?.sandbox;
+  if (sandbox?.status !== 'running' || !sandbox.processes) return false;
+  try {
+    return (await sandbox.processes.list()).some(process => process.running);
+  } catch {
+    return false;
+  }
 }
 
 export interface UnloadableController {
@@ -233,6 +257,12 @@ export class SessionUnloader {
     }
     let unloaded = 0;
     for (const { tracked, idleSince } of due) {
+      // A released session's sandbox was stopped with it; an idle one may still run a process.
+      if (!tracked.unloadWhenIdle && (await hasRunningProcess(tracked.session))) {
+        // Looked at again once another idle timeout has passed, not on every sweep.
+        if (tracked.lastActiveAt === idleSince) tracked.lastActiveAt = this.#now();
+        continue;
+      }
       // Anything that touched the session since it was picked keeps it.
       const stillIdle = () => !this.#inUse(tracked) && tracked.lastActiveAt === idleSince;
       if (await this.#unload(tracked, stillIdle)) unloaded += 1;

@@ -6,7 +6,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { askUserTool } from '@mastra/core/tools';
-import { Workspace } from '@mastra/core/workspace';
+import { LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { createHonoServer } from '@mastra/deployer/server';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -55,7 +55,7 @@ function askUserStream() {
  * A real controller over real thread memory. The model answers by the last prompt message:
  * `HOLD` streams until `release()`, `ASK` parks on `ask_user`, anything else replies at once.
  */
-async function mountController() {
+async function mountController(workspace?: Workspace) {
   let release = () => {};
   const held = new Promise<void>(resolve => {
     release = resolve;
@@ -80,7 +80,7 @@ async function mountController() {
   });
   const mastra = new Mastra({ agents: { coder: agent }, logger: false, storage: store });
   const controller = new AgentController({
-    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+    workspace: workspace ?? new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     id: 'code',
     storage: store,
     modes: [{ id: 'build', name: 'Build', default: true, agent: mastra.getAgent('coder') }],
@@ -217,6 +217,29 @@ describe('SessionUnloader on a real controller', () => {
     const messages = await after.thread.listMessages({ threadId: 'card-session' });
     expect(messages.slice(0, history.length)).toEqual(history);
     expect(messages.length).toBeGreaterThan(history.length);
+  });
+
+  // The reloaded session gets a new sandbox handle that no longer tracks the process, so
+  // the agent could neither read its output nor stop it.
+  it('keeps an idle session whose sandbox still runs a background process', async () => {
+    const sandbox = new LocalSandbox();
+    const mounted = await mountController(new Workspace({ name: 'sandboxed-workspace', sandbox }));
+    const { unloader, advance } = clockedUnloader(mounted);
+    await sessionWithHistory(mounted.controller, 'dev-server');
+    const server = await sandbox.processes.spawn('sleep 30');
+    onTestFinished(async () => {
+      await server.kill();
+    });
+
+    advance(61_000);
+    expect(await unloader.sweep()).toBe(0);
+    expect(await loaded(mounted.controller, 'dev-server')).toBe(true);
+
+    await server.kill();
+    await server.wait();
+    advance(61_000);
+    expect(await unloader.sweep()).toBe(1);
+    expect(await loaded(mounted.controller, 'dev-server')).toBe(false);
   });
 
   it('unloads a released session at once when idle, and on the first sweep after its work ends when busy', async () => {
