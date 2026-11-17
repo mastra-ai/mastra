@@ -216,7 +216,7 @@ export function createFactoryWorkItemTools(
       id: 'factory_transition_work_item',
       description: [
         "Move a work item to another stage of its board, or with `rerun` run the stage it is already in again, as the person you are working with: the same requests the board's own move and Start buttons send.",
-        "The board's rules decide whether the move is allowed and what it starts. The run it starts counts as approved by that person, so it does not wait in the approval queue.",
+        "The board's rules decide whether the move is allowed and what it starts. The run it starts counts as approved by that person, so it does not wait in the approval queue. The result has the card's `url`, to link it where you report the move.",
         'Use it when someone asks for a card\'s own stage work, such as "review this pull request" on a pull request that has a card: the card\'s review is recorded on the card and posted on the pull request.',
         'When the person asks for a side session, a review in this chat, or work the stage does not do (pushing fixes to a pull request, taking it over), do that instead.',
       ].join(' '),
@@ -255,6 +255,13 @@ export function createFactoryWorkItemTools(
             };
           }
         };
+        // The card's page, so a chat can link the card it moved; null without a public URL.
+        const url =
+          factoryWorkItemUrl({
+            factoryProjectId: item.factoryProjectId,
+            board: boardForWorkItem(item),
+            workItemId: item.id,
+          }) ?? null;
         const sameStage = item.stages.length === 1 && item.stages[0] === stage;
         // Already there: report the stage instead of starting it again without being asked, which
         // would rerun a finished review or plan on a "move it to review".
@@ -267,6 +274,7 @@ export function createFactoryWorkItemTools(
           ).filter(decision => decision.decision.type === 'invokeSkill').length;
           return followed({
             workItemId: item.id,
+            url,
             stage,
             revision: item.revision,
             unchanged: true,
@@ -317,6 +325,7 @@ export function createFactoryWorkItemTools(
         // The move can start a phase session the Factory owns; the card has moved by now.
         return followed({
           workItemId: item.id,
+          url,
           stage: result.stage,
           revision: result.revision,
           ...(rerun ? { reran: true } : {}),

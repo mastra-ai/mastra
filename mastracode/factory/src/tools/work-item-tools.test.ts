@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -458,7 +458,7 @@ describe('factory_transition_work_item', () => {
 
     const result = await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
 
-    expect(result).toEqual({ workItemId: item.id, stage: 'triage', revision: item.revision + 1 });
+    expect(result).toEqual({ workItemId: item.id, url: null, stage: 'triage', revision: item.revision + 1 });
     expect(transitionService.transition).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId: 'org-1',
@@ -493,6 +493,7 @@ describe('factory_transition_work_item', () => {
 
     await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).resolves.toEqual({
       workItemId: item.id,
+      url: null,
       stage: 'triage',
       revision: item.revision + 1,
       warnings: ['This session does not follow it yet: storage is away'],
@@ -802,12 +803,20 @@ describe("a card's work requested from a chat", () => {
   // Slack, 2026-11-16: "review: <pull request link>" on a card whose review was held for approval
   // ended in a side session's review posted in Slack; the card never ran its review.
   it('starts the review held on a pull request card when someone asks for it by its link', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    onTestFinished(() => void vi.unstubAllEnvs());
     const env = await boardSetup();
     const card = await heldReviewCard(env);
 
+    // The card's link comes back with the move, so the chat can link the card it started.
     await expect(
       env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review', rerun: true }),
-    ).resolves.toMatchObject({ workItemId: card.id, stage: 'pr-review', reran: true });
+    ).resolves.toMatchObject({
+      workItemId: card.id,
+      url: `https://factory.example.com/factories/project-1/work?item=${card.id}`,
+      stage: 'pr-review',
+      reran: true,
+    });
 
     // What the dispatcher reads: a review run approved by the person, which it starts without asking.
     const queued = (await env.runs(card.id)).filter(record => record.status === 'pending');
