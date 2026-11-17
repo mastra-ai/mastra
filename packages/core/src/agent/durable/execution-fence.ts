@@ -1134,20 +1134,36 @@ export class ExecutionFence implements RunFenceScope {
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
    * tolerated until the local lease deadline.
+   *
+   * A storage claim is not given up on the local clock alone: the store's
+   * conditional renewal decides. Past the deadline the heartbeat still renews,
+   * so an execution whose timer was starved (a blocked event loop) keeps the
+   * run unless another execution claimed it meanwhile.
    */
   #startHeartbeat(): void {
+    let lastTickAt = Date.now();
     this.#heartbeat = setInterval(() => {
-      if (this.#settlement || this.#lossError) return;
       const now = Date.now();
-      // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
-      // makes it return false. Wait for its result, but only for a grace period past the deadline.
-      const awaitingRenewal = this.#renewalInFlight && this.generation !== undefined;
-      if (awaitingRenewal && now < this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS) return;
-      if (now >= this.#leaseExpiresAt) {
+      // A tick far behind schedule means this process was stalled: a response that arrived meanwhile has not been
+      // read yet, because timers run before I/O. Let it land before judging the deadline.
+      const stalled = now - lastTickAt > 2 * EXECUTION_LEASE_RENEW_INTERVAL_MS;
+      lastTickAt = now;
+      if (this.#settlement || this.#lossError) return;
+      const storage = this.generation !== undefined;
+      if (this.#renewalInFlight) {
+        // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
+        // makes it return false. Wait for its result, but only for a grace period past the deadline.
+        const deadline = storage ? this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS : this.#leaseExpiresAt;
+        if (now >= deadline && !(storage && stalled)) {
+          this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
+        }
+        return;
+      }
+      // A lease has no generation to tell a late renewal from one by a later holder, so it keeps the local deadline.
+      if (!storage && now >= this.#leaseExpiresAt) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
-      if (this.#renewalInFlight) return;
       this.#renewalInFlight = true;
       const startedAt = Date.now();
       void this.#backend

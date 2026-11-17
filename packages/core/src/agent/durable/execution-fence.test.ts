@@ -812,6 +812,93 @@ describe('storage-backed ExecutionFence', () => {
     await successor.settle(async () => {});
   });
 
+  describe('after an event-loop stall longer than the lease (#30669)', () => {
+    // A blocked event loop moves the clock without letting the heartbeat run.
+    const stall = (ms: number) => vi.setSystemTime(Date.now() + ms);
+
+    it('renews instead of giving up when nobody else claimed the run', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = vi.spyOn(workflowsStore, 'renewRunOwnership');
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(renew).toHaveBeenCalledTimes(1);
+      expect(fence.isLost()).toBe(false);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+      expect(fence.isLost()).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+        ownerId: fence.executionId,
+        generation: fence.generation,
+        live: true,
+      });
+      expect(await fence.settle(async () => {})).toBe('owned');
+    });
+
+    it('keeps the run when a renewal sent before the stall succeeds after it', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let unblock!: () => void;
+      const blocked = new Promise<void>(resolve => (unblock = resolve));
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        await blocked;
+        return renew(args);
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      // Longer than the lease plus the in-flight grace: the late tick must not decide before the response lands.
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(false);
+
+      unblock();
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+      expect(fence.isLost()).toBe(false);
+      expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.live).toBe(true);
+      expect(await fence.settle(async () => {})).toBe('owned');
+    });
+
+    it('still loses the run to an execution that claimed it during the stall', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const lost = vi.fn();
+      fence.onLost(lost);
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      const successor = await ExecutionFence.claim({
+        leaseProvider: NoopLeaseProvider,
+        workflowsStore,
+        agentId,
+        runId: 'run-1',
+        mode: 'recover',
+      });
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+      expect(await fence.settle(async () => {})).toBe('superseded');
+      expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe(successor.executionId);
+      await successor.settle(async () => {});
+    });
+
+    it('marks the fence lost when the store cannot confirm the renewal', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockRejectedValue(new Error('store unavailable'));
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    });
+  });
+
   it('a released claim can be acquired again under the next generation', async () => {
     const { workflowsStore } = await stores();
     const first = await storageClaim(workflowsStore, 'run-1');
