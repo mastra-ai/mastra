@@ -190,7 +190,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
           'gen_ai.agent.name': 'customer-agent',
-          'gen_ai.system_instructions': JSON.stringify([{ type: 'text', content: 'Help customers' }]),
+          'gen_ai.system_instructions': 'Help customers',
         }),
       );
     });
@@ -411,6 +411,7 @@ describe('SentryExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           streaming: false,
+          finishReason: 'stop',
           usage: {
             inputTokens: 10,
             outputTokens: 5,
@@ -420,6 +421,7 @@ describe('SentryExporter', () => {
             temperature: 0.7,
             maxOutputTokens: 100,
             topP: 0.9,
+            stopSequences: ['END'],
           },
         },
       });
@@ -438,6 +440,8 @@ describe('SentryExporter', () => {
           'gen_ai.request.temperature': 0.7,
           'gen_ai.request.max_tokens': 100,
           'gen_ai.request.top_p': 0.9,
+          'gen_ai.request.stop_sequences': '["END"]',
+          'gen_ai.response.finish_reasons': '["stop"]',
           'gen_ai.request.stream': false,
           'gen_ai.response.streaming': false,
         }),
@@ -594,9 +598,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
           'gen_ai.agent.name': 'support-agent',
-          'gen_ai.system_instructions': JSON.stringify([
-            { type: 'text', content: 'Help customers with support requests' },
-          ]),
+          'gen_ai.system_instructions': 'Help customers with support requests',
           'gen_ai.tool.definitions': JSON.stringify([
             { type: 'function', name: 'search' },
             { type: 'function', name: 'calculator' },
