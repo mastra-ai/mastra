@@ -34,7 +34,9 @@
     "@langfuse/client": "^5.14.0",
     "@langfuse/otel": "^5.14.0",
     "@mastra/observability": "workspace:*",
-    "@mastra/otel-exporter": "workspace:*"
+    "@mastra/otel-exporter": "workspace:*",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/otlp-exporter-base": "^0.223.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
