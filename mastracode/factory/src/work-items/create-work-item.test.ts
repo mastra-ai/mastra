@@ -67,6 +67,21 @@ describe('createFactoryWorkItem with intake routes', () => {
     expect(created.item.metadata).toMatchObject({ labels: ['docs'], intakeRouteId: expect.any(String) });
   });
 
+  it("files a card into a phase Intake can't move to when the route names it", async () => {
+    // Work's Intake doesn't move cards to Building, but a rule's target is the admin's design.
+    const toBuilding: StoredIntakeRouteInput = {
+      name: 'Docs straight to Building',
+      when: DOCS,
+      target: { boardKey: 'work', phaseKey: 'execute' },
+    };
+    const { create } = await setup([toBuilding]);
+    const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });
+    expect(created.status).toBe('created');
+    if (created.status !== 'created') return;
+    expect(created.item).toMatchObject({ board: 'work', stages: ['execute'] });
+    expect(created.item.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'execute']);
+  });
+
   it("doesn't count the route's move as the person's consent to start work", async () => {
     const { create, seed, project } = await setup([toPlanning]);
     const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });

@@ -270,6 +270,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect((await send('/intake/test', { itemId: docsCard.id }, MEMBER)).body.evaluator).toBe('route-list');
   });
 
+  it("previews a draft rule filing into a phase the board's first phase can't move to, as filing would", async () => {
+    const { send, docsCard } = await setup();
+    // Work's Intake can't move to Execute; an intake rule may still file there.
+    const draft = {
+      boards: [{ boardKey: 'work', routes: [{ name: 'Straight to Execute', target: { phaseKey: 'execute' } }] }],
+    };
+    expect(await send('/intake/test', { itemId: docsCard.id, ...draft })).toMatchObject({
+      status: 200,
+      body: { placement: { boardKey: 'work', phase: 'execute' } },
+    });
+    expect((await send('/intake/dry-run', draft)).status).toBe(200);
+  });
+
   it('refuses what saving would refuse, and items it cannot read, before reading or writing anything', async () => {
     const { send, docsRule, notRouted, snapshot } = await setup();
     const before = await snapshot();

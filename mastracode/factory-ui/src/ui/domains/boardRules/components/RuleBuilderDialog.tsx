@@ -53,18 +53,14 @@ const STEPS: { id: RuleStep; title: string; question: string }[] = [
 ];
 
 /**
- * Phases a rule may aim at. An item with no card yet can't land in a finished phase and starts in the board's first
- * phase, so it may only land where that phase can move it. A card already on a board can go to any phase.
+ * Phases a rule may aim at. An item with no card yet can't land in a finished phase; any other
+ * phase works, even one the board's first phase can't move to — the rule's author designs the
+ * board too. A card already on a board can go to any phase.
  */
 function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean) {
   const phases = board?.phases ?? [];
   if (!placesNew) return phases;
-  const first = phases.find(phase => phase.id === board?.initialPhase);
-  return phases.filter(
-    phase =>
-      phase.kind !== 'terminal' &&
-      (phase.id === first?.id || first?.transitions.some(transition => transition.to === phase.id) === true),
-  );
+  return phases.filter(phase => phase.kind !== 'terminal');
 }
 
 /** What stops the rule saving, in words; undefined when it can save. */
