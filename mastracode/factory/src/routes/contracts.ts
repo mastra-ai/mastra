@@ -1226,8 +1226,6 @@ export const sessionRowsResponseSchema = z.object({
   boards: z.array(z.string()),
   /** People who own some row, whatever the filters. */
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
-  /** Some session is still coming up: the answer changes without anything else telling the reader. */
-  settling: z.boolean(),
 });
 
 export const sessionActivityResponseSchema = z.object({
@@ -1237,7 +1235,6 @@ export const sessionActivityResponseSchema = z.object({
   initializingSessionIds: z.array(z.string()),
   /** Cards with a session working, and with one waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),
-  settling: z.boolean(),
 });
 
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;

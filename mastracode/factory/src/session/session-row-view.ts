@@ -20,7 +20,6 @@ export type SessionRowsView = Omit<SessionRowsQuery, 'pin' | 'children'>;
 
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
 
-const UNMATERIALIZED_SETTLING_MS = 10 * 60_000;
 const HOUR_MS = 60 * 60 * 1_000;
 
 const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
@@ -113,7 +112,7 @@ export function sessionRowsView(
   view: SessionRowsView,
   viewerUserId: string,
   now: number,
-): Omit<SessionRowsResponse, 'settling'> {
+): SessionRowsResponse {
   const matching = filterSessionRows(rows.toSorted(compareSessionRows(view.sort)), view, viewerUserId, now);
   const groupKeyOf = GROUP_KEY_OF_ROW[view.groupBy];
   const rowsByGroup = new Map<string, SessionRow[]>();
@@ -143,15 +142,6 @@ export function sessionRowsView(
   };
 }
 
-export function isSettling(
-  sessions: readonly Pick<RowSession, 'materializedAt' | 'updatedAt'>[],
-  now: number,
-): boolean {
-  return sessions.some(
-    session => session.materializedAt === null && now - session.updatedAt.getTime() < UNMATERIALIZED_SETTLING_MS,
-  );
-}
-
 function liveSessionCounts(
   cards: readonly Card[],
   running: ReadonlySet<string>,
@@ -176,7 +166,6 @@ export function sessionActivity(facts: {
   cards: readonly Card[];
   runningSessionIds: ReadonlySet<string>;
   parkedSessionIds: ReadonlySet<string>;
-  now: number;
 }): SessionActivityResponse {
   const known = new Set([
     ...facts.sessions.map(session => session.sessionId),
@@ -190,6 +179,5 @@ export function sessionActivity(facts: {
       facts.sessions.flatMap(session => (session.materializedAt === null ? [session.sessionId] : [])),
     ),
     cards: liveSessionCounts(facts.cards, facts.runningSessionIds, facts.parkedSessionIds),
-    settling: isSettling(facts.sessions, facts.now),
   };
 }
