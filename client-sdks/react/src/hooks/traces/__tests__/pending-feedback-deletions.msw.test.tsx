@@ -18,14 +18,19 @@ import { feedbackRecord, listFeedbackResponse, SPAN_ID, TRACE_ID } from './fixtu
 const BASE_URL = 'http://localhost:4111';
 const FEEDBACK_URL = `${BASE_URL}/api/observability/feedback`;
 
-const makeWrapper = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+const makeQueryClient = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+const makeWrapper = (queryClient = makeQueryClient()) => {
   return ({ children }: { children: ReactNode }) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
 };
+
+const isIn = (row: ReturnType<typeof feedbackRecord>, ids: string[]) =>
+  row.feedbackId !== undefined && row.feedbackId !== null && ids.includes(row.feedbackId);
 
 /**
  * Models Platform's queued delete path: the DELETE is accepted (202), but the list endpoint
@@ -42,11 +47,11 @@ function queuedDeleteFeedbackServer(initialRows: ReturnType<typeof feedbackRecor
       listRequests++;
       return HttpResponse.json(listFeedbackResponse(rows));
     }),
-    http.delete(FEEDBACK_URL, async ({ request }) => {
+    http.delete<never, { feedbackIds: string[] }>(FEEDBACK_URL, async ({ request }) => {
       if (failDelete) return HttpResponse.json({ error: 'boom' }, { status: 500 });
-      const body = (await request.json()) as { feedbackIds: string[] };
-      requested.push(...body.feedbackIds);
-      if (sync) rows = rows.filter(row => !body.feedbackIds.includes(row.feedbackId!));
+      const { feedbackIds } = await request.json();
+      requested.push(...feedbackIds);
+      if (sync) rows = rows.filter(row => !isIn(row, feedbackIds));
       return HttpResponse.json({ accepted: true }, { status: 202 });
     }),
   );
@@ -55,7 +60,7 @@ function queuedDeleteFeedbackServer(initialRows: ReturnType<typeof feedbackRecor
     requested,
     listRequests: () => listRequests,
     failDelete: () => (failDelete = true),
-    applyDeletes: () => (rows = rows.filter(row => !requested.includes(row.feedbackId!))),
+    applyDeletes: () => (rows = rows.filter(row => !isIn(row, requested))),
   };
 }
 
@@ -89,9 +94,9 @@ const statusOf = (feedback: FeedbackListItem[] | undefined, id: string) =>
   feedback?.find(item => item.feedbackId === id)?.deleteStatus;
 
 describe.each(scopes)('pending $name feedback deletions', ({ spanId, rows, useList }) => {
-  const renderPanel = () =>
+  const renderPanel = (queryClient?: QueryClient) =>
     renderHook(() => ({ list: useList(), remove: useDeleteFeedback({ traceId: TRACE_ID, spanId }) }), {
-      wrapper: makeWrapper(),
+      wrapper: makeWrapper(queryClient),
     });
 
   describe('when the server accepts the delete but still returns the row', () => {
@@ -129,6 +134,31 @@ describe.each(scopes)('pending $name feedback deletions', ({ spanId, rows, useLi
       // Nothing left to wait for: back to the 30 second poll.
       const settled = api.listRequests();
       await act(() => vi.advanceTimersByTimeAsync(6_200));
+      expect(api.listRequests()).toBe(settled);
+    });
+  });
+
+  describe('when the cleanup job removes the row while the list is closed', () => {
+    it('settles the deletion on reopen and does not poll fast', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const api = queuedDeleteFeedbackServer([...rows]);
+      const queryClient = makeQueryClient();
+      const first = renderPanel(queryClient);
+      await waitFor(() => expect(first.result.current.list.data?.feedback).toHaveLength(2));
+      await act(() => first.result.current.remove.mutateAsync({ feedbackId: 'doomed' }));
+      await waitFor(() => expect(statusOf(first.result.current.list.data?.feedback, 'doomed')).toBe('deleting'));
+
+      first.unmount();
+      // Closed long enough for the list cache (gcTime 0) to be dropped.
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      api.applyDeletes();
+      const reopened = renderPanel(queryClient);
+      await waitFor(() =>
+        expect(reopened.result.current.list.data?.feedback.map(item => item.feedbackId)).toEqual(['keep']),
+      );
+
+      const settled = api.listRequests();
+      await act(() => vi.advanceTimersByTimeAsync(9_300));
       expect(api.listRequests()).toBe(settled);
     });
   });

@@ -315,6 +315,29 @@ describe('feedback tabs delete', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
   });
 
+  it('does not show a failed deletion error when the confirmation is opened again', async () => {
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => HttpResponse.json({ error: 'Delete failed' }, { status: 500 })),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback'), {
+      timeout: 5000,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
+
+    expect(await screen.findByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('shows no delete action for records without a feedbackId', async () => {
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: null })]))),

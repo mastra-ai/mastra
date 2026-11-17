@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import type { FeedbackListResponse } from './optimistic-feedback';
 
@@ -10,7 +11,7 @@ import type { FeedbackListResponse } from './optimistic-feedback';
  * Deletes are eventually consistent on Mastra Platform: the DELETE request is accepted (202)
  * and a background cleanup job removes the row later, so the list keeps returning it for a while.
  * Accepted deletions live in their own cache entry and mark the row `deleteStatus: 'deleting'`
- * until a refetch of the same page stops returning it. If that does not happen in time, the row
+ * until a fetch of the page it was last seen on stops returning it. If that does not happen in time, the row
  * is marked `deleteStatus: 'failed'` so the UI can show it again with an error.
  */
 
@@ -19,7 +20,13 @@ type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 /** How long a row shows as deleting before it is restored with an error. */
 export const PENDING_FEEDBACK_DELETION_TTL_MS = 5 * 60_000;
 
-type PendingDeletion = { feedbackId: string; expiresAt: number; failed: boolean };
+type PendingDeletion = {
+  feedbackId: string;
+  expiresAt: number;
+  failed: boolean;
+  /** List page the row was last returned on; a fetch of that page without the row settles the deletion. */
+  page?: number;
+};
 
 const pendingDeletionsKey = (traceId: string, spanId?: string) => ['feedback-deleting', traceId, spanId || null];
 
@@ -37,22 +44,27 @@ function updatePendingDeletions(
   });
 }
 
+const feedbackListKey = (traceId: string, spanId?: string) =>
+  spanId ? ['span-feedback', traceId, spanId] : ['trace-feedback', traceId];
+
+/** The list page whose cached copy shows the row, i.e. the page it was deleted from. */
+function findCachedPage(queryClient: QueryClient, traceId: string, spanId: string | undefined, feedbackId: string) {
+  const match = queryClient
+    .getQueriesData<ListFeedbackResponse>({ queryKey: feedbackListKey(traceId, spanId) })
+    .find(([, data]) => data?.feedback.some(item => item.feedbackId === feedbackId));
+  const page = match?.[0].at(-1);
+  return typeof page === 'number' ? page : undefined;
+}
+
 export function addPendingFeedbackDeletion(
   queryClient: QueryClient,
   { traceId, spanId, feedbackId }: { traceId: string; spanId?: string; feedbackId: string },
 ) {
+  const page = findCachedPage(queryClient, traceId, spanId, feedbackId);
   queryClient.setQueryData<PendingDeletion[]>(pendingDeletionsKey(traceId, spanId), (entries = []) => [
     ...entries.filter(entry => entry.feedbackId !== feedbackId),
-    { feedbackId, expiresAt: Date.now() + PENDING_FEEDBACK_DELETION_TTL_MS, failed: false },
+    { feedbackId, expiresAt: Date.now() + PENDING_FEEDBACK_DELETION_TTL_MS, failed: false, page },
   ]);
-  // No-op if the row was dropped (settled) or the entry was garbage-collected before then.
-  setTimeout(
-    () =>
-      updatePendingDeletions(queryClient, traceId, spanId, entries =>
-        entries.map(entry => (!entry.failed && entry.expiresAt <= Date.now() ? { ...entry, failed: true } : entry)),
-      ),
-    PENDING_FEEDBACK_DELETION_TTL_MS,
-  );
 }
 
 /** Marks rows with an accepted deletion as `deleting`, or `failed` once the deletion timed out. */
@@ -73,20 +85,22 @@ export function applyPendingFeedbackDeletions(
 }
 
 /**
- * Stops tracking deletions of rows that the previous fetch of this page returned and this one
- * does not, i.e. the row is gone.
+ * Records which page each deleting row was returned on, and stops tracking a deletion once a
+ * fetch of the page it was last seen on no longer returns it, i.e. the row is gone. Comparing
+ * against the page rather than the previous fetch also settles a row that went away while the
+ * list was unmounted (the list cache is dropped on unmount).
  */
 export function settlePendingFeedbackDeletions(
   queryClient: QueryClient,
-  { traceId, spanId }: { traceId: string; spanId?: string },
-  previous: ListFeedbackResponse | undefined,
+  { traceId, spanId, page }: { traceId: string; spanId?: string; page: number },
   data: ListFeedbackResponse,
 ) {
-  if (!previous) return;
-  const previousIds = new Set(previous.feedback.map(item => item.feedbackId));
   const currentIds = new Set(data.feedback.map(item => item.feedbackId));
   updatePendingDeletions(queryClient, traceId, spanId, entries =>
-    entries.filter(entry => !(previousIds.has(entry.feedbackId) && !currentIds.has(entry.feedbackId))),
+    entries.flatMap(entry => {
+      if (currentIds.has(entry.feedbackId)) return entry.page === page ? [entry] : [{ ...entry, page }];
+      return entry.page === page ? [] : [entry];
+    }),
   );
 }
 
@@ -104,6 +118,20 @@ export function usePendingFeedbackDeletions({ traceId, spanId }: { traceId: stri
     staleTime: Infinity,
     gcTime: PENDING_FEEDBACK_DELETION_TTL_MS,
   });
+  useEffect(() => {
+    const deleting = data.filter(entry => !entry.failed);
+    if (deleting.length === 0) return;
+    const nextExpiry = Math.min(...deleting.map(entry => entry.expiresAt));
+    const timer = setTimeout(
+      () =>
+        updatePendingDeletions(queryClient, traceId, spanId, entries =>
+          entries.map(entry => (!entry.failed && entry.expiresAt <= Date.now() ? { ...entry, failed: true } : entry)),
+        ),
+      Math.max(0, nextExpiry - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [data, queryClient, traceId, spanId]);
+
   return data;
 }
 

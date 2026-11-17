@@ -56,20 +56,14 @@ export const useTraceFeedback = <TData = FeedbackListResponse,>({
   );
   return useQuery({
     queryKey: ['trace-feedback', traceId, pageNumber],
-    queryFn: async ({ signal, queryKey }) => {
+    queryFn: async ({ signal }) => {
       const data = await client.listFeedback({
         filters: { traceId },
         pagination: { page: pageNumber, perPage: 10 },
       });
       // A cancelled or superseded fetch must not settle pending comments its result never displays.
       if (pageNumber === 0 && !signal.aborted) settlePendingFeedback(queryClient, { traceId }, data);
-      if (!signal.aborted)
-        settlePendingFeedbackDeletions(
-          queryClient,
-          { traceId },
-          queryClient.getQueryData<TraceFeedbackResponse>(queryKey),
-          data,
-        );
+      if (!signal.aborted) settlePendingFeedbackDeletions(queryClient, { traceId, page: pageNumber }, data);
       return data;
     },
     select,

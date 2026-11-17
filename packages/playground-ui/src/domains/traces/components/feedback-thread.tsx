@@ -48,7 +48,10 @@ type FeedbackThreadProps = {
   /** When provided, records with a feedbackId get a delete action. */
   onDelete?: (feedbackId: string) => void | Promise<unknown>;
   isDeleting?: boolean;
-  /** Shown in the delete confirmation when the delete request fails. */
+  /**
+   * Shown in the delete confirmation when the delete request fails. Only shown after a delete is
+   * confirmed in the open dialog, so a stale error does not appear when the dialog is opened again.
+   */
   deleteError?: string;
   /**
    * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
@@ -221,6 +224,7 @@ export function FeedbackThread({
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const sendBlocked = text.trim().length === 0 || isSubmitting;
 
   const feedbackItems = feedbackData?.feedback ?? [];
@@ -231,12 +235,18 @@ export function FeedbackThread({
   const handleDeleteConfirm = async () => {
     if (!feedbackIdToDelete || !onDelete) return;
 
+    setDeleteConfirmed(true);
     try {
       await onDelete(feedbackIdToDelete);
       setFeedbackIdToDelete(undefined);
     } catch {
       // Keep the confirmation open so the deletion can be retried.
     }
+  };
+
+  const requestDelete = (feedbackId: string) => {
+    setDeleteConfirmed(false);
+    setFeedbackIdToDelete(feedbackId);
   };
 
   return (
@@ -294,7 +304,7 @@ export function FeedbackThread({
           <FeedbackItems
             variant={variant}
             items={feedbackItems}
-            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
+            onRequestDelete={onDelete ? requestDelete : undefined}
             isDeleting={isDeleting}
             onMarkReviewed={onMarkReviewed}
             pendingFeedbackId={pendingFeedbackId}
@@ -338,7 +348,7 @@ export function FeedbackThread({
               This permanently deletes this feedback comment. This action cannot be undone.
             </AlertDialog.Description>
           </AlertDialog.Header>
-          {deleteError && (
+          {deleteConfirmed && deleteError && (
             <Notice variant="destructive" role="alert">
               <Notice.Message>{deleteError}</Notice.Message>
             </Notice>
