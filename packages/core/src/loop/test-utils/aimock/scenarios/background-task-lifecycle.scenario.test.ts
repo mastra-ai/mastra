@@ -930,8 +930,13 @@ describeForAllEngines(
           memory,
           engine,
         });
+        const prompt = 'Research near and look up dero';
+        // The mock server is shared by the suite. The previous test's agent still reports its parked
+        // task to the model as that test ends, and a request landing here would take this turn's
+        // tool calls. Answer only this thread's requests; aimock counts the sequence per predicate.
+        const ownRequest = (req: unknown) => JSON.stringify(req).includes(prompt);
         llm.on(
-          { endpoint: 'chat', sequenceIndex: 0 },
+          { endpoint: 'chat', predicate: ownRequest, sequenceIndex: 0 },
           {
             toolCalls: [
               { id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } },
@@ -939,12 +944,14 @@ describeForAllEngines(
             ],
           },
         );
-        for (let i = 1; i < 8; i++) llm.on({ endpoint: 'chat', sequenceIndex: i }, { content: `Reply ${i}.` });
+        for (let i = 1; i < 8; i++) {
+          llm.on({ endpoint: 'chat', predicate: ownRequest, sequenceIndex: i }, { content: `Reply ${i}.` });
+        }
 
         const first = await runLoopScenario({
           engine,
           llm,
-          prompt: 'Research near and look up dero',
+          prompt,
           sharedAgent: shared,
           fixtures: () => {},
           memory,
