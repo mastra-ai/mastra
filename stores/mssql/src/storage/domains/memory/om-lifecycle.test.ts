@@ -395,6 +395,52 @@ describe.runIf(process.env.ENABLE_TESTS === 'true')('MSSQL observational memory'
       expect(await rowsFor(key.threadId)).toEqual([]);
     });
 
+    const openSchemaStore = async (schemaName: string, extra: { skipDefaultIndexes?: boolean } = {}) => {
+      await db.pool.request().query(`CREATE SCHEMA [${schemaName}]`);
+      const store = new MSSQLStore({
+        id: `om-regress-${schemaName}`,
+        server: SERVER.server,
+        port: SERVER.port,
+        user: SERVER.user,
+        password: SERVER.password,
+        database: db.database,
+        schemaName,
+        ...extra,
+      });
+      stores.push(store);
+      return store;
+    };
+    const omIndexes = async (schemaName: string) =>
+      (
+        await db.pool
+          .request()
+          .input('schemaName', schemaName)
+          .query(
+            `SELECT i.name FROM sys.indexes i
+             JOIN sys.tables t ON t.object_id = i.object_id
+             JOIN sys.schemas s ON s.schema_id = t.schema_id
+             WHERE s.name = @schemaName AND t.name = 'mastra_observational_memory' AND i.type_desc = 'NONCLUSTERED'`,
+          )
+      ).recordset.map(r => r.name as string);
+
+    it('initializes with a long schema name and still creates the OM lookup index', async () => {
+      // 40 characters: with the schema name prefixed, the index name would pass the 63-character limit.
+      const schemaName = `om_long_schema_name_${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}_abcdefghijklm`;
+      const store = await openSchemaStore(schemaName);
+      await store.init();
+      expect(await omIndexes(schemaName)).toEqual(['mastra_om_lookupkey_generation_idx']);
+    });
+
+    it('creates no OM lookup index when skipDefaultIndexes is set', async () => {
+      const schemaName = `om_skip_${Math.floor(Math.random() * 1e6)}`;
+      const store = await openSchemaStore(schemaName, { skipDefaultIndexes: true });
+      await store.init();
+      expect(await omIndexes(schemaName)).toEqual([]);
+      const scoped = (await store.getStore('memory'))!;
+      const record = await scoped.initializeObservationalMemory(newKey());
+      expect(record.id).toBeTruthy();
+    });
+
     it('activation waits for a row lock held by another writer and then sees its write', async () => {
       const key = newKey();
       const record = await memory.initializeObservationalMemory(key);

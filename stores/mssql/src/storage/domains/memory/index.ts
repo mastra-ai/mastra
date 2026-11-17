@@ -184,9 +184,11 @@ export class MemoryMSSQL extends MemoryStorage {
     const tableName = TABLE_OBSERVATIONAL_MEMORY as TABLE_NAMES;
     await this.db.createTable({ tableName, schema });
     await this.db.alterTable({ tableName, schema, ifNotExists: Object.keys(schema) });
-    const schemaPrefix = this.schema ? `${this.schema}_` : '';
+    if (this.skipDefaultIndexes) return;
+    // No schema prefix: index names only need to be unique per table, and a long schema name
+    // would push a prefixed name past the 63-character identifier limit.
     await this.db.createIndex({
-      name: `${schemaPrefix}mastra_om_lookupkey_generation_idx`,
+      name: 'mastra_om_lookupkey_generation_idx',
       table: tableName,
       columns: ['lookupKey', 'generationCount DESC'],
     });
