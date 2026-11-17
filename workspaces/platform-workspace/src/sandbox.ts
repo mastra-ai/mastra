@@ -197,6 +197,13 @@ interface CreateSandboxResponse {
    * than fall back on a missing-field ambiguity).
    */
   instanceUrl?: string | null;
+  /**
+   * `true` when the platform provisioned the sandbox in credential-vault mode.
+   * Only emitted by the create route, and only for a fresh provision.
+   */
+  vault?: boolean;
+  /** `true` when `POST /sandbox` reattached a live sandbox instead of provisioning one. */
+  reattached?: boolean;
 }
 
 /** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
@@ -578,6 +585,18 @@ export class PlatformSandbox extends MastraSandbox {
   templatePending?: SandboxTemplatePending;
 
   /**
+   * Whether the platform provisioned this sandbox in credential-vault mode.
+   * A vault sandbox holds only placeholder GitHub tokens, and its git and `gh`
+   * traffic to GitHub goes through the vault, which adds the real credential.
+   *
+   * `true` or `false` after this instance provisioned the sandbox. `undefined`
+   * before the first start and after a reattach the platform did not report
+   * the mode for; a caller that must know then reads the sandbox's
+   * `SANDBOX_VAULT` variable, which is `1` in a vault sandbox.
+   */
+  vault: boolean | undefined = undefined;
+
+  /**
    * The platform's id for the provisioned sandbox, as returned by the create
    * or reattach response. Persist this to reattach later via the `sandboxId`
    * option. Undefined until the sandbox has been started in this process; a
@@ -884,6 +903,8 @@ export class PlatformSandbox extends MastraSandbox {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           // Reattach responses never carry templatePending — the field is
           // set only by the create route. Leave the instance's value alone.
+          // The same goes for `vault`, unless the platform reports it.
+          if (typeof json.vault === 'boolean') this.vault = json.vault;
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
@@ -952,6 +973,9 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
+    // The platform reports `vault` only for a vault provision, and not at all
+    // when it reattached a live sandbox by recovery id, so that mode is unknown.
+    this.vault = json.vault === true ? true : json.reattached ? undefined : false;
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
