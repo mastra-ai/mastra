@@ -4,7 +4,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
+import { createIsolatedFactoryPostgresForTests, createLegacyCardTablesForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
 import type { Card, ExternalWorkItemSource } from './base.js';
 import { Cards } from './cards.js';
@@ -21,6 +21,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `legacy-${randomUUID()}`, url: ':memory:' });
+    // A database an older Factory wrote cards to.
+    await createLegacyCardTablesForTests(storage);
     const workItems = storage.registerDomain(new WorkItemsStorage());
     await storage.init();
     onTestFinished(() => storage.close());

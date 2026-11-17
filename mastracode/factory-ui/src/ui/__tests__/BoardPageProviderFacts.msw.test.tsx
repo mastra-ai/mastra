@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +11,22 @@ import { nativeFactsCard, providerFactsCard } from './fixtures/providerFactsCard
 import { stubWorkBoard } from './workBoardStubs';
 
 describe('native card facts', () => {
+  it('shows a hand-filed card number in the list, where it has no upstream link to carry it', async () => {
+    stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+        HttpResponse.json({
+          workItems: [{ ...nativeFactsCard, metadata: { ...nativeFactsCard.metadata, cardNumber: 12 } }],
+        }),
+      ),
+    );
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/work?layout=list'] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const card = await screen.findByTestId('work-item-card');
+    expect(within(card).getByText('#12', { exact: true })).toBeVisible();
+  });
+
   describe('when a label filter matches a persisted native card', () => {
     it.each(['board', 'list'])('keeps its label visible in the filtered %s', async layout => {
       stubWorkBoard();
@@ -43,12 +58,13 @@ describe('native card facts', () => {
 });
 
 it.each([
-  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'list', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
+  { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app'], reference: 'app#73', link: 'app#73' },
+  { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73', link: 'acme/app#73' },
+  { layout: 'list', repositories: ['acme/app', 'acme/docs'], reference: 'app#73', link: 'app#73' },
 ])(
-  'shows source facts in $layout and details without provider lookups beyond routine intake browsing, as $reference among $repositories',
-  async ({ layout, repositories, reference }) => {
+  'shows source facts in $layout without provider lookups beyond routine intake browsing, as $reference among $repositories',
+  async ({ layout, repositories, reference, link }) => {
     const projectUrl = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
     const providerRequests: string[] = [];
     server.use(
@@ -80,43 +96,25 @@ it.each([
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      // Routine intake browsing can fail; card facts must not trigger a detail lookup to recover.
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/:id/prs`, () =>
-        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
-      ),
+      // Provider reads can fail; card facts must not trigger a detail lookup to recover.
       http.get(`${TEST_BASE_URL}/web/github/projects/*`, ({ request }) => {
         providerRequests.push(request.url);
         return HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 });
       }),
     );
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/work?layout=${layout}`] });
-    const user = userEvent.setup();
     renderWithProviders(<RouterProvider router={router} />);
 
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
     expect(card).toHaveTextContent(reference);
+    expect(within(card).getByRole('link', { name: `Open in GitHub: ${link}` })).toBeVisible();
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();
     expect(card).not.toHaveTextContent('stale-author');
     expect(card).not.toHaveTextContent('stale-label');
-
-    await user.click(within(card).getByRole('button', { name: 'Details for Repair source facts' }));
-    const details = await screen.findByRole('dialog', { name: 'Repair source facts' });
-    // The details show the reporter twice: in the source facts and as the card's latest activity.
-    const sourceFacts = within(details)
-      .getAllByText('reporter')
-      .map(reporter => reporter.closest('[data-slot="metadata"]'))
-      .filter(Boolean);
-    expect(sourceFacts).toHaveLength(1);
-    expect(sourceFacts[0]).toHaveTextContent(reference);
-    expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
-    expect(within(details).getByText('customer-visible')).toBeVisible();
-    expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(
       'href',
       providerFactsCard.workItem.url,
     );

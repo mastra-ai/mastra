@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ensureFactorySourceSession } from '../../../session/factory-session.js';
 import { workItemBranch } from '../../../work-item-branch.js';
@@ -19,7 +24,6 @@ const repositoryInput = {
 
 const projectRepositoryInput = {
   branch: null,
-  sandboxProvider: 'local',
 };
 
 describe('SourceControlStorage', () => {
@@ -219,7 +223,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
       branch: 'develop',
-      sandboxProvider: 'railway',
     });
 
     expect(firstLink).toMatchObject({
@@ -236,7 +239,7 @@ describe('SourceControlStorage', () => {
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
       teardownCommand: 'docker compose down --remove-orphans',
     });
-    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
+    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
@@ -766,6 +769,69 @@ describe('SourceControlStorage', () => {
     await github.sessions.markMaterialized({ id: session.id });
     const again = await github.sessions.getBySessionId(session.sessionId);
     expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
+  it('stamps materialized_at once when two replicas materialize the same session together', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-source-control-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const replica = async () => {
+      const storage = new LibSQLFactoryStorage({
+        id: `source-control-${randomUUID()}`,
+        url: `file:${join(dir, 'f.db')}`,
+      });
+      const replicaProjects = storage.registerDomain(new FactoryProjectsStorage());
+      const sourceControl = storage.registerDomain(new SourceControlStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      const announced: string[] = [];
+      sourceControl.projectSessions.onAnnounced(scope => announced.push(scope.factoryProjectId));
+      return { projects: replicaProjects, github: sourceControl.forIntegration('github'), announced };
+    };
+    const first = await replica();
+    const second = await replica();
+    const project = await first.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Race' } });
+    const installation = await first.github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'race-installation',
+    });
+    const repository = await first.github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await first.github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await first.github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+    });
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const sessionId = randomUUID();
+      const session = await first.github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+      });
+      first.announced.length = 0;
+      second.announced.length = 0;
+
+      await Promise.all([
+        first.github.sessions.markMaterialized({ id: session.id }),
+        second.github.sessions.markMaterialized({ id: session.id }),
+      ]);
+
+      expect([...first.announced, ...second.announced]).toEqual([project.id]);
+    }
   });
 
   it('clears every owned source-control collection', async () => {
@@ -1661,7 +1727,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
@@ -1704,7 +1769,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000bbbb',
@@ -1744,7 +1808,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaab',
@@ -1771,7 +1834,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaad',

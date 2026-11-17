@@ -43,16 +43,12 @@ export function collectMappingStepRefs(mapConfig: MappingConfig): string[] {
   return [...ids];
 }
 
-/** Step ids a predicate reads through `stepResults.<id>` paths. */
-export function collectPredicateStepRefs(predicate: Predicate): string[] {
-  const ids = new Set<string>();
+/** The normalized paths a predicate reads. */
+function predicatePaths(predicate: Predicate): string[] {
+  const paths: string[] = [];
   const addPath = (rawPath: string) => {
     const path = normalizePredicatePath(rawPath);
-    if (path === MISSING || !path.startsWith('stepResults.')) return;
-    const rest = path.slice('stepResults.'.length);
-    const dot = rest.indexOf('.');
-    const id = dot === -1 ? rest : rest.slice(0, dot);
-    if (id) ids.add(id);
+    if (path !== MISSING) paths.push(path);
   };
   const addRef = (ref: PathOrLiteral) => {
     if ('path' in ref) addPath(ref.path);
@@ -82,7 +78,25 @@ export function collectPredicateStepRefs(predicate: Predicate): string[] {
     }
   };
   visit(predicate);
+  return paths;
+}
+
+/** Step ids a predicate reads through `stepResults.<id>` paths. */
+export function collectPredicateStepRefs(predicate: Predicate): string[] {
+  const ids = new Set<string>();
+  for (const path of predicatePaths(predicate)) {
+    if (!path.startsWith('stepResults.')) continue;
+    const rest = path.slice('stepResults.'.length);
+    const dot = rest.indexOf('.');
+    const id = dot === -1 ? rest : rest.slice(0, dot);
+    if (id) ids.add(id);
+  }
   return [...ids];
+}
+
+/** Whether a predicate reads the run's state through `state` paths. */
+export function predicateReadsState(predicate: Predicate): boolean {
+  return predicatePaths(predicate).some(path => path === 'state' || path.startsWith('state.'));
 }
 
 /**

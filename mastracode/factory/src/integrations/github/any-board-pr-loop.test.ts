@@ -11,7 +11,11 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { createFactoryTransitionTools } from '../../rules/tools.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { StoredBoardInput } from '../../storage/domains/boards/base.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  finishQueuedRunsForTests,
+} from '../../storage/test-utils.js';
 import { resolveGithubRules } from './default-rules.js';
 import { GithubRules } from './rules.js';
 
@@ -130,7 +134,12 @@ function issueOpened() {
   };
 }
 
-function pullRequest(action: 'opened' | 'synchronize' | 'closed', deliveryId: string, merged = false) {
+function pullRequest(
+  action: 'opened' | 'synchronize' | 'closed',
+  deliveryId: string,
+  merged = false,
+  sender = 'maintainer',
+) {
   return {
     event: 'pull_request',
     deliveryId,
@@ -138,7 +147,7 @@ function pullRequest(action: 'opened' | 'synchronize' | 'closed', deliveryId: st
       action,
       installation: { id: 7 },
       repository: { id: 10, full_name: 'acme/repo' },
-      sender: { login: 'maintainer' },
+      sender: { login: sender, type: sender.endsWith('[bot]') ? 'Bot' : 'User' },
       pull_request: {
         number: 17,
         title: 'PR 17',
@@ -193,8 +202,8 @@ async function harness(
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
+  await seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/repo'] } } });
 
   if (loop.storedWithSelfReview) {
     // The project's Work row as Factory stored it back then: its row is its board from then on.
@@ -254,11 +263,15 @@ async function harness(
     github: {
       rules: resolveGithubRules(),
       slug: 'factory-app',
-      getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue('write'),
+      // GitHub never lists an app bot as a collaborator: its permission lookup answers nothing.
+      getRepositoryCollaboratorPermission: vi.fn(async (_installationId: number, _repository: string, login: string) =>
+        login.endsWith('[bot]') ? undefined : 'write',
+      ),
     } as never,
     sourceControl,
     integrationStorage,
     projects: seeded.projects,
+    intake: seeded.intake,
     storage: workItems,
     boards,
     configVersion,
@@ -289,8 +302,9 @@ async function harness(
         const decision = entry.decision as { role: string; skillName: string };
         return `${decision.role}:${decision.skillName}`;
       });
-  /** A person moving the card, the way the board UI does. */
+  /** A person moving the card, the way the board UI does, once what was queued for it has run. */
   const move = async (id: string, stage: string) => {
+    await finishQueuedRunsForTests(workItems, new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
     const current = await card(id);
     return transitionService.transition({
       ...scope,
@@ -433,6 +447,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       // The merge finishes the card in the board's completing phase.
       await h.deliver(pullRequest('closed', 'delivery-merged', true));
       expect(await h.card(id)).toMatchObject({ board: loop.board, stages: [loop.completed] });
+    });
+
+    // Factory's app bot is never a collaborator, so its permission lookup answers nothing: its
+    // authorship is its trust signal. The reviews its own opened pull request and pushes queue
+    // start without a person, like a maintainer's.
+    it("reviews Factory's own pull request and its pushes without a person when Factory's app sends the events", async () => {
+      const h = await harness(backend, loop);
+      const id = await cardInBuild(h);
+      await h.authored(id);
+      const reviews = async () =>
+        (await h.decisions()).filter(
+          entry =>
+            entry.workItemId === id &&
+            entry.decision.type === 'invokeSkill' &&
+            (entry.decision as { skillName?: string }).skillName === 'factory-review',
+        );
+
+      await h.deliver(pullRequest('opened', 'delivery-opened', false, 'factory-app[bot]'));
+      expect(await h.card(id)).toMatchObject({ board: loop.board, stages: [loop.review] });
+      const opened = await reviews();
+      expect(opened.length).toBeGreaterThanOrEqual(1);
+      expect(opened.map(entry => entry.status)).not.toContain('proposed');
+
+      await h.deliver(pullRequest('synchronize', 'delivery-push', false, 'factory-app[bot]'));
+      const pushed = await reviews();
+      expect(pushed).toHaveLength(opened.length + 1);
+      expect(pushed.map(entry => entry.status)).not.toContain('proposed');
     });
 
     it("sends the card back to rest when its pull request closes unmerged", async () => {

@@ -7,7 +7,7 @@ import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/ind
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -589,6 +589,7 @@ describe('FactoryPhaseStateProcessor', () => {
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
       for (const stage of ['execute', 'planning']) {
+        await finishQueuedRunsForTests(storage);
         const current = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
         await expect(
           transitionService.transition({

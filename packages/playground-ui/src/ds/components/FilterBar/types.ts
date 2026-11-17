@@ -66,6 +66,8 @@ export type FilterBarField = {
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
+  /** Keep the operator label visible even when this field allows only one operator. */
+  alwaysShowOperator?: boolean;
   /** Field-specific labels for operators, keyed by operator id (e.g. `notExists` → `is not recorded`). */
   operatorLabels?: Record<string, string>;
   /**

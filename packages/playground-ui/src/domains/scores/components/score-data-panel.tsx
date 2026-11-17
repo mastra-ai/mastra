@@ -25,7 +25,7 @@ function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
-      <Txt as="span" variant="eyebrow" tone="faint" className="flex items-center gap-1.5 [&>svg]:size-3.5">
+      <Txt as="span" variant="eyebrow" tone="faint" className="flex items-center gap-1.5 [&>svg]:size-icon-sm">
         {icon}
         {sectionTitle}
       </Txt>
@@ -125,7 +125,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                   className={cn(
                     'text-placeholder',
                     'flex items-baseline gap-2',
-                    '[&>svg]:size-5 [&>svg]:translate-y-1',
+                    '[&>svg]:size-icon-lg [&>svg]:translate-y-1',
                   )}
                 >
                   <IconGauge />

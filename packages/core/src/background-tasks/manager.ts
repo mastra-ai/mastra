@@ -48,6 +48,36 @@ function minLeaseOverride(): number | undefined {
   return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
 }
 
+/**
+ * Runs, persists, and recovers background tasks for one Mastra process.
+ *
+ * Several managers (processes or replicas) may share one storage backend.
+ * Execution is owned through a lease persisted on each task record:
+ *
+ * - Identity: each manager has a random `ownerId` (`workerId`), so a restarted
+ *   process is a new owner.
+ * - Acquisition: `handleDispatch` claims a task with a compare-and-set on the
+ *   observed status/owner/lease, writing `ownerId` and
+ *   `leaseExpiresAt = now + leaseDurationMs`. Losers of a race skip the task.
+ * - Renewal: the heartbeat renews owned leases every `leaseDurationMs / 3`,
+ *   fenced on `running` + this owner. Workflow terminal writes carry the same
+ *   fence, so a superseded owner cannot commit results.
+ * - Expiry and adoption: `recoverStaleTasks` only reclaims a `running` task
+ *   once its lease has expired (or was released on shutdown), fenced on the
+ *   owner/lease it read so one manager wins. It re-runs when the earliest live
+ *   lease lapses. `restart()` is the one deliberate takeover of a live lease.
+ * - Loss: a failed renewal aborts the local run's signal when another owner
+ *   holds the task or it was cancelled.
+ *
+ * Guarantee: at most one owner can commit a task's state at a time, except
+ * for the shutdown rollback of an interrupted resume in `handleResume`, which is
+ * conditional on status only. The tool
+ * itself may still run more than once (stalled owner past its lease, crash
+ * before the result is saved, explicit restart), so external side effects need
+ * idempotency. Assumes storage applies `updateTask` conditions atomically and
+ * that clock skew between managers is well below `leaseDurationMs`, since
+ * `leaseExpiresAt` is written by the owner's clock and read by others'.
+ */
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -709,6 +739,11 @@ export class BackgroundTaskManager {
    * re-registered via `registerTaskContext(taskId, ...)` because the original
    * registration is gone (e.g. process restart) — the manager doesn't
    * rehydrate executor closures from storage.
+   *
+   * Restarting a `running` task is an explicit takeover: the claim is fenced on
+   * status only, so it succeeds even while another manager holds a live lease.
+   * The previous owner's next renewal fails and aborts its run, but that run
+   * may overlap this one until then.
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
     if (this.shuttingDown) {

@@ -33,7 +33,6 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const sourceSession = await sourceControl.sessions.create({
     orgId: 'org-1',

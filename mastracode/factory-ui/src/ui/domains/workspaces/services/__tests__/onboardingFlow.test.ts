@@ -91,7 +91,6 @@ describe('Factory onboarding flow', () => {
         private: false,
         installationId: 7,
         installationStorageId: 'inst-7',
-        sandboxProvider: 'local',
       },
       modelScope: 'hybrid',
       model: { providerId: 'openai', method: 'api_key', modelId: '' },

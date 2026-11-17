@@ -217,12 +217,17 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
 
     // The loop's failed step.end and the first workflow.fail are both rejected, so the
     // failure reaches the loop's run through a redelivery that must not rerun user code.
-    it.each(['step', 'nested workflow'] as const)(
-      'fails the loop run when reporting the failure needs a redelivery (%s body)',
-      async bodyKind => {
+    it.each([
+      ['step', 1],
+      ['step', 2],
+      ['nested workflow', 1],
+      ['nested workflow', 2],
+    ] as const)(
+      'fails the loop run when reporting the failure needs a redelivery (%s body, storage v%s)',
+      async (bodyKind, storageVersion) => {
         const body = { calls: 0 };
         let conditionCalls = 0;
-        const loopId = `fail-publish-${bodyKind.replace(' ', '-')}`;
+        const loopId = `fail-publish-${bodyKind.replace(' ', '-')}-v${storageVersion}`;
         const { result, runId, store, failEvents, rejected } = await runToEnd({
           storage: getStorage(),
           rejectPublish: (event, rejectedSoFar) =>
@@ -230,7 +235,7 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
               ? event.type === 'workflow.step.end' && event.data.prevResult?.status === 'failed'
               : rejectedSoFar === 1 && event.type === 'workflow.fail',
           build: () =>
-            createWorkflow({ id: loopId, inputSchema: schema, outputSchema: schema })
+            createWorkflow({ id: loopId, inputSchema: schema, outputSchema: schema, options: { storageVersion } })
               .dowhile(
                 bodyKind === 'step'
                   ? countingStep(body)

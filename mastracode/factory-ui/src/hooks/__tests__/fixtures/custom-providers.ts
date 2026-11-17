@@ -6,6 +6,7 @@ export const customProvider: CustomProviderInfo = {
   url: 'https://api.my-llm.test/v1',
   hasApiKey: true,
   models: ['my-llm/fast', 'my-llm/smart'],
+  scope: 'user',
 };
 
 export const customProvidersResponse: CustomProvidersResponse = {

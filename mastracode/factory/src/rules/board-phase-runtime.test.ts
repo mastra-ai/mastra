@@ -230,7 +230,6 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
     orgId: ORG,
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
 
   // The project's intake route files new cards straight into the phase the test exercises.

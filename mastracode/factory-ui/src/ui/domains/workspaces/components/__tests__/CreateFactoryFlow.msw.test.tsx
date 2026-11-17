@@ -45,7 +45,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
 };
 
 function LocationProbe() {
@@ -246,7 +245,7 @@ describe('Create Factory wizard', () => {
     await waitForMutationsIdle(client);
     expect(calls).toEqual(['create', 'connect', 'link']);
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
-    expect(intakeConfigs).toEqual([{ github: { enabled: true, sourceIds: ['octo/hello'] } }]);
+    expect(intakeConfigs).toEqual([]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
@@ -298,25 +297,6 @@ describe('Create Factory wizard', () => {
 
     const models = await screen.findAllByRole('option', { name: /^mastra\// });
     expect(models[0]).toHaveAccessibleName(expect.stringContaining('mastra/anthropic/claude-opus-5.5'));
-  });
-
-  it('skips the intake write when the repository already feeds issue intake', async () => {
-    const calls: string[] = [];
-    seedDraft('model-provider');
-    const { intakeConfigs } = stubModelStepEndpoints(calls, {
-      github: { enabled: true, sourceIds: ['octo/hello'] },
-      gitlab: { enabled: false, sourceIds: null },
-    });
-    const user = userEvent.setup();
-
-    const { client } = renderFlow();
-
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    await waitForMutationsIdle(client);
-    // A retry or a second Factory over the same repo must not rewrite the selection.
-    expect(intakeConfigs).toEqual([]);
   });
 
   it('resumes a failed commit without creating a second Factory', async () => {
@@ -462,7 +442,6 @@ describe('Create Factory wizard', () => {
               connectionId: 'direct',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'local',
             },
           ],
         }),
@@ -561,10 +540,28 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
-    expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] } },
-      { linear: { enabled: true, sourceIds: ['lin-1'] } },
-    ]);
+    expect(intakeConfigs).toEqual([{ linear: { enabled: true, sourceIds: ['lin-1'] } }]);
+  });
+
+  it('keeps the repository mapping of a switched-off Linear selection when the new Factory picks its project', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    stubConnectedLinear();
+    const repositoryByLinearProject = { 'lin-1': 'octo/hello' };
+    const { intakeConfigs } = stubModelStepEndpoints(calls, {
+      linear: { enabled: false, sourceIds: ['lin-1'], repositoryByLinearProject },
+    });
+    server.use(http.put(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })));
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Mobile App/ }));
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    expect(intakeConfigs).toEqual([{ linear: { enabled: true, sourceIds: ['lin-1'], repositoryByLinearProject } }]);
   });
 
   it('routes the picked Jira project into the Factory it creates', async () => {
@@ -594,10 +591,7 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(bindings).toEqual([{ integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1' }]);
-    expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] } },
-      { jira: { enabled: true, sourceIds: ['jira-source-1'] } },
-    ]);
+    expect(intakeConfigs).toEqual([{ jira: { enabled: true, sourceIds: ['jira-source-1'] } }]);
   });
 
   it('still creates the Factory when the picked Jira project already sends all its issues elsewhere', async () => {
@@ -702,7 +696,7 @@ describe('Create Factory wizard', () => {
     await waitForMutationsIdle(client);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(bindings).toEqual([]);
-    expect(intakeConfigs).toEqual([{ github: { enabled: true, sourceIds: ['octo/hello'] } }]);
+    expect(intakeConfigs).toEqual([]);
   });
 
   it('restarts at the name step when the stored draft has no repository to commit', async () => {
@@ -812,6 +806,7 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
         expect(await request.json()).toMatchObject({
           repository: { externalId: '99', slug: 'octo/hello' },
           branch: 'main',
+          selectIntake: true,
         });
         return HttpResponse.json({ projectRepository: linkedRepository });
       },

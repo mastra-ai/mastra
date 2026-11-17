@@ -4,7 +4,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { GithubIntegration, narrowRepos, normalizePrivateKey } from './integration.js';
 import { openPullRequestLister } from './rules.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
@@ -75,6 +75,37 @@ describe('normalizePrivateKey', () => {
 
   it('leaves non-PEM values untouched', () => {
     expect(normalizePrivateKey('not-a-key')).toBe('not-a-key');
+  });
+});
+
+describe('narrowRepos', () => {
+  const repo = (fullName: string, pushedAt: string | null) => ({
+    id: fullName.length,
+    fullName,
+    name: fullName.split('/')[1]!,
+    owner: fullName.split('/')[0]!,
+    defaultBranch: 'main',
+    private: false,
+    installationId: 1,
+    pushedAt,
+  });
+  const repos = [
+    repo('acme/old-agent', '2026-01-01T00:00:00Z'),
+    repo('acme/web', '2026-11-01T00:00:00Z'),
+    repo('acme/never-pushed-agent', null),
+    repo('acme/Agent-New', '2026-10-01T00:00:00Z'),
+  ];
+
+  it('keeps names containing the query case-insensitively, most recently pushed first', () => {
+    expect(narrowRepos(repos, ' AGENT ').map(r => r.fullName)).toEqual([
+      'acme/Agent-New',
+      'acme/old-agent',
+      'acme/never-pushed-agent',
+    ]);
+  });
+
+  it('returns only the most recent repositories up to the limit', () => {
+    expect(narrowRepos(repos, '', 2).map(r => r.fullName)).toEqual(['acme/web', 'acme/Agent-New']);
   });
 });
 
@@ -742,6 +773,185 @@ describe('GithubIntegration capability surface', () => {
       expect.objectContaining({ pull_number: 34, commit_id: 'abc123', path: 'src/app.ts', line: 12, side: 'RIGHT' }),
     );
     expect(pulls.createReplyForReviewComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 91 }));
+  });
+
+  describe('resolveReviewThread', () => {
+    const connection = { type: 'app-installation' as const, installationId: 7 };
+    const reviewCommentLookup = (pullNumber = 34) =>
+      vi.fn(async () => ({
+        data: { id: 91, pull_request_url: `https://api.github.com/repos/acme/app/pulls/${pullNumber}` },
+      }));
+    const page = (hasNextPage: boolean, endCursor: string | null = null) => ({ hasNextPage, endCursor });
+    const thread = (id: string, commentIds: Array<number | string>, comments = page(false)) => ({
+      id,
+      comments: { nodes: commentIds.map(commentId => ({ fullDatabaseId: String(commentId) })), pageInfo: comments },
+    });
+    const threadsPage = (threads: ReturnType<typeof thread>[], pageInfo = page(false)) => ({
+      repository: { pullRequest: { reviewThreads: { nodes: threads, pageInfo } } },
+    });
+
+    function setup(graphql: ReturnType<typeof vi.fn>, getReviewComment = reviewCommentLookup()) {
+      const github = new GithubIntegration(validConfig());
+      vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ pulls: { getReviewComment }, graphql } as any);
+      return { github, graphql, getReviewComment };
+    }
+
+    it('finds the thread of a reply on a later page and resolves it', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10, 11])], page(true, 'threads-1')))
+        .mockResolvedValueOnce(threadsPage([thread('T2', [80, 91])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T2' } } });
+      const { github, getReviewComment } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: true,
+      });
+
+      expect(getReviewComment).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', comment_id: 91 });
+      expect(graphql).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('reviewThreads'),
+        expect.objectContaining({ owner: 'acme', repo: 'app', number: 34, cursor: null }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('reviewThreads'),
+        expect.objectContaining({ cursor: 'threads-1' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(3, expect.stringContaining('resolveReviewThread('), {
+        threadId: 'T2',
+      });
+      expect(graphql).toHaveBeenCalledTimes(3);
+    });
+
+    it('pages through the comments of a long thread and unresolves it', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10], page(true, 'comments-1')), thread('T2', [20])]))
+        .mockResolvedValueOnce({
+          node: { comments: { nodes: [{ fullDatabaseId: '12' }], pageInfo: page(true, 'comments-2') } },
+        })
+        .mockResolvedValueOnce({ node: { comments: { nodes: [{ fullDatabaseId: '91' }], pageInfo: page(false) } } })
+        .mockResolvedValueOnce({ unresolveReviewThread: { thread: { id: 'T1' } } });
+      const { github } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: false,
+      });
+
+      expect(graphql).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('PullRequestReviewThread'),
+        expect.objectContaining({ threadId: 'T1', cursor: 'comments-1' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('PullRequestReviewThread'),
+        expect.objectContaining({ threadId: 'T1', cursor: 'comments-2' }),
+      );
+      expect(graphql).toHaveBeenNthCalledWith(4, expect.stringContaining('unresolveReviewThread('), {
+        threadId: 'T1',
+      });
+    });
+
+    it('checks every thread on a page before paging the comments of long threads', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [10], page(true, 'comments-1')), thread('T2', [91])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T2' } } });
+      const { github } = setup(graphql);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '91',
+        resolved: true,
+      });
+
+      expect(graphql).toHaveBeenCalledTimes(2);
+      expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T2' });
+    });
+
+    it('matches comment ids above the 32-bit GraphQL Int range', async () => {
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', ['3000000000'])]))
+        .mockResolvedValueOnce({ resolveReviewThread: { thread: { id: 'T1' } } });
+      const getReviewComment = vi.fn(async () => ({
+        data: { id: 3000000000, pull_request_url: 'https://api.github.com/repos/acme/app/pulls/34' },
+      }));
+      const { github } = setup(graphql, getReviewComment);
+
+      await github.versionControl.resolveReviewThread!({
+        connection,
+        sourceId: 'acme/app',
+        commentId: '3000000000',
+        resolved: true,
+      });
+
+      expect(graphql).toHaveBeenNthCalledWith(1, expect.stringContaining('fullDatabaseId'), expect.anything());
+      expect(graphql).toHaveBeenLastCalledWith(expect.stringContaining('resolveReviewThread('), { threadId: 'T1' });
+    });
+
+    it('explains what to do when no thread holds the comment', async () => {
+      const graphql = vi.fn().mockResolvedValueOnce(threadsPage([thread('T1', [10])]));
+      const { github } = setup(graphql);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toThrow(
+        'GitHub review comment 91 on pull request #34 is not part of a published review thread, so there is no thread to resolve.',
+      );
+      expect(graphql).toHaveBeenCalledTimes(1);
+    });
+
+    it('explains what to do when the comment does not exist', async () => {
+      const graphql = vi.fn();
+      const getReviewComment = vi.fn(async () => {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      });
+      const { github } = setup(graphql, getReviewComment);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toThrow('GitHub review comment 91 was not found in acme/app.');
+      expect(graphql).not.toHaveBeenCalled();
+    });
+
+    it('surfaces GitHub permission errors unchanged', async () => {
+      const forbidden = new Error('Resource not accessible by integration');
+      const graphql = vi
+        .fn()
+        .mockResolvedValueOnce(threadsPage([thread('T1', [91])]))
+        .mockRejectedValueOnce(forbidden);
+      const { github } = setup(graphql);
+
+      await expect(
+        github.versionControl.resolveReviewThread!({
+          connection,
+          sourceId: 'acme/app',
+          commentId: '91',
+          resolved: true,
+        }),
+      ).rejects.toBe(forbidden);
+    });
   });
 
   it('implements reviews and reviewer requests through VersionControl', async () => {

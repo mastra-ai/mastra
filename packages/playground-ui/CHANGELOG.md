@@ -1,5 +1,142 @@
 # @mastra/playground-ui
 
+## 69.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/client-js@1.60.1-alpha.6
+  - @mastra/react@1.15.1-alpha.6
+
+## 69.1.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/client-js@1.60.1-alpha.5
+  - @mastra/react@1.15.1-alpha.5
+
+## 69.1.0-alpha.4
+
+### Minor Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Opening a Knowledge page now shows it in a panel beside the Pages tree instead of replacing the graph, and the graph stops drawing while the page is open. The page's right column gains a Details list with its scope, last update, author, creation date and version. ([#30588](https://github.com/mastra-ai/mastra/pull/30588))
+
+### Patch Changes
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- New feedback comments now show up in the list as soon as you submit them, instead of after the next refresh. Lists from `useTraceFeedback` and `useSpanFeedback` show the comment right away, remove it if the submit fails, and keep showing it until the list returns the stored comment or 60 seconds pass, whichever comes first. While a comment is waiting to be stored, the list refreshes every 3 seconds instead of every 30 seconds. ([#30515](https://github.com/mastra-ai/mastra/pull/30515))
+
+  Comments that are not stored yet have `isPending: true`, so you can hide actions such as delete until the stored comment arrives:
+
+  ```tsx
+  const { data } = useTraceFeedback({ traceId });
+
+  data?.feedback.map(item => (item.isPending ? <span>Sending…</span> : <FeedbackActions item={item} />));
+  ```
+
+  In Studio, a comment that is not stored yet shows "Sending…" instead of its review status, and its Mark reviewed and Delete actions stay hidden until the stored comment arrives.
+
+  `useCreateFeedback` now runs your `onMutate`, `onError` and `onSuccess` options in addition to its own behavior. Before, passing `onSuccess` skipped the hook's list refresh.
+
+- `Sidebar.NavShowMore` accepts a `ref` to its button, so an app can move focus to it, for example when the other toggle disappears after a click. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+  ```tsx
+  const showLess = useRef<HTMLButtonElement>(null);
+
+  <Sidebar.NavShowMore ref={showLess} foldedCount={20} expanded onExpandedChange={collapse} />;
+
+  showLess.current?.focus();
+  ```
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`83a6d17`](https://github.com/mastra-ai/mastra/commit/83a6d17903e678df0f0a788daf2d08c64cc0b7d5), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/react@1.15.1-alpha.4
+  - @mastra/client-js@1.60.1-alpha.4
+  - @mastra/ai-sdk@1.12.0
+
+## 69.1.0-alpha.3
+
+### Minor Changes
+
+- Added `unavailableReason` to `ModelPicker`. When set, the picker shows its usual trigger, disabled, and hovering or focusing it shows the reason in a tooltip. Use it when the current user can see the model but is not allowed to change it. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  ```tsx
+  <ModelPicker
+    providers={providers}
+    value={value}
+    onValueChange={setValue}
+    unavailableReason="Only the session owner can change the model."
+  />
+  ```
+
+- On phones and tablets, the default sidebar (`mobileMode="takeover"`) now sits under the page instead of covering it. Opening it slides the whole page to the right, and the navigation underneath grows into place as it fades in, like the ChatGPT iOS app. While it moves, the page gets rounded corners, a thin edge and a soft shadow, so it reads as a card lifted above the navigation. ([#30440](https://github.com/mastra-ai/mastra/pull/30440))
+
+  - Swipe the page right to open the sidebar and swipe left to close it. The page follows your finger. When you let go, it finishes in the direction you were last moving: a short swipe is enough, swiping back partway cancels, and a nudge of a few pixels springs back. It keeps the speed of your swipe and eases to a stop. Dragging moves only the page and the sidebar, so it stays smooth on long pages.
+  - While the sidebar is open, a faint tint of the opposite colour (light in dark mode, dark in light mode) covers the strip of page still in view, setting it apart from the navigation. Tap that strip, or press Escape, to close the sidebar. Focus returns to the menu button. Until then, Tab and Shift+Tab cycle through the sidebar, and the page and toasts behind it are out of reach.
+  - Swipes that start in content that scrolls sideways, or on sliders and other controls that handle their own drags, are left to that content.
+  - With reduced motion turned on, the sidebar opens and closes without sliding.
+
+  `AppShell` slides its content automatically. A `Sidebar` rendered outside `AppShell` has no page to slide, so either move the page into `AppShell` or keep the previous drawer:
+
+  ```tsx
+  <AppShell sidebar={<Sidebar>{nav}</Sidebar>}>{page}</AppShell>
+
+  // or, without AppShell
+  <Sidebar mobileMode="drawer">{nav}</Sidebar>
+  ```
+
+  On desktop, dragging the sidebar's edge no longer restyles the whole page on every move, so resizing stays smooth beside long pages. The live width is set on the sidebar panel itself, so `var(--sidebar-width)` read outside the sidebar keeps the initial width.
+
+- Switched `@mastra/playground-ui` components from Lucide to Central Icons, and added Central Icons for your own UI. Each icon is its own module under `@mastra/playground-ui/icons/central/` and works inside `Icon` like any other icon. The icons are licensed under the Central Icons license, not Apache-2.0. See `CENTRAL-ICONS-LICENSE.md` in the package. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+  ```tsx
+  import { Icon } from '@mastra/playground-ui/icons/Icon';
+  import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+  <Icon size="sm">
+    <IconMagnifyingGlass />
+  </Icon>;
+  ```
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- `CodeDiff` now paints its code on the card surface instead of the syntax theme's own background, so a diff matches the card around it in light and dark mode. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Fixed the right padding of `Sidebar.CommandHeader`: its buttons now line up with the right edge of the nav rows below. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  A `Button` rendered as a link no longer puts its `type` on the anchor, so `Sidebar.NavAction` used as a link renders a valid `<a>`.
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/client-js@1.60.1-alpha.3
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.3
+
 ## 69.1.0-alpha.2
 
 ### Patch Changes

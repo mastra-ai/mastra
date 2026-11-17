@@ -61,7 +61,7 @@ export function OnboardingProviderOption({
           </Txt>
         )}
       </span>
-      {selected && <IconCheckmark2Medium aria-hidden="true" className="size-4 shrink-0" />}
+      {selected && <IconCheckmark2Medium aria-hidden="true" className="size-icon-md shrink-0" />}
     </button>
   );
 }

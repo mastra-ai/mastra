@@ -15,7 +15,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
+import type { UpdateWorkflowStateOptions } from '../../../storage/types';
 import { createTool } from '../../../tools';
+import { createRunStorage } from '../../../workflows/run-storage';
+import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import type { AgentExecutionOptions } from '../../agent.types';
 import type { AgentConfig } from '../../types';
@@ -23,7 +26,6 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../co
 import { createDurableAgent } from '../create-durable-agent';
 import { ExecutionFence, __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
-import { storeRunsInV2 } from './storage-version';
 
 function toolCallThenTextModel(toolName: string, text: string) {
   let calls = 0;
@@ -94,6 +96,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
   function setup(
     execute: (input: { item: string }) => Promise<unknown>,
     defaultOptions?: AgentConfig['defaultOptions'],
+    storageVersion?: 1 | 2,
   ) {
     const storage = new InMemoryStore();
     const model = toolCallThenTextModel('archive', 'archived');
@@ -104,23 +107,32 @@ describe('DurableAgent resume claim loser (#27365)', () => {
       requireApproval: true,
       execute,
     });
-    // The tests read and rewrite the run's row, and race its claim, through v1's snapshot methods.
-    const durableAgent = storeRunsInV2(
-      createDurableAgent({
-        agent: new Agent({
-          id: 'loser-agent',
-          name: 'Loser Agent',
-          instructions: 'You archive items.',
-          model: model.model as LanguageModelV2,
-          tools: { archive },
-          defaultOptions,
-        }),
-        pubsub,
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'loser-agent',
+        name: 'Loser Agent',
+        instructions: 'You archive items.',
+        model: model.model as LanguageModelV2,
+        tools: { archive },
+        defaultOptions,
       }),
-      false,
-    );
+      pubsub,
+      storageVersion,
+    });
     new Mastra({ agents: { 'loser-agent': durableAgent as any }, logger: false, storage, pubsub });
     return { storage, model, durableAgent };
+  }
+
+  /** Replaces the run's row in the storage version it's stored in, as another process would. */
+  async function rewriteRow(storage: InMemoryStore, runId: string, snapshot: WorkflowRunState) {
+    const workflows = (await storage.getStore('workflows'))!;
+    const row = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    await createRunStorage({
+      storageVersion: row?.storageVersion ?? 1,
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      runId,
+      getStore: async () => workflows,
+    }).writeSnapshot(snapshot, row?.resourceId);
   }
 
   async function suspend(durableAgent: ReturnType<typeof setup>['durableAgent']) {
@@ -157,18 +169,13 @@ describe('DurableAgent resume claim loser (#27365)', () => {
       const resolveDefaults = vi.fn(() => defaults);
       const { storage, model, durableAgent } = setup(execute, mode === 'dynamic-default' ? resolveDefaults : defaults);
       const runId = await suspend(durableAgent);
-      const workflows = (await storage.getStore('workflows'))!;
       const row = (await workflowRow(storage, runId))!;
       const suspendedSnapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
       if (mode === 'persisted') {
         suspendedSnapshot.context.input.options.modelSettings = { timeout: { stepMs: -1 } };
       }
       // Model a process dying after claiming the suspended run, before continuing it.
-      await workflows.persistWorkflowSnapshot({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
-        runId,
-        snapshot: { ...suspendedSnapshot, status: 'running' },
-      });
+      await rewriteRow(storage, runId, { ...suspendedSnapshot, status: 'running' });
       globalRunRegistry.delete(runId);
       const before = await workflowRow(storage, runId);
       const runningSnapshot = typeof before!.snapshot === 'string' ? JSON.parse(before!.snapshot) : before!.snapshot;
@@ -195,11 +202,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
 
       if (mode === 'persisted') {
         runningSnapshot.context.input.options.modelSettings = { timeout: { stepMs: 30_000 } };
-        await workflows.persistWorkflowSnapshot({
-          workflowName: DurableStepIds.AGENTIC_LOOP,
-          runId,
-          snapshot: runningSnapshot,
-        });
+        await rewriteRow(storage, runId, runningSnapshot);
       }
       const resumed = await coldAgent.resume(
         runId,
@@ -217,14 +220,9 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     const execute = vi.fn(async () => ({ ok: true }));
     const { storage, durableAgent } = setup(execute);
     const runId = await suspend(durableAgent);
-    const workflows = (await storage.getStore('workflows'))!;
     const row = (await workflowRow(storage, runId))!;
     const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
-    await workflows.persistWorkflowSnapshot({
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-      runId,
-      snapshot: { ...snapshot, status: 'success', context: {} },
-    });
+    await rewriteRow(storage, runId, { ...snapshot, status: 'success', context: {} });
     globalRunRegistry.delete(runId);
     const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub });
     new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
@@ -327,6 +325,44 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [1, 2],
+    [2, 1],
+  ] as const)(
+    'finishes a run suspended on storage v%i in its stored version after the agent moves to v%i',
+    async (from, to) => {
+      const rows: Array<{ stored: boolean; other: boolean }> = [];
+      const { storage, durableAgent } = setup(
+        async () => {
+          const workflows = (await storage.getStore('workflows'))!;
+          const loop = { runId, workflowName: DurableStepIds.AGENTIC_LOOP };
+          rows.push({
+            stored: !!(await workflows.getWorkflowRunById({ ...loop, storageVersion: from })),
+            other: !!(await workflows.getWorkflowRunById({ ...loop, storageVersion: to })),
+          });
+          return { ok: true };
+        },
+        undefined,
+        from,
+      );
+      const runId = await suspend(durableAgent);
+      globalRunRegistry.delete(runId);
+      const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub, storageVersion: to });
+      new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
+
+      const resumed = await coldAgent.resume(runId, { approved: true });
+      const chunks = await drain(resumed.fullStream);
+      resumed.cleanup();
+
+      expect(chunks.find(chunk => chunk.type === 'error')).toBeUndefined();
+      expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+        'archived',
+      ]);
+      expect(rows).toEqual([{ stored: true, other: false }]);
+      await vi.waitFor(async () => expect(await workflowRow(storage, runId)).toBeNull());
+    },
+  );
+
   it('reports a resume that loses the persisted claim as AGENT_RESUME_ALREADY_CLAIMED (#27619)', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
     const { storage, durableAgent } = setup(execute);
@@ -335,16 +371,22 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     const workflows = (await storage.getStore('workflows'))!;
 
     // Another process claims the row after this resume read it as suspended but before its
-    // own claim lands, so the real claim CAS (suspended -> running) loses.
-    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    // own claim lands, so the real claim CAS (suspended -> running) loses. A v1 run is claimed
+    // through updateWorkflowState, a v2 run through updateWorkflowRunHeader.
     let competed = false;
-    vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
-      if (!competed && args.runId === runId && args.opts.expectedStatus === 'suspended') {
-        competed = true;
-        await updateWorkflowState({ workflowName: args.workflowName, runId, opts: { ...args.opts } });
-      }
-      return updateWorkflowState(args);
-    });
+    const competing =
+      <R>(update: (args: { workflowName: string; runId: string; opts: UpdateWorkflowStateOptions }) => Promise<R>) =>
+      async (args: { workflowName: string; runId: string; opts: UpdateWorkflowStateOptions }) => {
+        if (!competed && args.runId === runId && args.opts.expectedStatus === 'suspended') {
+          competed = true;
+          await update({ workflowName: args.workflowName, runId, opts: { ...args.opts } });
+        }
+        return update(args);
+      };
+    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    const updateWorkflowRunHeader = workflows.updateWorkflowRunHeader.bind(workflows);
+    vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(competing(updateWorkflowState));
+    vi.spyOn(workflows, 'updateWorkflowRunHeader').mockImplementation(competing(updateWorkflowRunHeader));
 
     const loser = await durableAgent.resume(runId, { approved: true });
     const chunks = await drain(loser.fullStream);

@@ -32,7 +32,6 @@ const repo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
 };
 const otherRepo: GithubRepo = { ...repo, id: 100, fullName: 'octo/other', name: 'other', defaultBranch: 'develop' };
 const thirdRepo: GithubRepo = { ...repo, id: 101, fullName: 'octo/third', name: 'third' };
@@ -43,7 +42,6 @@ const gitlabProject: GitLabProject = {
   projectPath: 'team/backend',
   installationStorageId: 'gitlab-inst',
   defaultBranch: 'develop',
-  sandboxProvider: 'local',
 };
 const model = { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' as const };
 const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
@@ -347,7 +345,7 @@ describe('Draft Factory onboarding', () => {
   });
 
   it('never starts syncing a repository the Work step switch left off', async () => {
-    registerSetup();
+    const writes = registerSetup();
     // Nothing is selected before onboarding, so "off" must not select the repository either, which
     // leaves the intake config untouched.
     const intake = registerIntake();
@@ -362,6 +360,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.find(item => item.path === 'repository')?.body).toMatchObject({ selectIntake: false });
     expect(intake.saved).toEqual([]);
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
   });

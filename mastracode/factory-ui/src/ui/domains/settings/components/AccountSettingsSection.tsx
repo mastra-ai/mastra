@@ -6,6 +6,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
 import { SettingsContainer, SettingsRow, SettingsSkeleton, SettingsValue } from '@mastra/playground-ui/new/settings';
 
+import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 
@@ -29,7 +30,35 @@ function authProviderLabel(provider: string | undefined): string {
 export function AccountSettingsSection() {
   const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
+  const signedIn = !!auth.data?.authEnabled && auth.data.authenticated;
 
+  const logOut = () => {
+    clearMastraCodeStorage();
+    redirectToLogout(baseUrl);
+  };
+
+  // Preferences are stored in this browser, so they don't wait on, or disappear with, the account details.
+  return (
+    <>
+      <ProfileSubsection auth={auth} />
+      <PreferencesSettings />
+      {signedIn && (
+        <SettingsSubsection scope="personal" title="Session">
+          <SettingsContainer>
+            <SettingsRow label="Log out" description="End your session on this device.">
+              <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
+                <IconArrowBoxLeft aria-hidden="true" />
+                Log out
+              </Button>
+            </SettingsRow>
+          </SettingsContainer>
+        </SettingsSubsection>
+      )}
+    </>
+  );
+}
+
+function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }) {
   if (auth.isPending) {
     return (
       <SettingsSubsection scope="personal" title="Profile">
@@ -55,50 +84,33 @@ export function AccountSettingsSection() {
 
   const user = state.user;
 
-  const logOut = () => {
-    clearMastraCodeStorage();
-    redirectToLogout(baseUrl);
-  };
-
   return (
-    <>
-      <SettingsSubsection
-        scope="personal"
-        title="Profile"
-        description="Your signed-in identity for this MastraCode deployment."
-      >
-        <SettingsContainer>
-          <SettingsRow label="Name" description="From your sign-in provider.">
-            <SettingsValue>{user?.name ?? 'Not provided'}</SettingsValue>
+    <SettingsSubsection
+      scope="personal"
+      title="Profile"
+      description="Your signed-in identity for this MastraCode deployment."
+    >
+      <SettingsContainer>
+        <SettingsRow label="Name" description="From your sign-in provider.">
+          <SettingsValue>{user?.name ?? 'Not provided'}</SettingsValue>
+        </SettingsRow>
+        <SettingsRow label="Email" description="From your sign-in provider.">
+          <SettingsValue>{user?.email ?? 'Not provided'}</SettingsValue>
+        </SettingsRow>
+        <SettingsRow label="Authentication" description="How you signed in.">
+          <SettingsValue>{authProviderLabel(state.provider)}</SettingsValue>
+        </SettingsRow>
+        {user?.userId && (
+          <SettingsRow label="Account ID" description="Useful when contacting support.">
+            <CopyField value={user.userId} label="account ID" />
           </SettingsRow>
-          <SettingsRow label="Email" description="From your sign-in provider.">
-            <SettingsValue>{user?.email ?? 'Not provided'}</SettingsValue>
+        )}
+        {user?.organizationId && (
+          <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
+            <CopyField value={user.organizationId} label="organization ID" />
           </SettingsRow>
-          <SettingsRow label="Authentication" description="How you signed in.">
-            <SettingsValue>{authProviderLabel(state.provider)}</SettingsValue>
-          </SettingsRow>
-          {user?.userId && (
-            <SettingsRow label="Account ID" description="Useful when contacting support.">
-              <CopyField value={user.userId} label="account ID" />
-            </SettingsRow>
-          )}
-          {user?.organizationId && (
-            <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
-              <CopyField value={user.organizationId} label="organization ID" />
-            </SettingsRow>
-          )}
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection scope="personal" title="Session">
-        <SettingsContainer>
-          <SettingsRow label="Log out" description="End your session on this device.">
-            <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
-              <IconArrowBoxLeft aria-hidden="true" />
-              Log out
-            </Button>
-          </SettingsRow>
-        </SettingsContainer>
-      </SettingsSubsection>
-    </>
+        )}
+      </SettingsContainer>
+    </SettingsSubsection>
   );
 }

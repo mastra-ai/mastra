@@ -17,9 +17,11 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../durable/create-durable-agent';
+import { createEventedAgent } from '../../durable/create-evented-agent';
 import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey } from '../run-records';
+import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey, durableReplayOwnerKey } from '../run-records';
 import type { AgentRunRecord } from '../run-records';
 
 class RecordingCache extends InMemoryServerCache {
@@ -42,6 +44,16 @@ class RecoveringCache extends RecordingCache {
       await this.beforeRunningRetry?.();
     }
     return super.set(key, value, ttlMs);
+  }
+}
+
+class ReadRecoveringCache extends RecordingCache {
+  recordReads = 0;
+  override async get(key: string): Promise<unknown> {
+    if (key.startsWith('agent.run.') && ++this.recordReads === 2) {
+      throw new Error('Cache temporarily unavailable');
+    }
+    return super.get(key);
   }
 }
 
@@ -130,56 +142,64 @@ describe('Agent run records', () => {
     expect(cache.writes.every(w => w.ttlMs === AGENT_RUN_RECORD_TTL_MS)).toBe(true);
   });
 
-  it('restores cross-instance ownership while a quiet tool is still running after a cache write failure', async () => {
-    getMock().on(
-      { endpoint: 'chat', hasToolResult: false },
-      { toolCalls: [{ id: 'call-1', name: 'wait', arguments: {} }] },
-    );
-    getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done waiting.' });
-    const cache = new RecoveringCache();
-    const pubsub = new EventEmitterPubSub();
-    let release!: () => void;
-    let started!: () => void;
-    const gate = new Promise<void>(resolve => (release = resolve));
-    const toolStarted = new Promise<void>(resolve => (started = resolve));
-    const wait = createTool({
-      id: 'wait',
-      description: 'Wait for work.',
-      inputSchema: z.object({}),
-      execute: async () => {
-        started();
-        await gate;
-        return { ok: true };
-      },
-    });
-    const agentA = makeAgent({ tools: { wait }, durable: { cache: false, cleanupTimeoutMs: 0 } });
-    const agentB = makeAgent({ durable: { cache: false, cleanupTimeoutMs: 0 } });
-    const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache, logger: false });
-    const mastraB = new Mastra({ agents: { agent: agentB }, pubsub, cache, logger: false });
-    try {
-      const output = await agentA.stream('Wait for work.', { requestContext: owner(), maxSteps: 3 });
-      const consuming = output.consumeStream();
-      await toolStarted;
-      await vi.waitFor(
-        async () =>
-          expect(await agentB.__getRunRecord(output.runId)).toMatchObject({
-            resourceId: 'user-1',
-            status: 'running',
-          }),
-        { timeout: 3000 },
+  it.each(['read', 'write'] as const)(
+    'restores cross-instance ownership while a quiet tool is still running after a cache %s failure',
+    async failure => {
+      getMock().on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call-1', name: 'wait', arguments: {} }] },
       );
-      expect(cache.runningAttempts).toBe(2);
-      await new Promise(resolve => setTimeout(resolve, 1100));
-      expect(cache.runningAttempts).toBe(2);
-      release();
-      await consuming;
-      expect(await output.text).toBe('Done waiting.');
-      await vi.waitFor(async () => expect((await agentB.__getRunRecord(output.runId))?.status).toBe('finished'));
-    } finally {
-      release();
-      await Promise.all([mastraA.shutdown(), mastraB.shutdown()]);
-    }
-  });
+      getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done waiting.' });
+      const cache = failure === 'read' ? new ReadRecoveringCache() : new RecoveringCache();
+      const pubsub = new EventEmitterPubSub();
+      let release!: () => void;
+      let started!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const toolStarted = new Promise<void>(resolve => (started = resolve));
+      const wait = createTool({
+        id: 'wait',
+        description: 'Wait for work.',
+        inputSchema: z.object({}),
+        execute: async () => {
+          started();
+          await gate;
+          return { ok: true };
+        },
+      });
+      const agentA = makeAgent({ tools: { wait }, durable: { cache: false, cleanupTimeoutMs: 0 } });
+      const agentB = makeAgent({ durable: { cache: false, cleanupTimeoutMs: 0 } });
+      const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache, logger: false });
+      const mastraB = new Mastra({ agents: { agent: agentB }, pubsub, cache, logger: false });
+      try {
+        const output = await agentA.stream('Wait for work.', {
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-1']]),
+          maxSteps: 3,
+        });
+        const consuming = output.consumeStream();
+        await toolStarted;
+        await vi.waitFor(
+          async () =>
+            expect(await agentB.__getRunRecord(output.runId)).toMatchObject({
+              resourceId: 'user-1',
+              status: 'running',
+            }),
+          { timeout: 3000 },
+        );
+        if (cache instanceof RecoveringCache) expect(cache.runningAttempts).toBe(2);
+        expect(cache.writes.filter(write => write.value.status === 'running')).toHaveLength(1);
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        if (cache instanceof RecoveringCache) expect(cache.runningAttempts).toBe(2);
+        expect(cache.writes.filter(write => write.value.status === 'running')).toHaveLength(1);
+        release();
+        await consuming;
+        expect(await output.text).toBe('Done waiting.');
+        await vi.waitFor(async () => expect((await agentB.__getRunRecord(output.runId))?.status).toBe('finished'));
+      } finally {
+        release();
+        await Promise.all([mastraA.shutdown(), mastraB.shutdown()]);
+      }
+    },
+  );
 
   it.each(['finished', 'suspended'] as const)('cancels a pending ownership retry when the run is %s', async status => {
     getMock().on(
@@ -255,6 +275,54 @@ describe('Agent run records', () => {
       releaseTool();
       releaseWrite();
       await mastra.shutdown();
+    }
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s publishes and cleans up full run records at its existing durable key', async (_engine, create) => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
+    const cache = new InMemoryServerCache();
+    const pubsub = new EventEmitterPubSub();
+    const agent = create({ agent: makeAgent(), cleanupTimeoutMs: 0 });
+    const observer = create({ agent: makeAgent(), cleanupTimeoutMs: 0 });
+    const producerMastra = new Mastra({
+      agents: { agent },
+      pubsub,
+      cache,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    const observerMastra = new Mastra({
+      agents: { agent: observer },
+      pubsub,
+      cache,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    try {
+      const output = await agent.stream('Say hello.', { requestContext: owner() });
+      expect(await output.output.text).toBe('Hello there.');
+      const key = durableReplayOwnerKey('records-agent', output.runId);
+      await vi.waitFor(async () =>
+        expect(await observer.__getRunRecord(output.runId)).toMatchObject({
+          agentId: 'records-agent',
+          runId: output.runId,
+          resourceId: 'user-1',
+          threadId: 'thread-1',
+          status: 'finished',
+          publisherId: expect.any(String),
+        }),
+      );
+      expect(await cache.get(key)).toEqual(await observer.__getRunRecord(output.runId));
+      expect(await cache.get(agentRunRecordKey('records-agent', output.runId))).toBeUndefined();
+
+      await output.cleanup();
+      await vi.waitFor(async () => expect(await cache.get(key)).toBeUndefined());
+      await expect(observer.__getRunRecord(output.runId)).resolves.toBeUndefined();
+    } finally {
+      await Promise.all([producerMastra.shutdown(), observerMastra.shutdown()]);
     }
   });
 

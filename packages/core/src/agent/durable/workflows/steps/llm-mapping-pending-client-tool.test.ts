@@ -85,6 +85,7 @@ async function runMappingStep(
 ) {
   const step = createDurableLLMMappingStep();
   const output = await (step as any).execute({
+    getState: async () => ({}),
     inputData: {
       llmOutput: {
         stepSpanData: tracing?.stepSpanData,
