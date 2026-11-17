@@ -171,8 +171,6 @@ describe('envVarsPullAction', () => {
       environments: [
         environment({
           envVars: { LOG_LEVEL: 'debug', OPENAI_API_KEY: '__mastra_secret__', REDIS_URL: '__mastra_secret__' },
-          envVarKinds: { LOG_LEVEL: 'config', OPENAI_API_KEY: 'secret', REDIS_URL: 'secret' },
-          secretsWriteOnly: true,
         }),
       ],
     });

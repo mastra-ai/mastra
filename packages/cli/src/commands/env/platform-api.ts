@@ -33,21 +33,9 @@ export interface Environment {
    * same way (workers currently run inline on the API service).
    */
   workerProviderServiceId?: string | null;
-  /**
-   * Kind of each env var: `secret` (write-only, delivered at boot) or
-   * `config` (readable plaintext). Absent on self-hosted and older platforms.
-   */
-  envVarKinds?: Record<string, EnvVarKind>;
-  /**
-   * True when encrypted secret values come back as `SECRET_VALUE_PLACEHOLDER`
-   * instead of their value. Absent on self-hosted and older platforms.
-   */
-  secretsWriteOnly?: boolean;
   createdAt: string;
   updatedAt: string;
 }
-
-export type EnvVarKind = 'secret' | 'config';
 
 /**
  * Value the platform returns in place of a write-only secret. Sending it back
