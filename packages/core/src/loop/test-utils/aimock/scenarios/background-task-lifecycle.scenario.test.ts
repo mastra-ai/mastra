@@ -901,6 +901,105 @@ describeForAllEngines(
       30_000,
     );
 
+    // Technical: one turn dispatches a deferred tool and also calls a tool that needs approval.
+    // Approving it resumes the same run under a new claim generation, and only then does the
+    // deferred tool call suspend(). The durable engine parks it. Known limit: the evented engine
+    // counts the resume's claim as another execution's, so the task fails with "lost its
+    // execution lease", as it does on main. Telling this resume from a real takeover would widen
+    // this fix, so the evented result is pinned. Inngest isn't covered here. (#30182)
+    it.runIf(engine === 'durable' || engine === 'evented')(
+      'parks a deferred tool that asks for input after an approval in the same turn resumed the run (#30182)',
+      async () => {
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const llm = getMock();
+        const thread = { threadId: 'bg-suspend-after-resume-thread', resourceId: 'bg-suspend-after-resume-user' };
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look up a user record',
+          inputSchema: z.object({ name: z.string() }),
+          outputSchema: z.object({ id: z.string() }),
+          requireApproval: true,
+          execute: async ({ name }) => ({ id: `user-${name}` }),
+        });
+        const shared = await createSharedAgent(llm, {
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate), lookup },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          engine,
+        });
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          {
+            toolCalls: [
+              { id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } },
+              { id: 'call-lookup-1', name: 'lookup', arguments: { name: 'dero' } },
+            ],
+          },
+        );
+        for (let i = 1; i < 8; i++) llm.on({ endpoint: 'chat', sequenceIndex: i }, { content: `Reply ${i}.` });
+
+        const first = await runLoopScenario({
+          engine,
+          llm,
+          prompt: 'Research near and look up dero',
+          sharedAgent: shared,
+          fixtures: () => {},
+          memory,
+          ...thread,
+          streamUntilIdle: true,
+          manualStreamConsumption: true,
+        });
+        const firstChunks = await collectUntil(
+          first.output.fullStream as ReadableStream<unknown>,
+          'tool-call-approval',
+        );
+        const started = firstChunks.find(c => c.type === 'background-task-started');
+        expect(firstChunks.find(c => c.type === 'tool-call-approval')?.payload.toolCallId).toBe('call-lookup-1');
+        const taskId = started!.payload.taskId as string;
+        const workflows = (await shared.mastra.getStorage()!.getStore('workflows'))!;
+        const before = await workflows.getRunOwnership({ runId: first.output.runId });
+
+        const resumed = await shared.agent.resumeStreamUntilIdle(
+          { approved: true },
+          {
+            runId: first.output.runId,
+            toolCallId: 'call-lookup-1',
+            memory: { thread: thread.threadId, resource: thread.resourceId },
+          },
+        );
+        // The resume claimed the same run again before the deferred tool suspends.
+        await waitFor(
+          () => workflows.getRunOwnership({ runId: first.output.runId }),
+          o => o !== null && o.generation !== before?.generation,
+        );
+        release();
+        const resumedChunks = collect(resumed.fullStream as AsyncIterable<unknown>);
+
+        const parked = (await waitFor(
+          () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        if (engine === 'durable') {
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+        } else {
+          expect(parked.status).toBe('failed');
+          expect(parked.error?.message).toContain('lost its execution lease');
+        }
+        const lookupResult = (await resumedChunks).find(
+          c => c.type === 'tool-result' && c.payload?.toolName === 'lookup',
+        );
+        expect(lookupResult?.payload.result).toEqual({ id: 'user-dero' });
+      },
+      60_000,
+    );
+
     // Technical: the late suspend above is only allowed while no other execution has claimed the
     // run. Once a successor claims it, the old execution's suspension must not reach memory or
     // park the task, and the successor's claim must stay as it was. (#30182)
