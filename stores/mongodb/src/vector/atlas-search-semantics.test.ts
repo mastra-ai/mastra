@@ -39,7 +39,8 @@ describe('Atlas search-index semantics (§0)', () => {
   afterEach(async () => {
     for (const c of colls.splice(0)) {
       await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
-      await dropCollectionWithSearchIndexes(db, c);
+      // Tolerant: a collection a test never created (or already removed) must not fail cleanup.
+      await dropCollectionWithSearchIndexes(db, c).catch(() => {});
     }
   });
 
@@ -123,6 +124,7 @@ describe('Atlas search-index semantics (§0)', () => {
   // The store reads 26 from a listing as no rows, so both answers mean absent.
   it('S0: a missing collection fails a drop by id and a create with 26, and lists no index', async () => {
     const missing = uniqueName('s0missing');
+    colls.push(missing); // if a create unexpectedly succeeds natively, afterEach still removes the collection
     await expect(dropById(missing, '000000000000000000000000')).rejects.toMatchObject({ code: 26 });
     await expect(create(missing, 'n')).rejects.toMatchObject({ code: 26 });
     const listing = await db
