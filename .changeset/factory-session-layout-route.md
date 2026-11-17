@@ -2,7 +2,7 @@
 'mastra': patch
 ---
 
-Sending the first message from a Factory card no longer swaps the page for a new one. The message shows as soon as you send it, and when the session's thread opens, the conversation, composer, header, stage bar and session panel stay on screen instead of loading and animating in again. The composer keeps its focus, its model and anything typed while the session starts.
+Improved starting a session from a Factory card: sending the first message no longer swaps the page for a new one. The message shows as soon as you send it, and when the session's thread opens, the conversation, composer, header, stage bar and session panel stay on screen instead of loading and animating in again. The composer keeps its focus, its model and anything typed while the session starts.
 
 The same holds when a suggested action such as Review or Investigate starts the card's session: its thread opens in the same conversation and loads its history there, with the card's stage bar and session panel already filled in, instead of replacing the composer.
 
