@@ -287,6 +287,11 @@ function ConditionLine({
   const shown = legacy && !fields.some(candidate => candidate.id === legacy.id) ? [legacy, ...fields] : fields;
   const listed = shown.find(candidate => candidate.id === row.field);
   const field = listed && narrowSuggestions(listed, limits);
+  // A stored comparison on a presence field (say, a pull request number) keeps its regular controls.
+  const presence =
+    !!field &&
+    isPresenceField(field.id) &&
+    (!row.operator || row.operator === 'exists' || row.operator === 'not_exists');
 
   return (
     <RuleLineContent>
@@ -320,8 +325,8 @@ function ConditionLine({
       </Select>
 
       {field?.type === 'boolean' && <BooleanValue row={row} field={field} onChange={onChange} />}
-      {field && isPresenceField(field.id) && <PresenceValue row={row} field={field} onChange={onChange} />}
-      {field && field.type !== 'boolean' && !isPresenceField(field.id) && (
+      {field && presence && <PresenceValue row={row} field={field} onChange={onChange} />}
+      {field && field.type !== 'boolean' && !presence && (
         <>
           <Select
             value={row.operator}
