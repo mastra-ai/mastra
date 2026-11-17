@@ -221,7 +221,19 @@ describe('a durable agent run resumed by another process', () => {
       }),
     );
     // Not scored either: `runScorer` declines a span that was never sampled, since its score
-    // would point at a trace that was never stored.
+    // would point at a trace that was never stored. Scores land after the stream ends, so a
+    // later sampled run's score is the signal that this run's score would have landed too.
+    const sampled = await startAgentProcess(storage, exporter, { sampling }).stream('Pay the bill.', {
+      closeOnSuspend: true,
+    });
+    const sampledToolCallId = await drain(sampled);
+    await drain(
+      await startAgentProcess(storage, exporter, { sampling }).approveToolCall({
+        runId: sampled.runId,
+        toolCallId: sampledToolCallId!,
+      }),
+    );
+    await scoreOf(storage, sampled.runId);
     expect(await listScores(storage, started.runId)).toEqual([]);
 
     const inputProcessorSpans = exporter.getAllSpans().filter(span => span.name === 'input processor: pass-through');

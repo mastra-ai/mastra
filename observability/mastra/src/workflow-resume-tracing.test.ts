@@ -4,7 +4,7 @@ import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow, createEventedWorkflow } from '@mastra/core/workflows';
 import type { WorkflowOptions } from '@mastra/core/workflows';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Observability } from './default';
@@ -352,6 +352,49 @@ describe('workflow resume span linkage', () => {
       expect(endedSpans()).toEqual([]);
     } finally {
       await host.shutdown();
+    }
+  });
+
+  // The resume saves its trace context before the engine runs. The engine has to listen for the
+  // run's end before that save completes, or a cancel that lands meanwhile leaves the resume pending.
+  it('evented resume returns when another caller cancels the run as it starts', async () => {
+    const { storage, workflow, host } = buildSampledHost('evented', { type: SamplingStrategyType.ALWAYS });
+    try {
+      await host.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const canceller = await workflow.createRun({ runId: run.runId });
+      const runEnded = new Promise<void>(resolve => {
+        void host.pubsub.subscribe('workflows-finish', async event => {
+          if (event.runId === run.runId) resolve();
+        });
+      });
+      const store = (await storage.getStore('workflows'))!;
+      const saveState = store.updateWorkflowState.bind(store);
+      let canceledDuringSave = false;
+      vi.spyOn(store, 'updateWorkflowState').mockImplementation(async args => {
+        // The resume's save of its trace context: the cancel completes while this write is in flight.
+        if (args.opts.tracingContext && args.opts.expectedStatus === 'running') {
+          canceledDuringSave = true;
+          await canceller.cancel();
+          await runEnded;
+        }
+        return saveState(args);
+      });
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      const outcome = await Promise.race([
+        resumed.resume({ resumeData: { approved: true } }),
+        new Promise(resolve => setTimeout(() => resolve('resume() still pending'), 1_000)),
+      ]);
+
+      expect(canceledDuringSave).toBe(true);
+      expect(outcome).toMatchObject({ status: 'canceled' });
+    } finally {
+      vi.restoreAllMocks();
+      // A resume that is still pending would hold shutdown for its whole drain budget.
+      await host.shutdown({ drainTimeout: 100 });
     }
   });
 
