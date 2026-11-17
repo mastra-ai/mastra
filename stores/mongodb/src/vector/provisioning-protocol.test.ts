@@ -897,6 +897,39 @@ describe('provisioning protocol', () => {
         expect(z?.indexIds).toEqual([{ name: 'A', id: STALE }]);
       });
 
+      it("R4-2: a delete releasing a co-owned index bumps the other owner's rev and sets a fresh claimToken", async () => {
+        const coll = await byoColl('r42rel');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        await waitFor(async () => (await listedId(db, coll, 'A')) !== undefined);
+        const r = await listedId(db, coll, 'A');
+        const owner = { textSearchIndexName: 'A', ownsTextIndex: true, indexIds: [{ name: 'A', id: r }] };
+        await seedUser(coll, 'y', { ...owner, generation: 'gy', rev: 1, claimToken: 'ty' });
+        await seedUser(coll, 'z', { ...owner, generation: 'gz', rev: 1, claimToken: 'tz' });
+
+        await a.deleteIndex({ indexName: `${coll}_y` });
+
+        const z = await entry(`${coll}_z`);
+        expect(z).toMatchObject({ ...owner, generation: 'gz', rev: 2 });
+        expect(z?.claimToken).not.toBe('tz');
+        expect(await listedId(db, coll, 'A')).toBe(r);
+      });
+
+      it('R4-2: a delete transferring an index to a referencing sibling bumps its rev and sets a fresh claimToken', async () => {
+        const coll = await byoColl('r42xfer');
+        await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
+        await waitFor(async () => (await listedId(db, coll, 'A')) !== undefined);
+        const r = await listedId(db, coll, 'A');
+        await seedUser(coll, 'y', { textSearchIndexName: 'A', ownsTextIndex: true, indexIds: [{ name: 'A', id: r }] });
+        await seedUser(coll, 'z', { textSearchIndexName: 'A', generation: 'gz', rev: 1, claimToken: 'tz' });
+
+        await a.deleteIndex({ indexName: `${coll}_y` });
+
+        const z = await entry(`${coll}_z`);
+        expect(z).toMatchObject({ ownsTextIndex: true, indexIds: [{ name: 'A', id: r }], generation: 'gz', rev: 2 });
+        expect(z?.claimToken).not.toBe('tz');
+        expect(await listedId(db, coll, 'A')).toBe(r);
+      });
+
       it('P-STALEID-T1b: a replaced incarnation is never transferred, and the stranger survives both deletes', async () => {
         const coll = await byoColl('staleid_t1b');
         await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
@@ -2113,8 +2146,7 @@ describe('provisioning protocol', () => {
             pB.release.resolve();
             pA.release.resolve();
           }
-          const result = await claimed;
-          if (result !== undefined) expect(result?.id).toBe(claimErr('CONFLICT'));
+          expect(await claimed).toBeUndefined();
           expect(await entry(coll)).toMatchObject({ ownsVectorIndex: true, indexIds: [{ name: n, id: r }] });
           expect(drops).toEqual([]);
           expect(await listedId(db, coll, n)).toBe(r);
@@ -2145,8 +2177,25 @@ describe('provisioning protocol', () => {
           expect(await entry(coll)).toBeNull();
           expect(drops).toEqual([{ collectionName: coll, name: n, id: r }]);
           expect(await docsOn(coll)).toEqual([]);
-          // The claim's insert recorded R after the decision and before the drop; its re-list undid it.
-          expect(checker.violations.splice(0)).toEqual([`dropped "${n}" (id ${r}) on "${coll}" recorded by ${coll}`]);
+        });
+
+        it('P-CLAIM-ORPHAN (dropped): a claim that lists only the DELETING row of a dropped orphan claims nothing', async () => {
+          const { coll, n, r, doc } = await legacyWithRecord('pclaimdel', 'orphaned');
+          await db.collection(JOURNAL).updateOne({ _id: doc._id as any }, { $set: { dropDecided: true } });
+          const { drops } = recordDrops(b);
+          // §3.8 step 4 drops R and deletes J.
+          await reconcile(b, coll);
+          expect(drops).toEqual([{ collectionName: coll, name: n, id: r }]);
+          expect(await docsOn(coll)).toEqual([]);
+          // The dropped index is still listed, as DELETING, at both of the claim's listings.
+          hooks(a, {
+            listSearchIndexesStub: (name: string, phase: string) =>
+              phase === 'claim' && name === n ? [{ id: r, name: n, status: 'DELETING' }] : undefined,
+          });
+          const err = await claim(coll);
+          expect([claimErr('NOT_FOUND'), claimErr('CONFLICT')]).toContain(err?.id);
+          if (err?.id === claimErr('CONFLICT')) expect(err.message).toBe(RELIST);
+          expect(await entry(coll)).toBeNull();
         });
 
         it('P-CLAIM-ORPHAN (4): a delete handing N over to the claim entry after its handshake makes the undo miss', async () => {
@@ -2189,8 +2238,7 @@ describe('provisioning protocol', () => {
             pD.release.resolve();
             pU.release.resolve();
           }
-          const result = await claimed;
-          if (result !== undefined) expect(result?.id).toBe(claimErr('CONFLICT'));
+          expect(await claimed).toBeUndefined();
           expect(await listedId(db, coll, n)).toBe(r);
           expect(await entry(coll)).toMatchObject({ ownsVectorIndex: true, indexIds: [{ name: n, id: r }] });
           expect(await entry(y)).toBeNull();

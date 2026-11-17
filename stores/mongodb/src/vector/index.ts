@@ -4133,16 +4133,42 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       names: string[],
       relisted: Record<string, string | undefined>,
     ) => (indexIds ?? []).every(e => !names.includes(e.name) || relisted[e.name] === e.id);
+    /** Pipeline stages adding `ids[name]` to `indexIds` for each owned claimed name with no entry yet (Q5 TOFU). */
+    const tofuStages = (ids: Record<string, string | undefined>, vectorName: string, textName?: string) => {
+      const stage = (name: string, owned: Document) => ({
+        $set: {
+          indexIds: {
+            $cond: [
+              { $and: [owned, { $not: [{ $in: [{ $literal: name }, { $ifNull: ['$indexIds.name', []] }] }] }] },
+              indexIdsWith(name, ids[name]!),
+              '$indexIds',
+            ],
+          },
+        },
+      });
+      return [
+        ...(ids[vectorName] ? [stage(vectorName, { $eq: ['$ownsVectorIndex', true] })] : []),
+        ...(textName && ids[textName]
+          ? [
+              stage(textName, {
+                $and: [{ $eq: ['$textSearchIndexName', { $literal: textName }] }, { $eq: ['$ownsTextIndex', true] }],
+              }),
+            ]
+          : []),
+      ];
+    };
     /**
      * §3.10 step 5, after an undo missed (or another write landed first): a cleaner may have handed
      * responsibility to the entry (R4-2, R5-2), so it stays; the claim succeeds only if the entry is
-     * still on the claimed target and records what the re-list shows.
+     * still on the claimed target and records what the re-list shows. On the insert path
+     * (`requireLive`) every claimed name must also be listed live (R16).
      */
     const settle = async (
       collectionName: string,
       searchIndexName: string,
       names: string[],
       relisted: Record<string, string | undefined>,
+      requireLive = false,
     ) => {
       this.indexTargets.delete(indexName);
       const current = await this.readRegistryEntry(indexName);
@@ -4153,7 +4179,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         current.collectionName === collectionName &&
         current.searchIndexName === searchIndexName &&
         current.ownsCollection === true &&
-        idsMatch(current.indexIds, names, relisted)
+        idsMatch(current.indexIds, names, relisted) &&
+        (!requireLive || names.every(n => relisted[n] !== undefined))
       )
         return;
       throw relistConflict();
@@ -4165,17 +4192,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const names = [searchIndexName, ...(textSearchIndexName ? [textSearchIndexName] : [])];
       // TOFU (Q5): the listing before the write; an id is recorded only for an owned name with none.
       const listed = await listIds(collectionName, names);
-      const tofu = (name: string, owned: Document) => ({
-        $set: {
-          indexIds: {
-            $cond: [
-              { $and: [owned, { $not: [{ $in: [{ $literal: name }, { $ifNull: ['$indexIds.name', []] }] }] }] },
-              indexIdsWith(name, listed[name]!),
-              '$indexIds',
-            ],
-          },
-        },
-      });
       const claimToken = uuidv4();
       const before = await registry.findOneAndUpdate(
         {
@@ -4196,17 +4212,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               ...mutationFields(claimToken),
             },
           },
-          ...(listed[searchIndexName] ? [tofu(searchIndexName, { $eq: ['$ownsVectorIndex', true] })] : []),
-          ...(textSearchIndexName && listed[textSearchIndexName]
-            ? [
-                tofu(textSearchIndexName, {
-                  $and: [
-                    { $eq: ['$textSearchIndexName', { $literal: textSearchIndexName }] },
-                    { $eq: ['$ownsTextIndex', true] },
-                  ],
-                }),
-              ]
-            : []),
+          ...tofuStages(listed, searchIndexName, textSearchIndexName),
         ],
         { returnDocument: 'before' },
       );
@@ -4265,13 +4271,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const claimed = this.db.collection<MongoDBDocument>(indexName);
       const textIndex = `${indexName}_search_index`;
       const searchIndexes: string[] = [];
-      // TOFU (Q5): the ids listed before the insert are the ones it records.
-      const indexIds: { name: string; id: string }[] = [];
+      // TOFU (Q5): the live ids listed before the insert, recorded only once the re-list confirms them (R16).
+      const tofuIds: Record<string, string | undefined> = {};
       for (const name of [vectorIndex, textIndex]) {
         const rows = await this.listSearchIndexRows(claimed, name, 'claim');
         if (rows.length) searchIndexes.push(name);
-        const id = rows.find(isLiveRow)?.id;
-        if (id) indexIds.push({ name, id });
+        tofuIds[name] = rows.find(isLiveRow)?.id;
       }
       if (!searchIndexes.includes(vectorIndex)) {
         throw refuse(
@@ -4299,7 +4304,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ownsCollection: true,
           ownsVectorIndex: true,
           ...(searchIndexes.includes(textIndex) ? { textSearchIndexName: textIndex, ownsTextIndex: true } : {}),
-          indexIds,
           generation,
           rev: 1,
           claimToken,
@@ -4322,16 +4326,24 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const pending = await this.pendingDropError(indexName, indexName, names, 'CLAIM_LEGACY_INDEX', reconciled);
       const after = await otherUsers();
       const relisted = await listIds(indexName, names);
-      const refusal = after.length
-        ? inUse(after)
-        : (pending ?? (idsMatch(indexIds, names, relisted) ? undefined : relistConflict()));
-      if (!refusal) return;
+      // R16: a claimed name is present only when the re-list shows a live row with the id listed before.
+      const present = names.every(n => tofuIds[n] !== undefined && relisted[n] === tofuIds[n]);
+      const refusal = after.length ? inUse(after) : (pending ?? (present ? undefined : relistConflict()));
+      if (!refusal) {
+        // The confirmed ids, pinned like the undo (R16); a miss means another writer came first: step 5.
+        const recorded = await registry.updateOne({ _id: indexName, generation, claimToken, rev: 1 }, [
+          { $set: mutationFields() },
+          ...tofuStages(tofuIds, vectorIndex, names.includes(textIndex) ? textIndex : undefined),
+        ]);
+        if (recorded.matchedCount === 1) return;
+        return await settle(indexName, vectorIndex, names, relisted, true);
+      }
       await this.testHooks?.beforeClaimUndo?.(indexName);
       // Pinned on rev too (R5-2): a cleaner's release or transfer to this entry makes it miss.
       const undone = await registry.deleteOne({ _id: indexName, generation, claimToken, rev: 1 });
       this.indexTargets.delete(indexName);
       if (undone.deletedCount === 1) throw refusal;
-      await settle(indexName, vectorIndex, names, relisted);
+      await settle(indexName, vectorIndex, names, relisted, true);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
