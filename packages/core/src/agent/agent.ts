@@ -215,7 +215,6 @@ import {
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
-  DurableAgentActiveRun,
   DurableAgentRecoveredRun,
   DurableAgentListActiveRunsOptions,
   DurableAgentListActiveRunsResult,
@@ -12618,78 +12617,7 @@ export class Agent<
     const executionEngine = this.#resolveExecutionEngine();
     if (!executionEngine) return this.#requireDurableExecution('listActiveRuns');
 
-    const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
-
-    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PER_PAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" listActiveRuns() requires perPage to be a positive integer.`,
-        details: { agentName: this.name, perPage },
-      });
-    }
-    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" listActiveRuns() requires page to be a non-negative integer.`,
-        details: { agentName: this.name, page },
-      });
-    }
-
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-
-    if (!workflowsStore) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_NO_STORAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          `DurableAgent "${this.name}" listActiveRuns() requires storage to discover running runs. ` +
-          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage`,
-        details: { agentName: this.name },
-      });
-    }
-
-    // Scan every candidate for an exact filtered total, but retain only the requested page.
-    const runs: DurableAgentActiveRun[] = [];
-    const start = perPage !== undefined && page !== undefined ? page * perPage : 0;
-    const end = perPage !== undefined && page !== undefined ? start + perPage : Infinity;
-    let total = 0;
-    for await (const { run, snapshot } of executionEngine.listRunningSnapshots(workflowsStore, {
-      resourceId,
-      fromDate,
-      toDate,
-    })) {
-      // The persisted workflow input carries the owning agentId. Default-deny:
-      // a snapshot without an input or whose agentId does not match this agent
-      // is skipped so runs cannot leak across agents sharing the same storage.
-      const input = snapshot.context?.input as
-        | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
-        | undefined;
-      const runAgentId = input?.agentId;
-      if (runAgentId !== this.id) continue;
-
-      const memoryInfo = input?.messageListState?.memoryInfo;
-      const runThreadId = memoryInfo?.threadId;
-      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
-      if (threadId && runThreadId !== threadId) continue;
-      if (resourceId && runResourceId !== resourceId) continue;
-
-      const index = total++;
-      if (index < start || index >= end) continue;
-      runs.push({
-        runId: run.runId,
-        status: 'running',
-        threadId: runThreadId,
-        resourceId: runResourceId,
-        updatedAt: run.updatedAt,
-      });
-    }
-
-    return { runs, total };
+    return executionEngine.listActiveRuns(this.id, this.name, options);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { getErrorFromUnknown } from '../../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -8,6 +8,11 @@ import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, markErrorForStreamRejection } from './constants';
+import type {
+  DurableAgentActiveRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+} from './durable-agent';
 import { ExecutionFence, fencePubSub, resolveLeaseProvider, supportsRunFencing } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
@@ -93,6 +98,85 @@ export class DurableExecutionEngine {
     }
     latest ??= latestMessageListState(fallbackSnapshot);
     return latest;
+  }
+
+  async listActiveRuns(
+    agentId: string,
+    agentName: string,
+    options: DurableAgentListActiveRunsOptions,
+  ): Promise<DurableAgentListActiveRunsResult> {
+    const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
+
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PER_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" listActiveRuns() requires perPage to be a positive integer.`,
+        details: { agentName, perPage },
+      });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" listActiveRuns() requires page to be a non-negative integer.`,
+        details: { agentName, page },
+      });
+    }
+
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${agentName}" listActiveRuns() requires storage to discover running runs. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage`,
+        details: { agentName },
+      });
+    }
+
+    // Scan every candidate for an exact filtered total, but retain only the requested page.
+    const runs: DurableAgentActiveRun[] = [];
+    const start = perPage !== undefined && page !== undefined ? page * perPage : 0;
+    const end = perPage !== undefined && page !== undefined ? start + perPage : Infinity;
+    let total = 0;
+    for await (const { run, snapshot } of this.listRunningSnapshots(workflowsStore, {
+      resourceId,
+      fromDate,
+      toDate,
+    })) {
+      // The persisted workflow input carries the owning agentId. Default-deny:
+      // a snapshot without an input or whose agentId does not match this agent
+      // is skipped so runs cannot leak across agents sharing the same storage.
+      const input = snapshot.context?.input as
+        | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
+        | undefined;
+      const runAgentId = input?.agentId;
+      if (runAgentId !== agentId) continue;
+
+      const memoryInfo = input?.messageListState?.memoryInfo;
+      const runThreadId = memoryInfo?.threadId;
+      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+      if (threadId && runThreadId !== threadId) continue;
+      if (resourceId && runResourceId !== resourceId) continue;
+
+      const index = total++;
+      if (index < start || index >= end) continue;
+      runs.push({
+        runId: run.runId,
+        status: 'running',
+        threadId: runThreadId,
+        resourceId: runResourceId,
+        updatedAt: run.updatedAt,
+      });
+    }
+
+    return { runs, total };
   }
 
   async *listRunningSnapshots(

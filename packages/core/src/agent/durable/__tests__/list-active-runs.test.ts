@@ -412,12 +412,27 @@ describe.each(['durable', 'evented'] as const)('Agent.listActiveRuns (%s)', engi
   it('throws a helpful error when no storage is registered', async () => {
     const baseAgent = new Agent({
       id: 'unbound',
-      name: 'unbound',
+      name: 'Unbound Agent',
       instructions: 'x',
       model: makeMockModel(),
     });
     const unboundAgent =
       engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
     await expect(unboundAgent.listActiveRuns()).rejects.toThrow(/requires storage/);
+    await expect(unboundAgent.listActiveRuns()).rejects.toMatchObject({
+      id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_NO_STORAGE',
+      details: { agentName: 'Unbound Agent' },
+    });
+    // Invalid options still take precedence over missing storage, and errors use the display name, not the id.
+    await expect(unboundAgent.listActiveRuns({ perPage: 0 })).rejects.toMatchObject({
+      id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PER_PAGE',
+      message: 'DurableAgent "Unbound Agent" listActiveRuns() requires perPage to be a positive integer.',
+      details: { agentName: 'Unbound Agent', perPage: 0 },
+    });
+    await expect(unboundAgent.listActiveRuns({ page: -1 })).rejects.toMatchObject({
+      id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PAGE',
+      message: 'DurableAgent "Unbound Agent" listActiveRuns() requires page to be a non-negative integer.',
+      details: { agentName: 'Unbound Agent', page: -1 },
+    });
   });
 });
