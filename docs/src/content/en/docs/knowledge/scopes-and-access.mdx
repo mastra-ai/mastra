@@ -221,7 +221,7 @@ Use `explainAccess()` only in server code. It shows whether a page is missing or
 
 Give each agent only the scopes its task needs, and understand what it means to give one agent more than one.
 
-Knowledge keeps each scope's data separate. Every time an agent calls a Knowledge tool, Knowledge checks which scopes the agent has access to. An agent never sees pages or notes in scopes it can't reach. Agents working for different customers can't see each other's data.
+Knowledge keeps each scope's data separate. Every time an agent calls a Knowledge tool, Knowledge checks which scopes the agent has access to. An agent never sees pages or notes in scopes it can't reach. Agents working for different customers can't see each other's data, as long as no [access rule](#access-rules-and-roles) gives one customer's principal a role on another customer's scope. Check each rule's principal and the scopes it applies to, and test the rules for each customer.
 
 Knowledge has no guardrails yet against an agent leaking content between scopes it can access. Suppose an agent has access to `team:acme:support` and `resource:dana`. It can read a page in Dana's private scope and quote it in a team page. Each step is allowed on its own, and Knowledge can't tell that together they leak Dana's page.
 
