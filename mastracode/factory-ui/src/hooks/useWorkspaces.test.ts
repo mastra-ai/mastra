@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { NO_SESSION_ACTIVITY } from '../../e2e/ui/session-reads';
 import { queryKeys } from '../api/keys';
 import type { SessionRowsResponse, SessionRowWire } from '../api/types';
 import { createQueryClient } from '../query-client';
@@ -185,6 +186,7 @@ describe('updateCachedSessionTitle', () => {
       ],
       boards: [],
       owners: [],
+      activity: NO_SESSION_ACTIVITY,
     };
     client.setQueryData(rowsKey, rows);
     client.setQueryData(queryKeys.userSession('sess-1'), session({ title: undefined }));

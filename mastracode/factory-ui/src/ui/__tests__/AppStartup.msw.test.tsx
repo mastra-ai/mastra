@@ -14,6 +14,7 @@ import { answerBoardPhases, answerWorkItemFilterOptions } from '../../../e2e/ui/
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { NO_SESSION_ACTIVITY } from '../../../e2e/ui/session-reads';
 import { createQueryClient } from '../../query-client';
 import { factory, signedIn, signedOut } from '../domains/auth/components/__tests__/fixtures/auth';
 import { createAppRoutes } from '../router';
@@ -84,16 +85,10 @@ function renderApp(
     // No ambient handler: the sidebar's sessions, the chat's permissions, the
     // composer's model defaults and the board's intake.
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-rows`, () =>
-      HttpResponse.json({ total: 0, matching: 0, groups: [], boards: [], owners: [] }),
+      HttpResponse.json({ total: 0, matching: 0, groups: [], boards: [], owners: [], activity: NO_SESSION_ACTIVITY }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-activity`, () =>
-      HttpResponse.json({
-        runningSessionIds: [],
-        parkedSessionIds: [],
-        cardStatuses: {},
-        sessionHeldCardIds: [],
-        cards: { working: 0, waiting: 0 },
-      }),
+      HttpResponse.json(NO_SESSION_ACTIVITY),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId`, () => HttpResponse.json({ project: listed })),

@@ -1209,6 +1209,18 @@ const sessionRowSchema = z.object({
   childRows: z.array(z.object(sessionRowFields)).optional(),
 });
 
+export const sessionActivityResponseSchema = z.object({
+  runningSessionIds: z.array(z.string()),
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
+  parkedSessionIds: z.array(z.string()),
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
+  cards: z.object({ working: countSchema, waiting: countSchema }),
+});
+
 export const sessionRowsResponseSchema = z.object({
   /** Rows of the project, whatever the filters. */
   total: countSchema,
@@ -1228,18 +1240,8 @@ export const sessionRowsResponseSchema = z.object({
   boards: z.array(z.string()),
   /** People who own some row, whatever the filters. */
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
-});
-
-export const sessionActivityResponseSchema = z.object({
-  runningSessionIds: z.array(z.string()),
-  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
-  parkedSessionIds: z.array(z.string()),
-  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
-  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
-  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
-  sessionHeldCardIds: z.array(z.string()),
-  /** Cards in `cardStatuses` working, and waiting on a person. */
-  cards: z.object({ working: countSchema, waiting: countSchema }),
+  /** Read with the rows, so the sidebar and the board never show two different moments. */
+  activity: sessionActivityResponseSchema,
 });
 
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
@@ -1903,7 +1905,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   sessionRows: {
     method: 'GET',
     path: '/web/factory/projects/:id/session-rows',
-    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    description:
+      "List the sidebar's session rows of a view, grouped and in order, with how many match and the project's session activity",
     pathSchema: projectPathSchema,
     querySchema: sessionRowsQuerySchema,
     responseSchema: sessionRowsResponseSchema,

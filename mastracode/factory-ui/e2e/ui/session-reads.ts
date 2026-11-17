@@ -2,6 +2,7 @@ import { BoardDefinitionError, boardRegistryOf } from '@mastra/factory/boards';
 import type { InstalledBoard } from '@mastra/factory/boards';
 import { compileStoredBoard } from '@mastra/factory/boards/stored-board';
 import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
+import type { SessionActivityResponse } from '@mastra/factory/routes/contracts';
 import {
   CARD_DECISION_PAGE_SIZE,
   CARD_DECISION_STATUSES,
@@ -18,6 +19,14 @@ import { queryValues, storedCard, stubbedReads, stubbedUserId } from './board-re
 import type { StubbedReads } from './board-reads';
 
 const dateSchema = z.coerce.date();
+
+export const NO_SESSION_ACTIVITY: SessionActivityResponse = {
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  cardStatuses: {},
+  sessionHeldCardIds: [],
+  cards: { working: 0, waiting: 0 },
+};
 
 const wireSessionSchema = z
   .object({
@@ -157,6 +166,21 @@ async function stubbedSessionFacts(reads: StubbedReads, factoryProjectId: string
   };
 }
 
+function stubbedActivity({
+  sessions,
+  cards,
+  index,
+  viewer,
+}: Exclude<Awaited<ReturnType<typeof stubbedSessionFacts>>, Response>) {
+  return sessionActivity({
+    sessions,
+    cards,
+    runningSessionIds: viewer.runningSessionIds,
+    parkedSessionIds: viewer.parkedSessionIds,
+    cardStatuses: index.cardStatuses(viewer),
+  });
+}
+
 export const sessionReadHandlers = [
   http.get('*/web/factory/projects/:id/session-rows', async ({ request, params }) => {
     const url = new URL(request.url);
@@ -177,21 +201,15 @@ export const sessionReadHandlers = [
     if (facts instanceof Response) return facts;
     const { pin, children, ...view } = query.data;
     const rows = facts.index.rows({ ...facts.viewer, pinnedSessionIds: pin, revealChildSessions: children === 'true' });
-    return HttpResponse.json(sessionRowsView(rows, view, facts.viewer.viewerUserId, Date.now()));
+    return HttpResponse.json({
+      ...sessionRowsView(rows, view, facts.viewer.viewerUserId, Date.now()),
+      activity: stubbedActivity(facts),
+    });
   }),
   http.get('*/web/factory/projects/:id/session-activity', async ({ request, params }) => {
     const factoryProjectId = String(params.id);
     const facts = await stubbedSessionFacts(stubbedReads(request, factoryProjectId), factoryProjectId);
     if (facts instanceof Response) return facts;
-    const { sessions, cards, index, viewer } = facts;
-    return HttpResponse.json(
-      sessionActivity({
-        sessions,
-        cards,
-        runningSessionIds: viewer.runningSessionIds,
-        parkedSessionIds: viewer.parkedSessionIds,
-        cardStatuses: index.cardStatuses(viewer),
-      }),
-    );
+    return HttpResponse.json(stubbedActivity(facts));
   }),
 ];

@@ -20,7 +20,7 @@ const ROWS_REQUEST: SessionRowsRequest = {
   pin: [],
   windows: {},
 };
-const NO_ROWS: SessionRowsResponse = { total: 0, matching: 0, groups: [], boards: [], owners: [] };
+const NO_ROWS: Omit<SessionRowsResponse, 'activity'> = { total: 0, matching: 0, groups: [], boards: [], owners: [] };
 const oscillatorStart = vi.fn();
 
 class AudioContextStub {
@@ -40,23 +40,21 @@ class AudioContextStub {
 }
 
 function stubProject(runningSessionIds: () => string[]) {
-  const rows = { requests: 0 };
+  const activity = (): SessionActivity => ({
+    runningSessionIds: runningSessionIds(),
+    parkedSessionIds: [],
+    cardStatuses: {},
+    sessionHeldCardIds: [],
+    cards: { working: 0, waiting: 0 },
+  });
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-activity`, () =>
-      HttpResponse.json({
-        runningSessionIds: runningSessionIds(),
-        parkedSessionIds: [],
-        cardStatuses: {},
-        sessionHeldCardIds: [],
-        cards: { working: 0, waiting: 0 },
-      } satisfies SessionActivity),
+      HttpResponse.json(activity()),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-rows`, () => {
-      rows.requests += 1;
-      return HttpResponse.json(NO_ROWS);
-    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-rows`, () =>
+      HttpResponse.json({ ...NO_ROWS, activity: activity() } satisfies SessionRowsResponse),
+    ),
   );
-  return rows;
 }
 
 function SidebarWithObserver() {
@@ -77,27 +75,23 @@ beforeEach(() => {
 });
 
 describe('SessionRunObserver', () => {
-  it("rings and refreshes the sidebar's rows once when a run it watched in flight ends", async () => {
+  it('rings once when a run it watched in flight ends', async () => {
     let running = false;
-    const rows = stubProject(() => (running ? [SESSION_ID] : []));
+    stubProject(() => (running ? [SESSION_ID] : []));
     const { client } = renderWithProviders(<SidebarWithObserver />);
     await waitForMutationsIdle(client);
-    expect(rows.requests).toBe(1);
 
     running = true;
     await refetchActivity(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(rows.requests).toBe(1);
 
     running = false;
     await refetchActivity(client);
     expect(oscillatorStart).toHaveBeenCalled();
-    expect(rows.requests).toBe(2);
 
     oscillatorStart.mockClear();
     await refetchActivity(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(rows.requests).toBe(2);
   });
 
   it('stays silent for a run already over when the tab opened', async () => {

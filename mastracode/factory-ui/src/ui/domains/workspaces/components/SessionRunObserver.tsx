@@ -1,7 +1,5 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { queryKeys } from '../../../../api/keys';
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { playDoneSound } from '../../settings/services/doneSound';
 
@@ -12,7 +10,6 @@ export function resetSessionRunObserverForTests(): void {
 }
 
 export function SessionRunObserver({ factoryId }: { factoryId: string | undefined }) {
-  const queryClient = useQueryClient();
   const { data } = useSessionActivityQuery(factoryId);
 
   useEffect(() => {
@@ -20,10 +17,8 @@ export function SessionRunObserver({ factoryId }: { factoryId: string | undefine
     const running = new Set(data.runningSessionIds);
     const wasRunning = runningByFactory.get(factoryId) ?? running;
     runningByFactory.set(factoryId, running);
-    if ([...wasRunning].every(sessionId => running.has(sessionId))) return;
-    playDoneSound();
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryId) });
-  }, [data, queryClient, factoryId]);
+    if ([...wasRunning].some(sessionId => !running.has(sessionId))) playDoneSound();
+  }, [data, factoryId]);
 
   return null;
 }

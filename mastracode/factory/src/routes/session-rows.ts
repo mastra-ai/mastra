@@ -77,6 +77,16 @@ async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScop
   };
 }
 
+function activityOf({ seen, cards, index, viewer }: SessionFacts) {
+  return sessionActivity({
+    sessions: seen.sessions,
+    cards,
+    runningSessionIds: viewer.runningSessionIds,
+    parkedSessionIds: viewer.parkedSessionIds,
+    cardStatuses: index.cardStatuses(viewer),
+  });
+}
+
 export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRoute[] {
   return [
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.sessionRows.path, {
@@ -105,7 +115,13 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
           pinnedSessionIds: pin,
           revealChildSessions: children === 'true',
         });
-        return sendRevalidated(context, hashedBody(sessionRowsView(rows, view, resolved.userId, Date.now())));
+        return sendRevalidated(
+          context,
+          hashedBody({
+            ...sessionRowsView(rows, view, resolved.userId, Date.now()),
+            activity: activityOf(facts),
+          }),
+        );
       },
     }),
 
@@ -116,19 +132,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         const context = loose(c);
         const resolved = await deps.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        const { seen, cards, index, viewer } = await sessionFacts(deps, resolved);
-        return sendRevalidated(
-          context,
-          hashedBody(
-            sessionActivity({
-              sessions: seen.sessions,
-              cards,
-              runningSessionIds: viewer.runningSessionIds,
-              parkedSessionIds: viewer.parkedSessionIds,
-              cardStatuses: index.cardStatuses(viewer),
-            }),
-          ),
-        );
+        return sendRevalidated(context, hashedBody(activityOf(await sessionFacts(deps, resolved))));
       },
     }),
   ];
