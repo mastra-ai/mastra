@@ -1725,10 +1725,9 @@ describe('provisioning protocol', () => {
           expect(result).toBeInstanceOf(Error);
           expect(e).toBeNull();
         }
-        // B's drop saw C's registration, written after B's durable decision (R11): the one drop-time
-        // record of I11a that no handshake can prevent. C is never left on the dropped index.
-        expect(checker.violations).toEqual([expect.stringContaining(`referenced by ${coll}_c`)]);
-        checker.violations.length = 0;
+        // C was written after B's durable decision, so it does not block B's drop (R13); the checker
+        // instead verifies after the test that C is not left on the dropped R.
+        expect(checker.violations).toEqual([]);
       });
 
       describe('P-ATTACH-ORPHAN', () => {

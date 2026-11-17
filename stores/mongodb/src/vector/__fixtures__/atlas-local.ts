@@ -216,6 +216,11 @@ const references = (d: Document, name: string) =>
  * The shared end-of-test invariant checker (design §7). At every drop the stores send it reads the
  * registry on the primary and records a violation when a live registration references the name
  * (I11a); it samples `rev` per `_id`/`generation` there and in {@link assertClean}.
+ *
+ * R13: a drop whose cleanup record has `dropDecided` is not blocked by a registration (one written
+ * after the decision). Instead {@link assertClean} checks the post-condition: no live registration
+ * records the dropped id, and every live registration referencing the name has a live index of
+ * another id under it, so none is left attached to the dropped incarnation.
  */
 export function installInvariantChecker(
   db: Db,
@@ -230,6 +235,7 @@ export function installInvariantChecker(
   violations: string[];
 } {
   const violations: string[] = [];
+  const decidedDrops: { collectionName: string; name: string; id: string }[] = [];
   const revs = new Map<string, number>();
   const primary = { readPreference: ReadPreference.primary };
   const registry = () => db.collection(REGISTRY, primary);
@@ -247,7 +253,12 @@ export function installInvariantChecker(
       const docs = await registry().find({ collectionName }).toArray();
       sample(docs);
       const users = docs.filter(d => d.deleting !== true && references(d, name)).map(d => d._id);
-      if (users.length) violations.push(`dropped "${name}" (id ${id}) on "${collectionName}" referenced by ${users}`);
+      const decided = await db
+        .collection(JOURNAL, primary)
+        .findOne({ collectionName, name, indexId: id, state: 'orphaned', dropDecided: true });
+      if (decided) decidedDrops.push({ collectionName, name, id });
+      else if (users.length)
+        violations.push(`dropped "${name}" (id ${id}) on "${collectionName}" referenced by ${users}`);
     });
     return { store, hook };
   });
@@ -278,6 +289,17 @@ export function installInvariantChecker(
             ) || journal.some(j => j.collectionName === coll && (j.indexId === row.id || j.candidateId === row.id));
           if (!held) problems.push(`search index "${row.name}" (id ${row.id}) on "${coll}" is held by no record`);
         }
+      }
+      for (const drop of decidedDrops.filter(d => colls.includes(d.collectionName))) {
+        const { collectionName, name, id } = drop;
+        decidedDrops.splice(decidedDrops.indexOf(drop), 1);
+        const live = docs.filter(d => d.collectionName === collectionName && d.deleting !== true);
+        for (const d of live.filter(d => d.indexIds?.some((e: Document) => e.name === name && e.id === id)))
+          problems.push(`"${d._id}" records the dropped "${name}" (id ${id}) on "${collectionName}"`);
+        const row = (await listRows(db, collectionName)).find(r => r.name === name && isLiveRow(r as any));
+        for (const d of live.filter(d => references(d, name)))
+          if (!row || row.id === id)
+            problems.push(`"${d._id}" references "${name}" on "${collectionName}", whose index (id ${id}) was dropped`);
       }
       if (journal.length && !opts.journalExpected) problems.push(`journal not empty: ${journal.map(j => j._id)}`);
       problems.push(...violations.splice(0));
