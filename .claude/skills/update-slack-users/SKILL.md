@@ -57,34 +57,50 @@ git log origin/main --since=90.days --format=%B \
   | sed -E 's/.*<[0-9]+\+([^@]+)@.*/\1/' > "$work/coauthors.txt"
 ```
 
-Keep only people, with their GitHub profile name. `gh pr list` drops the `[bot]` suffix from app accounts, so you can't spot them by name. Ask GitHub for each login's account type instead: apps return 404, bots `Bot` and organisations `Organization`. Retry a lookup that fails with anything other than 404.
+Keep only people, with their GitHub profile name. `gh pr list` drops the `[bot]` suffix from app accounts, so you can't spot them by name. Ask GitHub for each login's account type instead: apps return 404, bots `Bot` and organisations `Organization`. Retry a lookup that fails with anything other than 404, and stop if it still fails: a silently dropped login would quietly lose a person.
 
 ```bash
 sort -u "$work"/week-*.txt "$work/coauthors.txt" | grep -v '^$' | while read -r login; do
-  gh api "users/$login" --jq 'select(.type == "User") | {login, name}' -c 2>/dev/null
+  for try in 1 2 3 4; do
+    if user=$(gh api "users/$login" 2>"$work/err"); then
+      jq -c 'select(.type == "User") | {login, name}' <<<"$user"
+      break
+    fi
+    grep -q 'HTTP 404' "$work/err" && break
+    [ "$try" = 4 ] && { echo "lookup failed for $login: $(cat "$work/err")" >&2; exit 1; }
+    sleep 5
+  done
 done > "$work/people.jsonl"
 ```
+
+If the loop stops with `lookup failed`, run it again; don't continue with a partial list.
 
 Expect around 150 people.
 
 ### 2. Fetch the Slack users
 
-`users.list` is paged; follow `response_metadata.next_cursor` until it is empty. Drop deleted users, bots, app users and Slackbot, and keep only the ID and the names.
+`users.list` is paged; follow `response_metadata.next_cursor` until it is empty. Drop deleted users, bots, app users and Slackbot, and keep only the ID and the names. Pages go to a `.partial` file that only becomes `slack-users.jsonl` once every page has arrived, so a failed run can't leave a list that looks complete.
 
 ```bash
-cursor=""; : > "$work/slack-users.jsonl"
-while :; do
-  page=$(curl -sS -H "Authorization: Bearer $SLACK_TOKEN" \
-    "https://slack.com/api/users.list?limit=200&cursor=$cursor")
-  [ "$(jq -r .ok <<<"$page")" = true ] || { jq -r .error <<<"$page"; break; }
-  jq -c '.members[] | select(.deleted|not) | select(.is_bot|not) | select(.is_app_user|not)
-         | select(.id != "USLACKBOT")
-         | {id, name, real_name: .profile.real_name, display_name: .profile.display_name}' \
-    <<<"$page" >> "$work/slack-users.jsonl"
-  cursor=$(jq -r '.response_metadata.next_cursor // ""' <<<"$page")
-  [ -n "$cursor" ] || break
-done
+(
+  set -e
+  cursor=""; : > "$work/slack-users.partial"
+  while :; do
+    page=$(curl -sS --fail-with-body --retry 3 -H "Authorization: Bearer $SLACK_TOKEN" \
+      "https://slack.com/api/users.list?limit=200&cursor=$cursor")
+    [ "$(jq -r .ok <<<"$page")" = true ] || { echo "users.list failed: $(jq -r .error <<<"$page")" >&2; exit 1; }
+    jq -c '.members[] | select(.deleted|not) | select(.is_bot|not) | select(.is_app_user|not)
+           | select(.id != "USLACKBOT")
+           | {id, name, real_name: .profile.real_name, display_name: .profile.display_name}' \
+      <<<"$page" >> "$work/slack-users.partial"
+    cursor=$(jq -r '.response_metadata.next_cursor // ""' <<<"$page")
+    [ -n "$cursor" ] || break
+  done
+  mv "$work/slack-users.partial" "$work/slack-users.jsonl"
+) || { rm -f "$work/slack-users.partial"; echo "Slack user list incomplete: stop" >&2; }
 ```
+
+If it prints `Slack user list incomplete`, or `$work/slack-users.jsonl` doesn't exist, stop and run it again. Don't go on to matching or to removing entries in step 4 with a partial list: a person missing from it would look deleted.
 
 This file names everyone in the workspace. Keep it in the temp directory, never commit it or paste it anywhere, and delete it when you're done.
 
@@ -103,7 +119,7 @@ Everyone else is left out. Keep a list of the logins you left out, split into _a
 
 ### 4. Check the entries already in the file
 
-For each existing entry, confirm its Slack ID is still in your step 2 list, so the account hasn't been deleted or turned into a bot. Remove entries whose Slack user is gone. Don't remove people just because they had no PR in the last 90 days.
+Only with the complete `slack-users.jsonl` from step 2: for each existing entry, confirm its Slack ID is still in your step 2 list, so the account hasn't been deleted or turned into a bot. Remove entries whose Slack user is gone. Don't remove people just because they had no PR in the last 90 days.
 
 ### 5. Write the file
 
