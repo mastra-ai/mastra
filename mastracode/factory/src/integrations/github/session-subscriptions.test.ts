@@ -295,6 +295,19 @@ describe('parsePushedBranches', () => {
     },
   );
 
+  it.each(['git push origin a 2>&1', 'git push origin a 2>&1 | tail -5', 'git push origin a | cat', 'git push&& echo ok'])(
+    'reads pushes followed by redirection or a pipe: %s',
+    command => {
+      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+      expect(parsePushedBranches(push(output, command))).toEqual([{ repository: 'mastra-ai/mastra', branch: 'a' }]);
+    },
+  );
+
+  it('ignores a dry run even when its output is redirected', () => {
+    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+    expect(parsePushedBranches(push(output, 'git push -n origin a 2>&1 | tail'))).toEqual([]);
+  });
+
   it('still reads a real push that follows a dry run', () => {
     const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
     expect(parsePushedBranches(push(output, 'git push -n origin a && git push --no-verify origin a'))).toEqual([
