@@ -5,13 +5,10 @@ import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 // On a settings page (`SettingsLayout`), section titles and descriptions sit 10px inside the card's edge, in line with
-// the inset page title, and titles are muted. Anywhere else (forms, other pages) they line up with the page's left edge
-// and field labels, in the label color. The defaults are custom properties, so a caller's `ps-*` or `text-*` still wins.
-// Written out in full (not composed) so Tailwind finds the classes.
+// the inset page title. Anywhere else (forms, other pages) they line up with the page's left edge and field labels.
+// The inset is a custom property, so a caller's `ps-*` class still wins. Written out in full so Tailwind finds it.
 const settingsInset =
   '[--settings-inset:0px] in-data-[slot=settings-layout]:[--settings-inset:--spacing(2.5)] ps-(--settings-inset)';
-const settingsTitleColor =
-  '[--settings-title-color:var(--foreground)] in-data-[slot=settings-layout]:[--settings-title-color:var(--muted-foreground)] text-(color:--settings-title-color)';
 
 const SettingsTitleIdContext = createContext<string | undefined>(undefined);
 
@@ -63,7 +60,7 @@ export function SettingsTitle({
 
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-2', settingsInset)}>
-      <Txt as="h2" id={titleId} variant="subheading" className={cn(settingsTitleColor, className)} {...props}>
+      <Txt as="h2" id={titleId} variant="subheading" tone="ink" className={className} {...props}>
         {info == null ? children : <SettingsTitleInfo info={info}>{children}</SettingsTitleInfo>}
       </Txt>
       {accessory}
