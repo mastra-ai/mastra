@@ -43,13 +43,13 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recoveries: ['credentials', 'model'] };
   }
+  const otherModel = memoryFailure ? 'another memory model in Memory settings' : 'another model';
   switch (classifyProviderError(error)) {
     case 'quota':
       if (isMastraGatewayError(error)) {
         return {
           title: 'Out of Mastra Gateway credits',
-          message:
-            'Your organization has no gateway credits left. Add credits, then continue the run, or choose another model.',
+          message: `Your organization has no gateway credits left. Add credits, then continue the run, or choose ${otherModel}.`,
           recoveries: ['credits', 'continue', 'model'],
         };
       }
@@ -57,20 +57,31 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
         title: 'Provider quota exhausted',
         message: afterProviderReason(
           error,
-          'Check the provider account’s billing or usage allowance, or use another credential or model.',
+          memoryFailure
+            ? 'Check the provider account’s billing or usage allowance, or use another credential or memory model in Memory settings.'
+            : 'Check the provider account’s billing or usage allowance, or use another credential or model.',
         ),
         recoveries: ['credentials', 'model'],
       };
     case 'auth':
       return {
         title: 'Provider access failed',
-        message: afterProviderReason(error, 'Review the credentials and model access configured for this session.'),
+        message: afterProviderReason(
+          error,
+          memoryFailure
+            ? 'Review the credentials and the memory model chosen in Memory settings.'
+            : 'Review the credentials and model access configured for this session.',
+        ),
         recoveries: ['credentials', 'model'],
       };
     case 'context_overflow':
       return {
-        title: 'Conversation exceeds the model’s limit',
-        message: 'Choose a model with a larger context window or start a new session with a shorter prompt.',
+        title: memoryFailure
+          ? 'Conversation exceeds the memory model’s limit'
+          : 'Conversation exceeds the model’s limit',
+        message: memoryFailure
+          ? 'Choose a memory model with a larger context window in Memory settings, or start a new session.'
+          : 'Choose a model with a larger context window or start a new session with a shorter prompt.',
         recoveries: ['model', 'new_session'],
       };
     case 'model_rejected':
@@ -105,15 +116,15 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
     case 'rate_limited':
       return {
         title: 'Provider rate limit reached',
-        message:
-          'The provider account behind this session’s credential hit a rate or usage limit. Continue once it resets, or use another credential or model.',
+        message: memoryFailure
+          ? 'The provider account behind the memory model’s credential hit a rate or usage limit. Continue once it resets, or use another credential or memory model in Memory settings.'
+          : 'The provider account behind this session’s credential hit a rate or usage limit. Continue once it resets, or use another credential or model.',
         recoveries: ['continue', 'credentials', 'model'],
       };
     case 'unavailable':
       return {
         title: 'Model provider temporarily unavailable',
-        message:
-          'The provider could not complete the request. Send a message to continue the run, or choose another model.',
+        message: `The provider could not complete the request. Send a message to continue the run, or choose ${otherModel}.`,
         recoveries: ['continue', 'model'],
       };
     case 'unknown':

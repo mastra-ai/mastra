@@ -152,18 +152,23 @@ describe('describeRunError', () => {
     });
   });
 
-  it('points a refused memory model at Memory settings, since the session model picker cannot change it', () => {
-    const description = describeRunError({
+  it.each([
+    ['model_rejected', "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400"],
+    ['quota', 'You exceeded your current quota, please check your plan and billing details: HTTP 429'],
+    ['gateway credits', 'Insufficient credits. Add more at https://gateway.mastra.ai'],
+    ['auth', 'Incorrect API key provided: HTTP 401'],
+    ['context_overflow', 'prompt is too long: 250000 tokens > 200000 maximum'],
+    ['rate_limited', 'Rate limit reached for requests: HTTP 429'],
+    ['unavailable', 'Service Unavailable: HTTP 503'],
+  ])('points a %s memory model failure at Memory settings, not the session model', (_kind, reason) => {
+    const { message, recoveries } = describeRunError({
       name: 'Error',
-      message:
-        "Observational memory observation run failed: The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400",
+      message: `Observational memory observation run failed: ${reason}`,
     });
-    expect(description).toMatchObject({
-      title: 'Memory model not available',
-      recoveries: ['memory_model'],
-    });
-    expect(description.message).toContain('Choose another memory model in Memory settings.');
-    expect(description.message).not.toContain('for this session');
+    expect(recoveries).toContain('memory_model');
+    expect(recoveries).not.toContain('model');
+    expect(message).toContain('Memory settings');
+    expect(message).not.toMatch(/this session|choose another model|use another credential or model/i);
   });
 
   it('offers to continue, switch credential, or switch model when the provider throttles the run', () => {
