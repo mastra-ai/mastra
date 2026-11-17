@@ -427,6 +427,7 @@ export class InngestWorkflow<
       workflowName: this.id,
       runId,
       resourceId: run?.resourceId,
+      expectedStatus: ['running', 'pending', 'waiting'],
       snapshot: {
         ...snapshot,
         status: 'failed',
@@ -498,9 +499,12 @@ export class InngestWorkflow<
         // what records a terminal snapshot, so a run that dies before reaching it
         // (worker crash, retries exhausted on a failed request) would otherwise stay
         // `running` in storage forever.
+        // A resumed InngestAgent segment carries a resume claim; the resume-claim release function
+        // ends those under the claim, so a stale segment cannot fail a run a later resume took over.
         onFailure: async ({ event, error }) => {
-          const runId: unknown = event.data?.event?.data?.runId;
-          if (typeof runId === 'string') await this.#markRunFailed(runId, error);
+          const original = event.data?.event?.data;
+          if (typeof original?.runId !== 'string' || original.resume?.claim) return;
+          await this.#markRunFailed(original.runId, error);
         },
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
