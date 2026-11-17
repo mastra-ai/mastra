@@ -7,7 +7,16 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, markErrorForStreamRejection } from './constants';
+import {
+  DURABLE_STOP_WHEN_ERROR_ID,
+  DurableStepIds,
+  RECOVER_ALREADY_IN_PROGRESS_ERROR_ID,
+  RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID,
+  RECOVER_RUN_NOT_ACTIVE_ERROR_ID,
+  RECOVER_RUN_SUSPENDED_ERROR_ID,
+  RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
+  markErrorForStreamRejection,
+} from './constants';
 import type {
   DurableAgentActiveRun,
   DurableAgentListActiveRunsOptions,
@@ -24,6 +33,9 @@ export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
 type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
+
+/** Recoveries in progress in this process, keyed by agent and run. */
+const localRecoveryClaims = new Map<string, string>();
 
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
@@ -545,6 +557,126 @@ export class DurableExecutionEngine {
     }
     return getErrorFromUnknown(workflowError, { fallbackMessage });
   }
+
+  /**
+   * Mark `runId` as being recovered by this process, and return the release.
+   * A second `recover()` of the same run in this process fails fast instead
+   * of contending for the claim. Across processes the run's execution claim
+   * picks the winner.
+   */
+  claimLocalRecovery(agentId: string, agentName: string, runId: string): () => void {
+    const key = JSON.stringify([agentId, runId]);
+    if (localRecoveryClaims.has(key)) {
+      throw new MastraError({
+        id: RECOVER_ALREADY_IN_PROGRESS_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" recover(${runId}): this process is already recovering this run.`,
+        details: { agentName, runId },
+      });
+    }
+    const token = crypto.randomUUID();
+    localRecoveryClaims.set(key, token);
+    return () => {
+      if (localRecoveryClaims.get(key) === token) localRecoveryClaims.delete(key);
+    };
+  }
+
+  async loadRecoverableSnapshot(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    agentId: string,
+    agentName: string,
+  ): Promise<{ snapshot: WorkflowRunState; workflowInput: DurableAgenticWorkflowInput }> {
+    const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
+    if (!persisted) {
+      throw new MastraError({
+        id: RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${agentName}" recover(${runId}): no persisted workflow snapshot found. ` +
+          `The run may have already completed or been cleaned up.`,
+        details: { agentName, runId },
+      });
+    }
+
+    const { snapshot } = persisted;
+    if (
+      snapshot?.status === 'pending' &&
+      snapshot.context != null &&
+      typeof snapshot.context === 'object' &&
+      !Array.isArray(snapshot.context) &&
+      !Object.prototype.hasOwnProperty.call(snapshot.context, 'input')
+    ) {
+      throw new MastraError({
+        id: RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${agentName}" recover(${runId}): no restartable checkpoint has been persisted yet. ` +
+          `Enable recovery: { durableAgents: 'auto' } or a shouldPersistSnapshot policy that includes ` +
+          `"running" before starting the run. Even with persistence enabled, recovery is unavailable ` +
+          `until the first running checkpoint is saved.`,
+        details: { agentName, runId, snapshotStatus: snapshot.status },
+      });
+    }
+    const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+    if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_INVALID_SNAPSHOT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: `DurableAgent "${agentName}" recover(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+        details: { agentName, runId },
+      });
+    }
+
+    if (workflowInput.agentId !== agentId) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_AGENT_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" recover(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${agentId}".`,
+        details: { agentName, runId, ownerAgentId: workflowInput.agentId },
+      });
+    }
+
+    // Recovery re-drives the run with `restart()`, which the engine only accepts
+    // for runs that were active when the process stopped (`running`/`waiting`, or
+    // a nested `pending` run) plus the terminal snapshots `_restart` short-circuits
+    // (`success`/`failed`/`tripwire`). Every other status would otherwise surface
+    // as a single "This workflow run was not active" error chunk, asynchronously,
+    // long after `recover()` resolved. Reject up front and say what to do instead:
+    // a run suspended on a tool call or an approval is continued with `resume()`.
+    // Checked again after the claim, since the run may suspend between discovery
+    // and the claim.
+    const restartable =
+      snapshot.status === 'running' ||
+      snapshot.status === 'waiting' ||
+      snapshot.status === 'success' ||
+      snapshot.status === 'failed' ||
+      snapshot.status === 'tripwire' ||
+      (snapshot.status === 'pending' &&
+        snapshot.context != null &&
+        Object.prototype.hasOwnProperty.call(snapshot.context, 'input'));
+    if (!restartable) {
+      throw new MastraError({
+        // A suspended run is not orphaned: it waits for resume().
+        id: snapshot.status === 'suspended' ? RECOVER_RUN_SUSPENDED_ERROR_ID : RECOVER_RUN_NOT_ACTIVE_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${agentName}" recover(${runId}): run status is "${snapshot.status}", ` +
+          `so the run cannot be recovered. Runs suspended on a tool call or an approval are ` +
+          `continued with resume(${runId}, ...), not recover().`,
+        details: { agentName, runId, snapshotStatus: snapshot.status },
+      });
+    }
+
+    return { snapshot, workflowInput };
+  }
+
   async loadPersistedRunSnapshot(workflowsStore: WorkflowsStorage, runId: string) {
     const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
     if (!persisted) return undefined;
