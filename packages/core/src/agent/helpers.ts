@@ -1,6 +1,9 @@
 import type { VersionOverrides } from '../mastra/types';
 import { MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../request-context';
 import type { RequestContext } from '../request-context';
+import { RECOVER_ALREADY_IN_PROGRESS_ERROR_ID } from './durable/constants';
+import type { DurableAgentRecoveredRun } from './durable/durable-agent';
+import { RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID, RUN_ACTIVE_ERROR_ID } from './durable/execution-fence';
 
 export function resolveVersionContext(
   requestContext: RequestContext,
@@ -33,4 +36,49 @@ export async function drainAgentOutput<T extends { error?: unknown }>(output: {
   getFullOutput(): Promise<T>;
 }): Promise<T> {
   return successfulAgentOutput(await output.getFullOutput());
+}
+
+export const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;
+const TRANSIENT_RECOVERY_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'LOADING',
+]);
+
+function isTransientRecoveryError(error: unknown): boolean {
+  const seen = new Set<object>();
+  let transient = false;
+  while (typeof error === 'object' && error !== null && !seen.has(error)) {
+    seen.add(error);
+    if ('name' in error && error.name === 'AbortError') return false;
+    if ('code' in error && typeof error.code === 'string' && TRANSIENT_RECOVERY_ERROR_CODES.has(error.code)) {
+      transient = true;
+    }
+    if ('message' in error && typeof error.message === 'string' && /^LOADING(?:\s|$)/.test(error.message)) {
+      transient = true;
+    }
+    error = 'cause' in error ? error.cause : undefined;
+  }
+  return transient;
+}
+
+/** Why `recover()` should be deferred, or `undefined` for a permanent failure. */
+export function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
+  const { id, details } = (error ?? {}) as { id?: unknown; details?: { retryAt?: unknown } };
+  switch (id) {
+    case RUN_ACTIVE_ERROR_ID:
+      return typeof details?.retryAt === 'number'
+        ? { reason: 'run-active', retryAt: details.retryAt }
+        : { reason: 'run-active' };
+    case RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID:
+      return { reason: 'run-active-locally' };
+    case RECOVER_ALREADY_IN_PROGRESS_ERROR_ID:
+      return { reason: 'already-in-progress' };
+    default:
+      return isTransientRecoveryError(error)
+        ? { reason: 'transient-error', retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS }
+        : undefined;
+  }
 }

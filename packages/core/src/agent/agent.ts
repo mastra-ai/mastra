@@ -70,6 +70,7 @@ import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-e
 // Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
+import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
@@ -204,11 +205,18 @@ import type { DelegationRefInput, DelegationRefRegistry } from './delegation-ref
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
 // agent/durable → agent`.
-import { DurableStepIds } from './durable/constants';
+import {
+  DurableStepIds,
+  RECOVER_SHUTDOWN_ERROR_ID,
+  RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
+  RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID,
+  RECOVER_RUN_SUSPENDED_ERROR_ID,
+} from './durable/constants';
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
   DurableAgentActiveRun,
+  DurableAgentRecoveredRun,
   DurableAgentListActiveRunsOptions,
   DurableAgentListActiveRunsResult,
   DurableAgentRecoverActiveRunsOptions,
@@ -218,11 +226,20 @@ import type {
   DurableAgentStreamResult,
 } from './durable/durable-agent';
 import type { DurableExecutionEngine } from './durable/execution-engine';
+import { EXECUTION_ABANDONED_ERROR_ID } from './durable/execution-fence';
 import { detachFullStreamOnEnd } from './durable/observe-full-stream';
+import { getRunRegistryEntry } from './durable/run-registry';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
-import { drainAgentOutput, successfulAgentOutput, resolveRunId, resolveVersionContext } from './helpers';
+import {
+  drainAgentOutput,
+  successfulAgentOutput,
+  resolveRunId,
+  resolveVersionContext,
+  recoverySkip,
+  TRANSIENT_RECOVERY_RETRY_DELAY_MS,
+} from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -989,6 +1006,36 @@ export class Agent<
   #suspendedRunOutputProcessors = new Map<string, OutputProcessorOrWorkflow[]>();
   readonly #options?: AgentCreateOptions;
   readonly #durable?: AgentDurableOption;
+  readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
+
+  #hasRecoveryAttempt(runId: string): boolean {
+    return this.#recoveryAttempts.has(runId);
+  }
+
+  #startRecoveryAttempt<T>(runId: string, recover: () => Promise<T>): Promise<T> {
+    // Defer execution until the map is populated, including synchronous re-entrant callers.
+    const attempt = Promise.resolve().then(recover);
+    this.#recoveryAttempts.set(runId, attempt);
+    const removeAttempt = () => {
+      if (this.#recoveryAttempts.get(runId) === attempt) this.#recoveryAttempts.delete(runId);
+    };
+    void attempt.then(removeAttempt, removeAttempt);
+    return attempt;
+  }
+
+  /**
+   * Logger for the persistence-policy guardrail warnings. The durable
+   * registration path rewires the *underlying* agent's logger but not the
+   * wrapper's, so prefer the Mastra-configured logger (which also respects
+   * `logger: false`) and fall back to the base logger for unregistered
+   * agents.
+   *
+   * @internal
+   */
+  protected get guardrailLogger() {
+    return this.#mastra?.getLogger() ?? this.logger;
+  }
+
   #executionEngine?: DurableExecutionEngine;
 
   #resolveExecutionEngine(): DurableExecutionEngine | undefined {
@@ -12645,11 +12692,179 @@ export class Agent<
     return { runs, total };
   }
 
-  /** Bulk-recover active durable runs. Requires createDurableAgent() or DurableAgent. */
+  /**
+   * Bulk recover durable agent runs whose in-process agentic loop was orphaned
+   * by a process restart. This is the recovery half of the discovery API
+   * paired with {@link Agent.listActiveRuns} and is the typical
+   * boot-time hook.
+   *
+   * Each targeted run is delegated to {@link Agent.recover}, which
+   * rebuilds the run's non-serializable state (message list, model, memory,
+   * save-queue manager, request context, agent span), re-subscribes to the
+   * run's pubsub topic, and restarts the workflow in the background. Because
+   * `recover()` registers `memory` + `saveQueueManager` on the run entry, the
+   * durable agentic workflow's terminal step flushes new messages to memory
+   * just like a fresh `stream()` call would.
+   *
+   * The per-run stream returned by `recover()` is discarded — this method
+   * awaits each run's workflow settlement and reports summary counts instead
+   * of surfacing live event streams. Callers who want to observe a specific
+   * recovered run's events should use {@link Agent.recover} directly
+   * (or {@link Agent.observe} with the returned `runId`).
+   *
+   * Failures are captured per-run so a single bad run does not block
+   * recovery of the rest.
+   *
+   * Only orphaned runs are recovered. A run another execution still drives,
+   * in this process or another, is reported as `skipped`; for one live in
+   * another process, `retryAt` says when to check again. A run that finished
+   * or suspended before its turn is left out.
+   *
+   * @example
+   * ```typescript
+   * // Recover every orphaned run for this agent (typical boot-time hook).
+   * const { recovered, succeeded, failed } = await durableAgent.recoverActiveRuns();
+   * logger.info('Recovered durable agent runs', { succeeded, failed });
+   *
+   * // Recover a single run by ID.
+   * await durableAgent.recoverActiveRuns({ runId });
+   * ```
+   */
   async recoverActiveRuns(
-    options?: DurableAgentRecoverActiveRunsOptions,
+    options: DurableAgentRecoverActiveRunsOptions = {},
   ): Promise<DurableAgentRecoverActiveRunsResult> {
-    return this.#requireDurableExecution('recoverActiveRuns');
+    const executionEngine = this.#resolveExecutionEngine();
+    if (!executionEngine) return this.#requireDurableExecution('recoverActiveRuns');
+    if (this.#mastra?.__shuttingDown) return { recovered: [], succeeded: 0, failed: 0 };
+    const { runId, ...discoveryOptions } = options;
+
+    // Without fencing in the workflows store nothing is fenced, memory included.
+    const storage = this.#mastra?.getStorage();
+    if (
+      !(await executionEngine.warnIfUnfenced(await storage?.getStore('workflows'), 'workflows', this.guardrailLogger))
+    ) {
+      await executionEngine.warnIfUnfenced(await storage?.getStore('memory'), 'memory', this.guardrailLogger);
+    }
+
+    let targetRunIds: string[];
+    if (runId) {
+      // Like discovery, an explicit run is only recovered while its snapshot is
+      // `running`: a finished run has nothing to recover, and a suspended one
+      // waits for resume().
+      targetRunIds = (await executionEngine.isRunningSnapshot(runId)) ? [runId] : [];
+    } else {
+      const { runs } = await this.listActiveRuns(discoveryOptions);
+      targetRunIds = runs.map(r => r.runId);
+    }
+
+    const outcomes: (DurableAgentRecoveredRun | undefined)[] = new Array(targetRunIds.length);
+    const timeoutOutcome = (targetRunId: string): DurableAgentRecoveredRun => ({
+      runId: targetRunId,
+      status: 'skipped',
+      reason: 'recovery-timeout',
+      retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS,
+    });
+
+    await runWithConcurrency(
+      targetRunIds.map((targetRunId, index) => ({ targetRunId, index })),
+      DEFAULT_RESTART_CONCURRENCY,
+      async ({ targetRunId, index }) => {
+        if (this.#mastra?.__shuttingDown) return;
+        if (this.#hasRecoveryAttempt(targetRunId)) {
+          outcomes[index] = timeoutOutcome(targetRunId);
+          return;
+        }
+        const attempt = this.#startRecoveryAttempt(
+          targetRunId,
+          async (): Promise<DurableAgentRecoveredRun | undefined> => {
+            if (this.#mastra?.__shuttingDown) return;
+            let runError: Error | undefined;
+            let started = false;
+            try {
+              // Delegate to the single-run streamable recover path so each run
+              // benefits from the rebuilt registry entry (message list, memory,
+              // saveQueueManager, request context, agent span) and the pubsub
+              // stream / terminal snapshot-cleanup contract stays identical to
+              // `recover()`. We don't surface the per-run stream here — bulk
+              // callers only care about counts — so we just await the workflow
+              // execution promise that `recover()` parks on the registry entry,
+              // capture any failure it surfaces via `onError`, and drop the
+              // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+              // suspended runs registered, so thread subscribers still see the
+              // terminal event and a later approval can resume the run (#25891).
+              // With auto-cleanup disabled nothing else releases a finished run, and
+              // bulk callers never get the cleanup handle. Release it once the
+              // terminal event has been delivered; suspended runs never get here.
+              let releaseAfterTerminal: (() => void) | undefined;
+              const onTerminal = () => {
+                if (this.__getStreamBus()?.cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+              };
+              const { cleanup } = await this.recover(targetRunId, {
+                onError: ({ error }) => {
+                  runError = error instanceof Error ? error : new Error(String(error));
+                  onTerminal();
+                },
+                onFinish: onTerminal,
+                onAbort: onTerminal,
+              });
+              started = true;
+              releaseAfterTerminal = cleanup;
+              try {
+                const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
+                if (workflowExecution) {
+                  await workflowExecution;
+                }
+              } catch (error) {
+                cleanup();
+                throw error;
+              }
+              if (runError) throw runError;
+              return { runId: targetRunId, status: 'success' };
+            } catch (error) {
+              const errorId = (error as { id?: unknown })?.id;
+              if (!runError && (errorId === RECOVER_SHUTDOWN_ERROR_ID || errorId === EXECUTION_ABANDONED_ERROR_ID)) {
+                return { runId: targetRunId, status: 'skipped' };
+              }
+              if (!started) {
+                // The checkpoint disappeared or the run suspended between discovery and recovery.
+                if (
+                  errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
+                  errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
+                  errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
+                )
+                  return;
+                const skipped = recoverySkip(error);
+                if (skipped) {
+                  if (skipped.reason === 'transient-error') {
+                    this.#mastra
+                      ?.getLogger()
+                      ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
+                        error,
+                        retryAt: skipped.retryAt,
+                      });
+                  }
+                  return { runId: targetRunId, status: 'skipped', ...skipped };
+                }
+              }
+              const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
+              this.#mastra
+                ?.getLogger?.()
+                ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
+              return { runId: targetRunId, status: 'failed', error: err };
+            }
+          },
+        );
+        const bounded = this.#mastra
+          ? await this.#mastra.__awaitDurableRecoveryAttempt(attempt, `durable agent ${this.id} run ${targetRunId}`)
+          : { value: await attempt };
+        outcomes[index] = bounded ? bounded.value : timeoutOutcome(targetRunId);
+      },
+    );
+
+    const recovered = outcomes.filter((outcome): outcome is DurableAgentRecoveredRun => outcome !== undefined);
+    const succeeded = recovered.filter(outcome => outcome.status === 'success').length;
+    const failed = recovered.filter(outcome => outcome.status === 'failed').length;
+    return { recovered, succeeded, failed };
   }
 
   /** Observe a resumable run without driving it. */
