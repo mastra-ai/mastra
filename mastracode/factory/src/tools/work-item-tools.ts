@@ -141,7 +141,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: Card, reason: 'created' | 'moved' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'moved' | 'started' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,
@@ -151,6 +151,34 @@ export function createFactoryWorkItemTools(
       userId: scope.userId,
       reason,
     });
+  /**
+   * Approving or retrying a run starts it from this session, so this session follows its card as a
+   * move does: the run's report and anything it waits on reach this session, which can pass them on.
+   * Only approval acts as the person; a retry keeps the run's original approver. The run has
+   * started by now: a failed read or follow is reported with it, not instead of it.
+   */
+  const followStartedRun = async (result: ReturnType<typeof settled>) => {
+    if (!result.workItemId) return result;
+    let url: string | null = null;
+    try {
+      const item = await deps.workItems.getForProject(scope.orgId, scope.factoryProjectId, result.workItemId);
+      if (!item) return result;
+      url =
+        factoryWorkItemUrl({
+          factoryProjectId: item.factoryProjectId,
+          board: boardForWorkItem(item),
+          workItemId: item.id,
+        }) ?? null;
+      await follow(item, 'started');
+      return { ...result, url };
+    } catch (error) {
+      return {
+        ...result,
+        url,
+        warnings: [`This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`],
+      };
+    }
+  };
 
   return {
     factory_create_work_item: createTool({
@@ -400,16 +428,18 @@ export function createFactoryWorkItemTools(
     factory_retry_decision: createTool({
       id: 'factory_retry_decision',
       description:
-        'Retry one failed Factory run once its cause is fixed. Refused when the failure cannot be fixed by retrying or the item has moved on.',
+        "Retry one failed Factory run once its cause is fixed. Refused when the failure cannot be fixed by retrying or the item has moved on. This session follows the run's card, so it hears how the run ends; the result has the card's `url`.",
       inputSchema: z.object({ decisionId }).strict(),
       execute: async ({ decisionId }) =>
-        settled(
-          await retryFactoryDecision({
-            workItems: deps.workItems,
-            boards: await toBoardSource(deps.boards).load(project),
-            ...project,
-            decisionId,
-          }),
+        followStartedRun(
+          settled(
+            await retryFactoryDecision({
+              workItems: deps.workItems,
+              boards: await toBoardSource(deps.boards).load(project),
+              ...project,
+              decisionId,
+            }),
+          ),
         ),
     }),
 
@@ -434,11 +464,11 @@ export function createFactoryWorkItemTools(
     factory_resolve_proposal: createTool({
       id: 'factory_resolve_proposal',
       description:
-        "Approve or dismiss one proposed Factory run. Approving starts the run and lets the item's later runs start without asking.",
+        "Approve or dismiss one proposed Factory run. Approving starts the run and lets the item's later runs start without asking, and this session follows the run's card, so it hears how the run ends; the result has the card's `url`.",
       inputSchema: z.object({ decisionId, action: z.enum(['approve', 'dismiss']) }).strict(),
       execute: async ({ decisionId, action }) => {
         requirePerson(scope, 'approve or dismiss a proposed run');
-        return settled(
+        const result = settled(
           await resolveFactoryProposal({
             workItems: deps.workItems,
             audit,
@@ -448,6 +478,7 @@ export function createFactoryWorkItemTools(
             action,
           }),
         );
+        return action === 'approve' ? followStartedRun(result) : result;
       },
     }),
 
