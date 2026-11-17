@@ -94,7 +94,7 @@ import {
   shouldRejectStream,
 } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
-import { DurableExecutionEngine } from './execution-engine';
+import { DurableExecutionEngine, latestMessageListState } from './execution-engine';
 import {
   EXECUTION_ABANDONED_ERROR_ID,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -766,27 +766,6 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   force?: boolean;
 }
 
-/** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
-function latestMessageListState(snapshot: {
-  value?: Record<string, any>;
-  state?: Record<string, any>;
-  context?: Record<string, any>;
-}): unknown {
-  // Evented checkpoints keep the latest setState under context.__state;
-  // value can still contain the transcript from the start of the iteration.
-  if (snapshot.context?.__state?.messageListState) return snapshot.context.__state.messageListState;
-  // The default engine persists workflow state under `value`.
-  if (snapshot.value?.messageListState) return snapshot.value.messageListState;
-  if (snapshot.state?.messageListState) return snapshot.state.messageListState;
-  let latest: { at: number; value: unknown } | undefined;
-  for (const step of Object.values(snapshot.context ?? {})) {
-    const value = step?.output?.messageListState;
-    const at = step?.endedAt ?? step?.startedAt ?? 0;
-    if (value && (!latest || at >= latest.at)) latest = { at, value };
-  }
-  return latest?.value;
-}
-
 export class DurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -1118,20 +1097,7 @@ export class DurableAgent<
     runId: string,
     fallbackSnapshot: WorkflowRunState,
   ): Promise<Awaited<ReturnType<typeof hydrateMessageListState>> | undefined> {
-    let latest: unknown;
-    try {
-      // Evented iterations have their own run id; the parent records the active one.
-      const nestedRunId = fallbackSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
-      const nested = await workflowsStore.getWorkflowRunById({
-        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
-        workflowName: DurableStepIds.AGENTIC_EXECUTION,
-      });
-      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      latest = snapshot && latestMessageListState(snapshot);
-    } catch {
-      // Fall back to the supplied snapshot.
-    }
-    latest ??= latestMessageListState(fallbackSnapshot);
+    const latest = await this.executionEngine.loadLatestMessageListState(workflowsStore, runId, fallbackSnapshot);
     if (!latest) return undefined;
     // Messages memory already stores are kept as refs; restore them so callers
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
