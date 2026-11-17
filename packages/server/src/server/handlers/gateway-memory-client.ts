@@ -307,6 +307,11 @@ export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unkno
     const candidate = gateway as { id?: string; isV2?: () => boolean };
     if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function') return candidate.isV2();
   }
+  return isGatewayV2ByEnvironment();
+}
+
+/** Whether the environment alone (MASTRA_GATEWAY_API_KEY and MASTRA_GATEWAY_VERSION) says v2. */
+function isGatewayV2ByEnvironment(): boolean {
   const key = process.env.MASTRA_GATEWAY_API_KEY;
   if (key?.startsWith('msk_')) return false;
   if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
@@ -320,16 +325,21 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
  * Get a GatewayMemoryClient instance, or null if gateway is not configured.
  * Pass `mastra` so a registered v2 gateway configuration takes precedence
  * over a v1 environment key.
+ *
+ * The client is built from MASTRA_GATEWAY_API_KEY and MASTRA_GATEWAY_URL, so it is built only when
+ * the environment itself says v1. A registered gateway that is v1 only because of a key in its own
+ * config, which the server cannot use here, does not make the environment key a v1 key.
  */
 export function getGatewayClient(mastra?: Parameters<typeof isGatewayV2>[0]): GatewayMemoryClient | null {
   // Gateway v2 has no memory REST API; Studio must use the agent's own memory configuration.
-  if (isGatewayV2(mastra)) return null;
+  if (isGatewayV2(mastra) || isGatewayV2ByEnvironment()) return null;
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
-  // An organization key cannot use the v1 memory API, even when a registered gateway with a v1
-  // key of its own makes the deployment v1.
-  if (!key || isV2GatewayKey(key)) return null;
+  if (!key) {
+    _gatewayClient = null;
+    return null;
+  }
   _gatewayClient = new GatewayMemoryClient(url, key);
   return _gatewayClient;
 }
