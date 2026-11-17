@@ -5835,7 +5835,10 @@ export class Mastra<
    * This method allows dynamic registration of tools after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a tool with the same key already exists
+   * If a tool with the same key already exists, this method leaves the existing
+   * tool registered and returns without an error. The new tool is not added.
+   *
+   * @throws {MastraError} When the tool is undefined
    *
    * @example
    * ```typescript
