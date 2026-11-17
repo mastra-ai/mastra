@@ -228,6 +228,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'notification_delivery_failed',
   'run_terminal_event_missing',
   'run_incomplete',
+  'run_stopped',
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',

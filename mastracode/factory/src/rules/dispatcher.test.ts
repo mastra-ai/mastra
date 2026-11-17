@@ -40,6 +40,7 @@ import {
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { observeSessionRunReports } from '../tools/run-watch.js';
 import { retryFactoryDecision } from '../work-items/decision-actions.js';
+import { factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import type { FactoryBindingPreparationInput, FactoryReviewStatusEvent } from './dispatcher.js';
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
@@ -72,6 +73,8 @@ function createSession(
     signalAccepted?: Promise<{ accepted: true; action?: string }>;
     emitAgentEndDuringSignal?: boolean;
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+    /** Why the run stopped, reported on `agent_end` as core does — e.g. a person's Stop. */
+    agentEndAbortReason?: string;
     /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
     omObservationError?: string;
     /** Emitted as the run's `error` event just before an `agent_end: 'error'`, as the session does. */
@@ -111,7 +114,9 @@ function createSession(
 ) {
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
-  const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
+  const agentEndListeners = new Set<
+    (event: { type: string; reason?: string; abortReason?: string; error?: unknown }) => void
+  >();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     if (reason === 'error' && options?.runError) {
       for (const listener of agentEndListeners) {
@@ -127,7 +132,13 @@ function createSession(
       }
     }
     for (const listener of agentEndListeners) {
-      listener({ type: 'agent_end', reason });
+      // Core reports `abortReason` only on an aborted run, and only when the
+      // abort said why — a bare abort carries nothing.
+      listener(
+        reason === 'aborted' && options?.agentEndAbortReason
+          ? { type: 'agent_end', reason, abortReason: options.agentEndAbortReason }
+          : { type: 'agent_end', reason },
+      );
     }
   };
   const emitSuspension = (toolName: string, toolCallId: string) => {
@@ -253,10 +264,12 @@ function createSession(
       if (redelivered) return { accepted: Promise.resolve({ accepted: true as const, action: 'wake' }) };
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };
     }),
-    subscribe: vi.fn((listener: (event: { type: string; reason?: string; error?: string }) => void) => {
-      agentEndListeners.add(listener);
-      return () => agentEndListeners.delete(listener);
-    }),
+    subscribe: vi.fn(
+      (listener: (event: { type: string; reason?: string; abortReason?: string; error?: string }) => void) => {
+        agentEndListeners.add(listener);
+        return () => agentEndListeners.delete(listener);
+      },
+    ),
     respondToToolSuspension: vi.fn(async () => {
       // Answering a suspension resumes the run over the wire, so it settles well
       // after the suspension's own `agent_end` has already been dispatched.
@@ -4093,9 +4106,10 @@ describe('FactoryDecisionDispatcher', () => {
 
   it.each([
     { reason: 'error' as const, key: 'skill-run-error', message: 'ended in error' },
-    // An abort reads as deliberate, but the stream never says who aborted, and
-    // the usual cause is the process going away underneath the run. Ending the
-    // card at attempt 1 with no button leaves a human to nudge it by hand.
+    // An abort that says nothing reads as deliberate, but the usual cause is the
+    // process going away underneath the run. Ending the card at attempt 1 with no
+    // button leaves a human to nudge it by hand. A person's Stop is the one abort
+    // that does state why, and that settles for good (see the `run_stopped` test).
     { reason: 'aborted' as const, key: 'skill-run-aborted', message: 'was aborted' },
   ])('retries a run that ended $reason instead of reporting success', async ({ reason, key, message }) => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -4158,6 +4172,81 @@ describe('FactoryDecisionDispatcher', () => {
       deliveryGeneration: 2,
     });
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('settles a run a person stopped for good, without resending the stage-move notice', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-run-stopped',
+      precedingMessage: 'This work was moved from the planning stage to the execute stage.',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session, sendNotificationSignal, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'aborted',
+      // What core reports when the Stop route stopped the run.
+      agentEndAbortReason: 'user-stop',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    // The harness dedupes notices on their dedupeKey, so count the sends: a
+    // retry would resend the same key and still be a second delivery.
+    const stageNotices = () =>
+      sendNotificationSignal.mock.calls.filter(call => call[0]?.kind === 'stage-transition').length;
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'failed', failureCode: 'run_stopped' });
+    expect(decision?.lastError).toContain('was stopped by a person');
+    // A person can start the stage again, but the dispatcher never does it for them.
+    expect(factoryDispatchFailureMetadata(decision?.failureCode ?? null)).toMatchObject({
+      canRetry: true,
+      autoRetry: false,
+    });
+    expect(session.sendSignal.mock.calls.map(call => call[0].id)).toEqual([decision!.id]);
+    expect(stageNotices()).toBe(1);
+    expect(getAgentEndListenerCount()).toBe(0);
+
+    // Nothing re-runs the stopped stage: no second kickoff, and the stage-move
+    // notice the person already saw is not said again.
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(session.sendSignal.mock.calls.map(call => call[0].id)).toEqual([decision!.id]);
+    expect(stageNotices()).toBe(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_stopped',
+    });
   });
 
   it('redelivers across consecutive ending runs until the kickoff wakes the session', async () => {
