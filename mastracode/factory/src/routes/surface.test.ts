@@ -382,9 +382,9 @@ describe('prepareFactoryRuleBinding', () => {
 
       it('starts the phase as the Factory when the organization runs on its own provider and stores no key', async () => {
         const seed = await seedFactoryWithRepository({ modelScope });
-        await seed.seeded.customProviders.upsert({
-          orgId: 'org-1',
-          userId: 'factory-creator',
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-1' },
+          createdBy: 'factory-creator',
           input: {
             providerId: 'acme',
             name: 'Acme',
@@ -399,9 +399,9 @@ describe('prepareFactoryRuleBinding', () => {
 
       it("does not count another organization's provider as this one's", async () => {
         const seed = await seedFactoryWithRepository({ modelScope });
-        await seed.seeded.customProviders.upsert({
-          orgId: 'org-elsewhere',
-          userId: 'someone-elsewhere',
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-elsewhere' },
+          createdBy: 'someone-elsewhere',
           input: {
             providerId: 'acme',
             name: 'Acme',
@@ -414,6 +414,49 @@ describe('prepareFactoryRuleBinding', () => {
 
         await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
         expect(prepare).not.toHaveBeenCalled();
+      });
+
+      it("does not count a member's personal provider as the organization's", async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-1', userId: 'approver-1' },
+          createdBy: 'approver-1',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+        expect(prepare).not.toHaveBeenCalled();
+      });
+
+      it('does not count an endpoint a hosted Factory refuses to call', async () => {
+        vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+        try {
+          const seed = await seedFactoryWithRepository({ modelScope });
+          await seed.seeded.customProviders.create({
+            owner: { orgId: 'org-1' },
+            createdBy: 'factory-creator',
+            input: {
+              providerId: 'acme',
+              name: 'Acme',
+              url: 'http://10.0.0.5/v1',
+              apiKey: 'sk-acme',
+              models: ['fast-1'],
+            },
+          });
+          const { prepare, started } = start(seed, 'approver-1');
+
+          await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+          expect(prepare).not.toHaveBeenCalled();
+        } finally {
+          vi.unstubAllEnvs();
+        }
       });
 
       it.each([

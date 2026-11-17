@@ -216,7 +216,6 @@ describe('updateCachedSessionTitle', () => {
       ],
       boards: [],
       owners: [],
-      settling: false,
     };
     client.setQueryData(rowsKey, rows);
     client.setQueryData(queryKeys.userSession('sess-1'), session({ title: undefined }));

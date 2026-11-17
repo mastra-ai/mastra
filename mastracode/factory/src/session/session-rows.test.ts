@@ -5,8 +5,8 @@ import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { testCard } from '../routes/test-utils.js';
 import type { Card, ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
-import { runningSessionIds, sessionRows } from './session-rows.js';
-import type { RowSession, SessionRowFacts } from './session-rows.js';
+import { runningSessionIds, SessionRowIndex } from './session-rows.js';
+import type { RowSession, SessionRowViewer } from './session-rows.js';
 
 const VIEWER = 'user-1';
 const PROJECT = '00000000-0000-4000-8000-0000000000aa';
@@ -55,21 +55,21 @@ function ref(sessionId: string) {
   return { sessionId, branch: `factory/issue-${sessionId}`, threadId: `${sessionId}-thread`, startedBy: VIEWER };
 }
 
-function rowsOf(facts: Partial<SessionRowFacts> & Pick<SessionRowFacts, 'sessions'>) {
-  return sessionRows({
-    cards: [],
-    boards,
+type RowFacts = Partial<SessionRowViewer> & { sessions: readonly RowSession[]; cards?: readonly Card[] };
+
+function rowsOf({ sessions, cards = [], ...viewer }: RowFacts) {
+  return new SessionRowIndex(sessions, cards, boards).rows({
     awaitingPerson: new Set(),
     runningSessionIds: new Set(),
     parkedSessionIds: new Set(),
     viewerUserId: VIEWER,
     pinnedSessionIds: new Set(),
     revealChildSessions: false,
-    ...facts,
+    ...viewer,
   });
 }
 
-function onlyRow(facts: Partial<SessionRowFacts> & Pick<SessionRowFacts, 'sessions'>) {
+function onlyRow(facts: RowFacts) {
   const [row, ...others] = rowsOf(facts);
   expect(others).toEqual([]);
   return row;

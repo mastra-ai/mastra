@@ -7,8 +7,8 @@ import {
   CARD_DECISION_STATUSES,
   cardsAwaitingPerson,
 } from '@mastra/factory/routes/work-item-starters';
-import { isSettling, sessionActivity, sessionRowsView } from '@mastra/factory/session/session-row-view';
-import { runningSessionIds, sessionRows } from '@mastra/factory/session/session-rows';
+import { sessionActivity, sessionRowsView } from '@mastra/factory/session/session-row-view';
+import { runningSessionIds, SessionRowIndex } from '@mastra/factory/session/session-rows';
 import type { RowSession } from '@mastra/factory/session/session-rows';
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
@@ -175,25 +175,20 @@ export const sessionReadHandlers = [
     if (!catalog.ok) return catalog;
     if (!decisions.ok) return decisions;
     const { pin, children, ...view } = query.data;
-    const rows = sessionRows({
-      ...project.facts,
-      boards: boardRegistryOf(stubbedCatalogSchema.parse(await catalog.json()).boards.flatMap(installedBoard)),
+    const { sessions, cards, ...live } = project.facts;
+    const boards = boardRegistryOf(stubbedCatalogSchema.parse(await catalog.json()).boards.flatMap(installedBoard));
+    const rows = new SessionRowIndex(sessions, cards, boards).rows({
+      ...live,
       awaitingPerson: cardsAwaitingPerson(cardDecisions(await decisions.json())),
       viewerUserId: project.viewerUserId,
       pinnedSessionIds: pin,
       revealChildSessions: children === 'true',
     });
-    const now = Date.now();
-    return HttpResponse.json({
-      ...sessionRowsView(rows, view, project.viewerUserId, now),
-      settling: isSettling(project.facts.sessions, now),
-    });
+    return HttpResponse.json(sessionRowsView(rows, view, project.viewerUserId, Date.now()));
   }),
   http.get('*/web/factory/projects/:id/session-activity', async ({ request, params }) => {
     const factoryProjectId = String(params.id);
     const project = await stubbedSessionFacts(stubbedReads(request, factoryProjectId), factoryProjectId);
-    return project instanceof Response
-      ? project
-      : HttpResponse.json(sessionActivity({ ...project.facts, now: Date.now() }));
+    return project instanceof Response ? project : HttpResponse.json(sessionActivity(project.facts));
   }),
 ];

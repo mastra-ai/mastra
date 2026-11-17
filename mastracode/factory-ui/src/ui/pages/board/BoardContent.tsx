@@ -14,7 +14,7 @@ import { useRunQueue } from '../../../hooks/useFactoryDecisions';
 import { useBoardPhasesQuery, useWorkItemFilterOptionsQuery } from '../../../hooks/useWorkItems';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
-import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/factory/boardPhasesRequest';
+import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
@@ -32,8 +32,6 @@ import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions
 import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
-import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
-import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
@@ -41,13 +39,12 @@ import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCa
 import type { DragPayload } from '../../domains/factory/boardDrag';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
-import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
+import type { FactoryProject } from '../../domains/workspaces/services/github';
 
 import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStages } from './BoardStages';
-import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
 
 const NO_CARDS: WorkItem[] = [];
 const NO_WINDOWS: Readonly<Record<string, number>> = {};
@@ -60,20 +57,12 @@ const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
 
-/** The card a row's key names: a card id holds no `/`. */
-function keyedCardId(key: string | undefined): string | undefined {
-  const id = key?.slice(key.lastIndexOf('/') + 1);
-  return id !== undefined && isCardId(id) ? id : undefined;
-}
-
 export function BoardContent({
   factory,
-  repository,
   kind,
   definition,
 }: {
   factory: FactoryProject;
-  repository: LinkedRepositoryPayload;
   kind: BoardKind;
   definition: InstalledBoardInfo;
 }) {
@@ -108,8 +97,7 @@ export function BoardContent({
   const viewKey = JSON.stringify([view.sort, view.q, view.filters]);
   const [deepened, setDeepened] = useState({ viewKey, windows: NO_WINDOWS });
   const windows = deepened.viewKey === viewKey ? deepened.windows : NO_WINDOWS;
-  const openCard = useOpenCardState();
-  const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows }, keyedCardId(openCard.openKey));
+  const phasesRead = useBoardPhasesQuery(factoryProjectId, { ...view, windows });
   const snapshot = phasesRead.data;
   const cards = snapshot?.workItems ?? NO_CARDS;
 
@@ -131,7 +119,6 @@ export function BoardContent({
     items.handleDrop(payload, stage, cause);
   };
   const intake = useBoardIntakeSetup({ factoryProjectId, repositories: factory.repositories, definition });
-  const runs = useBoardRuns({ factoryProjectId });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
@@ -206,7 +193,7 @@ export function BoardContent({
     );
   }
 
-  const mutationError = runs.error ?? decisions.error ?? items.mutationError;
+  const mutationError = decisions.error ?? items.mutationError;
   const totalTaskCount = snapshot?.matchingTotal ?? 0;
   const unfilteredTaskCount = snapshot?.boardTotal ?? 0;
   const anyFilterActive = boardFiltersActive(filters) || view.q !== '';
@@ -296,13 +283,7 @@ export function BoardContent({
                 relatedItems={relatedItemsFor(item)}
                 sessionStatus={sessionStatuses.get(item.id)}
                 ownerCurrent={ownerCurrent}
-                projectRepositoryId={cardProjectRepositoryId(
-                  factory.repositories,
-                  item,
-                  repository.projectRepositoryId,
-                )}
                 activityPage={activityPage}
-                preparing={runs.preparingFor(item.id)}
                 evaluatingStage={items.evaluatingStages.get(item.id)}
                 transitionReason={items.transitionReasons[item.id]}
                 decision={decisions.effectByItem.get(item.id)}
@@ -313,7 +294,6 @@ export function BoardContent({
                 onApproveProposal={decisions.approve}
                 onDismissProposal={decisions.dismiss}
                 onRetryDecision={decisions.retry}
-                onCreateSession={() => void runs.openOrCreateSession(item)}
                 onMove={toStage => items.move(item.id, toStage)}
                 onRemove={() => items.remove(item.id)}
               />
@@ -358,7 +338,6 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
-        openCard={openCard}
         onDrop={drop}
         toolbar={
           <BoardViewControls

@@ -173,6 +173,7 @@ import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
+import { shareSessionListChanges } from './session-list-changes.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -642,6 +643,7 @@ export class MastraFactory {
   #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
+  #unsubscribeSessionListChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -1001,6 +1003,10 @@ export class MastraFactory {
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
     this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
+    this.#unsubscribeSessionListChanges = shareSessionListChanges(eventBus, {
+      sourceControl: sourceControlStorage,
+      workItems: workItemsStorage,
+    });
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -2674,6 +2680,9 @@ export class MastraFactory {
       const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
       this.#unsubscribeLinkedRepositoryChanges = undefined;
       await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
+      const unsubscribeSessionListChanges = this.#unsubscribeSessionListChanges;
+      this.#unsubscribeSessionListChanges = undefined;
+      await unsubscribeSessionListChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

@@ -20,7 +20,7 @@ const ROWS_REQUEST: SessionRowsRequest = {
   pin: [],
   windows: {},
 };
-const NO_ROWS: SessionRowsResponse = { total: 0, matching: 0, groups: [], boards: [], owners: [], settling: false };
+const NO_ROWS: SessionRowsResponse = { total: 0, matching: 0, groups: [], boards: [], owners: [] };
 const oscillatorStart = vi.fn();
 
 class AudioContextStub {
@@ -48,7 +48,6 @@ function stubProject(runningSessionIds: () => string[]) {
         parkedSessionIds: [],
         initializingSessionIds: [],
         cards: { working: 0, waiting: 0 },
-        settling: false,
       } satisfies SessionActivity),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-rows`, () => {

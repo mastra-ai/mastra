@@ -9,6 +9,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { WorkspacePanelDock } from '../../workspace-viewer/components/WorkspacePanelDock';
 import { currentItemStage } from '../boardStages';
@@ -17,7 +18,7 @@ import { useOpenSession } from '../hooks/useOpenSession';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardStageBar } from './CardStageBar';
 import { CardStageSummary } from './CardStageSummary';
-import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
+import { SessionContextMenu } from './SessionContextMenu';
 import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 
 interface OpenSessionContext {
@@ -97,7 +98,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
                 size="sm"
                 className="shrink-0"
                 aria-label={`Go to ${switchable.workingSession.label} session`}
-                render={<Link to={cardSessionPath(factoryId, switchable.workingSession)} />}
+                render={<Link to={threadPath(factoryId, switchable.workingSession.ref)} />}
               >
                 {switchable.workingSession.label}
                 <IconArrowRight aria-hidden />
