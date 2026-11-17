@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   alertMessages,
+  checkoutRunner,
   attribute,
   candidateRange,
   escapedFiles,
   escapeMrkdwn,
+  ghAll,
   goodRunFor,
   nextBisectStep,
   prForCommit,
@@ -361,4 +366,113 @@ test('a bot PR tags its stand-ins, or @here when there are none; a title cannot 
   });
   assert.match(nobody, /\(bot\), no person found on the PR <!here>\./);
   assert.equal(nobody.match(/<!here>/g).length, 1);
+});
+
+function runnerFixture(files, report) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'attribute-runner-'));
+  fs.mkdirSync(path.join(dir, 'packages/core/src'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'packages/core/package.json'), JSON.stringify({ name: '@mastra/core' }));
+  for (const f of files) fs.writeFileSync(path.join(dir, f), '');
+  const calls = [];
+  const exec = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    const out = args.find(a => a.startsWith('--outputFile='));
+    if (out) {
+      const testResults = report.map(([f, status]) => ({ name: path.join(dir, f), status }));
+      fs.writeFileSync(out.slice('--outputFile='.length), JSON.stringify({ testResults }));
+      if (report.some(([, status]) => status === 'failed')) throw new Error('vitest exited 1');
+    }
+    return '';
+  };
+  return { dir, calls, exec };
+}
+
+test('the runner counts a file as failing when any project that ran it failed', async () => {
+  const file = 'packages/core/src/a.test.ts';
+  for (const report of [
+    [
+      [file, 'failed'],
+      [file, 'passed'],
+    ],
+    [
+      [file, 'passed'],
+      [file, 'failed'],
+    ],
+  ]) {
+    const { dir, exec } = runnerFixture([file], report);
+    const got = await checkoutRunner(dir, { exec, log: () => {} })('c'.repeat(40), [file]);
+    assert.deepEqual(got, { [file]: 'fail' });
+  }
+  const { dir, exec } = runnerFixture(
+    [file],
+    [
+      [file, 'passed'],
+      [file, 'passed'],
+    ],
+  );
+  assert.deepEqual(await checkoutRunner(dir, { exec, log: () => {} })('c'.repeat(40), [file]), { [file]: 'pass' });
+  // Passing in one project and not running in another is not a pass.
+  for (const report of [
+    [
+      [file, 'passed'],
+      [file, 'skipped'],
+    ],
+    [
+      [file, 'skipped'],
+      [file, 'passed'],
+    ],
+  ]) {
+    const { dir, exec } = runnerFixture([file], report);
+    const got = await checkoutRunner(dir, { exec, log: () => {} })('c'.repeat(40), [file]);
+    assert.deepEqual(got, { [file]: 'error' }, JSON.stringify(report));
+  }
+});
+
+test('the runner runs package E2E files in their e2e project, and a file no project ran is an error', async () => {
+  const e2e = 'packages/core/src/b.e2e.test.ts';
+  const gone = 'packages/core/src/gone.test.ts';
+  const { dir, calls, exec } = runnerFixture([e2e], [[e2e, 'failed']]);
+  const got = await checkoutRunner(dir, { exec, log: () => {} })('c'.repeat(40), [e2e, gone]);
+  assert.deepEqual(got, { [e2e]: 'fail', [gone]: 'error' });
+  const vitest = calls.find(c => c.includes('vitest'));
+  const cmd = vitest.join(' ');
+  assert.ok(cmd.includes('--project e2e:packages/* --project e2e:client-sdks/*'), cmd);
+  assert.ok(vitest.includes(e2e));
+  assert.ok(!vitest.includes(gone));
+  assert.ok(calls.some(c => c.join(' ') === 'pnpm turbo build --filter @mastra/core...'));
+});
+
+test('PR reviews and commits are read across every page', () => {
+  const calls = [];
+  const run = (cmd, args) => {
+    calls.push([cmd, ...args]);
+    const page1 = Array.from({ length: 100 }, () => ({ user: human('ana'), state: 'APPROVED' }));
+    return JSON.stringify([page1, [{ user: human('ana'), state: 'CHANGES_REQUESTED' }]]);
+  };
+  const reviews = ghAll('repos/o/r/pulls/1/reviews?per_page=100', run);
+  assert.deepEqual(calls, [['gh', 'api', '--paginate', '--slurp', 'repos/o/r/pulls/1/reviews?per_page=100']]);
+  assert.equal(reviews.length, 101);
+  // ana's last word was changes requested, so she is not an approver; nobody else is either.
+  assert.deepEqual(standIns({ mergedBy: null, reviews, commits: [] }), { role: null, logins: [] });
+
+  const commits = [...Array.from({ length: 100 }, () => commit(botUser('mastra-platform[bot]'))), commit(human('dee'))];
+  assert.deepEqual(standIns({ mergedBy: null, reviews: [], commits }), { role: 'co-authored by', logins: ['dee'] });
+});
+
+test('a lookup that failed or was cut off is unknown: that rung is skipped, never guessed from', () => {
+  const approvals = [{ user: human('ana'), state: 'APPROVED' }];
+  // merged_by unknown: fall through to the approvers.
+  assert.deepEqual(standIns({ mergedBy: undefined, reviews: approvals, commits: [] }), {
+    role: 'approved by',
+    logins: ['ana'],
+  });
+  // reviews unknown: fall through to commits.
+  assert.deepEqual(standIns({ mergedBy: null, reviews: null, commits: [commit(human('dee'))] }), {
+    role: 'co-authored by',
+    logins: ['dee'],
+  });
+  // GitHub lists at most 250 commits per PR; a full list may be cut off, so it is unknown.
+  const capped = Array.from({ length: 250 }, () => commit(human('dee')));
+  assert.deepEqual(standIns({ mergedBy: null, reviews: [], commits: capped }), { role: null, logins: [] });
+  assert.deepEqual(standIns({ mergedBy: null, reviews: null, commits: null }), { role: null, logins: [] });
 });

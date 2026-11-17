@@ -146,19 +146,24 @@ export function prForCommit(pulls, subject) {
 
 const isBot = user => !user?.login || user.type === 'Bot' || user.login.endsWith('[bot]');
 
+const PR_COMMITS_LIMIT = 250;
+
 const COAUTHOR = /^co-authored-by:.*<(?:\d+\+)?([^@<>\s]+)@users\.noreply\.github\.com>\s*$/gim;
 
 /**
  * Who answers for a PR a bot opened: the person who merged it, else every person whose latest
  * review approved it, else the person credited on the most commits (as author or in a
  * Co-authored-by trailer with a GitHub noreply address; ties go to all). None: `logins` is empty.
+ * A lookup that failed is passed as null (or undefined for the merger) and its rung is skipped.
  */
 export function standIns({ mergedBy, reviews, commits }) {
   if (!isBot(mergedBy)) return { role: 'merged by', logins: [mergedBy.login] };
   const latest = new Map();
-  for (const r of reviews) if (!isBot(r.user) && r.state !== 'COMMENTED') latest.set(r.user.login, r.state);
+  for (const r of reviews ?? []) if (!isBot(r.user) && r.state !== 'COMMENTED') latest.set(r.user.login, r.state);
   const approvers = [...latest].filter(([, state]) => state === 'APPROVED').map(([login]) => login);
   if (approvers.length) return { role: 'approved by', logins: approvers };
+  // GitHub lists at most 250 commits for a PR, so a list that long may be cut off.
+  if (!commits || commits.length >= PR_COMMITS_LIMIT) return { role: null, logins: [] };
   const credits = new Map();
   for (const c of commits) {
     const people = new Set([...c.commit.message.matchAll(COAUTHOR)].map(m => m[1]));
@@ -226,6 +231,9 @@ const repo = process.env.GITHUB_REPOSITORY ?? 'mastra-ai/mastra';
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 1 << 28, ...opts });
 const { CLICOLOR_FORCE: _color, ...plainEnv } = process.env;
 const gh = (...args) => JSON.parse(sh('gh', ['api', ...args], { env: plainEnv }));
+/** Every item of a paged list endpoint, not just its first page. */
+export const ghAll = (url, run = sh) =>
+  JSON.parse(run('gh', ['api', '--paginate', '--slurp', url], { env: plainEnv })).flat();
 const git = (...args) => sh('git', args).trim();
 
 /** The main commit a versioning head sits on: its first parent, or failing that its merge base with main. */
@@ -251,16 +259,17 @@ function packageNameFor(dir, file) {
 }
 
 /**
- * Runs files at a commit the way Affected UNIT does: install, build the files' packages and what
- * they depend on (turbo's cache serves unchanged packages), one root vitest run for all files.
+ * Runs files at a commit the way CI does: install, build the files' packages and what they depend
+ * on (turbo's cache serves unchanged packages), one root vitest run over the unit, typecheck and
+ * package E2E projects CI uses, so a file runs in whichever project owns it.
  */
-export function checkoutRunner(dir, { log = console.error } = {}) {
+export function checkoutRunner(dir, { log = console.error, exec = sh } = {}) {
   return async (sha, files) => {
     const started = Date.now();
     const all = verdict => Object.fromEntries(files.map(f => [f, verdict]));
     const step = (label, cmd, args) => {
       const t = Date.now();
-      sh(cmd, args, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+      exec(cmd, args, { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
       log(`  ${label}: ${((Date.now() - t) / 1000).toFixed(0)} s`);
     };
     const report = path.join(os.tmpdir(), `attribute-${sha}-${process.pid}-${Date.now()}.json`);
@@ -273,7 +282,7 @@ export function checkoutRunner(dir, { log = console.error } = {}) {
       const t = Date.now();
       try {
         if (present.length)
-          sh(
+          exec(
             'pnpm',
             [
               'vitest',
@@ -282,6 +291,10 @@ export function checkoutRunner(dir, { log = console.error } = {}) {
               'unit:*',
               '--project',
               'typecheck:*',
+              '--project',
+              'e2e:packages/*',
+              '--project',
+              'e2e:client-sdks/*',
               '--reporter=json',
               `--outputFile=${report}`,
               ...present,
@@ -293,13 +306,16 @@ export function checkoutRunner(dir, { log = console.error } = {}) {
       }
       log(`  vitest: ${((Date.now() - t) / 1000).toFixed(0)} s`);
       const results = fs.existsSync(report) ? JSON.parse(fs.readFileSync(report, 'utf8')).testResults : [];
-      const status = new Map(results.map(r => [path.relative(dir, r.name), r.status]));
-      return Object.fromEntries(
-        files.map(f => {
-          const s = status.get(f);
-          return [f, s === 'failed' ? 'fail' : s === 'passed' ? 'pass' : 'error'];
-        }),
-      );
+      // A file can be reported by more than one project (e.g. unit and typecheck): any failure wins,
+      // and it passes only if every result passed. No result at all means it could not run.
+      const rank = { pass: 0, error: 1, fail: 2 };
+      const status = new Map();
+      for (const r of results) {
+        const file = path.relative(dir, r.name);
+        const s = r.status === 'failed' ? 'fail' : r.status === 'passed' ? 'pass' : 'error';
+        if (rank[s] >= rank[status.get(file) ?? 'pass']) status.set(file, s);
+      }
+      return Object.fromEntries(files.map(f => [f, status.get(f) ?? 'error']));
     } catch (error) {
       log(
         `  could not run at ${sha}: ${String(error.stderr ?? error.message)
@@ -351,15 +367,19 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     const subject = git('log', '-1', '--format=%s', r.culprit);
     const pr = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
     if (pr?.bot) {
-      try {
-        pr.standIns = standIns({
-          mergedBy: gh(`repos/${repo}/pulls/${pr.number}`).merged_by,
-          reviews: gh(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`),
-          commits: gh(`repos/${repo}/pulls/${pr.number}/commits?per_page=100`),
-        });
-      } catch (error) {
-        console.error(`could not look up who answers for #${pr.number}: ${error.message}`);
-      }
+      const lookup = (what, fn, unknown) => {
+        try {
+          return fn();
+        } catch (error) {
+          console.error(`could not read the ${what} of #${pr.number}: ${error.message}`);
+          return unknown;
+        }
+      };
+      pr.standIns = standIns({
+        mergedBy: lookup('merger', () => gh(`repos/${repo}/pulls/${pr.number}`).merged_by, undefined),
+        reviews: lookup('reviews', () => ghAll(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`), null),
+        commits: lookup('commits', () => ghAll(`repos/${repo}/pulls/${pr.number}/commits?per_page=100`), null),
+      });
     }
     prs[r.culprit] = pr;
   }
