@@ -1,0 +1,63 @@
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+
+export const deleteGroupInputSchema = z
+  .object({
+    group_id: z.union([z.number(), z.string()]).describe('The ID or URL-encoded path of the group. Example: 123'),
+    permanently_remove: z
+      .boolean()
+      .optional()
+      .describe('If true, immediately deletes a subgroup already marked for deletion.'),
+    full_path: z
+      .string()
+      .optional()
+      .describe('The full path to the subgroup. Required when permanently_remove is true.'),
+  })
+  .refine(
+    data => data.permanently_remove !== true || (typeof data.full_path === 'string' && data.full_path.length > 0),
+    {
+      message: 'full_path is required when permanently_remove is true',
+      path: ['full_path'],
+    },
+  );
+
+export const deleteGroupOutputSchema = z.object({
+  success: z.boolean(),
+  group_id: z.union([z.number(), z.string()]).optional(),
+});
+
+export function deleteGroupTool(proxy: PlatformProxy) {
+  return createTool({
+    id: 'gitlab_delete_group',
+    description: 'Delete or archive a group in GitLab.',
+    inputSchema: deleteGroupInputSchema,
+    outputSchema: deleteGroupOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGroupOutputSchema>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const params: Record<string, string | number> = {};
+
+      if (input.permanently_remove !== undefined) {
+        params['permanently_remove'] = String(input.permanently_remove);
+      }
+
+      if (input.full_path !== undefined) {
+        params['full_path'] = input.full_path;
+      }
+
+      // https://docs.gitlab.com/api/groups/#delete-a-group
+      await platformProxy.delete({
+        endpoint: `/api/v4/groups/${String(input.group_id)}`,
+        params,
+        retries: 3,
+      });
+
+      return {
+        success: true,
+        group_id: input.group_id,
+      };
+    },
+  });
+}

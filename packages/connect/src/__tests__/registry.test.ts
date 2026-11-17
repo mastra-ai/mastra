@@ -15,6 +15,7 @@ describe('shipped provider registry', () => {
       'discord',
       'fireflies',
       'github',
+      'gitlab',
       'google-analytics',
       'google-calendar',
       'google-docs',

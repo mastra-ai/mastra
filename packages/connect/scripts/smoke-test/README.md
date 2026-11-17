@@ -33,6 +33,7 @@ Some scenarios probe side-effecting endpoints by default and only perform the re
 | `MASTRA_SMOKE_SHAREPOINT_SITE_ID`     | Graph site id (`<host>,<site-guid>,<web-guid>`) of a test site. The sharepoint-online scenario writes only to this site and skips entirely when unset.                                                                                                                      |
 | `MASTRA_SMOKE_SHAREPOINT_GRANTEE`     | Email of a test-tenant user. sharepoint-online grants, re-roles, and removes a real permission for them (`sendInvitation: false`, so no email) instead of probing add/update with synthetic ids.                                                                            |
 | `MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE` | `work` or `personal`. Tells Microsoft scenarios which account type is connected so capability failures are classified correctly; work-only scenarios (sharepoint-online, one-drive) skip entirely when set to `personal`. Unset reports the account type as `unknown`.      |
+| `MASTRA_SMOKE_GITLAB_PARENT_GROUP_ID` | Numeric id of a GitLab group the connection can create subgroups in. The gitlab scenario creates, updates, and deletes a real subgroup there; unset, it tries a top-level group (GitLab.com usually refuses) and probes the group write tools with a synthetic id.          |
 
 ## What the output means
 
