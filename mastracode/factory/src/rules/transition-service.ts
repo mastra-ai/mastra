@@ -224,6 +224,22 @@ function staleRejection(result: FactoryTransitionResultRejected, current: Card):
   );
 }
 
+/** A stale move whose target is the card's current phase has nothing left to do: report where it is. */
+function alreadyInStage(
+  result: FactoryTransitionResultRejected,
+  current: Card,
+  stage: FactoryRuleStage,
+): FactoryTransitionResult {
+  return {
+    status: 'accepted',
+    transitionId: result.transitionId,
+    itemId: result.itemId,
+    revision: current.revision,
+    stage,
+    decisions: [],
+  };
+}
+
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
   return stages.length === 1 ? stages[0] : undefined;
 }
@@ -391,12 +407,20 @@ export class FactoryTransitionService {
       }
     }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
+    let from = item;
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
-      if (current) result = staleRejection(result, current);
+      if (current && !request.reenter && currentStage(current.stages) === request.stage) {
+        // Another move already took the card where this one was going (e.g. an approval
+        // that waited while a later run moved it on). Retrying would only go stale again.
+        result = alreadyInStage(result, current, request.stage);
+        from = current;
+      } else if (current) {
+        result = staleRejection(result, current);
+      }
     }
-    await this.#recordTransition(request, item, result);
-    this.#notifyCommitted(request, item, result);
+    await this.#recordTransition(request, from, result);
+    this.#notifyCommitted(request, from, result);
     return result;
   }
 

@@ -3257,6 +3257,95 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
   },
 );
 
+describe('a stale agent move into the phase the card already reached', () => {
+  const ship = defineBoard({
+    id: 'ship',
+    name: 'Ship',
+    initialPhase: 'intake',
+    phases: {
+      intake: { name: 'Intake', kind: 'resting', nextPhases: ['building'] },
+      building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['self-review'] },
+      'self-review': {
+        name: 'Self-review',
+        kind: 'working',
+        runner: { context: 'review' },
+        nextPhases: ['review', 'building'],
+      },
+      review: { name: 'Review', kind: 'resting', nextPhases: ['done'] },
+      done: { name: 'Done', kind: 'terminal' },
+    },
+  });
+
+  /** An agent's move, parked for approval, while another run already took the card into Review. */
+  async function overtakenCard() {
+    const seed = await createFactoryStorageForTests();
+    const read = await createItem(seed.workItems, {
+      board: 'ship',
+      stages: ['self-review'],
+      metadata: { authorTrusted: true },
+    });
+    const service = new FactoryTransitionService({
+      configVersion: 'ship-rules',
+      storage: seed.workItems,
+      boards: createBoardRegistry({ boards: [ship] }),
+      audit: seed.audit,
+    });
+    await service.transition({
+      ...request(read, { board: 'ship', stage: 'review', expectedRevision: read.revision }),
+      actor: { type: 'agent', bindingId: 'other-run', role: 'review' },
+      ingress: { type: 'agent', identity: 'other-run-move' },
+      cause: 'Self-review approved.',
+    });
+    // A later change moves the revision on again while the card stays in Review.
+    const current = (await seed.workItems.update({
+      orgId: 'org-1',
+      id: read.id,
+      userId: 'factory-rule-dispatcher',
+      patch: { metadata: { openPullRequestNumber: 5 } },
+    }))!.item;
+    expect(current).toMatchObject({ stages: ['review'], revision: read.revision + 2 });
+    const parkedMove = (stage: FactoryRuleStage) =>
+      service.transition({
+        ...request(read, { board: 'ship', stage, expectedRevision: read.revision }),
+        actor: { type: 'agent', bindingId: 'parked-run', role: 'review' },
+        ingress: { type: 'agent', identity: `parked-move-${stage}` },
+        cause: 'Build complete.',
+      });
+    const audited = async () =>
+      (await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events.map(event => event.action);
+    return { read, current, storage: seed.workItems, parkedMove, audited };
+  }
+
+  it('reports the card already in that phase instead of a stale move to retry', async () => {
+    const { read, current, storage, parkedMove, audited } = await overtakenCard();
+    const before = await audited();
+
+    await expect(parkedMove('review')).resolves.toMatchObject({
+      status: 'accepted',
+      itemId: read.id,
+      stage: 'review',
+      revision: current.revision,
+      decisions: [],
+    });
+    expect(await storage.get({ orgId: 'org-1', id: read.id })).toMatchObject({
+      stages: ['review'],
+      revision: current.revision,
+    });
+    expect(await audited()).toEqual(before);
+  });
+
+  it('still rejects a stale move into another phase with the revision to retry at', async () => {
+    const { current, parkedMove, audited } = await overtakenCard();
+
+    await expect(parkedMove('done')).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'stale',
+      reason: `The card changed (now revision ${current.revision}, in review). Retry with expectedRevision ${current.revision} if the move still applies.`,
+    });
+    expect(await audited()).toContain('factory.work_item.transition_rejected');
+  });
+});
+
 describe('a person moving a busy card', () => {
   /** A card a person just moved into Planning: its plan run is queued and nothing has picked it up. */
   async function queuedCard({ runInFlight = false } = {}) {
