@@ -26,8 +26,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
-import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
@@ -125,7 +124,11 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
+import {
+  readFactorySessionScope,
+  resolveFactorySessionAddress,
+  restorePromptCheckoutTrust,
+} from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { createPhaseGoalEnder } from './rules/phase-goal.js';
@@ -1912,44 +1915,13 @@ export class MastraFactory {
         disableSettingsOmSeed: true,
         // Factory plan approval is a plain approval; goals are only started by the local TUI.
         planApprovalStartsGoal: false,
+        // The SDK resolves this callback before it loads repository AGENTS.md/CLAUDE.md.
         hostInstructions: async ({ requestContext }) => {
-          const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
-          // The SDK resolves this callback before it loads repository
-          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
-          // only initialState, and a partially persisted one can keep
-          // `factoryProjectId` while `untrustedCheckout` is gone, so the
-          // presence of the project id alone proves nothing. Heal whenever any
-          // trust field the recovery writes is missing, now, not later when
-          // the agent's tools are assembled. Unbound sessions never gain these
-          // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.sessionId) {
-            const current = context.getState();
-            const trustStateComplete =
-              Boolean(current.factoryProjectId) &&
-              Boolean(current.factoryOrgId) &&
-              typeof current.untrustedCheckout === 'boolean';
-            if (!trustStateComplete) {
-              const recovered = await resolveFactorySessionAddress({
-                requestContext,
-                storage: workItemsStorage,
-                forceBindingLookup: true,
-                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-              });
-              if (recovered?.binding) {
-                const state = context.getState();
-                if (
-                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === REVIEW_CONTEXT && state.untrustedCheckout !== true)
-                ) {
-                  throw new Error(
-                    'Factory review session security state could not be restored before prompt creation.',
-                  );
-                }
-              }
-            }
-          }
+          await restorePromptCheckoutTrust({
+            requestContext,
+            storage: workItemsStorage,
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+          });
           return undefined;
         },
         // A factory reads the repository it works on and its skill, never the
