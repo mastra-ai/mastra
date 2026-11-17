@@ -237,11 +237,14 @@ interface TransitionConsentOptions {
  * Whether moving a card from `from` to `to` hands it to the board's builder for the first time: `to`
  * runs in the seat of the board's build phase ({@link boardFlow}), and `from` is a resting phase or a
  * working phase of another seat that is no review (Work: Intake or Triage into Planning or Building).
+ * On a cross-board move `from` is the source board's phase — a same-named destination phase is a
+ * different one — while the build seat is always the destination board's. Roles compare across
+ * boards because they are names.
  */
-function acceptsWork(board: InstalledBoard, from: string, to: string): boolean {
+function acceptsWork(board: InstalledBoard, fromBoard: InstalledBoard, from: string, to: string): boolean {
   const buildRole = boardFlow(board).buildRole;
   if (!buildRole || board.roleForPhase(to) !== buildRole) return false;
-  const fromPhase = board.phases[from];
+  const fromPhase = fromBoard.phases[from];
   if (!fromPhase || fromPhase.kind === 'terminal') return false;
   if (fromPhase.kind === 'resting') return true;
   const fromRole = fromPhase.runner.context;
@@ -742,7 +745,7 @@ export class FactoryTransitionService {
           return {
             outcome: 'accepted' as const,
             intents: {
-              accepted: isHumanTransition(request) && acceptsWork(board, fromStage, request.stage),
+              accepted: isHumanTransition(request) && acceptsWork(board, fromBoard, fromStage, request.stage),
             },
             decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };

@@ -20,6 +20,8 @@ import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from 
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+/** Work the build seat was handed (see acceptsWork): production syncs acceptance labels from here. */
+let acceptedHook: Array<{ workItemId: string }> = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -102,6 +104,9 @@ function buildApp(
         storage: seed.workItems,
         boards: boardRegistry,
         audit: auditRecorder,
+        onAccepted: async args => {
+          acceptedHook.push({ workItemId: args.workItemId });
+        },
       }),
       startCoordinator,
       sessionRepository,
@@ -154,6 +159,7 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
+  acceptedHook = [];
   await seedProject();
 });
 
@@ -1190,6 +1196,27 @@ describe('POST transition moving a card to another board', () => {
       expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
     );
     expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+  });
+
+  it("accepts the work when a person hands the card to the destination board's build seat", async () => {
+    const created = await createItem();
+    const toPreview = await move(created, { board: 'preview', stage: 'inbox' });
+    expect(toPreview.status).toBe(200);
+    const parked = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(acceptedHook).toEqual([]);
+    // The move's own notice is delivered before the next move, as a running dispatcher would.
+    await finishQueuedRunsForTests(seed.workItems);
+
+    // Inbox is a resting phase Work does not have; handing the card to Work's builder accepts it.
+    const toBuild = await move(
+      { id: created.id, revision: parked.revision },
+      { board: 'work', stage: 'planning', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab9' },
+    );
+    expect(toBuild.status).toBe(200);
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('work');
+    // The move is the approval: the acceptance hook (production: GitHub labels) fires for the card.
+    await vi.waitFor(() => expect(acceptedHook).toEqual([{ workItemId: created.id }]));
   });
 
   it('holds a busy card whatever cause the request names', async () => {
