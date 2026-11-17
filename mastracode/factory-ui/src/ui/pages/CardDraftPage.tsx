@@ -12,107 +12,69 @@ import { Link, Navigate, useParams } from 'react-router';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useWorkItemQuery } from '../../hooks/useWorkItems';
 import type { InstalledBoardInfo } from '../../api/types';
-import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
-import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { DraftSessionStartContext } from '../domains/chat/context/DraftSessionStartContext';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
-import type { DraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { boardOf } from '../domains/factory/boardFlow';
 import { currentItemStage } from '../domains/factory/boardStages';
 import { CardDraftActions } from '../domains/factory/components/CardDraftActions';
-import { CardOverview } from '../domains/factory/components/CardOverview';
-import { CardStageBar } from '../domains/factory/components/CardStageBar';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import type { WorkItem } from '../domains/factory/services/workItems';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
 import type { FactoryProject } from '../domains/workspaces/services/github';
-import { PanelSubject } from '../domains/workspace-viewer/components/PanelSubject';
-import { WorkspaceFilesToggle } from '../domains/workspace-viewer/components/WorkspaceFilesToggle';
-import { WorkspacePanelDock } from '../domains/workspace-viewer/components/WorkspacePanelDock';
-import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
-import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/WorkspacePanelContext';
-import { SkeletonRows } from '../ui/SkeletonRows';
 
 export function CardDraftPage() {
-  const {
-    factoryId = '',
-    workItemId = '',
-    draftSessionId,
-  } = useParams<{ factoryId: string; workItemId: string; draftSessionId: string }>();
+  const { factoryId = '', workItemId = '' } = useParams<{ factoryId: string; workItemId: string }>();
   const guards = useDraftModelGuards(factoryId, 'factory');
-
-  return (
-    <ChatSessionBoundary key={draftSessionId}>
-      <CardDraftContent factoryId={factoryId} workItemId={workItemId} guards={guards} />
-    </ChatSessionBoundary>
-  );
-}
-
-function CardDraftContent({
-  factoryId,
-  workItemId,
-  guards,
-}: {
-  factoryId: string;
-  workItemId: string;
-  guards: DraftModelGuards;
-}) {
   const card = useWorkItemQuery(factoryId, workItemId);
   const catalog = useBoardCatalog(factoryId);
   const factory = guards.activeFactory;
 
   if (card.isLoadingError) {
     return (
-      <ChatPageLayout>
-        <div className={draftPageClass}>
-          <EmptyState
-            as="h2"
-            iconSlot={<IconTicket />}
-            titleSlot="Could not load this card"
-            descriptionSlot={card.error.message}
-            actionSlot={
-              <Button variant="primary" onClick={() => void card.refetch()}>
-                Try again
-              </Button>
-            }
-          />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass}>
+        <EmptyState
+          as="h2"
+          iconSlot={<IconTicket />}
+          titleSlot="Could not load this card"
+          descriptionSlot={card.error.message}
+          actionSlot={
+            <Button variant="primary" onClick={() => void card.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
     );
   }
   if (card.data === null) {
     return (
-      <ChatPageLayout>
-        <div className={draftPageClass}>
-          <EmptyState
-            as="h2"
-            iconSlot={<IconTicket />}
-            titleSlot="This card no longer exists"
-            descriptionSlot="It was removed from the board."
-            actionSlot={
-              <Link to={factoryHomePath({ id: factoryId })} className={buttonVariants({ variant: 'primary' })}>
-                Back to the board
-              </Link>
-            }
-          />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass}>
+        <EmptyState
+          as="h2"
+          iconSlot={<IconTicket />}
+          titleSlot="This card no longer exists"
+          descriptionSlot="It was removed from the board."
+          actionSlot={
+            <Link to={factoryHomePath({ id: factoryId })} className={buttonVariants({ variant: 'primary' })}>
+              Back to the board
+            </Link>
+          }
+        />
+      </div>
     );
   }
   if (!card.data || catalog.isPending || !factory) {
     return (
-      <ChatPageLayout>
-        <div className={draftPageClass} aria-busy="true">
-          <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
-          <Skeleton className="h-36 w-full rounded-xl" />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass} aria-busy="true">
+        <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
+        <Skeleton className="h-36 w-full rounded-xl" />
+      </div>
     );
   }
 
@@ -122,60 +84,8 @@ function CardDraftContent({
   const session = cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
   if (session) return <Navigate replace to={threadPath(factoryId, session)} />;
 
-  const panel: WorkspacePanelPage = {
-    subject: lead => <PanelSubject lead={lead} title={item.title} />,
-    overview: () => (
-      <CardDraftOverview factory={factory} item={item} boards={catalog.data} boardsFailed={catalog.isLoadingError} />
-    ),
-  };
-
-  return (
-    <WorkspaceFilesProvider page={panel}>
-      <ChatPageLayout
-        headerCenter={board && <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />}
-        headerActions={<WorkspaceFilesToggle />}
-        dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
-      >
-        {guards.missingModel || guards.missingCredential ? (
-          <DraftStart heading={item.title} guards={guards} />
-        ) : (
-          <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />
-        )}
-      </ChatPageLayout>
-    </WorkspaceFilesProvider>
-  );
-}
-
-function CardDraftOverview({
-  factory,
-  item,
-  boards,
-  boardsFailed,
-}: {
-  factory: FactoryProject;
-  item: WorkItem;
-  boards: readonly InstalledBoardInfo[] | undefined;
-  boardsFailed: boolean;
-}) {
-  const lookup = useCardSessionRepository(factory.id, item);
-  if (lookup.isPending) return <SkeletonRows label="Loading overview" rows={4} className="p-3" />;
-
-  const resolved = lookup.data?.status === 'resolved' ? lookup.data : undefined;
-  const repository =
-    resolved && factory.repositories.find(linked => linked.projectRepositoryId === resolved.projectRepositoryId);
-  return (
-    <CardOverview
-      item={item}
-      sessionItems={[item]}
-      factoryId={factory.id}
-      boards={boards}
-      boardsFailed={boardsFailed}
-      repository={repository}
-      repositoryFailed={lookup.isError}
-      subscriptions={[]}
-      pullRequestsFailed={false}
-    />
-  );
+  if (guards.missingModel || guards.missingCredential) return <DraftStart heading={item.title} guards={guards} />;
+  return <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />;
 }
 
 function CardDraft({
@@ -191,7 +101,11 @@ function CardDraft({
 }) {
   useGlobalShortcuts();
   const sessionRepository = useCardSessionRepository(factory.id, item);
-  const draftStart = useStartCardSessionFromDraft(item, sessionRepository.error ? undefined : sessionRepository.data);
+  const draftStart = useStartCardSessionFromDraft(
+    factory,
+    item,
+    sessionRepository.error ? undefined : sessionRepository.data,
+  );
 
   return (
     <DraftSessionStartContext.Provider value={draftStart}>

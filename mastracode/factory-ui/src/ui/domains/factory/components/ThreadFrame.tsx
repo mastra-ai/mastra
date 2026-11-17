@@ -7,11 +7,11 @@ import { Link, useParams } from 'react-router';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
+import { SessionFrame } from '../../chat/components/SessionFrame';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { threadPath } from '../../workspaces/services/factoryPaths';
-import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
-import { WorkspacePanelDock } from '../../workspace-viewer/components/WorkspacePanelDock';
+import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
+import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { currentItemStage } from '../boardStages';
 import { useSessionCard } from '../hooks/useSessionCard';
 import { useOpenSession } from '../hooks/useOpenSession';
@@ -19,7 +19,14 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { CardStageBar } from './CardStageBar';
 import { CardStageSummary } from './CardStageSummary';
 import { SessionContextMenu } from './SessionContextMenu';
+import { SessionPanelOverview } from './SessionPanelOverview';
+import { SessionPanelSubject } from './SessionPanelSubject';
 import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
+
+const SESSION_PANEL: WorkspacePanelPage = {
+  subject: lead => <SessionPanelSubject lead={lead} />,
+  overview: workspace => <SessionPanelOverview workspace={workspace} />,
+};
 
 interface OpenSessionContext {
   context: string;
@@ -64,9 +71,10 @@ function stageUnavailable(
   return undefined;
 }
 
-export function FactorySessionPage({ children }: { children: ReactNode }) {
+export function ThreadFrame({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const { session, isUserThread, title: sessionTitle } = useOpenSession();
+  const { workspacePath } = useThreadWorkspacePath();
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
   const {
@@ -86,7 +94,8 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
 
   return (
-    <ChatPageLayout
+    <SessionFrame
+      panel={workspacePath ? SESSION_PANEL : undefined}
       title={title}
       titleMenu={
         switchable && factoryId && sessionId ? (
@@ -122,11 +131,9 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
           <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
         ) : undefined
       }
-      headerActions={<WorkspaceFilesToggle />}
-      dockActions={actions => <WorkspacePanelDock>{actions}</WorkspacePanelDock>}
     >
       <ThreadSubscriptionsRefresh />
       {children}
-    </ChatPageLayout>
+    </SessionFrame>
   );
 }

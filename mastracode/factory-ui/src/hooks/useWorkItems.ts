@@ -267,9 +267,12 @@ export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: 
  * The cards holding one session, with the cards related to them: what a session page reads
  * instead of the board.
  */
-export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
+export function sessionWorkItemsQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  sessionId: string | undefined,
+) {
+  return queryOptions({
     queryKey: queryKeys.sessionWorkItems(factoryProjectId, sessionId),
     queryFn:
       factoryProjectId && sessionId
@@ -279,6 +282,11 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
     refetchOnWindowFocus: true,
     select: selectCards,
   });
+}
+
+export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(sessionWorkItemsQueryOptions(baseUrl, factoryProjectId, sessionId));
 }
 
 /** One card by id, for a page that shows it off the board. */

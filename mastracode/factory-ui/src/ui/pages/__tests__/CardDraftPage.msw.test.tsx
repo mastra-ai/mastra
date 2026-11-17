@@ -189,6 +189,70 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
+  it("keeps the card's stage and panel in place when the first prompt opens the thread", async () => {
+    stubPageWidth(1200);
+    const route = stubDraftRoute();
+    stubCard();
+    const user = userEvent.setup();
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+    const threadPath = `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`;
+    const cardInSession = {
+      ...linearCard,
+      sessions: {
+        chat: {
+          sessionId: DRAFT_SESSION_ID,
+          branch: 'factory/linear-eng-42',
+          threadId: DRAFT_SESSION_ID,
+          startedBy: 'user-1',
+        },
+      },
+    };
+    let answerThreadReads = () => {};
+    const threadReadsAnswered = new Promise<void>(resolve => {
+      answerThreadReads = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (!new URL(request.url).searchParams.has('sessionId')) return HttpResponse.json({ workItems: [linearCard] });
+        if (router.state.location.pathname === threadPath) await threadReadsAnswered;
+        return HttpResponse.json({ workItems: [cardInSession] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/subscriptions`, async () => {
+        if (router.state.location.pathname === threadPath) await threadReadsAnswered;
+        return HttpResponse.json({ subscriptions: [] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, () => HttpResponse.json({ description: null })),
+      http.get(`${TEST_BASE_URL}/web/workspace/changes`, ({ request }) =>
+        HttpResponse.json({
+          workspacePath: new URL(request.url).searchParams.get('workspacePath'),
+          available: true,
+          additions: 0,
+          deletions: 0,
+          changes: [],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+
+    expect(await screen.findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
+    expect(router.state.location.pathname).toBe(threadPath);
+    const panel = screen.getByRole('complementary', { name: 'Session panel' });
+    expect(within(panel).getByRole('region', { name: 'Workspace' })).toBeInTheDocument();
+    expect(within(panel).getByRole('region', { name: 'Card' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Card stage' })).toBeInTheDocument();
+
+    answerThreadReads();
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it('keeps the prompt on the draft when the start fails, and the card reopened starts in the session it left', async () => {
     const route = stubDraftRoute();
     const runStarts = stubCard();

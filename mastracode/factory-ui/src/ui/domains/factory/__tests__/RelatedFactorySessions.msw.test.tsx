@@ -15,8 +15,7 @@ import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards
 
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../../../api/types';
 import { ChatSessionTestProvider } from '../../chat/context/ChatSessionTestProvider';
-import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
-import { FactorySessionPage } from '../components/RelatedFactorySessions';
+import { ThreadFrame } from '../components/ThreadFrame';
 import type { FactoryDecisionSummary } from '../services/decisions';
 
 const FACTORY_ID = 'factory-1';
@@ -99,9 +98,7 @@ function renderHeader() {
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
             element={
               <ChatSessionTestProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
-                <WorkspaceFilesProvider>
-                  <FactorySessionPage>{null}</FactorySessionPage>
-                </WorkspaceFilesProvider>
+                <ThreadFrame>{null}</ThreadFrame>
               </ChatSessionTestProvider>
             }
           />
@@ -112,7 +109,7 @@ function renderHeader() {
   );
 }
 
-describe('FactorySessionPage', () => {
+describe('ThreadFrame', () => {
   describe('while the board is still loading', () => {
     it("names the session among the card's others before the board arrives", async () => {
       const card = workItem(undefined);
@@ -411,9 +408,7 @@ describe('FactorySessionPage', () => {
                 path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
                 element={
                   <ChatSessionTestProvider threadId={threadId} deferUntilMessagesReady={false}>
-                    <WorkspaceFilesProvider>
-                      <FactorySessionPage>{null}</FactorySessionPage>
-                    </WorkspaceFilesProvider>
+                    <ThreadFrame>{null}</ThreadFrame>
                   </ChatSessionTestProvider>
                 }
               />

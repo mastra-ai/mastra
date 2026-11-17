@@ -2,6 +2,8 @@ import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annot
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
+import { useLocation } from 'react-router';
 
 import { chatColumnClass, composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
@@ -15,6 +17,9 @@ import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
 import { ChatMessageBoundary } from '../context/ChatSessionProvider';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { opensWithPrompt } from '../hooks/useHandoffPrompt';
+
+import './chat-enter.css';
 
 const PREVIOUS_TURN_PEEK_PX = 64;
 const activityTail: TranscriptTail = stretchLive => <ActivityLine stretchLive={stretchLive} />;
@@ -35,6 +40,9 @@ export function SessionChatSurface({
   composerStatus,
   contentOverlay,
 }: SessionChatSurfaceProps) {
+  const location = useLocation();
+  // Fixed at mount: the thread drops the handoff from its state once it sends.
+  const [continuesDraft] = useState(() => opensWithPrompt(location.state));
   const { busy, loadMore, transcript } = useChatTranscript();
   const { historyInitializing, preparing } = useChatMessagePreparation();
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
@@ -42,7 +50,11 @@ export function SessionChatSurface({
 
   return (
     <ChatShell
-      className={cn('chat-surface-enter flex-1 [--chat-gutter:0.25rem]', chatColumnClass)}
+      className={cn(
+        continuesDraft ? 'chat-surface-continues' : 'chat-surface-enter',
+        'flex-1 [--chat-gutter:0.25rem]',
+        chatColumnClass,
+      )}
       scroller={{
         autoScroll: true,
         defaultScrollPosition: busy ? 'end' : 'last-anchor',

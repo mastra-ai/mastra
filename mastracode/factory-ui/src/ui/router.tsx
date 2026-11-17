@@ -49,24 +49,31 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage), <AppPageLoader />);
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
+// Card drafts and threads share this frame, and a draft's first prompt opens its thread.
+const SessionLayout = lazyPage(
+  () =>
+    import('./layouts/SessionLayout').then(module => {
+      // A failed preload retries on the visit.
+      ThreadPage.preload().catch(() => undefined);
+      return module.SessionLayout;
+    }),
+  <AppPageLoader />,
+);
 // A new session opens its thread on the first prompt, so that page loads right after.
 const NewPage = lazyPage(
   () =>
     import('./pages/NewPage').then(module => {
-      // A failed preload retries on the visit.
-      ThreadPage.preload().catch(() => undefined);
+      SessionLayout.preload().catch(() => undefined);
       return module.NewPage;
     }),
   <AppPageLoader />,
 );
-const CardDraftPage = lazyPage(
-  () =>
-    import('./pages/CardDraftPage').then(module => {
-      ThreadPage.preload().catch(() => undefined);
-      return module.CardDraftPage;
-    }),
-  <AppPageLoader />,
+const CardDraftPage = lazyPage(() =>
+  import('./pages/CardDraftPage').then(module => {
+    SessionLayout.preload().catch(() => undefined);
+    return module.CardDraftPage;
+  }),
 );
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
@@ -270,7 +277,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.
-                  ...loadOnEntry(prefetchSidebar, ThreadPage),
+                  ...loadOnEntry(prefetchSidebar, SessionLayout),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
@@ -278,17 +285,22 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                       children: [
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
-                        { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
-                        { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
                         {
                           path: 'cards/:workItemId',
                           element: <CardDraftRedirect />,
                           ...loadOnEntry(prefetchCardDraft, CardDraftPage),
                         },
                         {
-                          path: 'cards/:workItemId/new/:draftSessionId',
-                          ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                          ...lazyRoute(SessionLayout),
+                          children: [
+                            { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
+                            { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                            {
+                              path: 'cards/:workItemId/new/:draftSessionId',
+                              ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                            },
+                          ],
                         },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
