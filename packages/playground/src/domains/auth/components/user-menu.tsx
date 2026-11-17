@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
-import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
 import { useState } from 'react';
@@ -100,11 +100,11 @@ export function UserMenu({ user }: UserMenuProps) {
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
-                  {isSwitching && <IconLoadingCircle className="h-3.5 w-3.5 animate-spin" />}
+                  {isSwitching && <IconLoadingCircle className="size-icon-sm animate-spin" />}
                   <Txt as="span" variant="body" className="flex-1 capitalize">
                     {role.name}
                   </Txt>
-                  {isActive && <IconCrossMedium className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {isActive && <IconCrossMedium className="size-icon-sm text-muted-foreground" />}
                 </button>
               );
             })}
@@ -123,7 +123,7 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
-            icon={<IconSettingsGear1 />}
+            icon={<IconSettingsGear5 />}
           >
             Settings
           </Button>

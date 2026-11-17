@@ -40,7 +40,7 @@ export function SidebarMobileTrigger({
         className,
       )}
     >
-      {icon ?? <IconBarsThree className="size-5" />}
+      {icon ?? <IconBarsThree className="size-icon-lg" />}
     </button>
   );
 }

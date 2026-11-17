@@ -17,7 +17,7 @@ export function BoardItemsSkeleton({ label, layout, rows = 3 }: { label: string;
             <Skeleton className="h-5 w-16 shrink-0 rounded-full motion-reduce:before:animate-none max-sm:hidden" />
           </div>
           <Skeleton className="size-avatar-sm rounded-full motion-reduce:before:animate-none max-sm:hidden" />
-          <Skeleton className="h-3 w-10 justify-self-end motion-reduce:before:animate-none" />
+          <Skeleton className="h-3 w-10 motion-reduce:before:animate-none" />
         </div>
       </SkeletonRows>
     );

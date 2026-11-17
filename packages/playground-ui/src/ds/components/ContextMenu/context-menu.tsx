@@ -3,7 +3,7 @@ import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui
 import * as React from 'react';
 import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   menuItemCheckClass,
@@ -191,7 +191,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
     >
       {children}
       <span className={menuItemTrailingIconClass}>
-        <IconChevronBottom className="-rotate-90" />
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
   ),

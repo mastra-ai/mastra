@@ -411,7 +411,13 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when creating a custom provider', () => {
-    function registerCustomProviderHandlers({ orgKeyAdmin = true }: { orgKeyAdmin?: boolean } = {}) {
+    function registerCustomProviderHandlers({
+      orgKeyAdmin = true,
+      scope,
+    }: {
+      orgKeyAdmin?: boolean;
+      scope: 'org' | 'user';
+    }) {
       let created = false;
       const provider = {
         id: 'my-llm',
@@ -419,13 +425,15 @@ describe('Model provider onboarding', () => {
         url: 'https://api.example.com/v1',
         hasApiKey: true,
         models: ['model-a'],
+        scope,
       };
+      const savedRow =
+        scope === 'org'
+          ? { provider: 'my-llm', source: 'stored-org', orgCredential: 'api_key', orgKey: true, custom: true }
+          : { provider: 'my-llm', source: 'stored-user', userCredential: 'api_key', custom: true };
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({
-            orgKeyAdmin,
-            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
-          }),
+          HttpResponse.json({ orgKeyAdmin, providers: created ? [savedRow] : [] }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
           HttpResponse.json({
@@ -440,6 +448,7 @@ describe('Model provider onboarding', () => {
             url: 'https://api.example.com/v1',
             apiKey: 'sk-test',
             models: ['model-a'],
+            scope,
           });
           created = true;
           return HttpResponse.json({ ok: true, provider });
@@ -469,7 +478,7 @@ describe('Model provider onboarding', () => {
 
     it('requires a model before creating a provider during setup', async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers({ scope: 'org' });
       renderModelSection();
       const user = userEvent.setup();
 
@@ -482,9 +491,9 @@ describe('Model provider onboarding', () => {
       expect(await screen.findByText('At least one model is required.')).toBeVisible();
     });
 
-    it('refreshes the catalogs and continues to organization model selection', async () => {
+    it('saves the provider for the organization and continues to organization model selection', async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers({ scope: 'org' });
       const { client, onCreate } = renderModelSection();
 
       const user = await createCustomProvider();
@@ -499,9 +508,9 @@ describe('Model provider onboarding', () => {
       });
     });
 
-    it('continues to personal model selection with the stored custom provider', async () => {
+    it("saves the provider to the caller's own account and continues to personal model selection", async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers({ scope: 'user' });
       registerNoPersonalDefault();
       const { client, onCreate } = renderModelSection({ draft: { modelScope: 'user' } });
 
@@ -517,11 +526,10 @@ describe('Model provider onboarding', () => {
       });
     });
 
-    it('keeps a member on personal accounts after their custom provider unlocks the company account', async () => {
+    it("saves a member's custom provider to their own account, leaving the company account locked", async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers({ orgKeyAdmin: false });
+      registerCustomProviderHandlers({ orgKeyAdmin: false, scope: 'user' });
       registerNoPersonalDefault();
-      // No stored scope: the member lands on personal accounts only because the company account is locked.
       const { client, onCreate } = renderModelSection();
       const yourAccount = within(await screen.findByRole('group', { name: 'Your account' }));
 
@@ -538,6 +546,27 @@ describe('Model provider onboarding', () => {
         modelScope: 'user',
         personal: { providerId: 'my-llm', method: 'api_key', modelId: 'my-llm/model-a' },
       });
+    });
+
+    it('does not let a member add a custom provider for the company account', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: openaiModels })),
+      );
+      renderModelSection();
+      const company = within(await screen.findByRole('group', { name: 'Company account' }));
+
+      await openProviderList(userEvent.setup(), company);
+
+      const addCustom = screen.getByRole('button', { name: 'Add a custom provider' });
+      expect(addCustom).toBeDisabled();
+      expect(addCustom).toHaveAccessibleDescription(/Only an organization admin/);
     });
   });
 

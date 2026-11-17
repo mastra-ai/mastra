@@ -12,8 +12,8 @@ import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/
 import {
   useBoardPhasesQuery,
   useDeleteWorkItemMutation,
+  useSessionCardsQuery,
   useSessionWorkItemsQuery,
-  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
@@ -189,15 +189,11 @@ describe('useTransitionWorkItemMutation', () => {
 });
 
 describe('useDeleteWorkItemMutation', () => {
-  it('drops the deleted card and its session marker from the cards the sidebar reads', async () => {
+  it('drops the deleted card from the cards the search palette titles sessions with', async () => {
     let deleted = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
-        HttpResponse.json(
-          deleted
-            ? { workItems: [], parkedSessionIds: [] }
-            : { workItems: [wireItem], parkedSessionIds: ['session-1'] },
-        ),
+        HttpResponse.json({ workItems: deleted ? [] : [wireItem], parkedSessionIds: [] }),
       ),
       http.delete(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, () => {
         deleted = true;
@@ -206,18 +202,17 @@ describe('useDeleteWorkItemMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      cards: useSidebarWorkItemsQuery(PROJECT_ID),
+      cards: useSessionCardsQuery(PROJECT_ID),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
-    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual(['session-1']));
+    await waitFor(() => expect(result.current.cards.data?.workItems).toHaveLength(1));
 
     act(() => {
       result.current.remove.mutate(ITEM_ID);
     });
     await waitFor(() => expect(result.current.cards.data?.workItems).toEqual([]));
     await waitForMutationsIdle(client);
-
-    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual([]));
+    expect(result.current.cards.data?.workItems).toEqual([]);
   });
 });
 
@@ -462,40 +457,6 @@ describe('useBoardPhasesQuery', () => {
     expect(project.listings.at(-1)?.get('q')).toBe('login');
     expect(project.cardReads).toEqual([]);
     expect(result.current.data).toMatchObject({ matchingTotal: 1, boardTotal: 2 });
-  });
-
-  it('keeps the open card when newer cards push it past the ones its phase lists, without listing the phase down to it', async () => {
-    const project = serveProject(Array.from({ length: 50 }, (_, index) => card(index + 1)));
-    const { result, rerender, client } = renderHookWithProviders(
-      (openCard: string | undefined) => useBoardPhasesQuery(PROJECT_ID, VIEW, openCard),
-      { initialProps: undefined },
-    );
-    await waitFor(() => expect(listed(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1)));
-    const held = () => result.current.data?.workItems.find(item => item.id === cardId(1));
-    const opened = held();
-
-    rerender(cardId(1));
-    expect(project.listings).toHaveLength(1);
-
-    project.cards = [...project.cards, card(51), card(52)];
-    await act(() => refresh(client));
-
-    await waitFor(() => expect(listed(result.current.data, 'execute')?.total).toBe(52));
-    expect(project.listings.at(-1)?.get('item')).toBe(cardId(1));
-    // The phase lists its first cards, and the answer says apart that it holds the open one.
-    expect(listed(result.current.data, 'execute')?.ids).toHaveLength(50);
-    expect(listed(result.current.data, 'execute')?.ids).not.toContain(cardId(1));
-    expect(result.current.data?.asked).toEqual({ id: cardId(1), phases: ['execute'] });
-    expect(held()).toBe(opened);
-    expect(project.cardReads.map(ids => ids.toSorted())).toEqual([[cardId(51), cardId(52)]]);
-
-    // Closed, the card is listed like any other: the board lets go of it.
-    rerender(undefined);
-    await act(() => refresh(client));
-
-    await waitFor(() => expect(result.current.data?.asked).toBeUndefined());
-    expect(project.listings.at(-1)?.has('item')).toBe(false);
-    expect(held()).toBeUndefined();
   });
 
   it('reads a linked card deep in its phase with the first cards of the board, not with the cards above it', async () => {

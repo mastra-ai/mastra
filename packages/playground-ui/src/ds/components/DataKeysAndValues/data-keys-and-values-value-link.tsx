@@ -25,7 +25,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
   const linkClassName = cn(
     'flex items-center gap-2 truncate hover:text-foreground',
     controlStateColorTransition,
-    '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-70',
+    '[&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:opacity-70',
   );
 
   if (isExternal) {

@@ -4,6 +4,8 @@ import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
+import { stampNewProjectIntake } from '../boards/base.js';
+import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
 
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
@@ -244,7 +246,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA]);
+    // The project's intake setting is written with it, so its table is this domain's too.
+    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA, FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA]);
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -265,15 +268,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     input: CreateFactoryProjectInput;
   }): Promise<FactoryProject> {
     const now = new Date();
-    const row = await this.#db.insertOne<FactoryProjectDbRow>('factory_projects', {
-      org_id: orgId,
-      created_by: userId,
-      name: input.name,
-      description: input.description ?? null,
-      default_model_id: input.defaultModelId ?? null,
-      model_scope: input.modelScope ?? 'hybrid',
-      created_at: now,
-      updated_at: now,
+    // A new project places its items by intake order; one created before that keeps the route list.
+    const row = await this.storage.withTransaction(async ops => {
+      const inserted = await ops.insertOne<FactoryProjectDbRow>('factory_projects', {
+        org_id: orgId,
+        created_by: userId,
+        name: input.name,
+        description: input.description ?? null,
+        default_model_id: input.defaultModelId ?? null,
+        model_scope: input.modelScope ?? 'hybrid',
+        created_at: now,
+        updated_at: now,
+      });
+      await stampNewProjectIntake(ops, { orgId, factoryProjectId: inserted.id });
+      return inserted;
     });
     return toFactoryProject(row);
   }

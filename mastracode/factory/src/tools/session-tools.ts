@@ -10,7 +10,8 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
+import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
+import { customProviderOwner } from '../routes/custom-provider-source.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -33,6 +34,7 @@ import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/proj
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { workItemNumber } from '../work-items/card-number.js';
 import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
@@ -136,6 +138,13 @@ export function createFactorySessionTools(
     const modelScope = policy.tenant.credentialScope ?? 'user';
     const orgId = policy.tenant.orgId ?? scope.orgId;
     const customProviders = tenantCatalog.customProviders;
+    // The list model resolution uses for this session, so the tool never
+    // offers a custom model the session cannot run. A tenant catalog only
+    // exists with sign-in on.
+    const customProviderOwnerForSession = customProviderOwner(
+      { orgId, userId: policy.tenant.userId, credentialScope: modelScope },
+      /* authEnabled */ true,
+    );
     const usable = (
       await buildModelCatalog({
         controller,
@@ -146,12 +155,15 @@ export function createFactorySessionTools(
           modelScope,
         }),
         deploymentProviders: tenantCatalog.deploymentProviders,
-        listCustomProviders: customProviders
-          ? async () => {
-              await customProviders.ensureReady();
-              return customProviders.list({ orgId });
-            }
-          : undefined,
+        listCustomProviders:
+          customProviders && customProviderOwnerForSession
+            ? async () => {
+                await customProviders.ensureReady();
+                return (await customProviders.list(customProviderOwnerForSession)).filter(
+                  provider => !customEndpointUrlProblem(provider.url),
+                );
+              }
+            : undefined,
       })
     ).map(model => model.id);
     for (const id of usable) known.add(id);
@@ -477,7 +489,7 @@ export function createFactorySessionTools(
     } catch (error) {
       if (!alreadyFollowing) {
         await deps.workItems.unsubscribeFromWorkItem({
-          orgId: scope.orgId,
+          ...followScope,
           workItemId: item.id,
           sessionId: scope.sessionId,
         });

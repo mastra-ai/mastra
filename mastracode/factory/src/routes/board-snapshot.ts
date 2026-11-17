@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { gzip as gzipCallback } from 'node:zlib';
+import type { Context } from 'hono';
 
 import type { Card } from '../storage/domains/work-items/base.js';
 import { boardCheck } from '../work-items/board-check.js';
@@ -53,7 +54,7 @@ export function scopedSnapshot(
   parkedSessionIds: readonly string[],
   total?: number,
 ): BoardSnapshot {
-  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, sha1, { total });
+  return snapshot(items, toWire, runningSessionIds, parkedSessionIds, etagDigest, { total });
 }
 
 /** What moved on a board, for the one reader whose cursor it answers: nothing of it is kept. */
@@ -68,7 +69,7 @@ export function movedBody(body: unknown): Pick<BoardSnapshot, 'json' | 'gzipped'
  */
 export function hashedBody(body: unknown): BoardSnapshot {
   const json = JSON.stringify(body);
-  return { etag: `W/"${sha1(json)}"`, json, gzipped: () => gzip(json) };
+  return { etag: `W/"${etagDigest(json)}"`, json, gzipped: () => gzip(json) };
 }
 
 /**
@@ -81,7 +82,7 @@ export function namedBody(names: object, bodies?: () => object): BoardSnapshot {
   const json = () => (whole ??= bodies ? JSON.stringify({ ...names, ...bodies() }) : named);
   return {
     // An answer with bodies is not one a reader of the names alone holds.
-    etag: `W/"${sha1(named)}${bodies ? '.bodies' : ''}"`,
+    etag: `W/"${etagDigest(named)}${bodies ? '.bodies' : ''}"`,
     get json() {
       return json();
     },
@@ -114,7 +115,7 @@ function snapshot(
   }
   // Everything the body holds beside the cards: a 304 must never hide a change to any of it.
   const rest = JSON.stringify({ runningSessionIds, parkedSessionIds, ...more });
-  const etag = `W/"${cards.id}.${sha1(rest)}"`;
+  const etag = `W/"${cards.id}.${etagDigest(rest)}"`;
   if (cards.latest?.etag === etag) return cards.latest;
 
   const json = `{"workItems":${cards.json},${rest.slice(1)}`;
@@ -125,8 +126,8 @@ function snapshot(
 }
 
 /** Names a text: a reader holding another text holds another name. */
-export function sha1(text: string): string {
-  return createHash('sha1').update(text).digest('base64url');
+export function etagDigest(text: string): string {
+  return createHash('sha256').update(text).digest('base64url');
 }
 
 /** Whether an `If-None-Match` header names this ETag (weak comparison, as for GET). */
@@ -134,4 +135,37 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
   if (!ifNoneMatch) return false;
   const bare = (tag: string) => tag.trim().replace(/^W\//, '');
   return ifNoneMatch.split(',').some(tag => tag.trim() === '*' || bare(tag) === bare(etag));
+}
+
+/** Session ids of the listed cards that the predicate picks, each once. */
+export function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
+  const picked = new Set<string>();
+  for (const item of items) {
+    for (const { sessionId } of Object.values(item.sessions)) {
+      if (predicate(sessionId)) picked.add(sessionId);
+    }
+  }
+  return [...picked];
+}
+
+/** Sends a JSON body, gzipped for a reader that accepts it. */
+export async function sendJson(
+  c: Context,
+  body: Pick<BoardSnapshot, 'json' | 'gzipped'>,
+  headers: Record<string, string>,
+): Promise<Response> {
+  headers['Content-Type'] = 'application/json; charset=UTF-8';
+  headers.Vary = 'Accept-Encoding';
+  if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
+  headers['Content-Encoding'] = 'gzip';
+  return c.body(new Uint8Array(await body.gzipped()), 200, headers);
+}
+
+/** Sends an answer its reader revalidates: a 304 without a body when the reader holds it already. */
+export async function sendRevalidated(c: Context, answer: BoardSnapshot): Promise<Response> {
+  const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
+  if (matchesEtag(c.req.header('if-none-match'), answer.etag)) {
+    return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
+  }
+  return sendJson(c, answer, headers);
 }

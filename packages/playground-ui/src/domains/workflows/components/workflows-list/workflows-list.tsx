@@ -176,7 +176,7 @@ function WorkflowRow({
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
                 className="inline-flex shrink-0 items-center gap-1"
               >
-                <WorkflowIcon aria-hidden className="size-3.5" />
+                <WorkflowIcon aria-hidden className="size-icon-sm" />
                 {nestedIds.length}
               </Txt>
             ) : null}
@@ -202,7 +202,7 @@ function WorkflowRow({
               className="inline-flex items-center gap-1.5 text-warning-foreground"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
-              <IconPause aria-hidden className="size-3.5" />
+              <IconPause aria-hidden className="size-icon-sm" />
               {suspendedCount}
             </span>
           ) : (

@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -26,15 +25,13 @@ import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/Wor
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
-import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
+import { RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
 import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths';
 
 import '../domains/chat/components/chat-enter.css';
-import { IconBubbleCrossed } from '@mastra/playground-ui/icons/central/IconBubbleCrossed';
-
-const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
+import { IconChatBubble7Off } from '@mastra/playground-ui/icons/central/IconChatBubble7Off';
 
 const SESSION_PANEL: WorkspacePanelPage = {
   subject: lead => <SessionPanelSubject lead={lead} />,
@@ -74,7 +71,7 @@ function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
-          iconSlot={<IconBubbleCrossed />}
+          iconSlot={<IconChatBubble7Off />}
           titleSlot="Session not found"
           descriptionSlot="This session does not exist, or it is private to another user."
           actionSlot={
@@ -105,7 +102,6 @@ function ThreadPageMain({
           emptyState={<EmptyThreadState />}
           composerLabel="Thread composer"
           composerStatus={<TeammateSessionLine />}
-          className={threadShellClass}
           contentOverlay={<ThreadRailSlot />}
         />
       </FactorySessionPage>

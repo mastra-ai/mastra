@@ -746,6 +746,17 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'working-pull-request', FACTORY_API_ROUTE_CATALOG.workItemWorkingPullRequest, {
+    description: "Make one of a card's linked pull requests the one its sessions work on",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Work on pull request 42',
+        command: `mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'start', FACTORY_API_ROUTE_CATALOG.workItemStart, {
     description: 'Explicitly start a Factory work-item run',
     input: 'required',
@@ -761,6 +772,23 @@ export function registerApiCommand(program: CommanderCommand): void {
         command: `mastra api factory work-item automation-run <project-id> <work-item-id> '{"requestId":"00000000-0000-4000-8000-000000000000","expectedRevision":1,"role":"work","skillName":"factory-plan"}'`,
       },
     ],
+  });
+
+  const factorySession = factory.command('session').description("Inspect a Factory project's sessions");
+  addAction(factorySession, 'rows', FACTORY_API_ROUTE_CATALOG.sessionRows, {
+    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'My sessions grouped by board, listing 25 rows of the Work board',
+        command: `mastra api factory session rows <project-id> '{"owner":"mine","groupBy":"board","window":["board:work:25"]}'`,
+      },
+    ],
+  });
+  addAction(factorySession, 'activity', FACTORY_API_ROUTE_CATALOG.sessionActivity, {
+    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    routePlacement: 'origin',
   });
 
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
@@ -862,7 +890,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('intake-route')
     .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
   addAction(factoryIntakeRoute, 'list', FACTORY_API_ROUTE_CATALOG.intakeRouteList, {
-    description: "List a project's intake routes in order, and what applies when none matches",
+    description: "List a project's intake routes in order, or one board's with boardKey",
+    input: 'optional',
     routePlacement: 'origin',
   });
   addAction(factoryIntakeRoute, 'get', FACTORY_API_ROUTE_CATALOG.intakeRouteGet, {
@@ -903,6 +932,71 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Move untouched cards to the board the intake routes now file them on',
     routePlacement: 'origin',
     defaultTimeoutMs: 120_000,
+  });
+  const factoryIntakeOrder = factory
+    .command('intake-order')
+    .description("Read or set the order in which a Factory project's boards are asked to take a new item");
+  addAction(factoryIntakeOrder, 'get', FACTORY_API_ROUTE_CATALOG.intakeOrderGet, {
+    description:
+      'Get the intake order, the evaluator in use and where it came from, and how the old and new evaluators compare',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeOrder, 'set', FACTORY_API_ROUTE_CATALOG.intakeOrderUpdate, {
+    description: "Set the intake order, naming every board once, or switch the project's evaluator",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Ask the docs board before Work',
+        command: `mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'`,
+      },
+      {
+        description: 'Switch an older project to intake order',
+        command: `mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'`,
+      },
+    ],
+  });
+  const factoryNotRouted = factory
+    .command('not-routed')
+    .description("List and route again the items no board's intake rules took");
+  addAction(factoryNotRouted, 'list', FACTORY_API_ROUTE_CATALOG.intakeNotRoutedList, {
+    description: 'List items no board took, oldest first; pass nextCursor back as cursor for more',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryNotRouted, 'route-again', FACTORY_API_ROUTE_CATALOG.intakeRouteAgain, {
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    routePlacement: 'origin',
+  });
+  const factoryIntake = factory
+    .command('intake')
+    .description("Check a Factory project's intake rules against real items without filing anything");
+  addAction(factoryIntake, 'dry-run', FACTORY_API_ROUTE_CATALOG.intakeDryRun, {
+    description: 'Run the saved, or unsaved, intake rules and order over the newest 200 items',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Preview asking the docs board before Work',
+        command: `mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'`,
+      },
+    ],
+  });
+  addAction(factoryIntake, 'skipped', FACTORY_API_ROUTE_CATALOG.intakeSkippedList, {
+    description:
+      "How often each card-move rule was skipped in the last 30 days because its target couldn't take the card, with the newest skip",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntake, 'test', FACTORY_API_ROUTE_CATALOG.intakeTest, {
+    description: 'Show where intake would file one item, by URL or item id, and what every rule answered',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Test an issue from a linked repository',
+        command: `mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'`,
+      },
+    ],
   });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {

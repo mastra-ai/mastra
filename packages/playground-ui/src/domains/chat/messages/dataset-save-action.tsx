@@ -191,7 +191,7 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
         className={cn(quietTextHover, 'bg-transparent')}
         onClick={handleClick}
       >
-        <IconServer1 className="size-4" />
+        <IconServer1 />
       </Button>
       <DatasetSaveDialog
         open={dialogOpen}
@@ -260,7 +260,7 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
           'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
         )}
       >
-        {isFetching ? <Spinner className="size-3.5" /> : <IconServer1 className="size-3.5" />}
+        {isFetching ? <Spinner className="size-3.5" /> : <IconServer1 className="size-icon-sm" />}
         <Txt as="span" variant="meta" className="block">
           Save full conversation to dataset
         </Txt>
