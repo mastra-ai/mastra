@@ -45,7 +45,25 @@ class TestProcessHandle extends ProcessHandle {
 
   finish(): void {
     this.exitCode = 0;
-    this.resolveWait({
+    this.resolveWait(this.waitResult());
+  }
+
+  /**
+   * Settles `wait()` while the handle still counts as running, the shape a
+   * command that left a descendant holding its output open produces.
+   */
+  settleWaitWithoutExit(): void {
+    this.resolveWait(this.waitResult());
+  }
+
+  /** Reports the real exit the way a provider's `'close'` handler does. */
+  markExited(): void {
+    this.exitCode = 0;
+    this.notifyExited();
+  }
+
+  private waitResult(): CommandResult {
+    return {
       success: true,
       exitCode: 0,
       stdout: this.stdout,
@@ -55,7 +73,7 @@ class TestProcessHandle extends ProcessHandle {
       stdoutDroppedBytes: this.stdoutDroppedBytes,
       stderrDroppedBytes: this.stderrDroppedBytes,
       executionTimeMs: 0,
-    });
+    };
   }
 }
 
@@ -434,6 +452,47 @@ describe('ProcessHandle wait abortSignal', () => {
     // is no longer waiting on.
     controller.abort();
     expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('keeps the abort listener while the handle still counts as running after the wait settles', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill');
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    // The descendant still holds the output, so the wait settles without an exit.
+    handle.settleWaitWithoutExit();
+    await waiting;
+    expect(handle.exitCode).toBeUndefined();
+
+    // The caller is done waiting, but the process is still running and stays
+    // killable, so the run's signal must still reach it.
+    controller.abort();
+    expect(kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('detaches the abort listener once the process exits after the wait settled', async () => {
+    const handle = new TestProcessHandle();
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+    let exited = false;
+    void handle.whenExited().then(() => {
+      exited = true;
+    });
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    handle.settleWaitWithoutExit();
+    await waiting;
+
+    // The process is still running: its exit is outstanding and the listener
+    // has to stay attached.
+    expect(exited).toBe(false);
+    expect(removeListener).not.toHaveBeenCalled();
+
+    handle.markExited();
+
+    await vi.waitFor(() => expect(exited).toBe(true));
+    await vi.waitFor(() => expect(removeListener).toHaveBeenCalledTimes(1));
   });
 
   it('records that an abort killed the process', async () => {
