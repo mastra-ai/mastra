@@ -277,10 +277,14 @@ describe('a card without a session', () => {
 
     await user.click(within(suggested).getByRole('button', { name: 'Investigate' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(threadPath));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(threadPath);
+      expect(
+        within(conversation).queryByText('No session yet. Your first message starts one.'),
+      ).not.toBeInTheDocument();
+    });
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
     expect(screen.getByRole('region', { name: 'Conversation' })).toBe(conversation);
-    expect(within(conversation).queryByText('No session yet. Your first message starts one.')).not.toBeInTheDocument();
     answerHistory();
     expect(await within(conversation).findByText('Looking into ENG-42')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
