@@ -80,23 +80,33 @@ export function CardDraftPage() {
 
   const item = card.data;
   const board = boardOf(catalog.data, item);
-  // A card that gained a session, here or on the board, opens it instead of a second one.
   const session = cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
-  if (session) return <Navigate replace to={threadPath(factoryId, session)} />;
-
-  if (guards.missingModel || guards.missingCredential) return <DraftStart heading={item.title} guards={guards} />;
-  return <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />;
+  if (guards.missingModel || guards.missingCredential) {
+    if (session) return <Navigate replace to={threadPath(factoryId, session)} />;
+    return <DraftStart heading={item.title} guards={guards} />;
+  }
+  return (
+    <CardDraft
+      factory={factory}
+      item={item}
+      board={board}
+      session={session}
+      configurationError={guards.configurationError}
+    />
+  );
 }
 
 function CardDraft({
   factory,
   item,
   board,
+  session,
   configurationError,
 }: {
   factory: FactoryProject;
   item: WorkItem;
   board: InstalledBoardInfo | undefined;
+  session: { sessionId: string; threadId: string } | undefined;
   configurationError: Error | undefined;
 }) {
   useGlobalShortcuts();
@@ -106,6 +116,8 @@ function CardDraft({
     item,
     sessionRepository.error ? undefined : sessionRepository.data,
   );
+  // A card that gained a session elsewhere opens it instead of a second one. A Start here opens it with its prompt.
+  if (session && !draftStart.started) return <Navigate replace to={threadPath(factory.id, session)} />;
 
   return (
     <DraftSessionStartContext.Provider value={draftStart}>

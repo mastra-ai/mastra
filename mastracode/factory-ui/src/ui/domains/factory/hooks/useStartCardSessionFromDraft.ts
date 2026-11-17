@@ -10,6 +10,7 @@ import type { DraftSessionStart } from '../../chat/context/DraftSessionStartCont
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useChatThinking } from '../../chat/context/useChatThinking';
+import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { startPromptHandoff } from '../../chat/hooks/useHandoffPrompt';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { stashHandoffFiles } from '../../chat/services/handoffFiles';
@@ -28,10 +29,11 @@ export function useStartCardSessionFromDraft(
   factory: FactoryProject,
   item: WorkItem,
   sessionRepository: WorkItemSessionRepository | undefined,
-): DraftSessionStart {
+): DraftSessionStart & { started: boolean } {
   const { baseUrl } = useChatSessionContext();
   const { activeModelId, defaultModelId } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
+  const { localUser, failLocalUser } = useChatTranscript();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const resolved = sessionRepository?.status === 'resolved' ? sessionRepository : undefined;
@@ -72,7 +74,10 @@ export function useStartCardSessionFromDraft(
     if (!activeModelId) {
       throw new Error('Session configuration is not ready. Try again.');
     }
+    // Shown while the session starts, as its thread shows it.
+    const shownPrompt = localUser(prompt, false, files);
     const session = await startSession.mutateAsync(resolved).catch((error: unknown) => {
+      failLocalUser(shownPrompt);
       const message = error instanceof Error ? error.message : 'Session creation failed';
       throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
     });
@@ -90,11 +95,16 @@ export function useStartCardSessionFromDraft(
     void navigate(threadPath(factory.id, { sessionId, threadId: sessionId }), {
       replace: true,
       state: startPromptHandoff(sessionId, prompt, {
+        draftModelId: activeModelId,
         modelId: draftKeepsServerDefaults ? undefined : activeModelId,
         thinkingLevel: thinkingLevelOverride,
       }),
     });
   };
 
-  return { ready: resolved !== undefined && !startSession.isPending, start };
+  return {
+    ready: resolved !== undefined && !startSession.isPending,
+    started: startSession.isPending || startSession.isSuccess,
+    start,
+  };
 }

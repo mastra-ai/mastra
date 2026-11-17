@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { useLocation } from 'react-router';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { handoffDraftModelId } from '../hooks/useHandoffPrompt';
 import { routedDefaultModelId } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
@@ -64,6 +66,9 @@ function DraftChatModelsProvider({ children, initialModelId }: ChatModelsProvide
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
+  const location = useLocation();
+  // Fixed at mount: the thread drops the handoff from its state once it sends.
+  const [draftModelId] = useState(() => handoffDraftModelId(location.state));
   const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const localDefaultModelId = routedDefaultModelId(modelScope, {
@@ -85,7 +90,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     enabled: sessionEnabled,
   });
   const value: ChatModelsApi = {
-    activeModelId: state?.modelId,
+    activeModelId: state?.modelId ?? draftModelId,
     defaultModelId,
     pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,

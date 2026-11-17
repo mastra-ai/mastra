@@ -91,7 +91,7 @@ export function SessionChatSurface({
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label={composerLabel}>
-                  <ComposerPanel statusLead={composerStatus} />
+                  <ComposerPanel statusLead={composerStatus} autoFocus={continuesDraft} />
                 </div>
               </ChatShell.Column>
             </ChatShell.Dock>

@@ -15,6 +15,7 @@ import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
 
 interface PromptHandoff {
   handoffPrompt: string;
+  handoffDraftModelId: string;
   handoffModelId?: string;
   handoffThinkingLevel?: ThinkingLevelSetting;
 }
@@ -27,14 +28,23 @@ interface HandoffModel {
 // History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
 const unsentHandoffs = new Map<string, HandoffModel>();
 
-export function startPromptHandoff(sessionId: string, prompt: string, model: HandoffModel): PromptHandoff {
+export function startPromptHandoff(
+  sessionId: string,
+  prompt: string,
+  { draftModelId, ...model }: HandoffModel & { draftModelId: string },
+): PromptHandoff {
   unsentHandoffs.set(sessionId, model);
   storePendingHandoff(sessionId, prompt);
   return {
     handoffPrompt: prompt,
+    handoffDraftModelId: draftModelId,
     handoffModelId: model.modelId,
     handoffThinkingLevel: model.thinkingLevel,
   };
+}
+
+export function handoffDraftModelId(state: unknown): string | undefined {
+  return readHandoffField(state, 'handoffDraftModelId');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

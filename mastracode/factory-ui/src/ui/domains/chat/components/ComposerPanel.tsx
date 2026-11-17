@@ -9,12 +9,13 @@ const composerPanelClass = 'composer-enter flex min-w-0 w-full max-w-full shrink
 type ComposerPanelProps = {
   composerVariant?: 'inline' | 'textarea';
   statusLead?: ReactNode;
+  autoFocus?: boolean;
 };
 
-export function ComposerPanel({ composerVariant = 'inline', statusLead }: ComposerPanelProps) {
+export function ComposerPanel({ composerVariant = 'inline', statusLead, autoFocus }: ComposerPanelProps) {
   return (
     <div className={composerPanelClass}>
-      <Composer variant={composerVariant} statusLead={statusLead} />
+      <Composer variant={composerVariant} statusLead={statusLead} autoFocus={autoFocus} />
     </div>
   );
 }
