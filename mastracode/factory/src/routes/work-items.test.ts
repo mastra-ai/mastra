@@ -964,7 +964,24 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
 describe('POST transition moving a card to another board', () => {
   // On live projects, Work cards that belong on another board (e.g. OSS Features) had no manual
   // path off their board: the transition endpoint rejected any `board` other than the card's.
-  const registry = () => boardRegistryOf([triageWorkBoard, createTestBoard()]);
+
+  // A board sharing a phase name with Work: on another board, a same-named phase is a new phase.
+  const previewBoard = defineBoard({
+    id: 'preview',
+    title: 'Preview',
+    initialPhase: 'inbox',
+    phases: {
+      inbox: { title: 'Inbox', kind: 'resting', nextPhases: ['triage'] },
+      triage: {
+        title: 'Triage',
+        kind: 'working',
+        runner: { context: 'triage', skill: 'preview-triage' },
+        next: 'done',
+      },
+      done: { title: 'Done', kind: 'terminal' },
+    },
+  });
+  const registry = () => boardRegistryOf([triageWorkBoard, createTestBoard(), previewBoard]);
 
   async function createItem(overrides: Record<string, unknown> = {}) {
     const res = await buildApp(orgUser, undefined, undefined, registry()).request(
@@ -1113,6 +1130,68 @@ describe('POST transition moving a card to another board', () => {
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
     expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.stages).toEqual(['canceled']);
+  });
+
+  it('enters a same-named phase on the other board as a new phase: its runner queues and the move is audited', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+    await finishQueuedRunsForTests(seed.workItems);
+    auditRecorded = [];
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab6' },
+    );
+
+    expect(res.status).toBe(200);
+    const moved = (await res.json()).result;
+    expect(moved.status).toBe('accepted');
+    // Preview's Triage is not Work's Triage: entering it starts Preview's own runner.
+    expect(moved.decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        metadata: expect.objectContaining({ fromBoard: 'work', toBoard: 'preview' }),
+      }),
+    );
+  });
+
+  it('holds a busy card even when the destination phase shares its name', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: the same-named phase on another board is no exception.
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab7' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
+  });
+
+  it('holds a busy card whatever cause the request names', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { cause: 'run_start', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab8' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
   });
 });
 

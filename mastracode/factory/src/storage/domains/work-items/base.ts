@@ -2414,6 +2414,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
         const now = new Date();
         let item: Card | null = null;
+        let movedBoard = false;
         let code: string | null = null;
         let reason: string | null = null;
         let result: Record<string, unknown>;
@@ -2442,6 +2443,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
             const changesBoard = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            movedBoard = changesBoard;
             if (!changesBoard && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
@@ -2544,6 +2546,44 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 updated_at: now,
               });
             }
+          }
+        }
+        if (item && outcome === 'accepted' && movedBoard) {
+          // Runs the old board proposed, and its failures awaiting a retry, mean nothing on the
+          // new board. Retired inside this transaction, the move and the supersession land or
+          // fail together — and a proposal filed after the move is never caught by mistake.
+          // Live runs never reach here: a busy card's move is refused before commit.
+          const stranded = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            status: { in: ['proposed', 'failed'] },
+          });
+          for (const row of stranded) {
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              { id: row.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+              current =>
+                current.status === row.status
+                  ? {
+                      status: 'superseded',
+                      updated_at: now,
+                      ...(row.status === 'proposed' ? { completed_at: now } : {}),
+                    }
+                  : null,
+            );
+            await ops.deleteMany(
+              'factory_attention_receipts',
+              row.status === 'proposed'
+                ? proposalReceiptFilter(input.orgId, input.factoryProjectId, String(row.id))
+                : {
+                    org_id: input.orgId,
+                    factory_project_id: input.factoryProjectId,
+                    kind: 'automation-failed',
+                    source_id: String(row.id),
+                    occurrence: Number(row.failure_occurrence ?? 0),
+                  },
+            );
           }
         }
         return { status: 'committed', item, result };

@@ -365,29 +365,18 @@ export class FactoryTransitionService {
       return rejection;
     }
     // A person naming another board moves the card there: the same cross-board commit a
-    // card-move rule makes, under the caller's own name.
-    let manualBoardMove = false;
+    // card-move rule makes, under the caller's own name. Runs the old board queued for the
+    // card are superseded inside the commit itself; what this move queues stays.
     if (isHumanTransition(request) && !request.eventRoute && request.toBoard === undefined) {
       const itemBoard = boardForWorkItem(item);
       if (request.board !== itemBoard) {
         request = { ...request, board: itemBoard, toBoard: request.board };
-        manualBoardMove = true;
       }
     }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
       if (current) result = staleRejection(result, current);
-    }
-    // Runs the old board queued for the card mean nothing on the new one; what this move queued stays.
-    if (manualBoardMove && result.status === 'accepted') {
-      await this.#storage.supersedeDecisionsForWorkItem({
-        orgId: request.orgId,
-        factoryProjectId: request.factoryProjectId,
-        workItemId: item.id,
-        except: result.decisions.map(decision => String(decision.idempotencyKey)),
-        supersededAt: new Date(),
-      });
     }
     await this.#recordTransition(request, item, result);
     this.#notifyCommitted(request, item, result);
@@ -426,7 +415,9 @@ export class FactoryTransitionService {
     // Board-neutral, like the stage notification: `currentStage` only knows the
     // built-in rule stages and would drop custom-board phases.
     const from = item && item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
+    // A board-only move keeps the phase name yet moves the card: it is audited like any move.
+    const movedBoards = request.toBoard !== undefined && request.toBoard !== request.board;
+    if (result.status === 'accepted' && result.stage === from && !request.reenter && !movedBoards) return;
     const outcome =
       result.status === 'accepted'
         ? { action: 'factory.work_item.stage_moved' as const, to: result.stage, revision: result.revision }
@@ -582,7 +573,8 @@ export class FactoryTransitionService {
 
     // A person's cross-board move takes live work, not finished cards, and lands it where work can
     // continue: a finished card stays where it finished, and finishing belongs to the card's own board.
-    if (board !== fromBoard && !request.eventRoute) {
+    const crossesBoards = board !== fromBoard;
+    if (crossesBoards && !request.eventRoute) {
       if (fromBoard.isTerminal(fromStage)) {
         return this.#commitRejection(
           request,
@@ -603,19 +595,23 @@ export class FactoryTransitionService {
 
     if (
       isHumanTransition(request) &&
-      request.cause !== 'run_start' &&
       !request.initialEntry &&
-      (fromStage !== request.stage || request.reenter === true) &&
-      // Leaving the board strands whatever run is queued or underway, so a busy card stays put
-      // even when the destination phase itself starts nothing.
-      (phaseMayStartRun(board.phaseKind(request.stage)) || board !== fromBoard) &&
+      // Leaving the board strands whatever run is queued or underway, so every cross-board move of
+      // a busy card is refused — whatever cause it names, even into a phase sharing the old one's
+      // name or a phase that starts nothing itself.
+      (crossesBoards ||
+        (request.cause !== 'run_start' &&
+          (fromStage !== request.stage || request.reenter === true) &&
+          phaseMayStartRun(board.phaseKind(request.stage)))) &&
       (await this.#cardBusy(request))
     ) {
       return this.#commitRejection(request, transitionId, 'card_busy', BUSY_CARD_MOVE_REFUSAL);
     }
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
-    const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
+    // Crossing boards is always a move: a same-named phase on another board is a different phase.
+    const humanMove =
+      request.actor.type === 'human' && (fromStage !== request.stage || crossesBoards) && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
     const entersWorking = board.isWorking(request.stage);
     const seatRole = board.roleForPhase(request.stage);
@@ -701,6 +697,7 @@ export class FactoryTransitionService {
           const run = phaseRunDecision(board, request.stage, contextBase, {
             initialEntry: request.initialEntry,
             reenter: request.reenter,
+            boardEntry: crossesBoards,
           });
           const validated = validateFactoryRuleDecisions(run ? [run] : [], contextBase.causalChain.length).filter(
             decision => {
