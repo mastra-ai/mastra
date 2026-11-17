@@ -263,6 +263,41 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('"ticket:$id"'));
   });
 
+  it('names the skipped store declaration, and why, when its stored scopes fail the declaration check', async () => {
+    const { knowledge } = await setup({
+      'imports:$name': {},
+      'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }], children: [{ name: 'archive' }] },
+    });
+    const error = await knowledge.readScopeFor(['docs:eng']).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(KnowledgeDeclarationError);
+    const message = (error as Error).message;
+    expect(message).toMatch(
+      /^Knowledge skipped the store's scope declaration "linear:\$account:\$connection", so its stored scopes have none: "linear:\$account:\$connection" \(1 scope\), "linear:\$account:\$connection\/archive" \(1 scope\)\. .*"\*".* Fix that declaration in the store, or declare the key, with its children, in scopes to override it\.$/,
+    );
+    expect(message.match(/Knowledge skipped/g)).toHaveLength(1);
+    expect(message).not.toContain("this config doesn't declare");
+
+    const mixed = await setup({
+      'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }], children: [{ name: 'archive' }] },
+    });
+    await mixed.storage.materializeScope({
+      address: 'notion:acme:conn_2',
+      declaration: 'notion:$account:$connection',
+      name: 'Notion (acme)',
+      provenance: host,
+    });
+    const both = ((await mixed.knowledge.readScopeFor(['docs:eng']).catch((e: unknown) => e)) as Error).message;
+    expect(both).toMatch(/this config doesn't declare: "notion:\$account:\$connection" \(1 scope\)\. /);
+    expect(both).toMatch(
+      /Knowledge skipped the store's scope declaration "linear:\$account:\$connection", so its stored scopes have none: "linear:\$account:\$connection" \(1 scope\), "linear:\$account:\$connection\/archive" \(1 scope\)\./,
+    );
+    expect(both.match(/notion:\$account/g)).toHaveLength(1);
+
+    const undeclared = await (await setup({})).knowledge.readScopeFor(['docs:eng']).catch((e: unknown) => e);
+    expect((undeclared as Error).message).toContain("this config doesn't declare");
+    expect((undeclared as Error).message).not.toContain('Knowledge skipped');
+  });
+
   it('explains a grant and lists it in scope grants', async () => {
     const { knowledge } = await setup();
     const explained = await knowledge.explainAccess(['docs:eng', 'imports:all'], {

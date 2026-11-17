@@ -42,7 +42,7 @@ export class KnowledgeScopeRuntime {
   readonly #config: KnowledgeScopeDeclarations;
   readonly #configCompiled: CompiledKnowledgeScopes;
   /** The last resolved declarations, keyed by what the store supplied. */
-  #resolved: { stored: string; compiled: CompiledKnowledgeScopes };
+  #resolved: { stored: string; compiled: CompiledKnowledgeScopes; skipped: Map<string, string> };
   #declarationsChecked?: Promise<void>;
   /** The store's declarations as last read, shared by concurrent calls until they expire. */
   #stored?: { readAt: number; declarations: Promise<KnowledgeScopeDeclarations> };
@@ -54,7 +54,7 @@ export class KnowledgeScopeRuntime {
   ) {
     this.#config = structuredClone(declarations);
     this.#configCompiled = compileKnowledgeScopes(structuredClone(declarations));
-    this.#resolved = { stored: '{}', compiled: this.#configCompiled };
+    this.#resolved = { stored: '{}', compiled: this.#configCompiled, skipped: new Map() };
   }
 
   /** The declarations as last resolved: the config's, plus the store's from the latest {@link resolve}. */
@@ -86,6 +86,7 @@ export class KnowledgeScopeRuntime {
     // that doesn't compile.
     let pending = Object.entries(stored).filter(([name]) => !Object.hasOwn(this.#config, name));
     const failures = new Map<string, unknown>();
+    const skippedReasons = new Map<string, string>();
     const add = (entries: typeof pending, failed?: string) => {
       const next = { ...merged, ...Object.fromEntries(entries) };
       try {
@@ -111,14 +112,14 @@ export class KnowledgeScopeRuntime {
         }
         for (const [name] of skipped) {
           const error = failures.get(name);
-          this.warn(
-            `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
-          );
+          const reason = error instanceof Error ? error.message : String(error);
+          skippedReasons.set(name, reason);
+          this.warn(`Knowledge skipped the store's scope declaration "${name}": ${reason}`);
         }
         break;
       }
     }
-    this.#resolved = { stored: key, compiled };
+    this.#resolved = { stored: key, compiled, skipped: skippedReasons };
     this.#declarationsChecked = undefined;
     return compiled;
   }
@@ -177,14 +178,33 @@ export class KnowledgeScopeRuntime {
       ({ declaration }) => !this.compiled.declarations.has(declaration),
     );
     if (orphans.length === 0) return;
-    const listed = orphans
-      .map(({ declaration, scopes }) => `"${declaration}" (${scopes} scope${scopes === 1 ? '' : 's'})`)
-      .join(', ');
-    throw new KnowledgeDeclarationError(
-      `Knowledge storage has scopes created from declarations this config doesn't declare: ${listed}. ` +
-        'Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), ' +
-        'or keep the key with no access rules to retire it.',
-    );
+    const list = (entries: typeof orphans) =>
+      entries
+        .map(({ declaration, scopes }) => `"${declaration}" (${scopes} scope${scopes === 1 ? '' : 's'})`)
+        .join(', ');
+    // A store declaration that didn't compile leaves its stored scopes, its children's included,
+    // without a declaration too. Name it and why, since the fix is in the store, not the config.
+    const skippedKey = (declaration: string) => {
+      const key = declaration.split('/')[0]!;
+      return this.#resolved.skipped.has(key) ? key : undefined;
+    };
+    const undeclared = orphans.filter(({ declaration }) => !skippedKey(declaration));
+    const messages: string[] = [];
+    if (undeclared.length) {
+      messages.push(
+        `Knowledge storage has scopes created from declarations this config doesn't declare: ${list(undeclared)}. ` +
+          'Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), ' +
+          'or keep the key with no access rules to retire it.',
+      );
+    }
+    for (const key of new Set(orphans.map(({ declaration }) => skippedKey(declaration)).filter(k => k !== undefined))) {
+      const stranded = orphans.filter(({ declaration }) => skippedKey(declaration) === key);
+      messages.push(
+        `Knowledge skipped the store's scope declaration "${key}", so its stored scopes have none: ${list(stranded)}. ` +
+          `${this.#resolved.skipped.get(key)} Fix that declaration in the store, or declare the key, with its children, in scopes to override it.`,
+      );
+    }
+    throw new KnowledgeDeclarationError(messages.join(' '));
   }
 
   /** Re-keys stored scopes from declaration `from` to `to`. See {@link Knowledge.renameScopeDeclaration}. */
