@@ -66,7 +66,7 @@ To copy an environment's variables into a local env file, pull them. Each enviro
 mastra env vars pull staging --output .env.staging
 ```
 
-The file contains the values of config variables. Secrets and managed variables appear as name-only comments, because their values can't be read back. Deploying the file doesn't change the secrets listed in it. The stored values stay in place.
+The file contains the values of config variables, while secrets and managed variables appear as name-only comments because their values can't be read back. Deploying the file leaves those secrets unchanged, since their values remain stored on the platform.
 
 ### Secrets and config
 

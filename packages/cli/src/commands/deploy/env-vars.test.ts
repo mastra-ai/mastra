@@ -29,8 +29,12 @@ describe('getOverwrittenEnvKeys', () => {
     expect(getOverwrittenEnvKeys(existing, incoming)).toEqual(['A_KEY', 'B_KEY', 'C_KEY']);
   });
 
-  it('ignores write-only secrets whose stored value is hidden', () => {
-    expect(getOverwrittenEnvKeys({ API_KEY: '__mastra_secret__' }, { API_KEY: 'new-value' })).toEqual([]);
+  it('reports a real value replacing a hidden write-only secret', () => {
+    expect(getOverwrittenEnvKeys({ API_KEY: '__mastra_secret__' }, { API_KEY: 'new-value' })).toEqual(['API_KEY']);
+  });
+
+  it('ignores a placeholder sent for a hidden write-only secret', () => {
+    expect(getOverwrittenEnvKeys({ API_KEY: '__mastra_secret__' }, { API_KEY: '__mastra_secret__' })).toEqual([]);
   });
 
   it('ignores incoming placeholders, which keep the stored value', () => {
