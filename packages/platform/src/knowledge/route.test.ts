@@ -7,7 +7,7 @@ import {
   KnowledgeUnsupportedCapabilityError,
 } from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { PlatformKnowledge } from './index';
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -410,7 +410,12 @@ it.each([
   ['discovered instances of one project token', {}, {}, true],
   ['discovered instances of different projects', { projectId: 'project-1' }, { projectId: 'project-2' }, false],
   ['discovered instances of different project tokens', {}, { accessToken: 'other-token' }, false],
+  // Not detectable without a lookup: the token may name the same project.
+  ['a projectId lookup and a project token lookup', { projectId: 'project-1' }, {}, false],
 ])('a host rejects two PlatformKnowledge that share a backend: %s', (_name, first, second, rejected) => {
+  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
+  vi.stubEnv('MASTRA_PROJECT_ID', '');
+  onTestFinished(() => vi.unstubAllEnvs());
   const mastra = new Mastra({ logger: false });
   const make = (id: string, options: object) =>
     new PlatformKnowledge({ id, apiUrl: 'http://localhost', accessToken: 'token', ...options });

@@ -274,6 +274,9 @@ export class PlatformKnowledge extends Knowledge {
     const resolveEndpoint = instanceId
       ? async () => instanceEndpoint(instanceId)
       : async () => instanceEndpoint(await resolveInstanceId(base, token, projectId));
+    const lookupKey = projectId
+      ? `${base}?projectId=${encodeURIComponent(projectId)}`
+      : `${base}?token=${createHash('sha256').update(token).digest('hex')}`;
     const storage = new MastraCompositeStore({
       id: 'platform-knowledge',
       domains: {
@@ -281,12 +284,11 @@ export class PlatformKnowledge extends Knowledge {
           resolveEndpoint,
           token,
           // Stores keyed alike share a backend, so a host rejects registering both. A discovered instance is
-          // keyed by its lookup (the project, or the credential that names it; hashed, never the raw token).
-          // An explicit `instanceId` and a lookup that resolves to that same instance can't be matched
-          // without a network call at registration, so that mixed pair is not detected.
-          instanceId
-            ? instanceEndpoint(instanceId)
-            : `${base}?${projectId ? `projectId=${encodeURIComponent(projectId)}` : `token=${createHash('sha256').update(token).digest('hex')}`}`,
+          // keyed by its lookup: the project, or else the credential that names it (hashed, never the raw
+          // token). Without a network call at registration, a host can't tell that two different lookups
+          // reach one instance: an explicit `instanceId` and a lookup resolving to it, or a `projectId`
+          // lookup and a project token for that project. Those pairs are not detected.
+          instanceId ? instanceEndpoint(instanceId) : lookupKey,
         ),
       },
     });

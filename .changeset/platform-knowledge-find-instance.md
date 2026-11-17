@@ -11,4 +11,4 @@ new PlatformKnowledge({ instanceId: 'kn_123', tools: true });
 new PlatformKnowledge({ tools: true });
 ```
 
-Its default `id` is now `platform-knowledge` (was random per boot) and its storage id is `platform-knowledge` (was `platform-knowledge-<instanceId>`). If you register more than one `PlatformKnowledge`, give each its own `id`.
+Its default `id` is now `platform-knowledge` (was random per boot) and its storage id is `platform-knowledge` (was `platform-knowledge-<instanceId>`). If you register more than one `PlatformKnowledge`, give each its own `id` and its own Knowledge instance.
