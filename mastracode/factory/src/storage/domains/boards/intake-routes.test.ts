@@ -1054,8 +1054,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       if (args[0] === 'factory_intake_routes') routeWrites += 1;
       return original.apply(this, args as Parameters<typeof original>);
     });
-    await boards.deleteIntakeRoute(scope, created[1]!.id, { expectedRevision: 1 });
-    vi.restoreAllMocks();
+    try {
+      await boards.deleteIntakeRoute(scope, created[1]!.id, { expectedRevision: 1 });
+    } finally {
+      vi.restoreAllMocks();
+    }
     expect(routeWrites).toBe(0);
 
     // The other rules keep their order, revisions and fields exactly.
@@ -1127,7 +1130,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     ]).toContainEqual(final);
   });
 
-  it('keeps positions whole when clients add, delete and reorder routes at once', async () => {
+  it('keeps positions whole when clients add, delete and edit routes at once', async () => {
     const { boards, scope, secondClient } = await setup();
     const other = await secondClient();
     for (const name of ['a', 'b', 'c']) await boards.createIntakeRoute(scope, labelled(name), 'u');
