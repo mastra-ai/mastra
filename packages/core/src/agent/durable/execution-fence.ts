@@ -1133,7 +1133,8 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline.
+   * tolerated until the local lease deadline, where a storage-backed claim
+   * gets one more renewal before the fence is marked lost.
    */
   #startHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
@@ -1143,7 +1144,12 @@ export class ExecutionFence implements RunFenceScope {
       // makes it return false. Wait for its result, but only for a grace period past the deadline.
       const awaitingRenewal = this.#renewalInFlight && this.generation !== undefined;
       if (awaitingRenewal && now < this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS) return;
-      if (now >= this.#leaseExpiresAt) {
+      // Past the local deadline a storage-backed claim is still worth one renewal: a tick starved by a blocking
+      // tool call or a GC pause wakes after the deadline even though the store still holds this generation, and
+      // only a renewal can tell "still ours" from "taken over". The renewal is a compare-and-set on owner and
+      // generation, so a takeover that landed first still wins and is reported as superseded. A renewal already
+      // in flight has had its grace period, and a pubsub lease has no generation to compare, so both still fail.
+      if (now >= this.#leaseExpiresAt && (this.#renewalInFlight || this.generation === undefined)) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }

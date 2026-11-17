@@ -1051,6 +1051,58 @@ describe('storage-backed ExecutionFence', () => {
     expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe('foreign');
   });
 
+  it('renews a storage claim once the local deadline passes after a starved event loop', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = vi.spyOn(workflowsStore, 'renewRunOwnership');
+
+    // Move wall time without running timers, as happens while the event loop is blocked.
+    vi.setSystemTime(Date.now() + EXECUTION_LEASE_TTL_MS * 2);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(renew).toHaveBeenCalled();
+    expect(fence.isLost()).toBe(false);
+    await expect(fence.verify()).resolves.toBeUndefined();
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      live: true,
+    });
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it('still marks a storage claim superseded when a takeover lands during the stall', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    await workflowsStore.claimRunOwnership({
+      runId: 'run-1',
+      ownerId: 'foreign',
+      leaseMs: EXECUTION_LEASE_TTL_MS,
+      force: true,
+    });
+
+    vi.setSystemTime(Date.now() + EXECUTION_LEASE_TTL_MS * 2);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(fence.isLost()).toBe(true);
+    expect(await fence.settle(async () => {})).toBe('superseded');
+    expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe('foreign');
+  });
+
+  it('fails bounded when the renewal at the local deadline cannot reach the store', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockRejectedValue(new Error('store down'));
+
+    vi.setSystemTime(Date.now() + EXECUTION_LEASE_TTL_MS * 2);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(fence.isLost()).toBe(true);
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+  });
+
   it('a remote worker checks the claim against the workflows store', async () => {
     const { storage, workflowsStore } = await stores();
     const claimed = await workflowsStore.claimRunOwnership({
