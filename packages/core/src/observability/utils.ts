@@ -205,7 +205,6 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     resumeFrom,
     resumedFromSpanId,
     samplingDecision,
-    traceState,
     ...rest
   } = options;
 
@@ -261,7 +260,6 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     tracingOptions: rootTracingOptions,
     traceId: rootTracingOptions?.traceId,
     samplingDecision: samplingDecision ?? saved?.sampled,
-    traceState,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
     parentSpanId: resumed ? resumed.parentSpanId : resumedFromSpanId,
     resumedFromSpanId: resumed?.resumedFromSpanId,
