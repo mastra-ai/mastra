@@ -10,6 +10,7 @@ import {
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconChip } from '@mastra/playground-ui/icons/central/IconChip';
 import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
@@ -32,7 +33,6 @@ import { useTools } from '@mastra/react/hooks/tools';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import React from 'react';
 import { useNavigationCommand } from './use-navigation-command';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';

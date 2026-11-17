@@ -2,6 +2,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/utils/extractPrompt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -16,7 +17,6 @@ import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-s
 import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
-import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/agents')];

@@ -1,11 +1,11 @@
 import { createTool } from '@mastra/client-js';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 import { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
-import { z } from 'zod-v4';
 
+import { z } from 'zod-v4';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import type { ModelInfo } from '@/domains/llm';
 
 export const SET_AGENT_MODEL_TOOL_NAME = 'set-agent-model';
 

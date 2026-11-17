@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
@@ -37,7 +38,6 @@ import {
 } from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 type DialogMode = 'simple' | 'advanced';

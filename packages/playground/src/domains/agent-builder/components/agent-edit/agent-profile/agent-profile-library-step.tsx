@@ -4,13 +4,13 @@ import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCh
 import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { startViewTransition } from '@mastra/playground-ui/lib/view-transition';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
 import { useVisibilityChange } from '@/domains/agent-builder/hooks/use-visibility-change-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import { startViewTransition } from '@/lib/routing';
 
 export interface AgentProfileLibraryStepProps {
   agentId: string;

@@ -1,4 +1,5 @@
 import type { GetToolResponse } from '@mastra/client-js';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useApiToolSchemas } from '../../hooks/use-api-tool-schemas';
 import type { ToolExecution } from '../../utils/tool-run';
@@ -6,7 +7,6 @@ import { ToolOverview } from '../tool-overview';
 import { ToolPlayground } from '../tool-playground';
 import { ToolDrawerContent } from './tool-drawer-content';
 import { ToolUsedBySection } from './tool-used-by-section';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ToolDrawerBodyProps {
   tool: GetToolResponse;

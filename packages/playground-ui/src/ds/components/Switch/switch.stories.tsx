@@ -22,13 +22,13 @@ const visibilityIcons: SwitchIconProps = {
   uncheckedIcon: <IconGlobe />,
 };
 
-const withIconSource = `import { Switch } from '@mastra/playground-ui/components/Switch';
+const withIconSource = `import { Switch } from '@/ds/components/Switch';
 import { ZapIcon } from 'lucide-react';
 
 <Switch aria-label="Enable boost" icon={<ZapIcon />} />;`;
 
-const withStateIconsSource = `import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Switch } from '@mastra/playground-ui/components/Switch';
+const withStateIconsSource = `import { Field, FieldLabel } from '@/ds/components/Field';
+import { Switch } from '@/ds/components/Switch';
 import { GlobeIcon, LockKeyhole } from 'lucide-react';
 import { useState } from 'react';
 

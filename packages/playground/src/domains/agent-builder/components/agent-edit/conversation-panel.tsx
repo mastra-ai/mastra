@@ -1,10 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { useAgentBuilderAllowedModels } from '@mastra/playground-ui/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
 
+import { useFormContext, useWatch } from 'react-hook-form';
 import {
   useStreamMessages,
   useStreamRunning,
@@ -19,7 +20,6 @@ import { useChatDraft } from '../../hooks/use-chat-draft';
 import { CREATE_SKILL_TOOL_NAME, useCreateSkillTool } from '../../hooks/use-create-skill-tool';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
-import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { buildFormSnapshotInstructions } from '@/domains/agent-builder/services/build-form-snapshot';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';

@@ -3,13 +3,13 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { startViewTransition } from '@mastra/playground-ui/lib/view-transition';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
-import { startViewTransition } from '@/lib/routing';
 
 export interface AgentStepContainerProps {
   children: React.ReactNode;

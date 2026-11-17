@@ -1,8 +1,8 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useMcpServerEvents } from '../../hooks/use-mcp-server-events';
 import { McpEventDeliveryBadges } from './mcp-event-delivery-badges';
 import { McpEventLivePanel } from './mcp-event-live-panel';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ToolDrawerContent } from '@/domains/tools/components/tool-drawer/tool-drawer-content';
 import { ToolSchemaSection } from '@/domains/tools/components/tool-drawer/tool-schema-section';
 

@@ -1,6 +1,6 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm/hooks/use-filtered-models';
 import { FALLBACK_MODEL } from './constants';
-import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 type BuilderModelPolicy = Pick<NonNullable<BuilderSettingsResponse['modelPolicy']>, 'active' | 'default'>;
 

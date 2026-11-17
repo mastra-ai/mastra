@@ -3,6 +3,7 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
@@ -16,7 +17,6 @@ import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 

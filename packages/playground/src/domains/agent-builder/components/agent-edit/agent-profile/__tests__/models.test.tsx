@@ -18,7 +18,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 import { buildAvailableModels, buildBuilderSettings } from './fixtures/builder';
-import { datedModels } from '@/domains/llm/__tests__/fixtures/models';
+import { datedModels } from './fixtures/models';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

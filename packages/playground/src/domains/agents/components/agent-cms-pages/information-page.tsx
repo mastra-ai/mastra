@@ -3,12 +3,12 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { Controller } from 'react-hook-form';
+import { LLMProviders, LLMModels } from '@mastra/playground-ui/domains/llm';
 
+import { Controller } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { LLMProviders, LLMModels } from '@/domains/llm';
 
 export function InformationPage() {
   const { form, readOnly } = useAgentEditFormContext();

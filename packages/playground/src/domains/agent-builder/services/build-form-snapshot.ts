@@ -1,10 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 import { isPlaceholderAgentName } from '../components/agent-starter/utils';
 import type { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import type { AgentTool } from '../types/agent-tool';
-import type { ModelInfo } from '@/domains/llm';
 
 export interface AvailableWorkspaceLike {
   id: string;
