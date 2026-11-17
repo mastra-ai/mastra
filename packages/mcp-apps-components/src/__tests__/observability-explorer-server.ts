@@ -138,12 +138,19 @@ export type ViewRecord = {
   state: Record<string, any> | null;
   /** How many sync calls to fail next, as a cache outage would. */
   failures?: number;
-  /** Set when the view is gone (expired, or not the caller's): sync calls fail with a 404 as the server's do. */
-  gone?: boolean;
-  /** While set, the server holds its answers to the view's reports until it resolves. */
+  /**
+   * Set when the view is gone (expired, or not the caller's): sync calls fail with a 404 as the server's do.
+   * A view id says only that view is gone.
+   */
+  gone?: boolean | string;
+  /** While set, the server holds its answers to the view's reports (after taking them) until it resolves. */
   reportsHeld?: Promise<void>;
+  /** While set, the server holds its answers to polls (read when they arrived) until it resolves. */
+  pollsHeld?: Promise<void>;
   /** How many sync calls (polls and reports) reached the server. */
   syncCalls?: number;
+  /** The view id of each poll that reached the server. */
+  polled?: string[];
 };
 
 export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
@@ -225,7 +232,12 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
         }),
         execute: async args => {
           view.syncCalls = (view.syncCalls ?? 0) + 1;
-          if (view.gone) {
+          const { version, by, state } = view;
+          if (!args.state) {
+            (view.polled ??= []).push(args.viewId);
+            await view.pollsHeld;
+          }
+          if (view.gone === true || view.gone === args.viewId) {
             // The built-in server's `toolError`: a MastraError carrying the HTTP status.
             throw new MastraError({
               id: 'MASTRA_MCP_TOOL_CALL_FAILED',
@@ -242,12 +254,12 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
           }
           if (args.state) {
             record('sync_observability_view', args);
-            await view.reportsHeld;
             if (args.base !== view.version) throw new Error(`View changed since version ${args.base}`);
             Object.assign(view, { version: view.version + 1, by: 'app', state: args.state });
-            return { version: view.version };
+            const written = view.version;
+            await view.reportsHeld;
+            return { version: written };
           }
-          const { version, by, state } = view;
           return version !== args.since ? { version, by, state } : { version };
         },
       }),

@@ -57,10 +57,14 @@ export function useViewSync(app: App, viewId: string | undefined, onSteer: (stat
   const appliedContext = useRef<string | null>(undefined);
   const gone = useRef(false);
   // Reports go one at a time, each against the version the last one left, so two quick changes can't race.
-  const pending = useRef<(SteeredView & { context: string }) | undefined>(undefined);
+  const pending = useRef<(SteeredView & { context: string; steer: number }) | undefined>(undefined);
   const sending = useRef(false);
   // Bumped when the view id changes, so a report loop for the old view stops.
   const generation = useRef(0);
+  // Bumped with each model change the view applies: a report queued before it describes the screen it replaced.
+  const steers = useRef(0);
+  // Bumped when a report comes back: a poll that overlapped one may carry an older version than it left.
+  const reports = useRef(0);
   const onSteerRef = useRef(onSteer);
   onSteerRef.current = onSteer;
 
@@ -78,19 +82,22 @@ export function useViewSync(app: App, viewId: string | undefined, onSteer: (stat
     const poll = async () => {
       if (document.visibilityState === 'visible' && !gone.current) {
         try {
+          const reported = reports.current;
           const result = await app.callServerTool({ name: SYNC_TOOL, arguments: { viewId, since: version.current } });
+          if (stopped) return;
           if (result.isError) {
             // Anything else (a cache hiccup, a server restarting) may pass: try again next time.
             if (isFinal(result)) gone.current = true;
           } else {
             const synced = readResult(result) as Synced | undefined;
             // An older version means the record expired and started over.
-            if (!stopped && synced && synced.version !== version.current) {
+            if (synced && reports.current === reported && synced.version !== version.current) {
               version.current = synced.version;
               // The view's own reports come back as well; only a different list or trace is a change.
               if (synced.by === 'model' && synced.state && shown(synced.state) !== applied.current) {
                 applied.current = shown(synced.state);
                 appliedContext.current = null;
+                steers.current++;
                 onSteerRef.current(synced.state);
               }
             }
@@ -111,14 +118,16 @@ export function useViewSync(app: App, viewId: string | undefined, onSteer: (stat
   return useCallback(
     async (state: SteeredView & { context: string }) => {
       if (!viewId || gone.current) return;
-      pending.current = { ...state, context: state.context.slice(0, MAX_CONTEXT) };
+      pending.current = { ...state, context: state.context.slice(0, MAX_CONTEXT), steer: steers.current };
       if (sending.current) return;
       sending.current = true;
       const ours = generation.current;
       try {
         while (pending.current && !gone.current && generation.current === ours) {
-          const next = pending.current;
+          const { steer, ...next } = pending.current;
           pending.current = undefined;
+          // The model changed the view after the user made this one; the screen it describes is gone.
+          if (steer !== steers.current) continue;
           const steered = applied.current;
           if (appliedContext.current === null) appliedContext.current = next.context;
           // The user moved off what the model set, so the model setting it again has to apply again.
@@ -129,6 +138,7 @@ export function useViewSync(app: App, viewId: string | undefined, onSteer: (stat
               arguments: { viewId, state: next, base: version.current },
             });
             if (generation.current !== ours) return;
+            reports.current++;
             if (result.isError && isFinal(result)) gone.current = true;
             const written = result.isError ? undefined : (readResult(result) as Synced | undefined);
             if (written && written.version > version.current) version.current = written.version;

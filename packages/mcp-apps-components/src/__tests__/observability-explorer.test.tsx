@@ -379,3 +379,89 @@ it('stops polling a view the server says is gone', async () => {
   await new Promise(resolve => setTimeout(resolve, 3_500));
   expect(mcp.view.syncCalls).toBe(1);
 }, 20_000);
+
+it("doesn't send a change the user made before the model's, once the model's has replaced it", async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+  Object.assign(mcp.view, { version: 1, by: 'model', state: { tool: 'list_logs', args: { level: 'error' } } });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+  await waitFor(() => expect(mcp.view.version).toBe(2), POLL);
+
+  // The server takes the user's first change but is slow to answer; their second waits behind it.
+  let release!: () => void;
+  mcp.view.reportsHeld = new Promise<void>(resolve => (release = resolve));
+  const reports = () => mcp.calls.filter(call => call.tool === 'sync_observability_view');
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Traces' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Traces' }));
+  await waitFor(() => expect(mcp.view.version).toBe(3), POLL);
+  fireEvent.click(await screen.findByText('weather-agent'));
+  expect(await screen.findByRole('button', { name: 'Back to the list' })).toBeTruthy();
+  await new Promise(resolve => setTimeout(resolve, 1_000));
+
+  // Meanwhile the model shows all logs. The view applies that, then the first answer comes back.
+  Object.assign(mcp.view, { version: 4, by: 'model', state: { tool: 'list_logs', args: {} } });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+  release();
+
+  // The trace the user opened before the model's change never goes out against it: the view reports the logs.
+  await waitFor(() => expect(reports().some(call => call.args.base === 4)).toBe(true), POLL);
+  await new Promise(resolve => setTimeout(resolve, 1_000));
+  for (const call of reports().filter(report => report.args.base >= 4)) {
+    expect(call.args.state.args).toEqual({});
+    expect(call.args.state.context).toContain("They're on its Logs tab.");
+  }
+}, 20_000);
+
+it("doesn't let a poll answered after a report take the view back to an older version", async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+  Object.assign(mcp.view, { version: 1, by: 'model', state: { tool: 'list_logs', args: { level: 'error' } } });
+  expect(await screen.findByRole('tab', { name: 'Logs', selected: true }, POLL)).toBeTruthy();
+  await waitFor(() => expect(mcp.view.version).toBe(2), POLL);
+
+  // A poll reads the view at version 2 but is slow to answer; the user's change lands meanwhile, at 3.
+  let release!: () => void;
+  mcp.view.pollsHeld = new Promise<void>(resolve => (release = resolve));
+  const polls = mcp.view.polled!.length;
+  await waitFor(() => expect(mcp.view.polled!.length).toBe(polls + 1), POLL);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Traces' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Traces' }));
+  await waitFor(() => expect(mcp.view.version).toBe(3), POLL);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  mcp.view.pollsHeld = undefined;
+  release();
+
+  // The user's next change goes out against 3, so the server takes it instead of refusing it as stale.
+  await new Promise(resolve => setTimeout(resolve, 50));
+  fireEvent.click(await screen.findByText('weather-agent'));
+  await waitFor(() => expect(mcp.view.version).toBe(4), POLL);
+  const last = mcp.calls.filter(call => call.tool === 'sync_observability_view').at(-1)!;
+  expect(last.args.base).toBe(3);
+  expect(mcp.view.state?.context).toBe(last.args.state.context);
+}, 20_000);
+
+it('keeps polling a new view when the one before it turns out gone', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  const bridge = await openList(
+    mcp,
+    'query_traces',
+    { timeRange: lastHour() },
+    { meta: { 'mastra/viewId': 'view-1' } },
+  );
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+
+  // A poll for view 1 is out when the model opens view 2 in the same app; then view 1 turns out gone.
+  let release!: () => void;
+  mcp.view.pollsHeld = new Promise<void>(resolve => (release = resolve));
+  await waitFor(() => expect(mcp.view.polled).toContain('view-1'), POLL);
+  const called = await hosts.at(-1)!.client.callTool({ name: 'query_traces', arguments: { timeRange: lastHour() } });
+  await bridge.sendToolResult({ ...called, _meta: { 'mastra/viewId': 'view-2' } } as never);
+  mcp.view.gone = 'view-1';
+  mcp.view.pollsHeld = undefined;
+  release();
+
+  // View 1's answer doesn't stop view 2's polling.
+  await waitFor(() => expect(mcp.view.polled!.filter(id => id === 'view-2').length).toBeGreaterThanOrEqual(2), POLL);
+}, 20_000);

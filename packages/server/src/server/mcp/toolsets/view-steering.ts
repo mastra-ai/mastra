@@ -1,7 +1,6 @@
 import { deepEqual } from '@mastra/core/utils';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { GET_CAPABILITIES } from '../../handlers/observability-new-endpoints';
-import { toolError } from '../catalogue';
 import type { Args, CatalogueKit, ModelSummary } from '../catalogue';
 import { object, str } from '../schema';
 import { readView, viewOwner, writeView } from '../view-state';
@@ -58,20 +57,26 @@ export function addViewSteeringTools(kit: CatalogueKit, steerable: Map<Steerable
       `${tools.join(', ')} again (which opens another view). Pass tool and args to show that tool's result ` +
       '(its tab, filters, time range, and sort), and/or traceId to open a trace. Returns what the view now shows. ' +
       "Call with only viewId to read what it shows, including the user's own changes.",
-    object(
-      {
-        viewId,
-        tool: { type: 'string', enum: tools, description: 'Show what this tool returns for args.' },
-        args: { type: 'object', additionalProperties: true, description: 'The tool arguments, as you would call it.' },
-        traceId,
-        spanId,
-      },
-      ['viewId'],
-    ),
+    {
+      ...object(
+        {
+          viewId,
+          tool: { type: 'string', enum: tools, description: 'Show what this tool returns for args.' },
+          args: {
+            type: 'object',
+            additionalProperties: true,
+            description: 'The tool arguments, as you would call it.',
+          },
+          traceId,
+          spanId,
+        },
+        ['viewId'],
+      ),
+      dependencies: { spanId: ['traceId'] },
+    },
     async (args, signal) => {
       const record = await readView(cache, args.viewId, owner);
       if (!args.tool && !args.traceId) return { text: describe(args.viewId, record) };
-      if (args.spanId && !args.traceId) throw toolError(400, 'spanId needs traceId.');
 
       const state: ViewState = args.tool
         ? { tool: args.tool, args: (args.args as Args | undefined) ?? {} }

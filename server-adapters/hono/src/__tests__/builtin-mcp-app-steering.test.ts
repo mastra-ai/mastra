@@ -189,6 +189,43 @@ describe('steering an open observability explorer', () => {
     expect(json(await model.callTool({ name: SYNC, arguments: { viewId, since: 0 } }))).toEqual({ version: 0 });
   });
 
+  it('refuses a span without its trace, whether the model reads the view or changes it', async () => {
+    const model = await server.connect('ada');
+    const { viewId } = await openExplorer(model);
+    for (const args of [
+      { viewId, spanId: 'span-1' },
+      { viewId, tool: 'list_logs', args: { level: 'error' }, spanId: 'span-1' },
+    ]) {
+      const result = await model.callTool({ name: STEER, arguments: args });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(/traceId/);
+    }
+    expect(json(await model.callTool({ name: SYNC, arguments: { viewId, since: 0 } }))).toEqual({ version: 0 });
+  });
+
+  it("refuses view state too large for the shared cache, from the view or the model, and keeps what's stored", async () => {
+    const model = await server.connect('ada');
+    const { viewId } = await openExplorer(model);
+    const huge = { level: 'error', filler: 'x'.repeat(20_000) };
+    const report = await model.callTool({
+      name: SYNC,
+      arguments: { viewId, base: 0, state: { tool: 'list_logs', args: huge } },
+    });
+    expect(report.isError).toBe(true);
+    expect(text(report)).toMatch(/\b413\b.*at most 16384 bytes/);
+    const steer = await model.callTool({ name: STEER, arguments: { viewId, tool: 'list_logs', args: huge } });
+    expect(steer.isError).toBe(true);
+    expect(text(steer)).toMatch(/at most 16384 bytes/);
+    expect(json(await model.callTool({ name: SYNC, arguments: { viewId, since: 0 } }))).toEqual({ version: 0 });
+
+    // A state of ordinary size is taken.
+    const fits = await model.callTool({
+      name: SYNC,
+      arguments: { viewId, base: 0, state: { tool: 'list_logs', args: { level: 'error' } } },
+    });
+    expect(json(fits)).toEqual({ version: 1 });
+  });
+
   it("gives the model the user's changes, and doesn't let a stale one undo the model's", async () => {
     const model = await server.connect('ada');
     const { viewId } = await openExplorer(model);

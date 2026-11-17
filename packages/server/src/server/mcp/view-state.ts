@@ -53,6 +53,12 @@ const applies = (change: Change) => change.base === undefined || change.base ===
  */
 export const SEGMENT = 16;
 
+/**
+ * The most a change may weigh, serialized. A view keeps up to three segments of changes for an hour, so this
+ * bounds what one view holds in the shared cache (the screen description alone is capped at 4000 characters).
+ */
+export const MAX_STATE_BYTES = 16 * 1024;
+
 /** How many changes the view has had, which is the next change's index. */
 async function changeCount(cache: MastraServerCache, viewId: string): Promise<number> {
   const count = await cache.get(counterKey(viewId));
@@ -132,6 +138,10 @@ export async function writeView(
   base?: number,
 ): Promise<ViewRecord> {
   await checkOwner(viewId, owner);
+  const size = new TextEncoder().encode(JSON.stringify(state)).byteLength;
+  if (size > MAX_STATE_BYTES) {
+    throw toolError(413, `A view state is at most ${MAX_STATE_BYTES} bytes; this one is ${size}.`);
+  }
   const change = base === undefined ? { by, state } : { by, state, base };
   const segment = Math.floor((await changeCount(cache, viewId)) / SEGMENT);
   const index = await cache.listPushIndexed(segmentKey(viewId, segment), counterKey(viewId), change, VIEW_TTL_MS);
