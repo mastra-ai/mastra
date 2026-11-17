@@ -8347,10 +8347,10 @@ export class Mastra<
 
     // Unsubscribe only the (topic, listener) pairs we actually registered in
     // startWorkers() — keeps stopWorkers() symmetric with startWorkers() and
-    // avoids unsubscribing listeners that startWorkers never owned.
-    for (const { topic, cb } of this.#userEventSubscriptions) {
-      await this.#pubsub.unsubscribe(topic, cb);
-    }
+    // avoids unsubscribing listeners that startWorkers never owned. Concurrent
+    // because the pairs are independent, and a backend whose unsubscribe waits
+    // on a blocking read would otherwise pay that wait once per pair.
+    await Promise.all(this.#userEventSubscriptions.map(({ topic, cb }) => this.#pubsub.unsubscribe(topic, cb)));
     this.#userEventSubscriptions = [];
     await this.#unwireSchedulerWakeSubscription();
 
