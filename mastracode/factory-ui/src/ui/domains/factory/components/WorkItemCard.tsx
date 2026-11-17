@@ -168,7 +168,11 @@ export function WorkItemCard({
   };
   const relatedLinks = relatedItems.map(relatedLink);
   const upstreamLinks = (
-    <WorkItemUpstreamLinks item={item} shownAsRelated={relatedItems.flatMap(related => related.url ?? [])} />
+    <WorkItemUpstreamLinks
+      item={item}
+      shownAsRelated={relatedItems.flatMap(related => related.url ?? [])}
+      short={layout === 'list'}
+    />
   );
 
   if (layout === 'list') {

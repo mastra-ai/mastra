@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
+import { closeReason, isPullRequestEvent, listChange, updateEventFacts } from '../../boards/board-events.js';
 import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
@@ -673,7 +673,12 @@ export class GithubRules {
       item,
       ingress: { identity: `${installationId}:${parsed.deliveryId}` },
       actor: { ...actor },
-      event,
+      // A pull request update carries who made it: run approval reads the actor, not the author.
+      // Factory's own app is never a collaborator; its authorship is its trust signal.
+      event:
+        isPullRequestEvent(event.type) ?
+          { ...event, actorTrusted: actor.type === 'github' && (actor.trusted || actor.factoryAuthored) }
+        : event,
       fromCardSession,
     });
     return status;
@@ -1398,7 +1403,10 @@ export class GithubRules {
       }
       if (context.pullRequest) {
         const trusted = githubPullRequestTrusted(context);
-        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
+        // An unknown actor — a polled or system delivery — vouches for nothing. Factory's own
+        // app is never a collaborator, so its authorship is its trust signal, as everywhere else.
+        const actorTrusted = context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
+        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({

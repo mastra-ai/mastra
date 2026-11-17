@@ -199,6 +199,22 @@ export const mastra = new Mastra({
     ],
   },
   {
+    name: 'recoverStaleTasksOnStart',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      "Whether the manager recovers abandoned `running` and `pending` tasks on startup. A `running` task is only recovered once its owner's execution lease has expired, so this is safe when several managers share storage. When enabled, the manager scans again once the earliest live lease it found expires, and checks every `leaseDurationMs` for `pinToWorker` tasks whose worker stopped renewing their lease. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).",
+  },
+  {
+    name: 'leaseDurationMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '30000',
+    description:
+      'Duration of the execution lease a manager holds on each task it runs, in milliseconds. The owner renews the lease every `leaseDurationMs / 3`. While the lease is live, no other manager recovers the task. Once it expires, the owner is treated as dead. Must be at least `3000`; the manager throws at construction for lower values.',
+  },
+  {
     name: 'waitTimeoutMs',
     type: 'number',
     isOptional: true,

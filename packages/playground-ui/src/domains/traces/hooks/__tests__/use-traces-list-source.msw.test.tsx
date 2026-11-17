@@ -237,17 +237,32 @@ describe('useTracesListSource', () => {
         vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'], shouldAdvanceTime: true });
         vi.setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
         const { rerender } = renderHook(
-          ({ textSearch }: { textSearch?: string }) =>
+          ({ searchTerm }: { searchTerm?: string }) =>
             useTracesListSource({
-              query: now => ({ ...query(now), ...(textSearch ? { textSearch } : {}) }),
-              withDeltaPolling: !textSearch,
+              query: now => ({
+                ...query(now),
+                ...(searchTerm
+                  ? {
+                      where: {
+                        spans: {
+                          some: {
+                            op: 'hasAllTokens' as const,
+                            left: { path: 'all' as const },
+                            right: { literal: searchTerm },
+                          },
+                        },
+                      },
+                    }
+                  : {}),
+              }),
+              withDeltaPolling: !searchTerm,
             }),
-          { wrapper: Wrapper, initialProps: { textSearch: undefined } },
+          { wrapper: Wrapper, initialProps: { searchTerm: undefined } },
         );
         await waitFor(() => expect(requests.listRequests).toHaveLength(1));
         await waitFor(() => expect(requests.deltaRequests).toHaveLength(1));
         vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));
-        rerender({ textSearch: 'needle' });
+        rerender({ searchTerm: 'needle' });
         await waitFor(() => expect(requests.listRequests).toHaveLength(2));
         expect(Date.parse(requests.listRequests[1]?.timeRange.to ?? '')).toBeGreaterThanOrEqual(
           Date.parse('2026-09-01T12:00:00.000Z'),

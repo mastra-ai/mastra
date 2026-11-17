@@ -83,6 +83,35 @@ function stubPageWidth(width: number) {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, width, 800));
 }
 
+describe('a card with sessions', () => {
+  it("opens the thread of the session its current phase runs in, as a chat's link to the card does", async () => {
+    stubDraftRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...linearCard,
+              stages: ['execute'],
+              sessions: {
+                triage: { sessionId: 'session-triage', threadId: 'thread-triage' },
+                work: { sessionId: 'session-work', threadId: 'thread-work' },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const { router } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/session-work/threads/thread-work`,
+      ),
+    );
+  });
+});
+
 describe('a card without a session', () => {
   afterEach(() => vi.restoreAllMocks());
 

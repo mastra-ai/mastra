@@ -134,7 +134,12 @@ function issueOpened() {
   };
 }
 
-function pullRequest(action: 'opened' | 'synchronize' | 'closed', deliveryId: string, merged = false) {
+function pullRequest(
+  action: 'opened' | 'synchronize' | 'closed',
+  deliveryId: string,
+  merged = false,
+  sender = 'maintainer',
+) {
   return {
     event: 'pull_request',
     deliveryId,
@@ -142,7 +147,7 @@ function pullRequest(action: 'opened' | 'synchronize' | 'closed', deliveryId: st
       action,
       installation: { id: 7 },
       repository: { id: 10, full_name: 'acme/repo' },
-      sender: { login: 'maintainer' },
+      sender: { login: sender, type: sender.endsWith('[bot]') ? 'Bot' : 'User' },
       pull_request: {
         number: 17,
         title: 'PR 17',
@@ -258,7 +263,10 @@ async function harness(
     github: {
       rules: resolveGithubRules(),
       slug: 'factory-app',
-      getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue('write'),
+      // GitHub never lists an app bot as a collaborator: its permission lookup answers nothing.
+      getRepositoryCollaboratorPermission: vi.fn(async (_installationId: number, _repository: string, login: string) =>
+        login.endsWith('[bot]') ? undefined : 'write',
+      ),
     } as never,
     sourceControl,
     integrationStorage,
@@ -439,6 +447,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       // The merge finishes the card in the board's completing phase.
       await h.deliver(pullRequest('closed', 'delivery-merged', true));
       expect(await h.card(id)).toMatchObject({ board: loop.board, stages: [loop.completed] });
+    });
+
+    // Factory's app bot is never a collaborator, so its permission lookup answers nothing: its
+    // authorship is its trust signal. The reviews its own opened pull request and pushes queue
+    // start without a person, like a maintainer's.
+    it("reviews Factory's own pull request and its pushes without a person when Factory's app sends the events", async () => {
+      const h = await harness(backend, loop);
+      const id = await cardInBuild(h);
+      await h.authored(id);
+      const reviews = async () =>
+        (await h.decisions()).filter(
+          entry =>
+            entry.workItemId === id &&
+            entry.decision.type === 'invokeSkill' &&
+            (entry.decision as { skillName?: string }).skillName === 'factory-review',
+        );
+
+      await h.deliver(pullRequest('opened', 'delivery-opened', false, 'factory-app[bot]'));
+      expect(await h.card(id)).toMatchObject({ board: loop.board, stages: [loop.review] });
+      const opened = await reviews();
+      expect(opened.length).toBeGreaterThanOrEqual(1);
+      expect(opened.map(entry => entry.status)).not.toContain('proposed');
+
+      await h.deliver(pullRequest('synchronize', 'delivery-push', false, 'factory-app[bot]'));
+      const pushed = await reviews();
+      expect(pushed).toHaveLength(opened.length + 1);
+      expect(pushed.map(entry => entry.status)).not.toContain('proposed');
     });
 
     it("sends the card back to rest when its pull request closes unmerged", async () => {

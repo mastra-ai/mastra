@@ -520,7 +520,7 @@ await mastraClient.replaceFeedback({
 })
 ```
 
-Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable automatic retries.
+Use the normalized timestamp from the create response's `data` when available. OSS rejects changes to the original trace or timestamp with `409`. Platform uses the timestamp as part of record identity, so preserve it there too. The client preserves the replacement body across retries, but each accepted PUT retry is a new replacement and can supersede another edit. PUT requests get no transport retries by default, but a client configured with `retries` applies that count here too, and anchor retries stay on unless you turn them off. Pass `{ retries: 0, anchorRetryTimeoutMs: 0 }` as the second argument to disable both transport and anchor retries. `retries: 0` is only redundant when the client has no `retries` configured.
 
 ### Deleting feedback and scores
 

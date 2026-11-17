@@ -1092,7 +1092,7 @@ describe('pushBranch', () => {
     await pushBranch(sandbox, '/workspace/hello', 'feat/cloud-agent', 'tok-secret', 'octocat/hello');
 
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
-    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/cloud-agent']);
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '--porcelain', '-u', 'origin', 'feat/cloud-agent']);
     expect(push.options?.env).toMatchObject({
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.git.extraHeader',
@@ -1122,7 +1122,7 @@ describe('pushBranch', () => {
 
   it('keeps push failures classified without mutating the remote', async () => {
     const sandbox = new FakeSandbox(script =>
-      script.includes('push -u origin')
+      script.includes('push --porcelain -u origin')
         ? { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' }
         : OK,
     );
@@ -1145,7 +1145,7 @@ describe('pushRepositoryBranch', () => {
     await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello');
 
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
-    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/gitlab']);
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '--porcelain', '-u', 'origin', 'feat/gitlab']);
     expect(push.options?.env).toMatchObject({
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://gitlab.com/acme/hello.git.extraHeader',
@@ -1156,9 +1156,48 @@ describe('pushRepositoryBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
+  it('reports the pushed commit and whether the remote already had it', async () => {
+    const result = (upToDate: boolean) => (script: string) =>
+      script.includes('rev-parse')
+        ? { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+        : script.includes('push --porcelain')
+          ? {
+              exitCode: 0,
+              stdout: upToDate
+                ? 'To https://gitlab.com/acme/hello.git\n=\trefs/heads/feat/gitlab:refs/heads/feat/gitlab\t[up to date]\nDone\n'
+                : 'To https://gitlab.com/acme/hello.git\n \trefs/heads/feat/gitlab:refs/heads/feat/gitlab\t1111111..abc123\nDone\n',
+              stderr: '',
+            }
+          : OK;
+    await expect(
+      pushRepositoryBranch(new FakeSandbox(result(false)), '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: false });
+    await expect(
+      pushRepositoryBranch(new FakeSandbox(result(true)), '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: true });
+  });
+
+  it('reports an up-to-date push whose configured destination has another name', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse')
+        ? { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+        : script.includes('push --porcelain')
+          ? {
+              exitCode: 0,
+              stdout:
+                'To https://gitlab.com/acme/hello.git\n=\trefs/heads/feat/gitlab:refs/heads/review\t[up to date]\nDone\n',
+              stderr: '',
+            }
+          : OK,
+    );
+    await expect(
+      pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: true });
+  });
+
   it('keeps a failed push credential-free in argv and persistent config', async () => {
     const sandbox = new FakeSandbox(script =>
-      script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
+      script.includes('push --porcelain -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
     );
     const error = await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello').catch(
       value => value,
