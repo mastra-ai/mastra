@@ -369,7 +369,7 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
   ({ authEnabled }) => {
     const privateIds = ['their-card-run', 'their-draft', 'their-starting'];
 
-    it('reaches its owner through rows, activity and the session list, and no one else after the owner read them', async () => {
+    it("reaches only its owner through rows and the session list; activity names it to others only as a card's session", async () => {
       await createSession('team-session');
       await createCardSession('their-card-run', 'Their card', { userId: 'u2', visibility: 'private' });
       await createSession('their-draft', { userId: 'u2', visibility: 'private' });
@@ -398,11 +398,16 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
       });
 
       for (const viewer of ['u1', 'u3']) {
-        const bodies = await responsesFor(app, viewer);
-        expect(bodies[3], viewer).toContain('"team-session"');
-        for (const body of bodies) {
+        const [revealedRowsSeen, rowsSeen, activitySeen, sessionsSeen] = await responsesFor(app, viewer);
+        expect(sessionsSeen, viewer).toContain('"team-session"');
+        for (const body of [revealedRowsSeen, rowsSeen, sessionsSeen]) {
           for (const id of privateIds) expect(body, viewer).not.toContain(id);
         }
+        expect(JSON.parse(activitySeen ?? ''), viewer).toMatchObject({
+          runningSessionIds: ['their-card-run'],
+          parkedSessionIds: ['their-card-run'],
+          initializingSessionIds: [],
+        });
       }
     });
   },

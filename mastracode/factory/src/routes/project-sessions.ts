@@ -107,8 +107,6 @@ export interface SeenSessions {
   readonly sessions: readonly ListedSession[];
   /** Whether the session is listed and the viewer may see it. */
   has(sessionId: string): boolean;
-  /** Listed sessions the viewer may not see. */
-  readonly hiddenSessionIds: ReadonlySet<string>;
 }
 
 /**
@@ -134,9 +132,6 @@ export class ProjectSessions {
         const session = byId.get(sessionId);
         return session !== undefined && isSeenBy(session, viewerUserId);
       },
-      hiddenSessionIds: new Set(
-        this.#sessions.flatMap(session => (isSeenBy(session, viewerUserId) ? [] : [session.sessionId])),
-      ),
     };
   }
 

@@ -423,7 +423,6 @@ describe('sessionActivity', () => {
   it("reports runs on the project's sessions only, and counts each card once by its most urgent session", () => {
     const activity = sessionActivity({
       sessions: [session('listed'), session('coming', null)],
-      hiddenSessionIds: new Set(),
       cards: [
         testCard('working', { sessions: { work: ref('card-run') } }),
         testCard('waiting', { sessions: { work: ref('parked'), review: ref('parked-and-running') } }),

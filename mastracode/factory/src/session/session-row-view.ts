@@ -173,8 +173,6 @@ function liveSessionCounts(
 
 export function sessionActivity(facts: {
   sessions: readonly RowSession[];
-  /** Sessions the viewer may not see: never named, even when a card holds them. */
-  hiddenSessionIds: ReadonlySet<string>;
   cards: readonly Card[];
   runningSessionIds: ReadonlySet<string>;
   parkedSessionIds: ReadonlySet<string>;
@@ -184,11 +182,10 @@ export function sessionActivity(facts: {
     ...facts.sessions.map(session => session.sessionId),
     ...facts.cards.flatMap(card => Object.values(card.sessions).map(ref => ref.sessionId)),
   ]);
-  const named = (id: string) => known.has(id) && !facts.hiddenSessionIds.has(id);
   const sorted = (ids: Iterable<string>) => [...ids].toSorted((a, b) => a.localeCompare(b));
   return {
-    runningSessionIds: sorted([...facts.runningSessionIds].filter(named)),
-    parkedSessionIds: sorted([...facts.parkedSessionIds].filter(named)),
+    runningSessionIds: sorted([...facts.runningSessionIds].filter(id => known.has(id))),
+    parkedSessionIds: sorted(facts.parkedSessionIds),
     initializingSessionIds: sorted(
       facts.sessions.flatMap(session => (session.materializedAt === null ? [session.sessionId] : [])),
     ),

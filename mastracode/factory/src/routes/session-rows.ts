@@ -120,14 +120,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         const facts = await sessionFacts(deps, resolved);
         return sendRevalidated(
           context,
-          hashedBody(
-            sessionActivity({
-              ...facts,
-              sessions: facts.seen.sessions,
-              hiddenSessionIds: facts.seen.hiddenSessionIds,
-              now: Date.now(),
-            }),
-          ),
+          hashedBody(sessionActivity({ ...facts, sessions: facts.seen.sessions, now: Date.now() })),
         );
       },
     }),
