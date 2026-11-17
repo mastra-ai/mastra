@@ -5,9 +5,7 @@ import type { ReactNode } from 'react';
 import { Fragment, useRef, useState } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
-import { BoardRowDetailsContext } from '../context/BoardRowDetailsContext';
-import { useBoardOpenCard } from '../context/useBoardOpenCard';
-import { useBoardScrollRef } from '../context/useBoardScrollRef';
+import { useBoardScrollElement } from '../context/useBoardScrollElement';
 import { boardVirtualScroll } from '../services/boardVirtualScroll';
 import { SPANS_LIST_GRID } from './BoardList';
 
@@ -34,14 +32,12 @@ export function VirtualBoardWindow({
   itemIndexes: ReadonlyMap<string, number>;
   renderItem: (index: number) => ReactNode;
 }) {
-  const scrollRef = useBoardScrollRef();
+  const scrollElement = useBoardScrollElement();
   const contentRef = useRef<HTMLDivElement>(null);
   const [focusedKey, setFocusedKey] = useState<string>();
   const [draggingKey, setDraggingKey] = useState<string>();
-  const { openKey, setCardOpen } = useBoardOpenCard();
-  const [scrollOptions] = useState(() => boardVirtualScroll(scrollRef, contentRef));
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    ...scrollOptions,
+    ...boardVirtualScroll(scrollElement, contentRef),
     count,
     getItemKey,
     estimateSize: layout === 'list' ? estimateListRowHeight : estimateBoardCardHeight,
@@ -50,7 +46,7 @@ export function VirtualBoardWindow({
     useFlushSync: false,
   });
 
-  const retainedIndexes = [focusedKey, draggingKey, pinnedKey, openKey].flatMap(key =>
+  const retainedIndexes = [focusedKey, draggingKey, pinnedKey].flatMap(key =>
     key === undefined ? [] : (itemIndexes.get(key) ?? []),
   );
   const rows: BoardRow[] = virtualized
@@ -79,9 +75,7 @@ export function VirtualBoardWindow({
               onDragStart={() => setDraggingKey(key)}
               onDragEnd={() => setDraggingKey(undefined)}
             >
-              <BoardRowDetailsContext value={{ open: openKey === key, setOpen: open => setCardOpen(key, open) }}>
-                {renderItem(row.index)}
-              </BoardRowDetailsContext>
+              {renderItem(row.index)}
             </div>
           </Fragment>
         );

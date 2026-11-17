@@ -47,7 +47,7 @@ export function DataDetailsPanelCodeSection({
         <div
           className={cn(
             'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
-            '[&>svg]:size-3.5',
+            '[&>svg]:size-icon-sm',
           )}
         >
           {icon}

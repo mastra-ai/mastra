@@ -1,13 +1,7 @@
-import type { PullRequestStatus } from './boardItems';
-import type { CardChangeRequest } from './changeRequestState';
-import {
-  CHANGE_REQUEST_TERMS,
-  cardChangeRequest,
-  cardChangeRequests,
-  changeRequestKey,
-  changeRequestStatus,
-  isOpenChangeRequest,
-} from './changeRequestState';
+import { cardChangeRequest, cardChangeRequests } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+
+import { CHANGE_REQUEST_TERMS, changeRequestKey, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
 import { referenceLabel } from './services/relationships';
 import type { WorkItem } from './services/workItems';

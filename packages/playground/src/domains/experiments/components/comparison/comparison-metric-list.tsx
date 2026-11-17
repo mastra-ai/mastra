@@ -53,7 +53,7 @@ export function ComparisonMetricList({ metrics }: { metrics: ComparisonMetric[] 
     >
       {metrics.map(({ id, icon, label, value, delta, formatDelta, rawValue, higherIsBetter, emphasis }) => (
         <Fragment key={id}>
-          <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
+          <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-icon-sm [&>svg]:shrink-0">
             {icon}
             {label}
           </dt>

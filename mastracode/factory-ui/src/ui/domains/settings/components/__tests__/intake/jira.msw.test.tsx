@@ -44,21 +44,6 @@ describe('IntakeSection jira', () => {
         'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: 'Sync Jira issues' })).not.toBeInTheDocument();
-  });
-
-  it('enables the toggle and persists switching Jira on', async () => {
-    const { saved } = useJiraHandlers();
-
-    renderIntakeSection();
-
-    const toggle = await screen.findByRole('switch', { name: 'Sync Jira issues' });
-    expect(toggle).toBeEnabled();
-    expect(toggle).not.toBeChecked();
-
-    await userEvent.click(toggle);
-
-    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: null } }]));
   });
 
   it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
@@ -79,12 +64,9 @@ describe('IntakeSection jira', () => {
     renderIntakeSection();
 
     expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
     expect(
       within(screen.getByRole('region', { name: 'Jira' })).getByRole('link', { name: 'Manage Jira connection' }),
     ).toHaveAttribute('href', 'https://projects.mastra.ai');
-    await openSourcePicker('Jira projects');
-    expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
   });
 
   it('shows the site and persists an explicit project selection', async () => {
@@ -99,6 +81,21 @@ describe('IntakeSection jira', () => {
     await openSourcePicker('Jira projects');
 
     const projects = await screen.findByRole('group', { name: 'Jira projects' });
+    await userEvent.click(within(projects).getByRole('button', { name: 'Add ENG: Engineering' }));
+
+    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: ['10001'] } }]));
+  });
+
+  it('shows projects saved behind the old sync switch as not selected, since they bring nothing in', async () => {
+    const { saved } = useJiraHandlers({
+      config: { ...baseConfig(), jira: { enabled: false, sourceIds: ['10001', '10002'] } },
+    });
+
+    renderIntakeSection();
+    await openSourcePicker('Jira projects');
+
+    const projects = await screen.findByRole('group', { name: 'Jira projects' });
+    expect(screen.queryByRole('button', { name: 'Remove OPS: Operations' })).not.toBeInTheDocument();
     await userEvent.click(within(projects).getByRole('button', { name: 'Add ENG: Engineering' }));
 
     await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: ['10001'] } }]));
@@ -121,7 +118,7 @@ describe('IntakeSection jira', () => {
 
     release();
 
-    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: null } }]));
+    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: false, sourceIds: null } }]));
   });
 
   it('waits for Jira projects before listing saved sources, so rows never show raw project IDs', async () => {

@@ -1,241 +1,283 @@
+import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
+import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-query';
 import { describe, expect, it } from 'vitest';
 
-import { releaseBoard, workBoardCatalog } from '../../../../../../e2e/ui/board-catalog';
-import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
-import { cardChangeRequest } from '../../../factory/changeRequestState';
-import { EMPTY_SESSION_FILTERS, filterSessionRows } from '../sessionFilters';
-import { groupSessionRows, sessionGroupHeadings } from '../sessionGroups';
-import { oneRowPerCard, pinnedSessionsAfter, sessionActivityStatus, sessionBoard } from '../sessionRows';
-import { sessionWorkItemIndex } from '../sessionWorkItems';
-import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
+import type { SessionRowWire } from '../../../../../api/types';
+import { pinnedSessionsAfter, presentSessionRow, sessionOwners } from '../sessionRows';
+import { sessionRowsRequest } from '../sessionRowReads';
+import type { SessionRowPresentation } from '../sessionRows';
 
-describe('sessionBoard', () => {
-  it('puts a pull request item from before boards existed on Work', () => {
-    expect(sessionBoard(testWorkItem({ board: null, source: 'github-pr' }))).toBe('work');
+const FACTORY_ID = 'factory-1';
+
+function wireRow(sessionId: string, overrides: Partial<SessionRowWire> = {}): SessionRowWire {
+  const { session, ...rest } = overrides;
+  return {
+    session: {
+      id: `row-${sessionId}`,
+      sessionId,
+      projectRepositoryId: 'repo-1',
+      userId: 'user-1',
+      branch: `factory/${sessionId}`,
+      title: null,
+      visibility: 'org',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      ...session,
+    },
+    origin: 'factory',
+    board: 'work',
+    status: 'idle',
+    pinned: false,
+    updatedAt: '2026-09-02T00:00:00.000Z',
+    ...rest,
+  };
+}
+
+function card(overrides: Partial<NonNullable<SessionRowWire['card']>> = {}): NonNullable<SessionRowWire['card']> {
+  return { id: 'card-1', title: 'Fix the login', workItemUrl: null, externalSource: null, ...overrides };
+}
+
+const presentation: SessionRowPresentation = {
+  factoryId: FACTORY_ID,
+  openSessionId: undefined,
+  viewer: { userId: 'user-1', name: 'Ada Viewer' },
+  repositories: [{ projectRepositoryId: 'repo-1', slug: 'acme/app' }],
+};
+
+const pullRequestUrl = 'https://github.com/acme/app/pull/43';
+const mergeRequestUrl = 'https://gitlab.com/acme/app/-/merge_requests/43';
+const linearSource = {
+  integrationId: 'linear',
+  type: 'issue',
+  externalId: 'FACT-528',
+  url: 'https://linear.app/acme/issue/FACT-528',
+};
+
+const present = (wire: SessionRowWire, overrides: Partial<SessionRowPresentation> = {}) =>
+  presentSessionRow(wire, { ...presentation, ...overrides });
+
+describe('presentSessionRow', () => {
+  it('opens a factory session on its own thread, inside its workspace, with its repository', () => {
+    const row = present(wireRow('s1'));
+
+    expect(row).toMatchObject({
+      origin: 'factory',
+      url: `/factories/${FACTORY_ID}/workspaces/s1`,
+      openPath: `/factories/${FACTORY_ID}/workspaces/s1/threads/s1`,
+      repository: 'acme/app',
+    });
   });
 
-  it("follows the item's custom board", () => {
-    expect(sessionBoard(testWorkItem({ board: 'release' }))).toBe('release');
-  });
+  it('opens a user session on its user thread', () => {
+    const row = present(wireRow('u1', { origin: 'user' }));
 
-  it('puts a session with no linked item on Work, pull request reviews included', () => {
-    expect(sessionBoard(undefined)).toBe('work');
+    expect(row).toMatchObject({
+      origin: 'user',
+      board: undefined,
+      url: `/factories/${FACTORY_ID}/user/threads/u1`,
+      openPath: `/factories/${FACTORY_ID}/user/threads/u1`,
+    });
+    expect(row.repository).toBeUndefined();
   });
-});
-
-describe('sessionActivityStatus', () => {
-  const quiet = { initializing: false, running: false, attention: false, settled: false };
 
   it.each([
-    [{ ...quiet, initializing: true, attention: true }, 'initializing'],
-    [{ ...quiet, running: true, settled: true }, 'working'],
-    [{ ...quiet, attention: true, settled: true }, 'waiting'],
-    [{ ...quiet, settled: true }, 'done'],
-    [quiet, 'idle'],
-  ] as const)('reads %o as %s', (row, status) => {
-    expect(sessionActivityStatus(row)).toBe(status);
+    [
+      'a factory session by its title',
+      wireRow('s1', { session: { ...wireRow('s1').session, title: 'Ship it' } }),
+      'Ship it',
+    ],
+    ['a factory session with no title by its branch', wireRow('s1'), 'factory/s1'],
+    [
+      'an untitled Slack factory session by its card',
+      wireRow('s1', { session: { ...wireRow('s1').session, branch: 'slack/1.2' }, card: card() }),
+      'Fix the login',
+    ],
+    [
+      'an untitled Slack user session by its card',
+      wireRow('u1', { origin: 'user', session: { ...wireRow('u1').session, branch: 'slack/1.2' }, card: card() }),
+      'Fix the login',
+    ],
+    [
+      'a fresh user session as new',
+      wireRow('u1', { origin: 'user', session: { ...wireRow('u1').session, branch: 'user/session-u1' } }),
+      'New session',
+    ],
+  ] as const)('names %s', (_case, wire, name) => {
+    expect(present(wire).name).toBe(name);
   });
-});
 
-describe('factory session status on a custom board', () => {
-  it.each([
-    ['shipped', 'done'],
-    ['shipping', 'idle'],
-  ] as const)('reads a quiet session in the %s phase as %s', (phase, status) => {
-    const item = testWorkItem({ board: releaseBoard.id, stages: [phase] });
+  it('marks a folded card row open while any of its sessions is', () => {
+    const wire = wireRow('work', { cardSessionIds: ['work', 'triage'] });
 
-    expect(factoryRow(testSession('s1'), { item, boards: [releaseBoard] }).status).toBe(status);
+    expect(present(wire, { openSessionId: 'triage' }).active).toBe(true);
+    expect(present(wire, { openSessionId: 'other' }).active).toBe(false);
+    expect(present(wireRow('s1'), { openSessionId: 's1' }).active).toBe(true);
+    expect(present(wireRow('s1'), { openSessionId: undefined }).active).toBe(false);
   });
-});
 
-describe('title regeneration', () => {
-  const slackSession = testSession('s1', { branch: 'slack/1791936483-798759' });
+  it('draws the sessions listed under a row, each open on its own', () => {
+    const row = present(
+      wireRow('work', {
+        childRows: [{ ...wireRow('review'), phaseLabel: 'Review', runByFactory: true, waitingSessionId: 'review' }],
+      }),
+      { openSessionId: 'review' },
+    );
+
+    expect(row.active).toBe(false);
+    expect(row.childRows).toEqual([
+      expect.objectContaining({
+        url: `/factories/${FACTORY_ID}/workspaces/review`,
+        active: true,
+        phaseLabel: 'Review',
+        runByFactory: true,
+        waitingSessionId: 'review',
+      }),
+    ]);
+  });
+
+  it("names the viewer's own sessions by their profile and lets only them act as owner", () => {
+    const own = present(wireRow('s1'));
+    const theirs = present(
+      wireRow('s2', { session: { ...wireRow('s2').session, userId: 'user-2', owner: { id: 'user-2', name: 'Zoe' } } }),
+    );
+
+    expect(own).toMatchObject({ owner: { name: 'Ada Viewer' }, ownedByViewer: true });
+    expect(theirs).toMatchObject({ owner: { name: 'Zoe' }, ownedByViewer: false });
+    expect(present(wireRow('s2'), { viewer: undefined }).ownedByViewer).toBe(true);
+  });
+
+  const slackSession = { ...wireRow('s1').session, branch: 'slack/1791936483-798759' };
 
   it.each([
-    ['an owned user session', true, userRow('s1')],
-    ['an owned Slack session', true, factoryRow(slackSession)],
-    ['an owned work session', false, factoryRow(testSession('s1'))],
-    ["another owner's Slack session", false, factoryRow(slackSession, { viewer: { userId: 'user-2' } })],
-  ] as const)('is offered for %s: %s', (_case, offered, row) => {
-    expect(row.canRegenerateTitle).toBe(offered);
+    ['an owned user session', true, wireRow('s1', { origin: 'user' }), presentation.viewer],
+    ['an owned Slack session', true, wireRow('s1', { session: slackSession }), presentation.viewer],
+    ['an owned work session', false, wireRow('s1'), presentation.viewer],
+    ["another owner's Slack session", false, wireRow('s1', { session: slackSession }), { userId: 'user-2' }],
+  ] as const)('offers title regeneration for %s: %s', (_case, offered, wire, viewer) => {
+    expect(present(wire, { viewer }).canRegenerateTitle).toBe(offered);
+  });
+
+  it('shows where a card came from, falling back to a review branch without a card', () => {
+    expect(present(wireRow('s1', { card: card({ externalSource: linearSource }) })).source).toBe('linear-issue');
+    expect(present(wireRow('s1', { session: { ...wireRow('s1').session, branch: 'factory/pr-2' } })).source).toBe(
+      'github-pr',
+    );
+  });
+
+  it('reads the change request state of a factory row', () => {
+    const row = present(
+      wireRow('s1', {
+        threadId: 's1-thread',
+        pullRequest: { provider: 'github', url: pullRequestUrl, number: 43, status: 'merged', draft: false },
+      }),
+    );
+
+    expect(row).toMatchObject({ threadId: 's1-thread', pullRequestStatus: 'merged' });
   });
 });
 
 describe('external links', () => {
-  it.each(['github-pr', 'gitlab-pr'] as const)('shows a normalized merged %s without a legacy merged flag', source => {
-    const pullRequest = testWorkItem({
-      source,
-      metadata: { merged: false },
-      workItem: { ...providerFactsCard.workItem, state: 'merged', metadata: {} },
-    });
-    const row = factoryRow(testSession('s1'), { pullRequest: cardChangeRequest(pullRequest) });
-
-    expect(row.pullRequestStatus).toBe('merged');
-  });
-
-  const slackThread = testWorkItem({ source: 'slack-thread', url: 'https://app.slack.com/client/T-1/C-1' });
-  const pullRequest = testWorkItem({ id: 'pr-1', source: 'github-pr', url: 'https://github.com/acme/app/pull/43' });
-  const mergeRequest = testWorkItem({
-    id: 'mr-1',
-    source: 'gitlab-pr',
-    url: 'https://gitlab.com/acme/app/-/merge_requests/43',
-  });
-  const linearIssue = testWorkItem({ source: 'linear-issue', url: 'https://linear.app/acme/issue/FACT-528' });
-
   it.each([
     [
-      'the source and its pull request',
-      slackThread,
-      pullRequest,
+      'the Slack thread and its pull request',
+      card({
+        externalSource: { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C1:1.2', workspaceId: 'T1' },
+        workItemUrl: '/factories/factory-1/workspaces/s1',
+      }),
+      { provider: 'github', url: pullRequestUrl, draft: false },
       [
-        ['Open in Slack', slackThread.url],
-        ['Open pull request', pullRequest.url],
+        ['Open in Slack', 'https://app.slack.com/client/T1/C1/thread/C1-1.2'],
+        ['Open pull request', pullRequestUrl],
       ],
     ],
     [
       'a merge request once when it is the source',
-      mergeRequest,
-      mergeRequest,
-      [['Open merge request', mergeRequest.url]],
+      card({
+        externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: '43' },
+        workItemUrl: mergeRequestUrl,
+      }),
+      { provider: 'gitlab', url: mergeRequestUrl, draft: false },
+      [['Open merge request', mergeRequestUrl]],
     ],
-    ['an issue tracker by name', linearIssue, undefined, [['Open in Linear', linearIssue.url]]],
-    ['nothing for an item without a link', testWorkItem(), undefined, []],
-  ] as const)('offers %s', (_case, item, pullRequestItem, links) => {
-    const row = factoryRow(testSession('s1'), {
-      item,
-      pullRequest: pullRequestItem && cardChangeRequest(pullRequestItem),
-    });
+    [
+      'an issue tracker by name',
+      card({ externalSource: linearSource }),
+      undefined,
+      [['Open in Linear', linearSource.url]],
+    ],
+    ['nothing for a card without a link', card(), undefined, []],
+  ] as const)('offers %s', (_case, rowCard, pullRequest, links) => {
+    const row = present(wireRow('s1', { card: rowCard, ...(pullRequest ? { pullRequest } : {}) }));
 
     expect(row.externalLinks.map(link => [link.label, link.url])).toEqual(links);
   });
-
-  it('offers the pull request an issue card opened, next to the issue', () => {
-    const issueUrl = 'https://github.com/acme/app/issues/73';
-    const pullRequestUrl = 'https://github.com/acme/app/pull/74';
-    const issue = testWorkItem({
-      source: 'github-issue',
-      url: issueUrl,
-      sessions: { work: { sessionId: 's1', branch: 'factory/s1', threadId: 's1-thread', startedBy: 'user-1' } },
-      workItem: {
-        ...providerFactsCard.workItem,
-        sources: providerFactsCard.workItem.sources.map(source => ({
-          ...source,
-          id: 'source-pull-request',
-          sourceType: 'pull-request',
-          url: pullRequestUrl,
-          state: 'open',
-          metadata: { githubPullRequestNumber: 74 },
-        })),
-      },
-    });
-    const indexed = sessionWorkItemIndex([issue]).get('s1');
-    const row = factoryRow(testSession('s1'), { item: issue, pullRequest: indexed?.pullRequest });
-
-    expect(row.externalLinks.map(link => [link.label, link.url])).toEqual([
-      ['Open in GitHub', issueUrl],
-      ['Open pull request', pullRequestUrl],
-    ]);
-  });
 });
 
-describe('oneRowPerCard', () => {
-  const ref = (sessionId: string) => ({
-    sessionId,
-    branch: `factory/${sessionId}`,
-    threadId: `${sessionId}-thread`,
-    startedBy: 'user-1',
-  });
-  const item = testWorkItem({
-    stages: ['execute'],
-    sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
-  });
-  const boards = workBoardCatalog.boards;
-  const cardRow = (context: string, input: Parameters<typeof factoryRow>[1] = {}) =>
-    factoryRow(testSession(context), { item, boards, context, ...input });
+describe('pinnedSessionsAfter', () => {
+  it("unpins every session of a card's row, and pins only the session it shows", () => {
+    const shown = present(wireRow('work', { pinned: true, cardSessionIds: ['work', 'triage'] }));
 
-  it("keeps the card's current session and carries what its other sessions show", () => {
-    const rows = oneRowPerCard(
-      [
-        cardRow('triage', { routeSessionId: 'triage', pinned: true }),
-        cardRow('work'),
-        cardRow('review', { running: true }),
-      ],
-      boards,
-    );
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      session: { sessionId: 'work' },
-      status: 'working',
-      active: true,
-      pinned: true,
-    });
-  });
-
-  it("falls back to the card's next session when its current one is not listed", () => {
-    const rows = oneRowPerCard([cardRow('review'), cardRow('triage')], boards);
-
-    expect(rows.map(row => row.session.sessionId)).toEqual(['triage']);
-  });
-
-  it("unpins a card's row when its pin came from another of the card's sessions", () => {
-    const listed = (pinned: ReadonlySet<string>) =>
-      oneRowPerCard(
-        [cardRow('triage', { pinned: pinned.has('triage') }), cardRow('work', { pinned: pinned.has('work') })],
-        boards,
-      )[0];
-    const pinned = new Set(['triage']);
-    const shown = listed(pinned);
-    expect(shown).toMatchObject({ session: { sessionId: 'work' }, pinned: true });
-
-    expect(listed(pinnedSessionsAfter(pinned, shown, false)).pinned).toBe(false);
+    expect([...pinnedSessionsAfter(new Set(['triage', 'other']), shown, false)]).toEqual(['other']);
     expect([...pinnedSessionsAfter(new Set(), shown, true)]).toEqual(['work']);
   });
 
-  describe('with child sessions revealed', () => {
-    const revealed = () =>
-      oneRowPerCard([cardRow('triage'), cardRow('work'), cardRow('review', { running: true })], boards, {
-        revealChildSessions: true,
-      });
-    const byStatus = (status: 'working' | 'idle') =>
-      filterSessionRows(revealed(), { ...EMPTY_SESSION_FILTERS, status }, 'user-1');
-    const listed = (rows: ReturnType<typeof revealed>) =>
-      rows.map(row => [row.session.sessionId, row.childRows?.map(child => child.session.sessionId)]);
+  it('pins again a session whose pin fell past the newest the sidebar sends', () => {
+    const newer = Array.from({ length: SESSION_ROW_PINS_MAX }, (_, index) => `newer-${index}`);
+    const repinned = pinnedSessionsAfter(new Set(['old', ...newer]), present(wireRow('old')), true);
 
-    it('keeps a card under a status filter when one of its sessions matches, listing only the ones that do', () => {
-      expect(listed(byStatus('working'))).toEqual([['work', ['review']]]);
-      expect(listed(byStatus('idle'))).toEqual([['work', ['triage']]]);
+    const { pin } = sessionRowsRequest({
+      sort: 'activity',
+      groupBy: 'none',
+      filters: { owner: 'all', status: 'all', updated: 'all' },
+      pinned: repinned,
+      open: undefined,
+      children: false,
+      windows: {},
     });
 
-    it("groups a card by what its sessions carry, as it does when they're hidden", () => {
-      const rows = revealed();
-      const groups = groupSessionRows(
-        rows,
-        'status',
-        sessionGroupHeadings(rows, 'status', { boards, viewerUserId: 'user-1' }),
-        [],
-      );
-
-      expect(groups.map(group => [group.key, group.rows.map(row => row.session.sessionId)])).toEqual([
-        ['status:working', ['work']],
-      ]);
-    });
-
-    it('pins only the session that was pinned, since each one is listed on its own', () => {
-      const [card] = oneRowPerCard([cardRow('triage', { pinned: true }), cardRow('work')], boards, {
-        revealChildSessions: true,
-      });
-
-      expect(card).toMatchObject({ session: { sessionId: 'work' }, pinned: false });
-      expect(card?.childRows).toMatchObject([{ session: { sessionId: 'triage' }, pinned: true }]);
-      // Unpinning the card's row leaves the child's own pin alone.
-      expect([...pinnedSessionsAfter(new Set(['triage', 'work']), card, false)]).toEqual(['triage']);
-    });
+    expect(pin).toContain('old');
   });
+});
 
-  it('leaves sessions without a card alone', () => {
-    const rows = [factoryRow(testSession('loose')), userRow('mine')];
+describe('sessionRowsRequest', () => {
+  it('sends the windows of the groups opened last, as many as the server accepts', () => {
+    const opened = Array.from({ length: 65 }, (_, index) => [`board:board-${index}`, 25] as const);
 
-    expect(oneRowPerCard(rows, boards)).toEqual(rows);
+    const { windows } = sessionRowsRequest({
+      sort: 'activity',
+      groupBy: 'board',
+      filters: { owner: 'all', status: 'all', updated: 'all' },
+      pinned: new Set(),
+      open: undefined,
+      children: false,
+      windows: Object.fromEntries(opened),
+    });
+
+    const query = FACTORY_ROUTE_CONTRACTS.sessionRows.querySchema.safeParse({
+      window: Object.entries(windows).map(([group, count]) => `${group}:${count}`),
+    });
+    expect(query.success).toBe(true);
+    expect(windows).toHaveProperty(['board:board-64'], 25);
+    expect(windows).not.toHaveProperty(['board:board-0']);
+  });
+});
+
+describe('sessionOwners', () => {
+  it('names owners as their rows do, sorted by name', () => {
+    const owners = sessionOwners(
+      [
+        { userId: 'factory-project:p1' },
+        { userId: 'user-1', name: 'ada' },
+        { userId: 'user-2', name: 'Bea' },
+        { userId: 'user-3' },
+      ],
+      presentation.viewer,
+    );
+
+    expect(owners).toEqual([
+      { userId: 'user-1', name: 'Ada Viewer' },
+      { userId: 'user-2', name: 'Bea' },
+      { userId: 'factory-project:p1', name: 'Factory' },
+      { userId: 'user-3', name: 'user-3' },
+    ]);
   });
 });

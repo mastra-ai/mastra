@@ -24,6 +24,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { shareStreamChunk } from '../server-adapter/serialize';
 import { handleError } from './error';
 import { enforceThreadAccess } from './utils';
 
@@ -616,20 +617,93 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
- * before converting its Maps so queued wire events retain point-in-time state.
+ * Copy a display-state value as `JSON.stringify` would read it now: `toJSON` is
+ * resolved and every object and array is copied, so the reducer's in-place
+ * updates (tool status and results, input buffers, file operations, subagent
+ * progress) cannot reach a queued frame. Primitives are immutable and shared, so
+ * message text and large tool results are not duplicated per snapshot the way
+ * `structuredClone` duplicates them. `copies` preserves shared and circular
+ * references.
+ */
+function snapshotForWire(value: unknown, key: string, copies: Map<object, unknown>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (copies.has(value)) return copies.get(value);
+  if (ArrayBuffer.isView(value)) {
+    const copy = structuredClone(value);
+    copies.set(value, copy);
+    return copy;
+  }
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  let source: unknown = typeof toJSON === 'function' ? toJSON.call(value, key) : value;
+  // `JSON.stringify` writes a boxed number, string or boolean as its primitive.
+  if (source instanceof Number || source instanceof String || source instanceof Boolean) source = source.valueOf();
+  if (source === null || typeof source !== 'object') {
+    copies.set(value, source);
+    return source;
+  }
+  if (Array.isArray(source)) {
+    const copy: unknown[] = new Array(source.length);
+    copies.set(value, copy);
+    for (let index = 0; index < source.length; index++) {
+      copy[index] = snapshotForWire(source[index], String(index), copies);
+    }
+    return copy;
+  }
+  const copy: Record<string, unknown> = {};
+  copies.set(value, copy);
+  for (const field of Object.keys(source)) {
+    const fieldCopy = snapshotForWire((source as Record<string, unknown>)[field], field, copies);
+    if (field === '__proto__') {
+      // Parsed JSON can hold an own `__proto__` key; assigning it would set the
+      // copy's prototype and drop the key from the wire.
+      Object.defineProperty(copy, field, { value: fieldCopy, enumerable: true, writable: true, configurable: true });
+    } else {
+      copy[field] = fieldCopy;
+    }
+  }
+  return copy;
+}
+
+/**
+ * `display_state_changed` Maps JSON-serialize to `{}`, so convert them to
+ * records, and snapshot the live display state so queued wire events retain
+ * point-in-time state.
  */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
-  const snapshot = structuredClone(displayState);
-  return {
-    ...snapshot,
-    activeTools: Object.fromEntries(snapshot.activeTools),
-    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
-    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
-    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
-    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
-  };
+  const copies = new Map<object, unknown>();
+  const wire: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(displayState)) {
+    wire[field] =
+      value instanceof Map
+        ? Object.fromEntries(Array.from(value, ([id, entry]) => [id, snapshotForWire(entry, String(id), copies)]))
+        : snapshotForWire(value, field, copies);
+  }
+  return wire as WireDisplayState;
+}
+
+/**
+ * The frame of the display-state event being dispatched. Every stream of a
+ * session receives the same event object in one synchronous dispatch, so they
+ * share one snapshot, and its JSON, rather than each building its own.
+ */
+let dispatchedDisplayFrame: { event: AgentControllerEvent; frame: JsonReadyAgentControllerEvent } | undefined;
+
+function toWireDisplayEvent(
+  event: Extract<AgentControllerEvent, { displayState: AgentControllerDisplayState }>,
+): JsonReadyAgentControllerEvent {
+  if (dispatchedDisplayFrame?.event === event) {
+    // A second stream of the session: from here on the frame is fanned out, so
+    // serialize it once. A lone stream never pays for the shared-JSON entry.
+    return shareStreamChunk(dispatchedDisplayFrame.frame);
+  }
+  const frame = { ...event, displayState: toWireDisplayState(event.displayState) };
+  dispatchedDisplayFrame = { event, frame };
+  // The live state may change after this dispatch, so a later emit of the same
+  // event object must snapshot again.
+  queueMicrotask(() => {
+    if (dispatchedDisplayFrame?.event === event) dispatchedDisplayFrame = undefined;
+  });
+  return frame;
 }
 
 function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
@@ -644,7 +718,7 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
-    return { ...event, displayState: toWireDisplayState(event.displayState) };
+    return toWireDisplayEvent(event);
   }
   if (carriesError(event)) {
     return { ...event, error: toPersistedErrorIdentity(event.error) };

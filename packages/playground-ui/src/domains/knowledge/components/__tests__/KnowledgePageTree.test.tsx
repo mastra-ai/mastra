@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
+import { bodyHeadings } from '../../lib/bodyHeadings';
 import type { KnowledgeNotePayload, KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageDetail } from '../KnowledgePageDetail';
 import { KnowledgePageTree } from '../KnowledgePageTree';
@@ -157,12 +158,67 @@ describe('KnowledgePageDetail', () => {
       />,
     );
     const detail = screen.getByRole('article', { name: 'Refunds' });
-    expect(within(detail).getByText('In Acme')).toBeTruthy();
+    expect(within(within(detail).getByRole('region', { name: 'Details' })).getByText('Acme')).toBeTruthy();
     expect(within(detail).getByText('How refunds work')).toBeTruthy();
     expect(within(detail).getByText('Pinned for org:acme')).toBeTruthy();
     expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
     expect(within(detail).getByText('agent:alex')).toBeTruthy();
     expect(within(within(detail).getByLabelText('Stamped to')).getByText('org:acme')).toBeTruthy();
+  });
+
+  it('lists the body’s headings, and the pages its body links to', () => {
+    const onPageClick = vi.fn();
+    renderWithProviders(
+      <KnowledgePageDetail
+        page={{
+          ...refundsPage,
+          body: '# Refunds\nSee [[Billing]].\n## Retries\nAgain [[Billing]] and [[Nowhere]].\n```\n## Not a heading\n```',
+        }}
+        notes={[]}
+        pagesById={pagesById}
+        onPageClick={onPageClick}
+      />,
+    );
+    const toc = within(screen.getByRole('region', { name: 'On this page' }));
+    expect(toc.getAllByRole('button').map(button => button.textContent)).toEqual(['Refunds', 'Retries']);
+    const links = within(screen.getByRole('region', { name: 'Links to' }));
+    expect(links.getByRole('button', { name: 'Billing' })).toBeTruthy();
+    expect(links.getByText('×2')).toBeTruthy();
+    expect(links.queryByText('Nowhere')).toBeNull();
+  });
+
+  it('peeks with counts, a preview and only the latest note', () => {
+    const onOpenPage = vi.fn();
+    renderWithProviders(
+      <KnowledgePageDetail
+        compact
+        onOpenPage={onOpenPage}
+        page={{ ...refundsPage, body: 'See [[Billing]].' }}
+        notes={[
+          note({ id: 'old', text: 'Older note', updatedAt: '2026-10-01T00:00:00.000Z' }),
+          note({ id: 'new', text: 'Newest note', updatedAt: '2026-11-01T00:00:00.000Z' }),
+        ]}
+        mentionedBy={[note({ id: 'm', pageId: 'billing', text: 'About [[Refunds]]', mentions: ['refunds'] })]}
+        pagesById={pagesById}
+        onPageClick={() => {}}
+      />,
+    );
+    const counts = within(screen.getByLabelText('Links and notes'));
+    expect(counts.getAllByRole('definition').map(value => value.textContent)).toEqual(['1', '1', '2']);
+    const latest = within(screen.getByRole('region', { name: 'Latest note' }));
+    expect(latest.getByText('Newest note')).toBeTruthy();
+    expect(latest.queryByText('Older note')).toBeNull();
+    latest.getByRole('button', { name: 'All 2 notes' }).click();
+    expect(onOpenPage).toHaveBeenCalled();
+    expect(screen.queryByRole('region', { name: 'On this page' })).toBeNull();
+  });
+
+  it('reads only the top three heading levels outside code', () => {
+    expect(bodyHeadings('# One\n#### Four\n### Three **bold**\n~~~\n# code\n~~~\n## [[Two]] ##')).toEqual([
+      { depth: 1, text: 'One' },
+      { depth: 3, text: 'Three bold' },
+      { depth: 2, text: 'Two' },
+    ]);
   });
 
   it('links resolved mentions and leaves unresolved ones as text', async () => {

@@ -74,7 +74,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
   cn(
     navItemVariants({ size }),
     'w-full justify-start',
-    '[&_svg]:size-4 [&_svg]:shrink-0',
+    '[&_svg]:size-icon-md [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     !isCollapsed && withDescriptionClasses,

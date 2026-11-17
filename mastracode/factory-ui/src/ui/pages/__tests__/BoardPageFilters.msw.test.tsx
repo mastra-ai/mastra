@@ -83,8 +83,6 @@ function renderBoard(initialSearch = '', extraWorkItems: WorkItem[] = []) {
             url,
           },
         })),
-        runningSessionIds: [],
-        parkedSessionIds: [],
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>

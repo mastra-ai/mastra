@@ -22,6 +22,12 @@ type WarningLogger = (message: string, details: Record<string, unknown>) => void
 export interface SessionRetirementCoordinatorOptions {
   invalidateSession?: (sessionId: string) => Promise<void> | void;
   /**
+   * Unload the session from the controller once its sandbox is stopped or released, so its
+   * in-memory state is freed. Must keep the thread, the row and the VM. Not called by
+   * recreate or reset, which keep the session working.
+   */
+  unloadSession?: (sessionId: string) => Promise<unknown> | unknown;
+  /**
    * The deploy's sandbox configuration. Used to destroy a deleted session's
    * VM by identity when this process never attached to it (after a restart,
    * or on another replica). Recreate uses it the same way.
@@ -81,6 +87,7 @@ function boundedError(error: unknown): string {
  */
 export class SessionRetirementCoordinator {
   readonly #invalidateSession: NonNullable<SessionRetirementCoordinatorOptions['invalidateSession']>;
+  readonly #unloadSession: NonNullable<SessionRetirementCoordinatorOptions['unloadSession']>;
   readonly #sandbox: FactorySandbox | undefined;
   readonly #warn: WarningLogger;
   readonly #destroyTimeoutMs: number;
@@ -88,6 +95,7 @@ export class SessionRetirementCoordinator {
 
   constructor(options: SessionRetirementCoordinatorOptions = {}) {
     this.#invalidateSession = options.invalidateSession ?? (() => {});
+    this.#unloadSession = options.unloadSession ?? (() => {});
     this.#sandbox = options.sandbox;
     this.#warn = options.warn ?? ((message, details) => console.warn(`[Mastra Factory] ${message}`, details));
     this.#destroyTimeoutMs = options.destroyTimeoutMs ?? DEFAULT_DESTROY_TIMEOUT_MS;
@@ -145,6 +153,7 @@ export class SessionRetirementCoordinator {
         else await this.#releaseDetachedSandbox({ ...input, deleteSession: false }, session);
       } finally {
         await this.#invalidate(session);
+        await this.#unload(session);
       }
     });
   }
@@ -213,6 +222,7 @@ export class SessionRetirementCoordinator {
       released = await this.#teardownSessionSandbox(input, session);
     } finally {
       await this.#invalidate(session);
+      await this.#unload(session);
 
       if (input.deleteSession) {
         // Refs first: clearing again is a no-op, but refs on a deleted row would dangle forever.
@@ -313,6 +323,20 @@ export class SessionRetirementCoordinator {
       await this.#invalidateSession(session.sessionId);
     } catch (error) {
       this.#warn('Factory session workspace cache invalidation failed', {
+        orgId: session.orgId,
+        sessionId: session.sessionId,
+        projectRepositoryId: session.projectRepositoryId,
+        error: boundedError(error),
+      });
+    }
+  }
+
+  /** Unload the session from this process's controller; a failure is logged, never fatal. */
+  async #unload(session: SourceControlSession): Promise<void> {
+    try {
+      await this.#unloadSession(session.sessionId);
+    } catch (error) {
+      this.#warn('Factory session unload failed', {
         orgId: session.orgId,
         sessionId: session.sessionId,
         projectRepositoryId: session.projectRepositoryId,

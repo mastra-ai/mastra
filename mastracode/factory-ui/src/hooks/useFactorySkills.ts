@@ -19,42 +19,66 @@ export function useFactorySkillsQuery(factoryProjectId?: string) {
   });
 }
 
-async function sendSkillEdit(
+/** Sends one write to a project's skills and returns the skill it leaves, or null when it deleted the skill. */
+async function sendSkillWrite(
   baseUrl: string,
-  factoryProjectId: string,
-  name: string,
-  init: { method: 'PUT'; content: string } | { method: 'DELETE' },
-): Promise<FactorySkillInfo> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/skills/${encodeURIComponent(name)}`,
-    {
-      method: init.method,
-      credentials: 'include',
-      headers: { 'content-type': 'application/json', Accept: 'application/json' },
-      ...(init.method === 'PUT' ? { body: JSON.stringify({ content: init.content }) } : {}),
-    },
-  );
-  const body = (await res.json().catch(() => undefined)) as
-    | { skill?: FactorySkillInfo; message?: string; error?: string }
+  path: string,
+  method: 'POST' | 'PUT' | 'DELETE',
+  body?: Record<string, string>,
+): Promise<FactorySkillInfo | null> {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const json = (await res.json().catch(() => undefined)) as
+    | { skill?: FactorySkillInfo | null; message?: string; error?: string }
     | undefined;
-  if (!res.ok || !body?.skill) {
-    throw new Error(body?.message ?? body?.error ?? `Request failed (${res.status})`);
+  if (!res.ok || !json || json.skill === undefined) {
+    throw new Error(json?.message ?? json?.error ?? `Request failed (${res.status})`);
   }
-  return body.skill;
+  return json.skill;
 }
 
-/** Save (`content`) or revert (`content: null`) a project's edit of one skill. */
+const skillsPath = (factoryProjectId: string) => `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/skills`;
+
+/** Refreshes the skills, and the boards, whose phases flag a skill that is missing. */
+function useInvalidateSkills(factoryProjectId: string | undefined) {
+  const queryClient = useQueryClient();
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills(factoryProjectId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId) }),
+    ]);
+}
+
+/**
+ * Save (`content`) or revert (`content: null`) a project's edit of one skill. For a skill the project created,
+ * saving updates it and `content: null` deletes it.
+ */
 export function useFactorySkillEditMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
+  const invalidate = useInvalidateSkills(factoryProjectId);
   return useMutation({
     mutationFn: ({ name, content }: { name: string; content: string | null }) =>
-      sendSkillEdit(
+      sendSkillWrite(
         baseUrl,
-        factoryProjectId!,
-        name,
-        content === null ? { method: 'DELETE' } : { method: 'PUT', content },
+        `${skillsPath(factoryProjectId!)}/${encodeURIComponent(name)}`,
+        content === null ? 'DELETE' : 'PUT',
+        content === null ? undefined : { content },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills(factoryProjectId) }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Creates a skill for one Factory project. Mirrors `POST /web/factory/projects/:id/skills`. */
+export function useFactorySkillCreateMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const invalidate = useInvalidateSkills(factoryProjectId);
+  return useMutation({
+    mutationFn: ({ name, content }: { name: string; content: string }) =>
+      sendSkillWrite(baseUrl, skillsPath(factoryProjectId!), 'POST', { name, content }),
+    onSuccess: invalidate,
   });
 }
