@@ -55,7 +55,7 @@ function HeaderTitle({ path, previousPath }: Pick<CodeDiffFileHeader, 'path' | '
 }
 
 function FirstLineSlot({ children }: { children?: ReactNode }) {
-  return <span className="flex h-5 shrink-0 items-center gap-2 [&_svg]:size-4">{children}</span>;
+  return <span className="flex h-5 shrink-0 items-center gap-2 [&_svg]:size-icon-md">{children}</span>;
 }
 
 interface CodeDiffHeaderProps extends CodeDiffFileHeader {

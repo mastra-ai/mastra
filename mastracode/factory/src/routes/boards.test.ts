@@ -142,7 +142,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         workItems: domains.workItems,
         boardRegistry: cache,
         queueHealth: domains.queueHealth,
-        liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] } as never,
+        liveSessions: { parked: () => undefined, parkedIn: () => [] } as never,
       }).routes(),
       ...new ProjectRoutes({
         auth,

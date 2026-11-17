@@ -140,7 +140,7 @@ type ChipContext = {
   draft: boolean;
   /** Filter already removed from the value, playing its exit: segments are inert labels. */
   leaving: boolean;
-  /** The field allows a single operator, so the operator segment is not shown. */
+  /** The field allows a single operator and does not require its label to stay visible. */
   operatorImplied: boolean;
 };
 
@@ -216,8 +216,11 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
-  const validationMessage = !draft && typeof item.value === 'string' ? field?.validateInput?.(item.value) : undefined;
-  const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
+  const validationMessage =
+    !draft && operator?.arity !== 'none' && typeof item.value === 'string'
+      ? field?.validateInput?.(item.value)
+      : undefined;
+  const operatorImplied = field ? !field.alwaysShowOperator && ctx.getFieldOperators(field).length === 1 : false;
   const label = [
     field?.label ?? item.fieldId,
     operatorImplied ? '' : (operator?.label ?? item.operatorId),
@@ -382,7 +385,11 @@ function SegmentCombobox<T>({
   if (chip.readOnly || chip.draft || chip.leaving) {
     return (
       <span
-        className={cn(segmentClass, isField && 'text-foreground')}
+        className={cn(
+          segmentClass,
+          isField && 'text-foreground',
+          segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+        )}
         style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
         title={fullLabel}
       >
@@ -426,7 +433,11 @@ function SegmentCombobox<T>({
             tabIndex={segment === 'value' ? 0 : -1}
             aria-label={`${ariaLabel}: ${fullLabel}`}
             title={fullLabel}
-            className={cn(editableSegmentClass, isField && 'text-foreground')}
+            className={cn(
+              editableSegmentClass,
+              isField && 'text-foreground',
+              segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+            )}
             style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
         }

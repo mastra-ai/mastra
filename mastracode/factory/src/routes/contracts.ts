@@ -3,7 +3,13 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
+import {
+  CLOSE_REASONS,
+  INTAKE_ROUTE_RULE_FIELDS,
+  routeEventsProblem,
+  ROUTE_EVENTS,
+  STATUS_EVENTS,
+} from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -18,7 +24,7 @@ import {
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
 } from '../session/session-row-query.js';
-import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
+import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
 import type { CardChangeRequest } from '../work-items/change-requests.js';
@@ -115,6 +121,11 @@ const intakeRouteTargetSchema = z
      * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
      */
     joinClosedIssue: z.boolean().optional(),
+    /**
+     * On a route moving existing cards on later events, the board the card moves to, at `phaseKey`;
+     * `boardKey` stays the board whose cards the route moves. Unset keeps the card on `boardKey`.
+     */
+    moveToBoardKey: boardIdentifierSchema.nullable().optional(),
   })
   .strict();
 const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -125,9 +136,13 @@ const intakeRouteFields = {
   when: intakeRouteWhenSchema.nullable(),
   /** Where matching cards land. */
   target: intakeRouteTargetSchema,
-  /** The status events the route handles. `work_item.created` places new cards; the others move existing ones. */
+  /**
+   * The events the route handles. `work_item.opened` files new issues and `pull_request.opened` new
+   * pull requests with no card (and moves the card of an issue whose pull request opens); the others
+   * move existing cards. `work_item.created`, the legacy event, files both and is kept as written.
+   */
   on: z
-    .array(z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .array(z.enum(ROUTE_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
     .superRefine((on, ctx) => {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
@@ -140,6 +155,10 @@ export const intakeRouteInputSchema = z
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
     on: intakeRouteFields.on.optional(),
+    /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
+    pullRequestOpenedMovesOnly: z.literal(true).optional(),
+    /** Restores a route read with `outsiderPullRequestsGated` as it was: its card moves skipping outside authors' pull requests. */
+    outsiderPullRequestsGated: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -150,22 +169,36 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
+    /**
+     * `false` lets outside authors' pull requests match an older rule's card moves, like every rule
+     * written since rules decided them. No other edit changes it, so an edit and its Undo can't
+     * quietly widen the rule.
+     */
+    outsiderPullRequestsGated: z.literal(false).optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
   .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
     message: 'Change at least one field.',
   });
+/** Bounds a whole-project reorder, which names every rule of every board. */
+const MAX_PROJECT_INTAKE_ROUTES = 10_000;
 export const intakeRouteReorderBodySchema = z
   .object({
-    /** Every route of the project, once each, in the new order. */
+    /** Reorders only this board's rules, within the places they hold; omitted, the whole project's. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+    /** Every rule of the board (or of the project), once each, in the new order. */
     ids: z
       .array(uuidSchema)
       .min(1)
-      .max(MAX_INTAKE_ROUTES)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
       .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
   })
-  .strict();
+  .strict()
+  .refine(({ boardKey, ids }) => boardKey === undefined || ids.length <= MAX_INTAKE_ROUTES_PER_BOARD, {
+    message: `A board has at most ${MAX_INTAKE_ROUTES_PER_BOARD} intake rules.`,
+    path: ['ids'],
+  });
 const intakeRouteSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -173,8 +206,24 @@ const intakeRouteSchema = z.object({
   /** 0 is evaluated first. */
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
-  on: z.array(z.enum(STATUS_EVENTS)),
+  target: z.object({
+    boardKey: z.string(),
+    phaseKey: z.string().nullable(),
+    joinClosedIssue: z.boolean(),
+    moveToBoardKey: z.string().nullable(),
+  }),
+  on: z.array(z.enum(ROUTE_EVENTS)),
+  /**
+   * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
+   * files no pull request, through every edit. Add a route to file pull requests.
+   */
+  pullRequestOpenedMovesOnly: z.literal(true).optional(),
+  /**
+   * True on a route stored before card-move rules decided outsiders' pull requests: its card moves
+   * skip an outside author's pull request unless its conditions test `pullRequest.trusted`. Edits
+   * keep it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
+   */
+  outsiderPullRequestsGated: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -195,6 +244,315 @@ const intakeRerouteResponseSchema = z.object({
   moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
 });
 const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
+const intakeRouteListQuerySchema = z
+  .object({
+    /** Lists only this board's rules, in their order. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+  })
+  .strict();
+const intakeOrderResponseSchema = z.object({
+  /** Every board of the project, in the order intake asks them. */
+  boards: z.array(z.object({ boardKey: z.string(), name: z.string() })),
+  /**
+   * `derived` follows the rule list until an admin sets the order; then it is `explicit`. A project
+   * created with intake order has its own order from the start, so it is `explicit` from the start.
+   */
+  origin: z.enum(['derived', 'explicit']),
+  /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /**
+   * What decided `evaluator`: `FACTORY_INTAKE_EVALUATOR` (forced on every project), the project's
+   * own setting, or none (a project from before the setting, on `route-list`).
+   */
+  evaluatorSource: z.enum(['env', 'project', 'legacy']),
+  /** The project's own setting, used unless one is forced; null for a project from before the setting. */
+  projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
+  /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
+  comparison: z.object({
+    compared: z.number().int(),
+    differing: z.number().int(),
+    notRouted: z.number().int(),
+  }),
+  /** Whether the caller may change the order. */
+  canEdit: z.boolean(),
+});
+export const intakeOrderBodySchema = z
+  .object({
+    /** Every board of the project, once each, in the new order. */
+    boardKeys: z
+      .array(z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH))
+      .min(1)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
+      .refine(keys => new Set(keys).size === keys.length, { message: 'Each board may appear only once.' })
+      .optional(),
+    /** Switches the project's evaluator; a forced one still wins until it is unset. */
+    evaluator: z.enum(['route-list', 'intake-order']).optional(),
+  })
+  .strict()
+  .refine(body => body.boardKeys !== undefined || body.evaluator !== undefined, {
+    message: 'Name the boardKeys, the evaluator, or both.',
+  });
+const intakeDecisionSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['placed', 'not_routed', 'rule_skipped', 'rule_retired']),
+  evaluator: z.enum(['route-list', 'intake-order']),
+  boardKey: z.string().nullable(),
+  routeId: z.string().nullable(),
+  /** Why no board took it. */
+  reason: z.string().nullable(),
+  sourceKey: z.string().nullable(),
+  title: z.string(),
+  url: z.string().nullable(),
+  decidedAt: z.string(),
+});
+const intakeNotRoutedQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    /** The `nextCursor` of the page before. */
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+const intakeNotRoutedResponseSchema = z.object({
+  /** Oldest first. */
+  notRouted: z.array(intakeDecisionSchema),
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: z.string().nullable(),
+  /** Whether the caller may route an item again. */
+  canEdit: z.boolean(),
+});
+const intakeSkippedResponseSchema = z.object({
+  /** Card-move rules that matched but whose target couldn't take the card, in the last 30 days. */
+  skipped: z.array(z.object({ routeId: z.string(), count: z.number().int(), latest: intakeDecisionSchema })),
+});
+const intakeDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
+const intakeRouteAgainResponseSchema = z.object({
+  /** The item is queued to be filed here; the card appears once the dispatcher files it. */
+  status: z.literal('queued'),
+  boardKey: z.string(),
+  phaseKey: z.string(),
+  routeId: z.string(),
+});
+/** A board's rules as edited, not saved yet: they stand in for all of that board's rules. */
+const intakeDraftBoardSchema = z
+  .object({
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
+    routes: z
+      .array(
+        z
+          .object({
+            /** The saved rule this edits, so its counts line up; omitted for a new rule. */
+            id: uuidSchema.optional(),
+            name: intakeRouteFields.name,
+            enabled: intakeRouteFields.enabled.default(true),
+            when: intakeRouteFields.when.default(null),
+            target: z
+              .object({
+                phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional(),
+                /** On a card-move rule: the board the card moves to; unset keeps it on this board. */
+                moveToBoardKey: intakeRouteTargetSchema.shape.moveToBoardKey,
+                /** On a pull request rule: join the card of the issue it closes, as the saved rule does. */
+                joinClosedIssue: z.boolean().optional(),
+              })
+              .strict(),
+            on: intakeRouteFields.on.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_INTAKE_ROUTES_PER_BOARD),
+  })
+  .strict();
+const intakeDraftFields = {
+  /** Unsaved rules, board by board; boards not named run their saved rules. */
+  boards: z
+    .array(intakeDraftBoardSchema)
+    .max(MAX_PROJECT_INTAKE_ROUTES)
+    .refine(boards => new Set(boards.map(board => board.boardKey)).size === boards.length, {
+      message: 'Each board may appear only once.',
+    })
+    .optional(),
+  /** An unsaved intake order; omitted, the saved one. */
+  order: intakeOrderBodySchema.shape.boardKeys.optional(),
+};
+export const intakeDryRunBodySchema = z.object(intakeDraftFields).strict();
+const intakePlacementSchema = z.object({ boardKey: z.string(), routeId: z.string(), phase: z.string() });
+const intakeKeysByBoardSchema = z.array(z.object({ boardKey: z.string(), keys: z.array(z.string()) }));
+const intakeDryRunResponseSchema = z.object({
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** How many of the project's newest items (at most 200) were decided, from their stored facts. */
+  sampled: z.number().int(),
+  /** Every board in intake order, with what it and each of its rules would take. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      /** Keys of the items the board would take. */
+      takes: z.array(z.string()),
+      /** Items its rules matched that another board took first, by that board. */
+      lostTo: intakeKeysByBoardSchema,
+      rules: z.array(
+        z.object({
+          /** A rule not saved yet reads `draft:<boardKey>:<index>`. */
+          routeId: z.string(),
+          name: z.string().nullable(),
+          enabled: z.boolean(),
+          takes: z.array(z.string()),
+          /** Items it matched but an earlier rule took, by the board that took them. */
+          lost: intakeKeysByBoardSchema,
+          /** Cards it actually filed in the last 30 days. */
+          filed: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+  /** Keys of the items no board would take. */
+  notRouted: z.array(z.string()),
+  /** With unsaved rules or order: how many items land somewhere other than the saved ones put them. */
+  changed: z.number().int().optional(),
+  items: z.array(
+    z.object({
+      key: z.string(),
+      /** The card's id, or the Not routed decision's. */
+      id: z.string(),
+      kind: z.enum(['card', 'not_routed']),
+      title: z.string(),
+      url: z.string().nullable(),
+      placement: intakePlacementSchema.nullable(),
+      /** Every rule that matched and could take it, in the order intake asked them; the first won. */
+      matched: z.array(z.object({ boardKey: z.string(), routeId: z.string() })),
+      /** With unsaved rules or order: where the saved ones put it. */
+      before: intakePlacementSchema.nullable().optional(),
+    }),
+  ),
+  /** Whether the caller may run unsaved rules or order. */
+  canEdit: z.boolean(),
+});
+/** The most labels or assignees one test event may name on each side. */
+const MAX_TEST_EVENT_NAMES = 100;
+const itemChangeSchema = z
+  .object({
+    added: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+    removed: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+  })
+  .strict();
+/** A status event as card-move rules read it. */
+const intakeTestEventSchema = z
+  .object({
+    type: z.enum(STATUS_EVENTS),
+    /** On `work_item.closed`. */
+    reason: z.enum(CLOSE_REASONS).optional(),
+    /** On an update: the labels and assignees it changed. */
+    labels: itemChangeSchema.optional(),
+    assignees: itemChangeSchema.optional(),
+    /** On a pull request event: whether that pull request's author is trusted. */
+    pullRequestTrusted: z.boolean().optional(),
+  })
+  .strict();
+export const intakeTestBodySchema = z
+  .object({
+    ...intakeDraftFields,
+    /** An issue or pull request URL; one the Factory has never seen is fetched once, read-only, from a linked source. */
+    url: z.string().trim().url().max(2000).optional(),
+    /** A recent item: a card's id, or a Not routed decision's. */
+    itemId: uuidSchema.optional(),
+    /** A status event to try on the item's card, as if it had just happened; its recent events are replayed either way. */
+    event: intakeTestEventSchema.optional(),
+  })
+  .strict()
+  .refine(body => (body.url === undefined) !== (body.itemId === undefined), {
+    message: 'Send either a url or an itemId.',
+  });
+const failedConditionSchema = z.object({
+  field: z.string(),
+  operator: z.string(),
+  value: z.unknown().optional(),
+  /** The item's value for the field; null when it has none. */
+  actual: z.unknown(),
+});
+const intakeTestResponseSchema = z.object({
+  item: z.object({
+    title: z.string(),
+    url: z.string().nullable(),
+    /** `card` and `not_routed` are items the Factory has; `fetched` was read from its provider for this test. */
+    kind: z.enum(['card', 'not_routed', 'fetched']),
+    id: z.string().nullable(),
+  }),
+  placement: intakePlacementSchema.nullable(),
+  /** Why no board takes it. */
+  reason: z.string().nullable(),
+  /** What this answer leaves out, such as a fetched pull request joining an existing card instead. */
+  note: z.string().nullable(),
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** Every board in intake order and every placing rule on it, with what it answered. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          phase: z.string(),
+          /** `took` decides; `lost` matched after the rule that took it; `phase_refuses` matched but its phase can't hold the item. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'phase_refuses', 'disabled']),
+          /** With `no_match`: the conditions it failed on. */
+          failed: z.array(failedConditionSchema).optional(),
+          /** With `lost`: the rule that took it. */
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+        }),
+      ),
+    }),
+  ),
+  /** On a card: where it is now, and the intake rule that filed it, if one did. */
+  current: z.object({ boardKey: z.string(), phase: z.string().nullable(), routeId: z.string().nullable() }).nullable(),
+  /**
+   * On a card: the event sent in the request, then its recent status events newest first, each
+   * replayed against today's rules (or the draft) and the card as it is now.
+   */
+  moves: z.array(
+    z.object({
+      /** The stored event's decision; null for the event sent in the request. */
+      decisionId: z.string().nullable(),
+      at: z.string().nullable(),
+      event: z.object({
+        type: z.enum(STATUS_EVENTS),
+        reason: z.enum(CLOSE_REASONS).optional(),
+        labels: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        assignees: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        pullRequestTrusted: z.boolean().optional(),
+      }),
+      /**
+       * `moves` to `to`; `stays` where it is; `rule_default` leaves it to the integration's own move
+       * (to `phase`, when there is one) because no rule takes it; `ignored` when the event can't move
+       * a card in its state, with `reason`; `unknown` when an update burst reaches back past the
+       * history read, with `reason`.
+       */
+      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored', 'unknown']),
+      to: z.object({ boardKey: z.string(), phase: z.string(), routeId: z.string() }).nullable(),
+      phase: z.string().nullable(),
+      reason: z.string().nullable(),
+      /** Every rule on the card's board that handles the event, top to bottom. */
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          /** `skipped` matched but its target board or phase can't take the card, with `reason`. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'skipped', 'disabled']),
+          failed: z.array(failedConditionSchema).optional(),
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -594,6 +952,11 @@ const workItemListQuerySchema = z
 
 const countSchema = z.number().int().nonnegative();
 
+export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
+  z.object({ status: z.literal('unlinked'), hint: z.string() }),
+]);
+
 /** What the draft page's starter buttons count on the project's default board. */
 export const workItemStartersResponseSchema = z.object({
   failed: countSchema,
@@ -725,9 +1088,6 @@ export const boardPhasesResponseSchema = z.object({
   matchingTotal: countSchema,
   /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
   workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
-  /** Among the named cards. */
-  runningSessionIds: z.array(z.string()),
-  parkedSessionIds: z.array(z.string()),
 });
 
 /** What the board's filter menus offer, read over every card of the project. */
@@ -881,18 +1241,18 @@ export const sessionRowsResponseSchema = z.object({
   boards: z.array(z.string()),
   /** People who own some row, whatever the filters. */
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
-  /** Some session is still coming up: the answer changes without anything else telling the reader. */
-  settling: z.boolean(),
 });
 
 export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
-  /** Sessions of a card whose run waits on a person's answer. */
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
-  initializingSessionIds: z.array(z.string()),
-  /** Cards with a session working, and with one waiting on a person. */
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),
-  settling: z.boolean(),
 });
 
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
@@ -1127,6 +1487,8 @@ const skillNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
 const skillResponseSchema = z.object({ skill: entitySchema });
+/** `skill` is null when the request deleted a skill the project created. */
+const skillRevertResponseSchema = z.object({ skill: entitySchema.nullable() });
 
 /** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
 function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
@@ -1147,6 +1509,12 @@ export const skillOverrideBodySchema = z
  */
 export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
+/** A new skill's SKILL.md must load under the name it is created with, exactly as the runtime validates it. */
+export const skillCreateBodySchema = z
+  .object({ name: skillNameSchema, content: skillContentSchema })
+  .strict()
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
@@ -1401,6 +1769,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/intake-routes',
     description: "List a Factory project's intake routes in evaluation order",
     pathSchema: projectPathSchema,
+    querySchema: intakeRouteListQuerySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
   intakeRouteGet: {
@@ -1457,17 +1826,69 @@ export const FACTORY_ROUTE_CONTRACTS = {
     bodySchema: intakeRouteReorderBodySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
+  intakeOrderGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "The order a Factory project's boards are asked to take a new item, and the evaluator in use",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeOrderUpdate: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "Set the order a Factory project's boards are asked to take a new item, or its evaluator",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeOrderBodySchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeNotRoutedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/not-routed',
+    description: "Items no board's intake rules took, oldest first, a page at a time",
+    pathSchema: projectPathSchema,
+    querySchema: intakeNotRoutedQuerySchema,
+    responseSchema: intakeNotRoutedResponseSchema,
+  },
+  intakeRouteAgain: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/not-routed/:decisionId/route-again',
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    pathSchema: intakeDecisionPathSchema,
+    responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeSkippedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/skipped',
+    description: 'How often each card-move rule was skipped in the last 30 days, with its newest skip',
+    pathSchema: projectPathSchema,
+    responseSchema: intakeSkippedResponseSchema,
+  },
+  intakeDryRun: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/dry-run',
+    description:
+      "Run a Factory project's intake rules, saved or unsaved, over its newest 200 items without filing anything",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeDryRunBodySchema,
+    responseSchema: intakeDryRunResponseSchema,
+  },
+  intakeTest: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/test',
+    description: 'Show where intake would file one item, and what every rule answered, without filing it',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeTestBodySchema,
+    responseSchema: intakeTestResponseSchema,
+  },
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items',
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
-      runningSessionIds: z.array(z.string()),
-      parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
       total: z.number().int().nonnegative().optional(),
       /** Names this read of the whole board. Absent when the next read must list it whole again. */
@@ -1511,7 +1932,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
   sessionActivity: {
     method: 'GET',
     path: '/web/factory/projects/:id/session-activity',
-    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    description: "List which of a project's sessions are running or waiting on a person, and each card's status",
     pathSchema: projectPathSchema,
     responseSchema: sessionActivityResponseSchema,
   },
@@ -1545,6 +1966,25 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: transitionPathSchema,
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,
+  },
+  workItemWorkingPullRequest: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/work-items/:workItemId/working-pull-request',
+    description:
+      "Make one of the pull requests linked to a card the one its sessions work on. The only way an outside author's pull request becomes a card's working pull request.",
+    pathSchema: transitionPathSchema,
+    bodySchema: z.object({
+      pullRequest: z.number().int().positive(),
+      expectedRevision: z.number().int().nonnegative(),
+    }),
+    responseSchema: workItemResponseSchema,
+  },
+  workItemSessionRepository: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/session-repository',
+    description: "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemSessionRepositoryResponseSchema,
   },
   workItemStart: {
     method: 'POST',
@@ -1655,10 +2095,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: z.object({ projectId: uuidSchema.optional() }),
     responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
+  skillCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/skills',
+    description: 'Create a skill for one Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: skillCreateBodySchema,
+    responseSchema: skillResponseSchema,
+  },
   skillOverrideSave: {
     method: 'PUT',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Save a project's edited SKILL.md for a Factory skill",
+    description: "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     pathSchema: skillPathSchema,
     bodySchema: skillOverrideBodySchema,
     responseSchema: skillResponseSchema,
@@ -1666,9 +2114,10 @@ export const FACTORY_ROUTE_CONTRACTS = {
   skillOverrideRevert: {
     method: 'DELETE',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    description:
+      "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     pathSchema: skillPathSchema,
-    responseSchema: skillResponseSchema,
+    responseSchema: skillRevertResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

@@ -86,6 +86,7 @@ export const queryKeys = {
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
+  connectToolList: () => ['connect-tools', 'tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
@@ -96,11 +97,35 @@ export const queryKeys = {
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule or order change refreshes the counts.
+  intakeDryRun: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule change refreshes its skips.
+  intakeSkipped: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  intakeNotRouted: (factoryProjectId: string | undefined) =>
+    ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  // Not under the board's key: card rewrites there expect a board snapshot.
+  workItemSessionRepository: (
+    factoryProjectId: string | undefined,
+    workItemId: string | undefined,
+    cardUpdatedAt: string | undefined,
+  ) =>
+    [
+      'factory',
+      'work-item-session-repository',
+      factoryProjectId ?? null,
+      workItemId ?? null,
+      cardUpdatedAt ?? null,
+    ] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItem: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'card', workItemId ?? null] as const,
   workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>

@@ -36,9 +36,9 @@ const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
   default: cn(
-    '[&_[data-slot=command-input-wrapper]_svg]:size-5',
+    '[&_[data-slot=command-input-wrapper]_svg]:size-icon-lg',
     '**:[[cmdk-input]]:h-12',
-    '[&_[cmdk-item]_svg]:size-5',
+    '[&_[cmdk-item]_svg]:size-icon-lg',
   ),
   inset: cn(
     'gap-1',
@@ -293,7 +293,7 @@ const CommandItem = React.forwardRef<
       // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
       'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
+      '[&_svg]:pointer-events-none [&>svg]:size-icon-md [&>svg]:shrink-0',
       controlIconState,
       // A selected row brightens its icon with its label, like a highlighted menu row.
       '[--control-icon-hover:var(--foreground)] data-[selected=true]:[--control-icon:var(--control-icon-hover)]',

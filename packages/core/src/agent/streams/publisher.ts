@@ -138,7 +138,7 @@ export function createAgentStreamPublisherCoordinator(
   runId: string,
   logger?: IMastraLogger,
 ): AgentStreamPublisherCoordinator {
-  const producers = new Map<string, AgentStreamProducer>();
+  const producers = new Map<string, { producer: AgentStreamProducer; publications: PublicationQueue }>();
   const owners = new Map<string, AgentStreamPublisher>();
   const listeners = new Set<() => Promise<void>>();
 
@@ -170,7 +170,7 @@ export function createAgentStreamPublisherCoordinator(
   const coordinator: AgentStreamPublisherCoordinator = {
     attachEventProducer({ publisherId, pubsub, assertOwnership }) {
       const existing = producers.get(publisherId);
-      if (existing) return existing;
+      if (existing) return existing.producer;
       const publications = createPublicationQueue();
       let released = false;
       const producer: AgentStreamProducer = {
@@ -182,7 +182,7 @@ export function createAgentStreamPublisherCoordinator(
           await publications.flush();
         },
       };
-      producers.set(publisherId, producer);
+      producers.set(publisherId, { producer, publications });
       return producer;
     },
     attachOwner(options) {
@@ -193,6 +193,14 @@ export function createAgentStreamPublisherCoordinator(
         { ...options, runId, publisherId },
         createPublicationQueue(),
         coordinator.listenForAbort,
+        () => {
+          if (!producers.size) return;
+          // Stop this execution's producer, but only drain older or sibling handles.
+          return Promise.allSettled([
+            producers.get(publisherId)?.producer.detach(),
+            ...Array.from(producers.values(), ({ publications }) => publications.flush()),
+          ]).then(() => {});
+        },
       );
       owners.set(publisherId, handle);
       return handle;
@@ -222,7 +230,7 @@ export function createAgentStreamPublisherCoordinator(
     async detach() {
       await Promise.all([
         ...Array.from(listeners, detach => detach()),
-        ...Array.from(producers.values(), producer => producer.detach()),
+        ...Array.from(producers.values(), ({ producer }) => producer.detach()),
         ...Array.from(owners.values(), owner => owner.detach()),
       ]);
     },
@@ -267,6 +275,7 @@ function createOwnerHandle(
   }: CreateAgentStreamPublisherOptions,
   publications: PublicationQueue,
   listen: AgentStreamPublisherCoordinator['listenForAbort'],
+  drainProducers: () => Promise<void> | undefined,
 ): AgentStreamPublisher {
   const { controller, detach } = createRunAbortController(callerSignal);
   const abort = (reason?: unknown) => {
@@ -370,21 +379,32 @@ function createOwnerHandle(
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
-  const cleanup = async () => {
-    await publications.flush().catch(() => {});
-    if (runningRetryTimer) clearTimeout(runningRetryTimer);
-    runningRetryTimer = undefined;
+  const canCleanup = async () => {
     try {
       await assertCleanupOwnership?.();
       // As with plain runs, a later publisher's record prevents old cleanup.
       if (record) {
         const current = await readAgentRunRecord(record.cache, record.agentId, runId, record.key);
-        if (current && current.publisherId !== publisherId) return;
+        if (current && current.publisherId !== publisherId) return false;
       }
+      return true;
     } catch {
       // Leave state to its TTL when ownership cannot be verified.
-      return;
+      return false;
     }
+  };
+
+  const cleanup = async () => {
+    await publications.flush().catch(() => {});
+    if (!(await canCleanup())) return;
+    const draining = drainProducers();
+    if (draining) {
+      await draining;
+      // A resumed execution may take over while the old transport is draining.
+      if (!(await canCleanup())) return;
+    }
+    if (runningRetryTimer) clearTimeout(runningRetryTimer);
+    runningRetryTimer = undefined;
     for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
       void pubsub.clearTopic(topic).catch(() => {});
     }

@@ -16,6 +16,7 @@ import {
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
   getTraceQueryValuesArgsSchema,
+  TraceQueryUnsupportedError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   parseTraceQueryRequest,
@@ -1596,5 +1597,18 @@ describe('trace-query discovery routes', () => {
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The query exceeded its execution timeout',
     });
+  });
+});
+
+it('maps a typed store unsupported error to the route-specific 501', async () => {
+  const { mastra, observabilityStore } = createHarness();
+  observabilityStore.queryTraces.mockRejectedValue(
+    new TraceQueryUnsupportedError('Indexed token search is not supported by this store'),
+  );
+  const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE })));
+  expect(error.status).toBe(501);
+  expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+    code: 'TRACE_QUERY_UNSUPPORTED',
+    message: 'Indexed token search is not supported by this store',
   });
 });

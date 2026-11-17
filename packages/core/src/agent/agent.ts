@@ -10855,6 +10855,10 @@ export class Agent<
     const routingRequirement = {
       requireClaimedOwner: target.ifIdle?.requireClaimedOwner === true,
       scopes: target.scopes,
+      // A persist-only send must stay persist-only when the delivery is delayed:
+      // the deferred dispatch would otherwise wake the idle thread the caller
+      // explicitly asked not to wake.
+      ...(target.ifIdle?.behavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
     };
     for (const notification of inputs) {
       records.push(

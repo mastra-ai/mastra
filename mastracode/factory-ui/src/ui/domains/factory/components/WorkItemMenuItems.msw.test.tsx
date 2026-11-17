@@ -144,7 +144,7 @@ describe('held card menu', () => {
   const choices = ['Accept and plan', 'Close', 'Dismiss suggested run', 'Remove'];
 
   it.each<[string, BoardCardOwner, boolean[]]>([
-    ['a parked session', { kind: 'session', status: 'ready' }, [true, false, false, false]],
+    ['a parked session', { kind: 'session' }, [true, false, false, false]],
     ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, false, false, false]],
     ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true]],
   ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
