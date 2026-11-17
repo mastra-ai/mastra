@@ -187,7 +187,8 @@ export class Knowledge extends MastraBase {
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
    * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
    * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
-   * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
+   * declarations as last resolved, not storage (see {@link Knowledge.resolveScopeDeclarations}). For
+   * browsing UIs that draw access between scopes.
    *
    * @experimental
    */

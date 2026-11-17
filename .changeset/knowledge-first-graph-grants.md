@@ -3,4 +3,4 @@
 '@mastra/server': patch
 ---
 
-Knowledge graph and explorer routes now include store-declared grants and scope labels on the first request; adds `Knowledge.resolveScopeDeclarations()`.
+Studio's Knowledge graph and explorer now show grants and scope labels from store-supplied declarations (e.g. Platform Knowledge) on the first request, not only after another call loaded them. Adds `Knowledge.resolveScopeDeclarations()`.
