@@ -143,7 +143,7 @@ function CardDraft({
   configurationError: Error | undefined;
 }) {
   useGlobalShortcuts();
-  const sessionRepository = useCardSessionRepository(factory.id, item.id);
+  const sessionRepository = useCardSessionRepository(factory.id, item);
   const draftStart = useStartCardSessionFromDraft(item, sessionRepository.error ? undefined : sessionRepository.data);
 
   return (

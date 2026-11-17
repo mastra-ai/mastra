@@ -319,6 +319,59 @@ describe('a card without a session', () => {
     expect(runStarts).toEqual([]);
   });
 
+  it("starts once the card's repository is linked and the card is opened again", async () => {
+    stubDraftRoute();
+    stubCard();
+    const hint = 'Repository acme/app is not linked to this Factory.';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
+        HttpResponse.json({ status: 'unlinked', hint }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { router } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+    expect(await screen.findByText(hint)).toBeInTheDocument();
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
+        HttpResponse.json({ status: 'resolved', projectRepositoryId: 'repository-draft-handoff', slug: 'acme/app' }),
+      ),
+    );
+    await router.navigate(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/new\//));
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+  });
+
+  it("asks again which repository the card's session starts in when the card changes", async () => {
+    stubDraftRoute();
+    stubCard();
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+
+    const hint = 'Repository acme/elsewhere is not linked to this Factory.';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            { ...linearCard, metadata: { repository: 'acme/elsewhere' }, updatedAt: '2030-01-01T00:00:00.000Z' },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
+        HttpResponse.json({ status: 'unlinked', hint }),
+      ),
+    );
+    await client.invalidateQueries({ queryKey: ['factory', 'work-items'] });
+
+    expect(await screen.findByText(hint)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+  });
+
   it("keeps the card's title and next steps on the draft when the composer posts a notice", async () => {
     stubDraftRoute();
     stubCard();
