@@ -573,7 +573,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     }
 
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: LoggerContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
@@ -595,7 +597,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: MetricsContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
