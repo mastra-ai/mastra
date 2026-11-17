@@ -83,6 +83,13 @@ test.describe('Factory board collapsed columns', () => {
         if (screenshotDir) {
           await page.mouse.move(0, 0);
           await page.screenshot({ path: `${screenshotDir}/${viewport.name}.png` });
+          // Then at the board's far edge, where a phone scrolls to reach the later phases.
+          await page.getByRole('group', { name: 'Board columns' }).evaluate(columns => {
+            let surface = columns.parentElement;
+            while (surface && surface.scrollWidth <= surface.clientWidth) surface = surface.parentElement;
+            surface?.scrollTo({ left: surface.scrollWidth });
+          });
+          await page.screenshot({ path: `${screenshotDir}/${viewport.name}-far-edge.png` });
         }
 
         const intakeBox = await intake.boundingBox();
