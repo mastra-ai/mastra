@@ -162,6 +162,59 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
       await client.close();
     }
   });
+
+  // The probe runs before the SDK's body-size cap, so it only reads bodies an `initialize` could fit in.
+  it('leaves bodies too large for an initialize to the SDK handler', async () => {
+    const initialize = (padding: string) =>
+      fetch(served.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            clientInfo: { name: 'legacy', version: '1.0.0', padding },
+            ...declaresUi,
+          },
+        }),
+      });
+    const small = await initialize('');
+    expect(small.status).toBe(200);
+    expect(small.headers.get('mcp-session-id')).toMatch(/^mcp-apps\./);
+
+    const padded = await initialize('x'.repeat(128 * 1024));
+    expect(padded.status).toBe(200);
+    expect(padded.headers.get('mcp-session-id')).toBeNull();
+  });
+});
+
+describe('MCP Apps client-support requirement without app resources', () => {
+  it('gives a 2025-era client no apps session when there are no apps to serve', async () => {
+    const served = await serveHTTP(
+      new MCPServer({
+        name: 'No apps',
+        version: '1.0.0',
+        appsRequireClientSupport: true,
+        legacy: 'stateless',
+        tools: { plain: createTool({ id: 'plain', description: 'No app', execute: async () => 'plain' }) },
+      }),
+    );
+    const client = new Client(
+      { name: 'legacy', version: '1.0.0' },
+      { ...declaresUi, versionNegotiation: { mode: 'legacy' } },
+    );
+    const transport = new StreamableHTTPClientTransport(served.url);
+    try {
+      await client.connect(transport);
+      expect(transport.sessionId).toBeUndefined();
+      expect((await client.listTools()).tools.map(t => t.name)).toEqual(['plain']);
+    } finally {
+      await client.close();
+      await served.close();
+    }
+  });
 });
 
 describe('MCP Apps without the client-support requirement', () => {

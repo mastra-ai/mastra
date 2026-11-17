@@ -88,6 +88,15 @@ it('keeps the spans it has and says so when a later page of the trace fails', as
   expect(await spanRow("llm: 'gpt-5'")).toBeTruthy();
 });
 
+it('says so when a later page of the trace comes back empty', async () => {
+  const mcp = traceServer({ pageSize: 1, emptyAt: 2 });
+  await openTrace(mcp, 'trace-1');
+
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    "Showing the first 2 of 3 spans; couldn't load the rest.",
+  );
+});
+
 it("loads a picked span's details through get_span", async () => {
   const mcp = traceServer();
   await openTrace(mcp, 'trace-1');
