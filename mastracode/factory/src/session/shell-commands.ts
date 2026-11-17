@@ -1,4 +1,4 @@
-/** Tool observers read the same shell commands, so the reading lives here rather than once per observer. */
+/** Two tool observers read the same `gh pr create`, so the reading lives here rather than once per observer. */
 
 const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
 
@@ -23,13 +23,4 @@ export function executableCommand(command: string): string {
 
 export function runsPullRequestCreate(command: string): boolean {
   return GH_PR_CREATE_RE.test(executableCommand(command));
-}
-
-/** The push's arguments run to the next `;`, `&`, `|` or newline, read past redirections (`2>&1`, `&>f`). */
-const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+(?:-C\s+\S+\s+)?push(?:\s(?:[<>]&|&(?=>)|[^\n;&|])*)?(?=$|[\n;&|])/g;
-const DRY_RUN_FLAG_RE = /\s(?:--dry-run|-[a-zA-Z]*n[a-zA-Z]*)(?=\s|$)/;
-
-/** A `git push` that sends updates; `--dry-run`/`-n` report updates without making them. */
-export function runsGitPush(command: string): boolean {
-  return [...executableCommand(command).matchAll(GIT_PUSH_RE)].some(match => !DRY_RUN_FLAG_RE.test(match[0]));
 }

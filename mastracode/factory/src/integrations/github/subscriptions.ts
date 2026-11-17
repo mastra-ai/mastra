@@ -1,11 +1,6 @@
 import type { IntegrationStorageHandle, IntegrationSubscription } from '../../storage/domains/integrations/base.js';
 
-export type GithubSignalSubscriptionSource =
-  | 'auto-gh-pr-create'
-  | 'factory-pr-create'
-  | 'explicit-tool'
-  // The session pushed to the head branch of an already-open pull request.
-  | 'auto-git-push';
+export type GithubSignalSubscriptionSource = 'auto-gh-pr-create' | 'factory-pr-create' | 'explicit-tool';
 export type GithubSignalSubscriptionStatus = 'open' | 'closed' | 'merged';
 
 export interface GithubSignalSubscriptionData {

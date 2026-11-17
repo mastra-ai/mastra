@@ -5,28 +5,10 @@ import type { GithubIntegration } from './integration.js';
 const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionId: string }) => ({ created: true })),
   unsubscribe: vi.fn(async (_input: { sessionId: string }) => ({ removed: true })),
-  getPullRequest: vi.fn(
-    async ({
-      repo,
-    }: {
-      owner: string;
-      repo: string;
-      pull_number: number;
-    }): Promise<{ data: { base: { repo: { id: number } }; head: { ref: string; repo: { id: number } | null } } }> => {
-      const id = repo === 'docs' ? 98 : 99;
-      return { data: { base: { repo: { id } }, head: { ref: 'factory/issue-1', repo: { id } } } };
-    },
-  ),
+  getPullRequest: vi.fn(async ({ repo }: { owner: string; repo: string; pull_number: number }) => ({
+    data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'factory/issue-1' } },
+  })),
   upsertSessionRepository: vi.fn(async () => undefined),
-  listPullRequests: vi.fn(
-    async (_input: {
-      sourceId: string;
-      cursor?: string | null;
-    }): Promise<{
-      pullRequests: Array<{ id: string; headBranch: string; baseBranch: string }>;
-      nextCursor: string | null;
-    }> => ({ pullRequests: [], nextCursor: null }),
-  ),
   getRepositoryAccess: vi.fn(async () => ({
     cloneUrl: 'https://github.com/mastra-ai/mastra.git',
     authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
@@ -111,7 +93,6 @@ const githubStub = {
   },
   versionControl: {
     getRepositoryAccess: mocks.getRepositoryAccess,
-    listPullRequests: mocks.listPullRequests,
   },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
   upsertFactoryTriageComment: mocks.upsertTriageComment,
@@ -120,10 +101,8 @@ const githubStub = {
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
-  parsePushedBranches,
   refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
-  subscribeCurrentSessionToPushedPullRequests,
   unsubscribeCurrentSessionFromPullRequest,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
@@ -164,8 +143,6 @@ function refreshableRequestContext(
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
-  // Back to the vi.fn default: some tests swap in a whole implementation.
-  mocks.getPullRequest.mockReset();
   delete integrationStorage.settings;
   storageState.links = links;
   storageState.session = sessionRow;
@@ -235,241 +212,6 @@ describe('parseCreatedPullRequest', () => {
     expect(
       parseCreatedPullRequest({ toolName: 'source_control_create_change_request', input: {}, ...context }),
     ).toBeUndefined();
-  });
-});
-
-describe('parsePushedBranches', () => {
-  const push = (output: unknown, command = 'git push') => ({ toolName: 'execute_command', input: { command }, output });
-
-  it('reads updated branches from git push output, whatever the remote URL form', () => {
-    expect(
-      parsePushedBranches(
-        push(
-          {
-            stderr: [
-              'To https://x-access-token:secret@github.com/mastra-ai/mastra.git',
-              '   1a2b3c4..5d6e7f8  fix/review -> fix/review',
-              'To git@github.com:mastra-ai/docs',
-              ' + 1a2b3c4...5d6e7f8 HEAD -> refs/heads/docs/fix (forced update)',
-            ].join('\n'),
-          },
-          'cd /workspace/mastra && git push -u origin HEAD',
-        ),
-      ),
-    ).toEqual([
-      { repository: 'mastra-ai/mastra', branch: 'fix/review' },
-      { repository: 'mastra-ai/docs', branch: 'docs/fix' },
-    ]);
-  });
-
-  it('ignores new, deleted, rejected and up-to-date refs and non-GitHub remotes', () => {
-    expect(
-      parsePushedBranches(
-        push(
-          [
-            'To https://github.com/mastra-ai/mastra.git',
-            ' * [new branch]      feat/new -> feat/new',
-            ' - [deleted]         old',
-            ' ! [rejected]        main -> main (fetch first)',
-            ' = [up to date]      same -> same',
-            'To https://gitlab.com/mastra-ai/mastra.git',
-            '   1a2b3c4..5d6e7f8  other -> other',
-          ].join('\n'),
-        ),
-      ),
-    ).toEqual([]);
-  });
-
-  it('ignores failed calls and commands that do not push', () => {
-    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-    expect(parsePushedBranches({ ...push(output), error: new Error('exit 1') })).toEqual([]);
-    expect(parsePushedBranches(push(output, 'echo "git push"'))).toEqual([]);
-    expect(parsePushedBranches({ toolName: 'view', input: { command: 'git push' }, output })).toEqual([]);
-  });
-
-  it.each(['git push --dry-run origin a', 'git push -n origin a', 'cd x && git push -fn origin a'])(
-    'ignores dry runs, which report updates without making them: %s',
-    command => {
-      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-      expect(parsePushedBranches(push(output, command))).toEqual([]);
-    },
-  );
-
-  it.each(['git push origin a 2>&1', 'git push origin a 2>&1 | tail -5', 'git push origin a | cat', 'git push&& echo ok'])(
-    'reads pushes followed by redirection or a pipe: %s',
-    command => {
-      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-      expect(parsePushedBranches(push(output, command))).toEqual([{ repository: 'mastra-ai/mastra', branch: 'a' }]);
-    },
-  );
-
-  it('reads updated branches from --porcelain output and skips new, deleted, rejected and unchanged refs', () => {
-    const output = [
-      'To https://github.com/mastra-ai/mastra.git',
-      ' \trefs/heads/a:refs/heads/a\t1a2b3c4..5d6e7f8',
-      '+\trefs/heads/b:refs/heads/b\t1a2b3c4...5d6e7f8 (forced update)',
-      '*\trefs/heads/c:refs/heads/c\t[new branch]',
-      '-\t:refs/heads/d\t[deleted]',
-      '!\trefs/heads/e:refs/heads/e\t[rejected] (fetch first)',
-      '=\trefs/heads/f:refs/heads/f\t[up to date]',
-      ' \trefs/tags/v1:refs/tags/v1\t1a2b3c4..5d6e7f8',
-      'Done',
-    ].join('\n');
-    expect(parsePushedBranches(push(output, 'git push --porcelain origin a b c'))).toEqual([
-      { repository: 'mastra-ai/mastra', branch: 'a' },
-      { repository: 'mastra-ai/mastra', branch: 'b' },
-    ]);
-  });
-
-  it.each(['git push -n origin a 2>&1 | tail', 'git push 2>&1 -n origin a | tail', 'git push &>/tmp/log --dry-run origin a'])(
-    'ignores a dry run even when its output is redirected: %s',
-    command => {
-      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-      expect(parsePushedBranches(push(output, command))).toEqual([]);
-    },
-  );
-
-  it('still reads a real push that follows a dry run', () => {
-    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-    expect(parsePushedBranches(push(output, 'git push -n origin a && git push --no-verify origin a'))).toEqual([
-      { repository: 'mastra-ai/mastra', branch: 'a' },
-    ]);
-  });
-
-  it.each([
-    'https://notgithub.com/mastra-ai/mastra.git',
-    'https://github.com.evil.dev/mastra-ai/mastra.git',
-    'https://evil.dev/github.com/mastra-ai/mastra.git',
-    'git@notgithub.com:mastra-ai/mastra.git',
-  ])('ignores remotes whose host only looks like GitHub: %s', remote => {
-    expect(parsePushedBranches(push(`To ${remote}\n   1a2b3c4..5d6e7f8  a -> a\n`))).toEqual([]);
-  });
-
-  it('accepts ssh:// GitHub remotes', () => {
-    expect(
-      parsePushedBranches(push('To ssh://git@github.com:22/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n')),
-    ).toEqual([{ repository: 'mastra-ai/mastra', branch: 'a' }]);
-  });
-
-  it('reads the shared push tool result', () => {
-    expect(
-      parsePushedBranches({
-        toolName: 'source_control_push_branch',
-        input: {},
-        output: { pushed: true, branch: 'slack/1', repository: 'mastra-ai/mastra' },
-      }),
-    ).toEqual([{ repository: 'mastra-ai/mastra', branch: 'slack/1' }]);
-  });
-});
-
-describe('subscribeCurrentSessionToPushedPullRequests', () => {
-  it('subscribes the thread to the open pull request whose head the push updated', async () => {
-    mocks.listPullRequests
-      .mockResolvedValueOnce({
-        pullRequests: [{ id: '5', headBranch: 'factory/issue-1', baseBranch: 'factory/issue-1' }],
-        nextCursor: '2',
-      })
-      .mockResolvedValueOnce({
-        pullRequests: [{ id: '7', headBranch: 'factory/issue-1', baseBranch: 'main' }],
-        nextCursor: null,
-      });
-
-    await expect(
-      subscribeCurrentSessionToPushedPullRequests(
-        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
-        [{ repository: 'Mastra-AI/Docs', branch: 'factory/issue-1' }],
-        githubStub,
-      ),
-    ).resolves.toEqual([7]);
-
-    expect(mocks.listPullRequests).toHaveBeenCalledTimes(2);
-    expect(mocks.listPullRequests).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sourceId: 'mastra-ai/docs', state: 'open', cursor: '2' }),
-    );
-    expect(mocks.subscribe).toHaveBeenCalledWith(
-      expect.objectContaining({ changeRequestId: '7', repositorySlug: 'mastra-ai/docs', source: 'auto-git-push' }),
-      integrationStorage,
-    );
-    expect(mocks.upsertSessionRepository).toHaveBeenCalledWith(
-      expect.objectContaining({ projectRepositoryId: 'project-repository-2', changeRequestId: '7' }),
-    );
-  });
-
-  it('never subscribes to a fork pull request whose head branch shares the pushed name', async () => {
-    mocks.listPullRequests.mockResolvedValueOnce({
-      pullRequests: [
-        { id: '11', headBranch: 'factory/issue-1', baseBranch: 'release' },
-        { id: '12', headBranch: 'factory/issue-1', baseBranch: 'main' },
-        { id: '7', headBranch: 'factory/issue-1', baseBranch: 'main' },
-      ],
-      nextCursor: null,
-    });
-    mocks.getPullRequest.mockImplementation(async ({ pull_number }) => ({
-      data: {
-        base: { repo: { id: 98 } },
-        // 11 comes from an outside fork, 12 from a fork that was since deleted.
-        head: { ref: 'factory/issue-1', repo: pull_number === 11 ? { id: 4242 } : pull_number === 12 ? null : { id: 98 } },
-      },
-    }));
-
-    await expect(
-      subscribeCurrentSessionToPushedPullRequests(
-        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
-        [{ repository: 'mastra-ai/docs', branch: 'factory/issue-1' }],
-        githubStub,
-      ),
-    ).resolves.toEqual([7]);
-
-    expect(mocks.subscribe).toHaveBeenCalledTimes(1);
-    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '7' }), integrationStorage);
-  });
-
-  it('subscribes nothing when the only matching pull request comes from a fork', async () => {
-    mocks.listPullRequests.mockResolvedValueOnce({
-      pullRequests: [{ id: '11', headBranch: 'factory/issue-1', baseBranch: 'main' }],
-      nextCursor: null,
-    });
-    mocks.getPullRequest.mockResolvedValueOnce({
-      data: { base: { repo: { id: 98 } }, head: { ref: 'factory/issue-1', repo: { id: 4242 } } },
-    });
-
-    await expect(
-      subscribeCurrentSessionToPushedPullRequests(
-        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
-        [{ repository: 'mastra-ai/docs', branch: 'factory/issue-1' }],
-        githubStub,
-      ),
-    ).resolves.toEqual([]);
-
-    expect(mocks.subscribe).not.toHaveBeenCalled();
-    expect(mocks.upsertSessionRepository).not.toHaveBeenCalled();
-  });
-
-  it('subscribes nothing for a branch without an open pull request or a repository outside the environment', async () => {
-    await expect(
-      subscribeCurrentSessionToPushedPullRequests(
-        authenticatedRequestContext(),
-        [
-          { repository: 'mastra-ai/mastra', branch: 'no-pr' },
-          { repository: 'other/repo', branch: 'factory/issue-1' },
-        ],
-        githubStub,
-      ),
-    ).resolves.toEqual([]);
-
-    expect(mocks.listPullRequests).toHaveBeenCalledTimes(1);
-    expect(mocks.subscribe).not.toHaveBeenCalled();
-  });
-
-  it('does nothing outside repository sessions', async () => {
-    await expect(
-      subscribeCurrentSessionToPushedPullRequests(
-        new RequestContext(),
-        [{ repository: 'mastra-ai/mastra', branch: 'factory/issue-1' }],
-        githubStub,
-      ),
-    ).resolves.toEqual([]);
-    expect(mocks.listPullRequests).not.toHaveBeenCalled();
   });
 });
 

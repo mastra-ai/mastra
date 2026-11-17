@@ -326,21 +326,13 @@ describe('PlatformGithubIntegration', () => {
     await expect(integration.intake.getIssue({ connection, sourceId: 'acme/app', issueId: '99' })).resolves.toBeNull();
   });
 
-  it('exposes the base repository id, head ref and head repository through the octokit pulls shim', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(json(pullRequest))
-      .mockResolvedValueOnce(json({ ...pullRequest, head: { ...pullRequest.head, repo: { id: 4242 } } }));
+  it('exposes the base repository id and head ref through the octokit pulls shim', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json(pullRequest));
     const integration = createIntegration(fetchImpl);
-    const pulls = integration.getInstallationOctokit(7).pulls;
 
-    // A platform response without the head repository reads as unknown, so callers fail closed.
-    await expect(pulls.get({ owner: 'acme', repo: 'app', pull_number: 34 })).resolves.toEqual({
-      data: { base: { repo: { id: 101 } }, head: { ref: 'feat/intake', repo: null } },
-    });
-    await expect(pulls.get({ owner: 'acme', repo: 'app', pull_number: 34 })).resolves.toEqual({
-      data: { base: { repo: { id: 101 } }, head: { ref: 'feat/intake', repo: { id: 4242 } } },
-    });
+    await expect(
+      integration.getInstallationOctokit(7).pulls.get({ owner: 'acme', repo: 'app', pull_number: 34 }),
+    ).resolves.toEqual({ data: { base: { repo: { id: 101 } }, head: { ref: 'feat/intake' } } });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/repos/acme/app/pulls/34');
   });
 

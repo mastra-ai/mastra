@@ -67,9 +67,7 @@ import type { GitIdentity } from './sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
-  parsePushedBranches,
   subscribeCurrentSessionToPullRequest,
-  subscribeCurrentSessionToPushedPullRequests,
 } from './session-subscriptions.js';
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
@@ -1568,19 +1566,9 @@ export class GithubIntegration implements FactoryIntegration {
     toolContext,
     requestContext,
   }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
-    if (!requestContext) return;
     const pullRequestUrl = parseCreatedPullRequest(toolContext);
-    if (pullRequestUrl) {
-      await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', this);
-      return;
-    }
-    const pushes = parsePushedBranches(toolContext);
-    if (pushes.length === 0) return;
-    // Not awaited: finding the pull request can page through every open one,
-    // and the push already succeeded.
-    void subscribeCurrentSessionToPushedPullRequests(requestContext, pushes, this).catch(error =>
-      console.warn('[GitHub] Subscribing to the pushed pull request failed', error),
-    );
+    if (!pullRequestUrl || !requestContext) return;
+    await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', this);
   }
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */
