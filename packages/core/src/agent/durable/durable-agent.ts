@@ -3192,6 +3192,14 @@ export class DurableAgent<
       );
     }
 
+    return this.#execute(messages, options, 'stream');
+  }
+
+  async #execute(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput>,
+    methodType: 'stream' | 'generate',
+  ): Promise<DurableAgentStreamResult<TOutput>> {
     // Enforce agent-level FGA (agents:execute) before durable execution. The
     // base Agent enforces this in its stream()/generate(); durable execution
     // runs a workflow instead and would otherwise skip the gate. This also
@@ -3224,6 +3232,7 @@ export class DurableAgent<
         resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
+        methodType,
         durableAgentId: this.id,
         durableAgentName: this.name,
       });
@@ -3260,7 +3269,7 @@ export class DurableAgent<
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
     await this.#attachStreamPublisher(runId, { threadId, resourceId });
-    const segment = this.#beginSegment(runId);
+    const segment = methodType === 'stream' ? this.#beginSegment(runId) : undefined;
 
     // Assigned once the stream is created below. Declared here so the shared
     // performCleanup() closure can unsubscribe the pubsub reader (via
@@ -3268,41 +3277,42 @@ export class DurableAgent<
     // cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
 
-    // Single cleanup path for both the auto-cleanup timer and the explicit
-    // cleanup(). Revokes continuation before unsubscribing the pubsub reader,
-    // then tears down the registry entries and pubsub topic this execution
-    // still owns — an execution that recovered the run in this process holds
-    // its own. The topic stays when the run's latest execution here (this one
-    // or a later resume()) lost the run: whoever took it over, in any process,
-    // writes to it. Runs at most once.
+    // Stream segments and generate registry entries have distinct release guards.
+    // Neither may tear down state registered by a newer execution.
+    const releaseRunState = () => {
+      if (segment !== undefined) {
+        if (!this.#releaseSegment(runId, segment, registryEntry)) return;
+      } else if (this.#runRegistry.get(runId) === registryEntry) {
+        this.#runRegistry.cleanup(runId);
+      }
+      if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
+        globalRunRegistry.delete(runId);
+        if (
+          !this.#unverifiedReaderFences.has(executionFence) &&
+          (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true)
+        )
+          this.#clearPubsubTopic(runId, globalRegistryEntry);
+      }
+    };
+
     const runCleanup = createRunCleanup({
       scheduleTimer: cleanup => this.#scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup?.();
-        // A deferred cleanup must not tear down a newer segment (e.g. resume())
-        // registered under the same run id.
-        if (this.#releaseSegment(runId, segment, registryEntry)) {
-          if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
-            globalRunRegistry.delete(runId);
-            if (
-              !this.#unverifiedReaderFences.has(executionFence) &&
-              (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true)
-            )
-              this.#clearPubsubTopic(runId, globalRegistryEntry);
-          }
-        }
+        releaseRunState();
       },
+      // Generate's timer releases state without disposing its draining reader.
+      ...(methodType === 'generate' ? { releaseOnTimer: releaseRunState } : {}),
     });
     const performCleanup = runCleanup.run;
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = runCleanup.schedule;
 
-    // Whether this caller's stream closes at the suspension boundary. Defaults
-    // to false (stream stays open for a same-reader resume). The same value
-    // gates the `across-suspension` continuation so the two cannot drift.
-    const closeOnSuspend = options?.closeOnSuspend ?? false;
-    const closeOnPersistedSuspend = closeOnSuspend && this.suspendPersistedOnReturn;
+    // Generate closes at suspension; stream defaults to staying open for a
+    // same-reader resume. The same value gates stream's continuation.
+    const closeOnSuspend = methodType === 'generate' || (options?.closeOnSuspend ?? false);
+    const closeOnPersistedSuspend = methodType === 'stream' && closeOnSuspend && this.suspendPersistedOnReturn;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
@@ -3350,7 +3360,7 @@ export class DurableAgent<
       // after executeWorkflow() returns (below) rather than on the SUSPENDED
       // event, which is published before the snapshot is saved.
       closeOnSuspend: closeOnSuspend && !closeOnPersistedSuspend,
-      hideSignals: options?.hideSignals,
+      ...(methodType === 'stream' ? { hideSignals: options?.hideSignals } : {}),
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       processorStates: registryEntry.processorStates,
@@ -3369,7 +3379,7 @@ export class DurableAgent<
         .then(async () => {
           if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-          // Only the initial stream() path emits 'start'; resume() does not.
+          // Only initial generate()/stream() emits 'start'; resume() does not.
           await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
             type: 'start',
             runId,
@@ -3399,6 +3409,7 @@ export class DurableAgent<
             await waitForEventDelivery();
             detachStream();
           }
+          if (methodType === 'generate') return result;
         })
         .catch(error =>
           this.settleExecution(runId, executionFence, {
@@ -3411,22 +3422,24 @@ export class DurableAgent<
       trackedEntry.workflowExecution = workflowExecution;
     }
 
-    // 4b. Register with the thread-stream runtime so subscribeToThread /
-    // sendMessage subscribers receive run-registered events and stream parts.
-    // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
-    // CachingPubSub (this.pubsub) which carries durable workflow chunks.
-    await agentThreadStreamRuntime.registerRun(
-      this as unknown as Agent<any, any, any, any>,
-      output,
-      options as AgentExecutionOptions<TOutput>,
-      this.getPubSub(),
-      {
-        continuation: closeOnSuspend ? undefined : 'across-suspension',
-        generation: executionFence.generation,
-        ownershipLost: () => executionFence.isLost(),
-        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
-      },
-    );
+    if (methodType === 'stream') {
+      // 4b. Register with the thread-stream runtime so subscribeToThread /
+      // sendMessage subscribers receive run-registered events and stream parts.
+      // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
+      // CachingPubSub (this.pubsub) which carries durable workflow chunks.
+      await agentThreadStreamRuntime.registerRun(
+        this as unknown as Agent<any, any, any, any>,
+        output,
+        options as AgentExecutionOptions<TOutput>,
+        this.getPubSub(),
+        {
+          continuation: closeOnSuspend ? undefined : 'across-suspension',
+          generation: executionFence.generation,
+          ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+        },
+      );
+    }
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.
@@ -3435,7 +3448,7 @@ export class DurableAgent<
     // background. Tearing down the reader first would drop it, leaving the
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
-      if (runCleanup.done || output.status !== 'running') return performCleanup();
+      if (methodType === 'generate' || runCleanup.done || output.status !== 'running') return performCleanup();
       void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.pubsub.flush())
         .then(() => waitForEventDelivery())
@@ -4816,199 +4829,7 @@ export class DurableAgent<
   ): Promise<FullOutput<TOutput>> {
     options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
 
-    // Enforce agent-level FGA (agents:execute) before durable execution — see
-    // stream() above. Durable/evented generate would otherwise skip the gate.
-    await this.requireAgentExecutionFGA({
-      requestContext: options?.requestContext,
-      memory: options?.memory,
-      runId: options?.runId,
-      actor: options?.actor,
-    });
-
-    validateModelTimeoutSettings(options?.modelSettings?.timeout);
-
-    // 1. Claim the run before preparing it — see stream().
-    const runId = resolveRunId(options?.runId);
-    const requestContext = options?.requestContext ?? new RequestContext();
-    const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
-
-    // 1a. Prepare for durable execution (non-durable phase)
-    let preparation: PreparationResult<TOutput>;
-    try {
-      preparation = await prepareForDurableExecution<TOutput>({
-        agent: this.#wrappedAgent as Agent<string, any, TOutput>,
-        messages,
-        options: options as AgentExecutionOptions<TOutput>,
-        runId,
-        requestContext,
-        optionsAreResolved: true,
-        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
-        scopesResolved: true,
-        mastra: this.#mastra,
-        methodType: 'generate',
-        durableAgentId: this.id,
-        durableAgentName: this.name,
-      });
-    } catch (error) {
-      // The run never started: drop its owner record rather than leave it behind.
-      await executionFence.settle(async () => {});
-      throw error;
-    }
-
-    const { messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
-    // Set after preparation so request-context schema validation never sees it.
-    setExecutionClaim(requestContext, runId, executionFence.claim);
-    registryEntry.executionFence = executionFence;
-    this.#runInputs.set(executionFence, workflowInput);
-
-    // 1b. Install the abort controller for this run. The controller is owned
-    // by this DurableAgent instance; the result's abort() method flips it,
-    // and the durable LLM-execution step reads `abortSignal` off the registry
-    // to thread it into the model call + abort short-circuits. If the caller
-    // also supplied an external signal, forward its abort to the internal
-    // controller so either source can cancel the run.
-    const { controller: abortController } = createRunAbortController(options?.abortSignal);
-    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
-      abortController.abort();
-    }
-    this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
-
-    // Share the scope before either registry copies the entry.
-    const readLocalRequest = createLocalRequestReader(runId, registryEntry, this.#mastra);
-
-    // 2. Register non-serializable state (both local and global registries)
-    registryEntry.agentId = this.id;
-    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    const globalRegistryEntry = { ...registryEntry, messageList };
-    globalRunRegistry.set(runId, globalRegistryEntry);
-    await this.#attachStreamPublisher(runId, { threadId, resourceId });
-
-    // Tears down the registry entries and pubsub topic this execution still
-    // owns, as stream() does: an execution that recovered the run in this
-    // process registers its own under the same runId, and one that took the
-    // run over, in any process, writes to the topic.
-    const releaseRunState = () => {
-      if (this.#runRegistry.get(runId) === registryEntry) {
-        this.#runRegistry.cleanup(runId);
-      }
-      if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
-        globalRunRegistry.delete(runId);
-        if (
-          !this.#unverifiedReaderFences.has(executionFence) &&
-          (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true)
-        )
-          this.#clearPubsubTopic(runId, globalRegistryEntry);
-      }
-    };
-
-    // The explicit cleanup() also revokes continuation and unsubscribes the
-    // pubsub reader; the auto-cleanup timer only releases the run state.
-    const runCleanup = createRunCleanup({
-      scheduleTimer: cleanup => this.#scheduleReaderCleanup(executionFence, cleanup),
-      release: () => {
-        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
-        streamCleanup();
-        releaseRunState();
-      },
-      releaseOnTimer: releaseRunState,
-    });
-    // Schedule automatic registry cleanup after stream ends
-    const scheduleAutoCleanup = runCleanup.schedule;
-
-    // 3. Create the durable agent stream (subscribes to pubsub)
-    const {
-      output,
-      cleanup: streamCleanup,
-      ready,
-    } = createDurableAgentStream<TOutput>({
-      pubsub: this.pubsub,
-      runId,
-      minGeneration: executionFence.generation,
-      onTerminalEvent: this.#owningReaderTerminal(runId, executionFence),
-      readLocalRequest,
-      messageId,
-      model: {
-        modelId: workflowInput.modelConfig.modelId,
-        provider: workflowInput.modelConfig.provider,
-        version: 'v3',
-      },
-      threadId,
-      resourceId,
-      onChunk: options?.onChunk,
-      experimentalTransform: options?.experimentalTransform,
-      onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
-      onStreamFinished: scheduleAutoCleanup,
-      onError: async error => {
-        await options?.onError?.(error);
-        scheduleAutoCleanup();
-      },
-      onSuspended: options?.onSuspended,
-      onAbort: async data => {
-        try {
-          await (options?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
-        } finally {
-          scheduleAutoCleanup();
-        }
-      },
-      // onIterationComplete is NOT forwarded here — the dowhile predicate
-      // now calls it in-process from globalRunRegistry and honors its return
-      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
-      // still fires for external observability subscribers.
-      closeOnSuspend: true,
-      structuredOutput: registryEntry.structuredOutput as any,
-      outputProcessors: registryEntry.outputProcessors,
-      processorStates: registryEntry.processorStates,
-      agent: registryEntry.agent,
-      requestContext: registryEntry.requestContext,
-      returnScorerData: workflowInput.options.returnScorerData,
-      tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
-      messageList,
-    });
-
-    // 4. Wait for subscription to be ready, then execute workflow
-    // This prevents race conditions where events are published before subscription
-    const workflowExecution = executionFence.run(() =>
-      ready
-        .then(async () => {
-          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
-          // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-          // Only the initial generate()/stream() path emits 'start'; resume() does not.
-          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
-            type: 'start',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { id: workflowInput.agentId, messageId },
-          });
-          if (this.__getGoalConfig()) {
-            await beginGoalActivity({
-              mastra: this.#mastra,
-              agentId: workflowInput.agentId,
-              threadId,
-              runId,
-              requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
-            });
-          }
-          try {
-            await this.persistInitialInput(runId, workflowInput);
-            return await this.executeWorkflow(runId, workflowInput);
-          } finally {
-            await stopGoalActivity({ agentId: workflowInput.agentId, runId });
-          }
-        })
-        .catch(error =>
-          this.settleExecution(runId, executionFence, {
-            error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
-          }),
-        ),
-    );
-    const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
-    if (trackedEntry) {
-      trackedEntry.workflowExecution = workflowExecution;
-    }
-
-    // 5. Create cleanup function (cancels auto-cleanup timer if called)
-    const cleanup = runCleanup.run;
+    const { output, runId, cleanup } = await this.#execute(messages, options, 'generate');
 
     let suspended = false;
     try {
