@@ -520,18 +520,18 @@ describe('TracesExplorer.Histogram', () => {
         expect(chart()).not.toBeNull();
         const input = screen.getByRole('combobox', { name: 'Add filter' });
         fireEvent.focus(input);
-        fireEvent.change(input, { target: { value: 'Any Content' } });
-        expect(screen.queryByRole('option', { name: 'Any Content' })).toBeNull();
+        fireEvent.change(input, { target: { value: 'Span any content' } });
+        expect(screen.queryByRole('option', { name: 'Span any content' })).toBeNull();
       },
     );
     it.each([
-      ['all', 'Any Content'],
-      ['input', 'Input'],
-      ['output', 'Output'],
-      ['error', 'Error'],
-      ['inputPreview', 'Input Preview'],
-      ['outputPreview', 'Output Preview'],
-      ['errorPreview', 'Error Preview'],
+      ['all', 'Span any content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
     ] as const)('uses the same %s search for lists and histograms', async (field, label) => {
       setHandlers({ capabilities: traceTextSearchCapabilities });
       await renderExplorer({
@@ -581,8 +581,8 @@ describe('TracesExplorer.Histogram', () => {
       const result = await renderExplorer();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
-      fireEvent.change(input, { target: { value: 'Any Content' } });
-      fireEvent.click(await screen.findByRole('option', { name: 'Any Content' }));
+      fireEvent.change(input, { target: { value: 'Span any content' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Span any content' }));
       onAggregate.mockClear();
       fireEvent.change(input, { target: { value: 'ok' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -591,17 +591,17 @@ describe('TracesExplorer.Histogram', () => {
       await settle(result.queryClient);
       await waitFor(() => expect(chart()).not.toBeNull());
       expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
-      fireEvent.click(screen.getByRole('button', { name: 'Remove Any Content filter' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Span any content filter' }));
       await waitFor(() => expect(chart()).not.toBeNull());
     });
     it.each([
-      ['all', 'Any Content'],
-      ['input', 'Input'],
-      ['output', 'Output'],
-      ['error', 'Error'],
-      ['inputPreview', 'Input Preview'],
-      ['outputPreview', 'Output Preview'],
-      ['errorPreview', 'Error Preview'],
+      ['all', 'Span any content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
     ] as const)('does not send %s token predicates without the trace capability', async field => {
       setHandlers({
         capabilities: {
@@ -619,8 +619,8 @@ describe('TracesExplorer.Histogram', () => {
       expect(chart()).not.toBeNull();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
-      fireEvent.change(input, { target: { value: 'Any Content' } });
-      expect(screen.queryByRole('option', { name: 'Any Content' })).toBeNull();
+      fireEvent.change(input, { target: { value: 'Span any content' } });
+      expect(screen.queryByRole('option', { name: 'Span any content' })).toBeNull();
     });
   });
 });

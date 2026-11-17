@@ -37,7 +37,7 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
     return {
       ...existing,
       id: prefix + path,
-      label,
+      label: prefix === 'spans.' ? `Span ${label.toLowerCase()}` : label,
       icon:
         path === 'error' || path === 'errorPreview' ? IconExclamationTriangle : (existing?.icon ?? IconMagnifyingGlass),
       operators: ['hasAllTokens', ...(existing?.operators ?? [])],
@@ -50,5 +50,9 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
 
 export function hasTokenSearchFilter(node: TraceFilterNode): boolean {
   if ('nodes' in node) return node.nodes.some(hasTokenSearchFilter);
-  return node.operatorId === 'hasAllTokens' && !!tokenSearchPredicate(node.fieldId.replace(/^spans\./, ''), node.value);
+  return (
+    node.operatorId === 'hasAllTokens' &&
+    node.fieldId.startsWith('spans.') &&
+    !!tokenSearchPredicate(node.fieldId.slice('spans.'.length), node.value)
+  );
 }
