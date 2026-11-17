@@ -109,6 +109,17 @@ describe('IntakeStorage', () => {
     expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: true, sourceIds: ['c'] } });
   });
 
+  it('keeps every source when repositories are linked at the same time', async () => {
+    const storage = await makeStorage();
+    await storage.saveConfig({ orgId: 'org1', config: { github: { enabled: true, sourceIds: ['a'] } } });
+
+    await Promise.all(
+      ['b', 'c', 'd'].map(id => storage.addSources({ orgId: 'org1', integrationId: 'github', sourceIds: [id] })),
+    );
+
+    expect((await storage.getConfig({ orgId: 'org1' })).github?.sourceIds?.toSorted()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
   it('adds sources once per migration, so a source removed afterwards stays removed', async () => {
     const storage = await makeStorage();
     const sourcesByOrg = async () => new Map([['org1', ['acme/repo']]]);

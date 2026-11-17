@@ -2331,7 +2331,14 @@ export class MastraFactory {
                         sourceIds,
                       );
                       for (const projectRepositoryId of projectRepositoryIds) {
-                        await githubIntegration.ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId });
+                        await githubIntegration
+                          .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId })
+                          .catch(error => {
+                            console.warn(
+                              `[factory] Failed to bring in issues from newly selected repository ${projectRepositoryId}:`,
+                              error,
+                            );
+                          });
                       }
                     })().catch(error => {
                       console.warn('[factory] Failed to bring in issues from newly selected repositories:', error);

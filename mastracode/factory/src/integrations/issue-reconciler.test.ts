@@ -440,6 +440,18 @@ describe('issue reconcilers', () => {
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
   });
 
+  it('still reconciles the cards already filed when the intake selection cannot be read', async () => {
+    const listOpenIssues = vi.fn().mockResolvedValue([]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
+      listOpenIssues,
+    });
+    vi.spyOn(setup.intake, 'getConfig').mockRejectedValue(new Error('intake down'));
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 1 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+  });
+
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {
     const setup = await githubSetup({
       fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),

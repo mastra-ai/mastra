@@ -55,8 +55,9 @@ function withoutPausedSources(integrationId: string, selection: IntakeSelection)
 
 /** Enable sync and pick `id`; returns the same object when nothing changes. */
 export function selectIntakeSource(selection: IntakeSelection, id: string): IntakeSelection {
-  if (selection.sourceIds === null) return { enabled: true, sourceIds: [id] };
-  if (!selection.sourceIds.includes(id)) return { enabled: true, sourceIds: [...selection.sourceIds, id] };
+  if (selection.sourceIds === null) return { ...selection, enabled: true, sourceIds: [id] };
+  if (!selection.sourceIds.includes(id))
+    return { ...selection, enabled: true, sourceIds: [...selection.sourceIds, id] };
   return selection.enabled ? selection : { ...selection, enabled: true };
 }
 

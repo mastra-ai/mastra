@@ -543,6 +543,27 @@ describe('Create Factory wizard', () => {
     expect(intakeConfigs).toEqual([{ linear: { enabled: true, sourceIds: ['lin-1'] } }]);
   });
 
+  it('keeps the repository mapping of a switched-off Linear selection when the new Factory picks its project', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    stubConnectedLinear();
+    const repositoryByLinearProject = { 'lin-1': 'octo/hello' };
+    const { intakeConfigs } = stubModelStepEndpoints(calls, {
+      linear: { enabled: false, sourceIds: ['lin-1'], repositoryByLinearProject },
+    });
+    server.use(http.put(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })));
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Mobile App/ }));
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    expect(intakeConfigs).toEqual([{ linear: { enabled: true, sourceIds: ['lin-1'], repositoryByLinearProject } }]);
+  });
+
   it('routes the picked Jira project into the Factory it creates', async () => {
     const calls: string[] = [];
     seedDraft('project-management');

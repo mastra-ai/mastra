@@ -291,6 +291,32 @@ async function upsertBinding(
   });
 }
 
+async function readConfig(ops: FactoryStorageOps, orgId: string): Promise<IntakeConfig> {
+  const row = await ops.findOne<{ config: IntakeConfig }>('intake_org_settings', { org_id: orgId });
+  return structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+}
+
+async function writeConfig(ops: FactoryStorageOps, orgId: string, config: IntakeConfig): Promise<void> {
+  const now = new Date();
+  const updated = await ops.updateMany('intake_org_settings', { org_id: orgId }, { config, updated_at: now });
+  if (updated > 0) return;
+  await ops.insertOne('intake_org_settings', { org_id: orgId, config, created_at: now, updated_at: now });
+}
+
+async function addSourcesIn(
+  ops: FactoryStorageOps,
+  { orgId, integrationId, sourceIds }: { orgId: string; integrationId: string; sourceIds: readonly string[] },
+): Promise<void> {
+  const config = await readConfig(ops, orgId);
+  const current = config[integrationId];
+  const selected = current?.enabled ? (current.sourceIds ?? []) : [];
+  const merged = [...new Set([...selected, ...sourceIds])];
+  await writeConfig(ops, orgId, {
+    ...config,
+    [integrationId]: { enabled: merged.length > 0, sourceIds: merged.length ? merged : null },
+  });
+}
+
 export class IntakeStorage extends FactoryStorageDomain {
   /** The legacy collections this database has, so only those are read, migrated, or cleared. */
   #legacy = { userSettings: false, bindings: false };
@@ -412,9 +438,14 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   /** Overlay `config` onto the stored selections; integrations it omits keep their stored value. */
   async mergeConfig({ orgId, config }: { orgId: string; config: IntakeConfig }): Promise<IntakeConfig> {
-    const merged: IntakeConfig = Object.assign(Object.create(null), await this.getConfig({ orgId }), config);
-    await this.saveConfig({ orgId, config: merged });
-    return merged;
+    return this.storage.withTransaction(
+      async ops => {
+        const merged: IntakeConfig = Object.assign(Object.create(null), await readConfig(ops, orgId), config);
+        await writeConfig(ops, orgId, merged);
+        return merged;
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
 
   /** Every org's stored selections. */
@@ -424,26 +455,15 @@ export class IntakeStorage extends FactoryStorageDomain {
   }
 
   /** Select `sourceIds` for `integrationId` on top of what the org already selected. */
-  async addSources({
-    orgId,
-    integrationId,
-    sourceIds,
-  }: {
-    orgId: string;
-    integrationId: string;
-    sourceIds: readonly string[];
-  }): Promise<void> {
-    const config = await this.getConfig({ orgId });
-    const current = config[integrationId];
-    const selected = current?.enabled ? (current.sourceIds ?? []) : [];
-    const merged = [...new Set([...selected, ...sourceIds])];
-    await this.saveConfig({
-      orgId,
-      config: { ...config, [integrationId]: { enabled: merged.length > 0, sourceIds: merged.length ? merged : null } },
-    });
+  async addSources(input: { orgId: string; integrationId: string; sourceIds: readonly string[] }): Promise<void> {
+    await this.storage.withTransaction(ops => addSourcesIn(ops, input), { isolationLevel: 'serializable' });
   }
 
-  /** Run {@link addSources} for every org once per `migration`, so a later removal by a user sticks. */
+  /**
+   * Run {@link addSources} for every org once per `migration`, so a later removal by a user sticks.
+   * The marker and the selections commit together, so a boot racing another cannot reselect a
+   * source removed after the first boot finished.
+   */
   async addSourcesOnce({
     migration,
     integrationId,
@@ -454,12 +474,18 @@ export class IntakeStorage extends FactoryStorageDomain {
     sourcesByOrg: () => Promise<ReadonlyMap<string, readonly string[]>>;
   }): Promise<void> {
     if (await this.#db.findOne('intake_data_migrations', { name: migration })) return;
-    for (const [orgId, sourceIds] of await sourcesByOrg()) {
-      await this.addSources({ orgId, integrationId, sourceIds });
-    }
+    const sources = await sourcesByOrg();
     try {
-      await this.#db.insertOne('intake_data_migrations', { name: migration, completed_at: new Date() });
+      await this.storage.withTransaction(
+        async ops => {
+          if (await ops.findOne('intake_data_migrations', { name: migration })) return;
+          for (const [orgId, sourceIds] of sources) await addSourcesIn(ops, { orgId, integrationId, sourceIds });
+          await ops.insertOne('intake_data_migrations', { name: migration, completed_at: new Date() });
+        },
+        { isolationLevel: 'serializable' },
+      );
     } catch (error) {
+      // Postgres can report the boot that lost the race as a unique violation instead of a serialization failure.
       if (!(error instanceof UniqueViolationError)) throw error;
     }
   }
