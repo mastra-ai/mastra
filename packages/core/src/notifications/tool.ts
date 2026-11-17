@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { Mastra } from '../mastra';
+import { resolveAgentById } from '../mastra/resolve-agent';
 import { createTool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import { createNotificationSignal } from './signals';
@@ -114,8 +116,10 @@ async function deliverNotifications({
     const agentId = notification.agentId ?? context?.agent?.agentId;
     const resourceId = notification.resourceId ?? context?.agent?.resourceId;
     const mastra = context?.mastra;
-    const agent =
-      agentId && typeof mastra?.getAgentById === 'function' ? await mastra.getAgentById(agentId) : undefined;
+    // Registry first, then stored agents through the editor: a stored agent is
+    // not on the Mastra registry until it has been hydrated once in this process.
+    const resolved = mastra && agentId ? await resolveAgentById(mastra as Mastra, agentId) : undefined;
+    const agent = resolved?.status === 'found' ? (resolved.agent as NotificationToolAgent) : undefined;
 
     if (agent && resourceId && !notification.deliveredSignalId) {
       const signal = createNotificationSignal({ ...notification, status: 'delivered' });

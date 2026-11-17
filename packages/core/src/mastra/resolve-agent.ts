@@ -35,7 +35,9 @@ export type ResolveAgentByIdResult =
  */
 export async function resolveAgentById(mastra: Mastra, agentId: string): Promise<ResolveAgentByIdResult> {
   try {
-    return { status: 'found', agent: mastra.getAgentById(agentId) };
+    // The versioned overload resolves asynchronously, so await here to keep the
+    // `found` result's `agent` a real agent for every caller.
+    return { status: 'found', agent: await mastra.getAgentById(agentId) };
   } catch {
     // Registry miss — fall through to the editor.
   }

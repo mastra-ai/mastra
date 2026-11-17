@@ -415,6 +415,39 @@ describe('notification inbox', () => {
     expect(allSeen.hasMore).toBe(false);
   });
 
+  it('resolves a stored agent through the editor when reading a notification on cold start', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({
+      id: 'n1',
+      threadId: 'thread-1',
+      source: 'email',
+      kind: 'direct-message',
+      summary: 'Stored agent update',
+      resourceId: 'resource-1',
+      agentId: 'stored-agent-1',
+    });
+    const sendSignal = vi.fn(signal => ({ signal, persisted: Promise.resolve() }));
+    const getById = vi.fn(async () => ({ id: 'stored-agent-1', sendSignal }));
+    const tool = createNotificationInboxTool({ storage });
+
+    const result = await tool.execute?.({ action: 'read', id: 'n1' }, {
+      agent: { agentId: 'stored-agent-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      mastra: {
+        getAgentById: vi.fn(() => {
+          throw new Error('Agent with id stored-agent-1 not found');
+        }),
+        getEditor: () => ({ agent: { getById } }),
+      },
+    } as any);
+
+    expect(result).toMatchObject({ message: '1 notification will now be delivered.', delivered: 1 });
+    expect(getById).toHaveBeenCalledWith('stored-agent-1');
+    expect(sendSignal).toHaveBeenCalled();
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'seen',
+    });
+  });
+
   it('surfaces a notification that ran out of delivery attempts once, then marks it seen', async () => {
     const storage = new InMemoryNotificationsStorage();
     await storage.createNotification({ id: 'ok', threadId: 'thread-1', source: 'ci', kind: 'run', summary: 'ok' });
@@ -1417,6 +1450,156 @@ describe('notification inbox', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  it('resolves a stored agent through the editor when the registry misses on cold start', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
+    const storedAgent = { id: 'stored-agent-1', sendSignal };
+    const getById = vi.fn(async () => storedAgent);
+    const mastra = {
+      getAgentById: vi.fn(() => {
+        throw new Error('Agent with id stored-agent-1 not found');
+      }),
+      getEditor: () => ({ agent: { getById } }),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'stored-agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toHaveLength(1);
+    expect(getById).toHaveBeenCalledWith('stored-agent-1');
+    expect(sendSignal).toHaveBeenCalled();
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'delivered',
+    });
+  });
+
+  it('resolves a stored agent through the editor for a summary dispatch on cold start', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'persist' }),
+      signal,
+      persisted: Promise.resolve(),
+    }));
+    const storedAgent = { id: 'stored-agent-1', sendSignal };
+    const getById = vi.fn(async () => storedAgent);
+    const mastra = {
+      getAgentById: vi.fn(() => {
+        throw new Error('Agent with id stored-agent-1 not found');
+      }),
+      getEditor: () => ({ agent: { getById } }),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'stored-agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'low',
+      summary: 'Low priority update',
+      summaryAt: now,
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(getById).toHaveBeenCalledWith('stored-agent-1');
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: result.signals[0]?.id,
+    });
+  });
+
+  it('leaves a notification pending when the stored agent lookup fails transiently', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const getById = vi.fn(async () => {
+      throw new Error('editor storage unavailable');
+    });
+    const mastra = {
+      getAgentById: vi.fn(() => {
+        throw new Error('Agent with id stored-agent-1 not found');
+      }),
+      getEditor: () => ({ agent: { getById } }),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'stored-agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toEqual([]);
+    expect(getById).toHaveBeenCalledWith('stored-agent-1');
+    const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
+    expect(stored).toMatchObject({ status: 'pending' });
+    // A lookup that proves nothing about the agent must not spend an attempt.
+    expect(stored?.deliveryAttempts ?? 0).toBe(0);
+    expect(stored?.lastDeliveryError).toBeUndefined();
+  });
+
+  it('fails the delivery when the registry and the editor both report the agent missing', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const getById = vi.fn(async () => null);
+    const mastra = {
+      getAgentById: vi.fn(() => {
+        throw new Error('Agent with id stored-agent-1 not found');
+      }),
+      getEditor: () => ({ agent: { getById } }),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'stored-agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered).toEqual([]);
+    expect(result.failed).toMatchObject([
+      { record: { id: 'n1' }, error: 'Agent with id stored-agent-1 not found' },
+    ]);
+    // The editor has to be consulted before a miss is treated as confirmed.
+    expect(getById).toHaveBeenCalledWith('stored-agent-1');
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 1,
+      lastDeliveryError: 'Agent with id stored-agent-1 not found',
+    });
   });
 
   it('allows notification dispatch workflow registration to be disabled', async () => {

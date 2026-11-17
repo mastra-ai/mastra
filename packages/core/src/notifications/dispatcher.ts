@@ -3,6 +3,7 @@ import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentSignalIfIdleOptions, SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
+import { resolveAgentById } from '../mastra/resolve-agent';
 import type { NotificationDeliveryPolicyInput } from './delivery-policy';
 import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { readNotificationRoutingRequirement } from './routing';
@@ -178,6 +179,32 @@ async function recordDeliveryFailure({
   });
 }
 
+/**
+ * Resolve a notification's target agent the same way the rest of core does: the
+ * in-memory registry first, then the editor for stored agents. A stored agent
+ * isn't registered on the Mastra instance until it has been hydrated once in
+ * this process, so a registry miss on a cold start does not mean the agent is
+ * gone.
+ *
+ * Returns `null` when the lookup failed for a reason that proves nothing about
+ * the agent, such as a storage or hydration error. Callers must leave the
+ * notification pending instead of spending one of its delivery attempts. Throws
+ * only when the registry and the editor agree the agent does not exist.
+ */
+async function resolveDispatchAgent(mastra: Mastra, agentId: string): Promise<NotificationDispatchAgent | null> {
+  const resolved = await resolveAgentById(mastra, agentId);
+  if (resolved.status === 'found') return resolved.agent as NotificationDispatchAgent;
+  if (resolved.status === 'error') {
+    const log = mastra.getLogger?.();
+    log?.warn?.('Could not resolve an agent for notification delivery; leaving the notification pending', {
+      agentId,
+      error: resolved.error,
+    });
+    return null;
+  }
+  throw new Error(`Agent with id ${agentId} not found`);
+}
+
 async function sendNotificationRecord({
   mastra,
   storage,
@@ -196,7 +223,10 @@ async function sendNotificationRecord({
   if (!current.agentId) throw new Error(`Notification ${current.id} is missing agentId`);
   if (!current.resourceId) throw new Error(`Notification ${current.id} is missing resourceId`);
 
-  const agent = (await mastra.getAgentById(current.agentId as never)) as NotificationDispatchAgent;
+  const agent = await resolveDispatchAgent(mastra, current.agentId);
+  // A lookup that proved nothing about the agent (a storage or hydration
+  // error) leaves the record pending rather than spending an attempt on it.
+  if (!agent) return null;
   const threadState =
     batchThreadState ??
     agentThreadStreamRuntime.getThreadState(
@@ -256,7 +286,10 @@ async function sendNotificationSummary({
   if (!first?.agentId) throw new Error('Notification summary is missing agentId');
   if (!first.resourceId) throw new Error('Notification summary is missing resourceId');
 
-  const agent = (await mastra.getAgentById(first.agentId as never)) as NotificationDispatchAgent;
+  const agent = await resolveDispatchAgent(mastra, first.agentId);
+  // A lookup that proved nothing about the agent leaves the batch pending
+  // rather than skipping the records it covers.
+  if (!agent) return null;
   const decision = await resolveDeliveryTimeDecision(agent, {
     record: first,
     threadState: agentThreadStreamRuntime.getThreadState(
@@ -319,8 +352,11 @@ async function getBatchThreadState({
 }: {
   mastra: Mastra;
   group: DueDispatchGroup;
-}): Promise<NotificationDeliveryThreadState> {
-  const agent = (await mastra.getAgentById(group.agentId as never)) as NotificationDispatchAgent;
+}): Promise<NotificationDeliveryThreadState | null> {
+  const agent = await resolveDispatchAgent(mastra, group.agentId);
+  // `null` means the agent could not be resolved right now, which says nothing
+  // about the group's records: leave them pending for a later dispatch.
+  if (!agent) return null;
   return agentThreadStreamRuntime.getThreadState(
     { resourceId: group.resourceId, threadId: group.threadId },
     agent.getPubSub?.(),
@@ -411,7 +447,11 @@ async function dispatchRecords({
     const records = [...group.summaryRecords, ...group.individualRecords];
     let batchThreadState: NotificationDeliveryThreadState;
     try {
-      batchThreadState = await getBatchThreadState({ mastra, group });
+      const resolved = await getBatchThreadState({ mastra, group });
+      // A transient resolution failure leaves the whole group pending: the
+      // agent may exist, and failing these records would spend their attempts.
+      if (!resolved) continue;
+      batchThreadState = resolved;
     } catch (error) {
       for (const record of records) {
         await recordDeliveryFailure({ storage, record, now, error });
