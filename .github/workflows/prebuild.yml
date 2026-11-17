@@ -189,6 +189,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ github.base_ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
         run: |
