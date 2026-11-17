@@ -1112,10 +1112,7 @@ export class DurableAgent<
     workflowsStore: WorkflowsStorage,
     runId: string,
   ): Promise<{ snapshot: WorkflowRunState; workflowInput: DurableAgenticWorkflowInput }> {
-    const persisted = await workflowsStore.getWorkflowRunById({
-      runId,
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-    });
+    const persisted = await this.executionEngine.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
       throw new MastraError({
         id: RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
@@ -1128,10 +1125,7 @@ export class DurableAgent<
       });
     }
 
-    const snapshot =
-      typeof persisted.snapshot === 'string'
-        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-        : persisted.snapshot;
+    const { snapshot } = persisted;
     if (
       snapshot?.status === 'pending' &&
       snapshot.context != null &&

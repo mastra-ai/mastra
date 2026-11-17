@@ -461,12 +461,19 @@ export class DurableExecutionEngine {
     }
     return getErrorFromUnknown(workflowError, { fallbackMessage });
   }
+  async loadPersistedRunSnapshot(workflowsStore: WorkflowsStorage, runId: string) {
+    const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    if (!persisted) return undefined;
+    const snapshot =
+      typeof persisted.snapshot === 'string'
+        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+        : persisted.snapshot;
+    return { snapshot };
+  }
+
   async loadRunSnapshot(runId: string): Promise<WorkflowRunState | undefined> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-    return typeof persisted?.snapshot === 'string'
-      ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-      : persisted?.snapshot;
+    return workflowsStore ? (await this.loadPersistedRunSnapshot(workflowsStore, runId))?.snapshot : undefined;
   }
   createRun(workflow: DurableWorkflow, options: Parameters<DurableWorkflow['createRun']>[0]): Promise<DurableRun> {
     return workflow.createRun(options);
