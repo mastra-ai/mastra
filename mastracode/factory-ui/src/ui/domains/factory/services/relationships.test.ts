@@ -6,6 +6,7 @@ import {
   relationshipLabel,
   relationshipPath,
   workItemReference,
+  workItemShortReference,
 } from './relationships';
 import type { WorkItem } from './workItems';
 
@@ -161,13 +162,19 @@ describe('Factory work item relationships', () => {
   });
 
   it.each([
-    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42' },
-    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42' },
-    { source: 'gitlab-issue', key: 'group/sub/app#7', inside: 'Issue #7', outside: 'Issue group/sub/app#7' },
-    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7' },
+    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42', short: 'app#42' },
+    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42', short: 'app#42' },
+    {
+      source: 'gitlab-issue',
+      key: 'group/sub/app#7',
+      inside: 'Issue #7',
+      outside: 'Issue group/sub/app#7',
+      short: 'app#7',
+    },
+    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7', short: 'app!7' },
   ] as const)(
-    'drops the repository from a $source reference only inside that repository',
-    ({ source, key, inside, outside }) => {
+    'drops the repository from a $source reference only inside that repository, and its owner from the short key',
+    ({ source, key, inside, outside, short }) => {
       const item = workItem({
         id: `${source}-keyed`,
         source,
@@ -187,6 +194,8 @@ describe('Factory work item relationships', () => {
       expect(workItemReference(item, repository.toUpperCase())).toBe(inside);
       expect(workItemReference(item, 'acme/other')).toBe(outside);
       expect(workItemReference(item)).toBe(outside);
+      expect(workItemShortReference(item)).toBe(short);
+      expect(workItemShortReference(item, repository)).toBe(inside.split(' ')[1]);
     },
   );
 

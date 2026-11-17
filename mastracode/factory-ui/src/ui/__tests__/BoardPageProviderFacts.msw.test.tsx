@@ -43,8 +43,9 @@ describe('native card facts', () => {
 
 it.each([
   { layout: 'board', repositories: ['acme/app'], reference: 'Issue #73' },
-  { layout: 'list', repositories: ['acme/app'], reference: 'Issue #73' },
+  { layout: 'list', repositories: ['acme/app'], reference: '#73' },
   { layout: 'board', repositories: ['acme/app', 'acme/docs'], reference: 'Issue acme/app#73' },
+  { layout: 'list', repositories: ['acme/app', 'acme/docs'], reference: 'app#73' },
 ])(
   'shows source facts in $layout without provider lookups beyond routine intake browsing, as $reference among $repositories',
   async ({ layout, repositories, reference }) => {
