@@ -323,6 +323,32 @@ const [scope] = await store.getScopesByAddress(['team:acme:support'])
 const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
 
+#### `reembed()`
+
+```typescript oxfmt:false
+reembed(options?: { scope?: string; limit?: number; cursor?: string }): Promise<KnowledgeReembedResult>
+```
+
+Embeds pages and notes that already exist, without changing them. Use it for content written before you added `vector` and `embedder`, or after you switch embedders. Each call handles up to `limit` pages (default 50, at most 500) with their notes, and resolves to:
+
+- `embedded`: how many pages and notes this call embedded.
+- `failed`: pages and notes whose embed still failed after Knowledge's own retries, each with its `kind`, `id` and `error`. The rest of the batch carries on, and a later run tries them again.
+- `overChunkCap`: pages longer than the [chunk limit](/reference/knowledge/limits), with how many chunks they'd need. They're embedded up to the limit.
+- `rateLimited`: `true` when the embedder kept rate limiting, so the call stopped early. Wait before you resume from `nextCursor`, or the next call is rate limited too.
+- `nextCursor`: pass it as `cursor` to the next call. It's absent when everything has been handled.
+
+`scope` limits the run to one scope's pages and the notes on them, such as `org:acme`. Without it, the run covers every page, then the notes on scope pages, where each scope counts toward `limit` like a page. Embedding a page again overwrites its vectors, so you can stop a run and resume it from the last cursor, or rerun it. The cursor isn't a snapshot. Pages added or removed during a run can be missed or handled twice, and a page read before a concurrent edit can overwrite the vectors that edit wrote. Run `reembed()` again after concurrent writes finish. Throws without `vector` and `embedder`.
+
+```typescript
+let cursor: string | undefined
+do {
+  const result = await knowledge.reembed({ cursor })
+  for (const failure of result.failed) console.warn(failure)
+  if (result.rateLimited) await new Promise(resolve => setTimeout(resolve, 60_000))
+  cursor = result.nextCursor
+} while (cursor)
+```
+
 #### `reindexLinks()`
 
 ```typescript oxfmt:false
