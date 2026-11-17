@@ -307,6 +307,20 @@ export class FactorySkillSource implements SkillSource {
     return { file: file !== undefined, override };
   }
 
+  /** A created skill's folder: its SKILL.md, plus whatever an app skill left in a folder of the same name. */
+  async #createdSkillEntries(relativePath: string): Promise<SkillSourceEntry[]> {
+    const entries = new Map<string, SkillSourceEntry>();
+    for (const source of [this.#bundledSource, this.#localSource]) {
+      try {
+        for (const entry of (await source?.readdir(relativePath)) ?? []) entries.set(entry.name, entry);
+      } catch {
+        // Nothing under the name in this layer, or a file rather than a folder.
+      }
+    }
+    entries.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
+    return [...entries.values()];
+  }
+
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
@@ -358,13 +372,16 @@ export class FactorySkillSource implements SkillSource {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
       if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
+      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
+      if (created) {
+        if (created.file) throw skillSourceEnoent(skillPath);
+        return this.#createdSkillEntries(relative);
+      }
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
       ]);
       if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
-        const created = await this.#createdSkillAt(relative);
-        if (created && !created.file) return [{ name: 'SKILL.md', type: 'file' }];
         throw skillSourceEnoent(skillPath);
       }
       const [bundledEntries, localEntries, codeEntries, createdNames] = await Promise.all([
@@ -374,15 +391,14 @@ export class FactorySkillSource implements SkillSource {
         relative === '' ? this.#createdSkillNames() : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
-      // Created skills only fill names no layer serves.
-      for (const name of createdNames) merged.set(name, { name, type: 'directory' });
       for (const entry of bundledEntries) merged.set(entry.name, entry);
       // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
       for (const entry of codeEntries) merged.set(entry.name, entry);
-      // A created skill in a folder an app skill left behind still has its SKILL.md.
-      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
-      if (created && !created.file) merged.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
+      // Created skills only fill names no layer serves a skill under; a stray file of that name doesn't hide one.
+      for (const name of createdNames) {
+        if (merged.get(name)?.type !== 'directory') merged.set(name, { name, type: 'directory' });
+      }
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));

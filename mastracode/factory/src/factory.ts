@@ -717,7 +717,7 @@ export class MastraFactory {
    * project gets none. This lasts for the process, so run it at every startup. A Work or app
    * board's key keeps that board's code behaviour,
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
-   * event rules). The board is validated once, as the boards API does; a runner may name a skill a
+   * event rules). The board is validated as the boards API validates it; a runner may name a skill a
    * project created in Settings › Skills only when `projects` lists the projects, and each listed
    * project must have it, while a board for `'all'` projects may only run the app's skills. Each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a

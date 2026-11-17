@@ -123,6 +123,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     ]);
   });
 
+  it("fails a write with the storage error, not unknown_skill, when the project's skills can't be read", async () => {
+    const { writes, writer, scope, skillOverrides, storage } = await setup();
+    vi.spyOn(skillOverrides, 'list').mockRejectedValueOnce(new Error('connection reset'));
+    await expect(writes.create(scope, bugs, writer)).rejects.toThrow('connection reset');
+    expect(await storage.get(scope, 'bugs')).toBeNull();
+  });
+
   it("flags a created skill as missing only while the project's skills can't be read", async () => {
     const { writes, writer, scope, boards, skillOverrides } = await setup();
     const project = { orgId: scope.orgId, projectId: scope.factoryProjectId };

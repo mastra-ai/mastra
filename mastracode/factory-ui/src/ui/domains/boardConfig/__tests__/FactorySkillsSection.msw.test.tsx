@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse, FactorySkillInfo, FactorySkillsResponse } from '../../../../api/types';
 import { FactorySkillsSection } from '../components/FactorySkillsSection';
 
@@ -387,7 +387,7 @@ describe('FactorySkillsSection', () => {
     it('creates a skill for this Factory and lists it as custom', async () => {
       const { writes } = serve();
       const user = userEvent.setup();
-      renderSection();
+      const { client } = renderSection();
 
       await user.click(await screen.findByRole('button', { name: 'New skill' }));
       const dialog = await screen.findByRole('dialog', { name: 'New skill' });
@@ -409,12 +409,13 @@ describe('FactorySkillsSection', () => {
       const created = await screen.findByRole('button', { name: /^release-notes/ });
       expect(within(created).getByText('Custom')).toBeInTheDocument();
       expect(within(card('changelog-lint')).queryByText('Custom')).not.toBeInTheDocument();
+      await waitForMutationsIdle(client);
     });
 
     it('keeps an all-digit name a string in the SKILL.md it sends', async () => {
       const { writes } = serve();
       const user = userEvent.setup();
-      renderSection();
+      const { client } = renderSection();
 
       await user.click(await screen.findByRole('button', { name: 'New skill' }));
       const dialog = await screen.findByRole('dialog', { name: 'New skill' });
@@ -425,6 +426,7 @@ describe('FactorySkillsSection', () => {
       await waitFor(() => expect(writes).toHaveLength(1));
       expect(writes[0]).toMatchObject({ method: 'POST', name: '123' });
       expect(writes[0].content).toMatch(/^---\nname: "123"\n/);
+      await waitForMutationsIdle(client);
     });
 
     it('explains a name agents cannot use and keeps Create disabled', async () => {
@@ -445,7 +447,7 @@ describe('FactorySkillsSection', () => {
     it('shows why the server refused it and keeps the editor open', async () => {
       serve();
       const user = userEvent.setup();
-      renderSection();
+      const { client } = renderSection();
 
       await user.click(await screen.findByRole('button', { name: 'New skill' }));
       const dialog = await screen.findByRole('dialog', { name: 'New skill' });
@@ -457,6 +459,7 @@ describe('FactorySkillsSection', () => {
         'A skill named "changelog-lint" already exists. Edit it instead.',
       );
       expect(screen.getByRole('dialog', { name: 'New skill' })).toBeInTheDocument();
+      await waitForMutationsIdle(client);
     });
 
     it('offers no New skill to members who are not admins', async () => {
@@ -479,7 +482,7 @@ describe('FactorySkillsSection', () => {
     };
     const { writes } = serve({ catalog: [...skills, releaseNotes] });
     const user = userEvent.setup();
-    renderSection();
+    const { client } = renderSection();
 
     await user.click(await screen.findByRole('button', { name: 'Edit release-notes' }));
     const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
@@ -496,6 +499,7 @@ describe('FactorySkillsSection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(writes).toEqual([{ method: 'DELETE', name: 'release-notes' }]);
     await waitFor(() => expect(screen.queryByRole('button', { name: /^release-notes/ })).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
   });
 
   it('surfaces a load failure from the server', async () => {

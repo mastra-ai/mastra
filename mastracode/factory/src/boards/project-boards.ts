@@ -366,18 +366,20 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   /**
-   * The skills the project created, which its runners may name besides the app's. Empty when they can't be
-   * read, so a storage failure flags those runners instead of failing the boards.
+   * The skills the project created, which its runners may name besides the app's. Throws when they can't be
+   * read, so a board write fails with the storage error instead of refusing a skill the project has.
    */
   async projectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string>> {
-    return (await this.#readProjectSkillNames(scope)) ?? NO_PROJECT_SKILLS;
+    return this.#projectSkills ? this.#projectSkills.names(scope) : NO_PROJECT_SKILLS;
   }
 
-  /** Undefined when the names can't be read, so a load knows not to cache what it compiled without them. */
+  /**
+   * The names for a load, or undefined when they can't be read: the load still serves the boards, flags their
+   * created skills as missing, and doesn't cache what it compiled without them.
+   */
   async #readProjectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string> | undefined> {
-    if (!this.#projectSkills) return NO_PROJECT_SKILLS;
     try {
-      return await this.#projectSkills.names(scope);
+      return await this.projectSkillNames(scope);
     } catch (error) {
       this.#warnOnce(
         `project-skills:${scopeKey(scope)}`,

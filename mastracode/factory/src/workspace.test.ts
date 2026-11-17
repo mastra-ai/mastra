@@ -3966,6 +3966,29 @@ describe('FactorySkillSource layering', () => {
       expect(String(await source.readFile(path.join(skillDir, 'SKILL.md')))).toBe(content);
     });
 
+    it('serves a created skill whose name a stray file in the app skills folder uses', async () => {
+      const localRoot = await makeLocalRoot({});
+      await fs.writeFile(path.join(localRoot, 'release-notes'), 'not a skill');
+      const content = '---\nname: release-notes\ndescription: notes\n---\n\n# Ours\n';
+      const source = new FactorySkillSource(
+        repoFallback([]),
+        [repoRoot],
+        localRoot,
+        async () => true,
+        [],
+        async () => new Map([['release-notes', { content, updatedAt: new Date(), created: true }]]),
+      );
+      const skillDir = path.join(FACTORY_SKILLS_MOUNT, 'release-notes');
+
+      expect((await source.readdir(FACTORY_SKILLS_MOUNT)).find(entry => entry.name === 'release-notes')).toEqual({
+        name: 'release-notes',
+        type: 'directory',
+      });
+      expect(await source.readdir(skillDir)).toEqual([{ name: 'SKILL.md', type: 'file' }]);
+      expect((await source.stat(skillDir)).type).toBe('directory');
+      expect(String(await source.readFile(path.join(skillDir, 'SKILL.md')))).toBe(content);
+    });
+
     it('picks up app-local skills added after the source was created', async () => {
       const localRoot = await makeLocalRoot({});
       const source = new FactorySkillSource(repoFallback(['late-skill']), [repoRoot], localRoot);

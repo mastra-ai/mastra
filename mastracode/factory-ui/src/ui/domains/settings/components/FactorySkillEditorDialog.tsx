@@ -145,7 +145,7 @@ export function FactorySkillEditorDialog({ skill, factoryId, canEdit, onClose }:
           {confirmingDelete ? (
             <>
               <Txt as="span" variant="caption" tone="muted" className="mr-auto">
-                Delete {name}? Board phases that run it stop starting.
+                Delete {name}? Cards entering a phase that runs it won't start until the phase gets another skill.
               </Txt>
               <Button onClick={() => setConfirmingDelete(false)} disabled={pending}>
                 Keep
