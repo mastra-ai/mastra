@@ -590,4 +590,62 @@ describe('writeManagedApiKey', () => {
       `TURSO_DATABASE_URL=file:local.db\nMASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`,
     );
   });
+
+  it('writes the gateway URL next to the key so a staging key reaches the staging gateway', async () => {
+    const projectPath = await createFixture();
+    await fs.rm(path.join(projectPath, '.env'));
+    await adaptFixture({ projectPath, provider: 'mastra', versionTag: 'latest' });
+
+    await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
+    });
+
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      `MASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\nMASTRA_GATEWAY_URL=https://gateway-api.staging.mastra.ai\n`,
+    );
+  });
+
+  it.each([
+    ['an invalid variable name', { 'BAD-KEY': 'value' }],
+    ['a variable name with a line break', { 'OK\nEVIL': 'value' }],
+    ['a value with a line break', { MASTRA_GATEWAY_URL: 'https://gateway.example.test\nOTHER=1' }],
+    ['a value with a #', { MASTRA_GATEWAY_URL: 'https://gateway.example.test/#x' }],
+  ])('refuses to write .env when extraEnv has %s', async (_label, extraEnv) => {
+    const projectPath = await createFixture();
+    const envPath = path.join(projectPath, '.env');
+    const originalEnv = await fs.readFile(envPath, 'utf8');
+
+    const written = await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv,
+    });
+
+    expect(written).toBe(false);
+    expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
+  });
+
+  it('replaces a gateway URL already in .env instead of adding a second one', async () => {
+    const projectPath = await createFixture();
+    await fs.writeFile(
+      path.join(projectPath, '.env'),
+      'MASTRA_GATEWAY_URL=https://old.example\nMASTRA_GATEWAY_API_KEY=\n',
+      'utf8',
+    );
+
+    await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
+    });
+
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      `MASTRA_GATEWAY_URL=https://gateway-api.staging.mastra.ai\nMASTRA_GATEWAY_API_KEY=${TEST_API_KEY}\n`,
+    );
+  });
 });
