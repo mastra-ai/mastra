@@ -154,7 +154,7 @@ async function pageRefKeys(storage: KnowledgeStorage, page: KnowledgePage): Prom
 }
 
 /** The page and its live ordinary descendants, at most {@link MAX_KNOWLEDGE_MOVE_PAGES} + 1. */
-async function subtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<KnowledgePage[]> {
+export async function knowledgeSubtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<KnowledgePage[]> {
   const pages = [root];
   for (let index = 0; index < pages.length && pages.length <= MAX_KNOWLEDGE_MOVE_PAGES; index++) {
     let cursor: string | undefined;
@@ -192,17 +192,27 @@ export async function refreshKnowledgeLinksTo(
   options: { withDescendants?: boolean } = {},
 ): Promise<void> {
   const affected = options.withDescendants
-    ? (await Promise.all(pages.map(page => subtree(storage, page)))).flat()
+    ? (await Promise.all(pages.map(page => knowledgeSubtree(storage, page)))).flat()
     : pages;
   const refs = new Set<string>();
+  const targets = new Set(affected.map(page => page.id));
+  const names = new Set<string>();
   for (const page of affected) {
     if (page.deletedAt) continue;
     for (const key of await pageRefKeys(storage, page)) refs.add(key);
+    names.add(page.name);
+  }
+  // A page that now answers to a name can make a link by that name to another page ambiguous, or
+  // claim it from another scope. Those links are stored resolved, so find them by their target.
+  for (const name of names) {
+    for (const namesake of await storage.findPagesByName({ name, read: 'all', limit: LIST_PAGE })) {
+      targets.add(namesake.id);
+    }
   }
   const sources = (
     await storage.listPageBodyLinkSources({
       refs: [...refs],
-      toPageIds: affected.map(page => page.id),
+      toPageIds: [...targets],
     })
   ).sort();
   if (!sources.length) return;

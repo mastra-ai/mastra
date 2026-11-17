@@ -7,7 +7,7 @@ import type {
   KnowledgeProvenance,
   MoveKnowledgePageInput,
 } from '../storage/domains/knowledge/pages';
-import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
+import { knowledgeSubtree, refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 import { knowledgeEmbedFailedWarning } from './semantic';
@@ -266,7 +266,8 @@ export async function moveKnowledgePageAndRelink(
 ): Promise<KnowledgePage> {
   const moved = await storage.movePage(input);
   await updateKnowledgeLinks(warn, async () => {
-    await syncKnowledgePageBodyLinks(storage, moved);
+    // Every carried page may now sit in another scope, where its links by name resolve differently.
+    for (const page of await knowledgeSubtree(storage, moved)) await syncKnowledgePageBodyLinks(storage, page);
     await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
   });
   return moved;

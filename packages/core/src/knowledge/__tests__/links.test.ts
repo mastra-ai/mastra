@@ -98,6 +98,15 @@ describe('Knowledge page link index', () => {
     expect(await out(hub.id)).toEqual([]);
   });
 
+  it('unresolves a link by name once a second page takes that name', async () => {
+    const { write, out } = setup();
+    const target = await write('Target', 'The first.');
+    const hub = await write('Hub', 'See [[Target]].');
+    expect(await out(hub.id)).toEqual([target.id]);
+    await write('Target', 'The second.', { parent: 'Hub' });
+    expect(await out(hub.id)).toEqual([]);
+  });
+
   it('replaces outgoing links when the body is rewritten', async () => {
     const { write, edit, out } = setup();
     const a = await write('Alpha', 'a');

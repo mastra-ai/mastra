@@ -143,6 +143,34 @@ describe('Knowledge.movePage (host)', () => {
     expect(await out()).toEqual([part.id]);
   });
 
+  it('re-resolves name links held by every page the move carries to another scope', async () => {
+    const { knowledge, store } = setup();
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'target', name: 'Target' });
+    const there = (await knowledge.upsertPage({ scope: 'docs:acme', path: 'target', name: 'Target' })).page;
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'doc', name: 'Doc' });
+    const child = (
+      await knowledge.upsertPage({ scope: 'org:acme', path: 'doc/child', name: 'Child', body: 'See [[Target]].' })
+    ).page;
+    await knowledge.movePage({ scope: 'org:acme', path: 'doc', toScope: 'docs:acme' });
+    const out = (await (await store()).listPageLinks({ pageIds: [child.id], read: 'all', direction: 'out' })).map(
+      l => l.toPageId,
+    );
+    expect(out).toEqual([there.id]);
+  });
+
+  it('drops a name link the move makes ambiguous, even when it pointed at a page that stayed', async () => {
+    const { knowledge, store } = setup();
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'target', name: 'Target' });
+    const hub = (await knowledge.upsertPage({ scope: 'org:acme', path: 'hub', name: 'Hub', body: 'See [[Target]].' }))
+      .page;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'target', name: 'Target' });
+    const out = async () =>
+      (await (await store()).listPageLinks({ pageIds: [hub.id], read: 'all', direction: 'out' })).map(l => l.toPageId);
+    expect(await out()).toHaveLength(1);
+    await knowledge.movePage({ scope: 'docs:acme', path: 'target', toScope: 'org:acme', parent: 'hub' });
+    expect(await out()).toEqual([]);
+  });
+
   it('throws clear errors for a missing page, a missing parent, a declared page and its own subtree', async () => {
     const { knowledge } = setup();
     await knowledge.upsertPage({ scope: 'org:acme', path: 'a/b', name: 'B' });
