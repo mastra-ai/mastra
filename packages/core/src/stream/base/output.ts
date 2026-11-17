@@ -1193,17 +1193,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 files: self.#bufferedFiles.length,
                 toolCalls: self.#toolCalls.length,
               };
-              Object.assign(self.#bufferedByStep, {
-                sources: [],
-                files: [],
-                toolCalls: [],
-                toolResults: [],
-                dynamicToolCalls: [],
-                dynamicToolResults: [],
-                staticToolCalls: [],
-                staticToolResults: [],
-                content: [],
-              });
+              Object.assign(self.#bufferedByStep, { sources: [], files: [], toolCalls: [], toolResults: [] });
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
