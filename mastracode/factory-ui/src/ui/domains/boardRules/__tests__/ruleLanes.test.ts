@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { rule } from './fixtures/rulesServer';
-import { intakePosition, newItemRules, ordinal } from '../ruleLanes';
+import { arrivalFallback, intakePosition, newItemRules, ordinal } from '../ruleLanes';
 
 const order = [
   { boardKey: 'ship', name: 'Ship' },
@@ -12,11 +12,20 @@ const order = [
 describe('intakePosition', () => {
   it.each([
     [order, 'work', 'Checked after Ship, before Docs'],
-    [order, 'ship', 'Checked first, before Work'],
-    [order, 'docs', 'Checked last, after Work'],
+    [order, 'ship', 'Checked first (no board before it), before Work'],
+    [order, 'docs', 'Checked last, after Work (no board after it)'],
     [order.slice(0, 1), 'ship', 'The only board intake checks'],
     [order, 'release', 'Not in the intake order yet'],
   ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(intakePosition(boards, boardKey)).toBe(text));
+});
+
+describe('arrivalFallback', () => {
+  it.each([
+    [order, 'ship', 'Otherwise: checked by Work next, then the boards after it, then Not routed'],
+    [order, 'work', 'Otherwise: checked by Docs next, then Not routed'],
+    [order, 'docs', 'Otherwise: Not routed (no board after this one)'],
+    [undefined, 'work', 'Otherwise: checked by the next board, then Not routed'],
+  ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(arrivalFallback(boards, boardKey)).toBe(text));
 });
 
 describe('ordinal', () => {

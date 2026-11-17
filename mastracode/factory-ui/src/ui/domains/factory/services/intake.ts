@@ -34,20 +34,30 @@ export type IntakeConfig = Record<string, IntakeSelection> & {
  * edited. Custom integration keys pass through.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
-  return {
-    ...raw,
-    github: raw?.github ?? { enabled: false, sourceIds: null },
-    gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
-    linear: raw?.linear ?? { enabled: false, sourceIds: null },
-    jira: raw?.jira ?? { enabled: false, sourceIds: null },
-    incidentio: raw?.incidentio ?? { enabled: false, sourceIds: null },
+  const placeholder = { enabled: false, sourceIds: null };
+  const config: IntakeConfig = {
+    github: placeholder,
+    gitlab: placeholder,
+    linear: placeholder,
+    jira: placeholder,
+    incidentio: placeholder,
   };
+  for (const [integrationId, selection] of Object.entries(raw ?? {})) {
+    if (selection) config[integrationId] = withoutPausedSources(integrationId, selection);
+  }
+  return config;
+}
+
+/** Only Dependabot keeps an on/off switch; anywhere else a switched-off selection syncs nothing, so it shows nothing. */
+function withoutPausedSources(integrationId: string, selection: IntakeSelection): IntakeSelection {
+  return integrationId === 'dependabot' || selection.enabled ? selection : { ...selection, sourceIds: null };
 }
 
 /** Enable sync and pick `id`; returns the same object when nothing changes. */
 export function selectIntakeSource(selection: IntakeSelection, id: string): IntakeSelection {
-  if (selection.sourceIds === null) return { enabled: true, sourceIds: [id] };
-  if (!selection.sourceIds.includes(id)) return { enabled: true, sourceIds: [...selection.sourceIds, id] };
+  if (selection.sourceIds === null) return { ...selection, enabled: true, sourceIds: [id] };
+  if (!selection.sourceIds.includes(id))
+    return { ...selection, enabled: true, sourceIds: [...selection.sourceIds, id] };
   return selection.enabled ? selection : { ...selection, enabled: true };
 }
 

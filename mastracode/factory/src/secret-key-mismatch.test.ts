@@ -18,7 +18,7 @@ import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 
 const prepareMock = vi.fn(async (_config: Record<string, unknown>) => ({
-  base: { controller: { onSessionCreated: vi.fn() } },
+  base: { controller: { onSessionCreated: vi.fn(() => () => {}), onSessionDeleted: vi.fn(() => () => {}) } },
   mastraArgs: {},
   finalize: vi.fn(async () => {}),
 }));

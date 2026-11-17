@@ -119,6 +119,49 @@ describe('scenario: apply-default-model reaches a live run', () => {
     });
   });
 
+  // Factory unloads idle sessions, so most bound cards are not in memory when an admin applies the default.
+  it('a bound run whose session was unloaded adopts the project default when it loads again', async () => {
+    const storage = new InMemoryStore({ id: 'apply-default-model-unloaded' });
+    const { seed, project } = await seedProject('anthropic/claude-opus-4-6');
+    const controller = await buildController(storage, 'code');
+    const session = await controller.createSession({ id: 'unloaded', resourceId: 'resource-1', ownerId: 'user-1' });
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-5.2-codex');
+
+    await bindRun({
+      seed,
+      projectId: project.id,
+      sessionId: 'unloaded',
+      threadId: thread.id,
+      resourceId: 'resource-1',
+      externalId: 'github-issue:3',
+    });
+    expect(await controller.deleteSession({ sessionId: 'unloaded' })).toBe(true);
+
+    const app = mount({
+      auth: fakeRouteAuth(),
+      projects: seed.projects,
+      sourceControl: seed.sourceControl,
+      workItems: seed.workItems,
+      controller,
+    });
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+    expect(response.status).toBe(202);
+
+    await vi.waitFor(async () => {
+      const stored = await controller.queryThreadById({ threadId: thread.id });
+      expect(stored?.metadata?.currentModelId).toBe('anthropic/claude-opus-4-6');
+    });
+    const reloaded = await controller.createSession({
+      id: 'unloaded',
+      resourceId: 'resource-1',
+      ownerId: 'user-1',
+      threadId: thread.id,
+    });
+    expect(reloaded.model.get()).toBe('anthropic/claude-opus-4-6');
+  });
+
   it('updates the bound thread without changing a sibling thread', async () => {
     const storage = new InMemoryStore({ id: 'apply-default-model-sibling' });
     const { seed, project } = await seedProject('anthropic/claude-opus-4-6');

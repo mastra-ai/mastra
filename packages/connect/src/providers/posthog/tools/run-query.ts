@@ -17,7 +17,10 @@ export const runQueryInputSchema = z.object({
 export const runQueryOutputSchema = z.object({
   results: z.array(z.array(z.unknown())).describe('Result rows. Each row is an array of column values.'),
   columns: z.array(z.string()).nullish().describe('Column names for the result rows.'),
-  types: z.array(z.string()).nullish().describe('Column types for the result rows.'),
+  types: z
+    .array(z.tuple([z.string(), z.string()]))
+    .nullish()
+    .describe('Column types as [columnName, clickhouseType] pairs, one per column.'),
   hogql: z.string().nullish().describe('The HogQL that was executed after normalization.'),
   clickhouse: z.string().nullish().describe('The ClickHouse SQL the query was compiled to.'),
   hasMore: z.boolean().nullish().describe('Whether more rows are available beyond the returned set.'),
@@ -30,7 +33,7 @@ const ProviderResponseSchema = z
   .object({
     results: z.array(z.array(z.unknown())),
     columns: z.array(z.string()).nullish(),
-    types: z.array(z.string()).nullish(),
+    types: z.array(z.tuple([z.string(), z.string()])).nullish(),
     hogql: z.string().nullish(),
     clickhouse: z.string().nullish(),
     hasMore: z.boolean().nullish(),

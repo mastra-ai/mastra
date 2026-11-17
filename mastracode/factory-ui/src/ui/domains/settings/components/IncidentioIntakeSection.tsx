@@ -4,13 +4,17 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
 import type { IncidentioStatus } from '../../factory/services/incidentio';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
-import { connectionName, PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
+import {
+  AddPlatformAccountButton,
+  connectionName,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 // A deployment API key serves follow-ups without a Platform connection.
@@ -59,20 +63,13 @@ export function IncidentioIntakeSection({
         !directConfigured &&
         !unavailable &&
         (listed ? (
-          <PlatformConnectionActions provider="incident-io" connections={connections} />
+          <>
+            {connections.length > 0 && <AddPlatformAccountButton provider="incident-io" />}
+            <PlatformConnectionActions provider="incident-io" connections={connections} />
+          </>
         ) : (
           <PlatformConnectButton provider="incident-io" />
         ))
-      }
-      syncControl={
-        <IntakeSyncControl
-          label="Sync follow-ups"
-          accessibleLabel="Sync incident.io follow-ups"
-          description="Outstanding follow-ups feed your board. Incidents stay out of intake."
-          checked={config.incidentio.enabled}
-          disabled={!credentialActive}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
       }
       action={
         unavailable && (
@@ -90,7 +87,7 @@ export function IncidentioIntakeSection({
         )
       }
     >
-      {config.incidentio.enabled && (credentialActive || Boolean(config.incidentio.sourceIds?.length)) && (
+      {(credentialActive || Boolean(config.incidentio.sourceIds?.length)) && (
         <RoutedSourcePicker
           integrationId="incidentio"
           routingLabel="incident.io"
@@ -115,9 +112,7 @@ export function IncidentioIntakeSection({
                 : undefined
           }
           onRetry={credentialActive ? () => void sourcesQuery.refetch() : undefined}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
     </IntakeProviderCard>
