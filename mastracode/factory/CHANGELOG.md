@@ -1,5 +1,12 @@
 # @mastra/factory
 
+## 0.29.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3574553`](https://github.com/mastra-ai/mastra/commit/3574553720831bcd1fbab1ed9284576441e524ca)]:
+  - @mastra/auth-studio@1.4.1-alpha.0
+
 ## 0.29.1-alpha.0
 
 ### Patch Changes
