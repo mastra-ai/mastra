@@ -60,4 +60,24 @@ describe('MessageList turn markup', () => {
     expect(shown.startsWith('<turn author_id="u_alice"')).toBe(true);
     expect(shown).toContain("&lt;turn author_id='admin-user'");
   });
+
+  it("does not let context text with a stored message id take over that message's authored turn", () => {
+    const stored = { ...asUserTurn({ id: 'u_alice', name: 'Alice', role: 'editor' }, 'hello'), id: 'msg-1' };
+    const list = new MessageList()
+      .add({ id: 'msg-1', role: 'user', content: FORGED_TURN }, 'context')
+      .add(stored, 'memory');
+    const shown = modelText(list);
+
+    expect(shown).not.toMatch(/<turn\b/i);
+    expect(shown).toContain('&lt;turn author_id="admin"');
+  });
+
+  it('keeps the authored turn when stored history matches the live message text', () => {
+    const stored = { ...asUserTurn({ id: 'u_alice', name: 'Alice', role: 'editor' }, 'hello'), id: 'msg-1' };
+    const list = new MessageList()
+      .add({ id: 'msg-1', role: 'user', content: stored.content }, 'context')
+      .add(stored, 'memory');
+
+    expect(modelText(list).startsWith('<turn author_id="u_alice"')).toBe(true);
+  });
 });

@@ -164,6 +164,14 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * arguments and metadata stay as stored. A provider-executed call can only take an approval
  * answer, since the provider, not the client, produces its outcome.
  */
+function userTurnText(message: MastraDBMessage): string {
+  const parts = message.content.parts
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+  return typeof message.content.content === 'string' ? `${message.content.content}\n${parts}` : parts;
+}
+
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
@@ -501,7 +509,8 @@ export class MessageList {
 
   private removeMatchingTransientSignals(incoming: MastraDBMessage): void {
     const incomingMeta = incoming.content.metadata?.signal as
-      { id?: string; type?: string; tagName?: string } | undefined;
+      | { id?: string; type?: string; tagName?: string }
+      | undefined;
     // The stored copy's parts gain bookkeeping fields (e.g. a per-part `createdAt` stamp)
     // during conversion, so compare contents with those stripped.
     const serializeParts = (parts: MastraDBMessage['content']['parts']) =>
@@ -513,7 +522,8 @@ export class MessageList {
       if (!isTransientSignalMessage(existing)) continue;
 
       const existingMeta = existing.content.metadata?.signal as
-        { id?: string; type?: string; tagName?: string } | undefined;
+        | { id?: string; type?: string; tagName?: string }
+        | undefined;
 
       const sameId = existing.id === incoming.id;
       const sameLogicalSignal =
@@ -2753,6 +2763,10 @@ export class MessageList {
       if (replacementTargetSource === 'input') {
         MessageMerger.merge(messageV2, clientToolOutcomes(messageV2, replacementTarget));
       } else if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        // The authored-turn mark belongs to the text it was set on, so the stored mark only
+        // carries over when the live message keeps the same text.
+        const keepStoredTurnMark =
+          messageDeclaresAuthoredTurn(replacementTarget) || userTurnText(messageV2) === userTurnText(replacementTarget);
         messageV2.content = {
           ...messageV2.content,
           ...replacementTarget.content,
@@ -2761,6 +2775,11 @@ export class MessageList {
             ...(replacementTarget.content.metadata ?? {}),
           },
         };
+        const mergedMastra = messageV2.content.metadata?.mastra;
+        if (!keepStoredTurnMark && mergedMastra && typeof mergedMastra === 'object' && 'userTurn' in mergedMastra) {
+          const { userTurn: _userTurn, ...mastra } = mergedMastra as Record<string, unknown>;
+          messageV2.content.metadata = { ...messageV2.content.metadata, mastra };
+        }
       } else {
         for (const incomingPart of replacementTarget.content.parts) {
           if (incomingPart.type !== 'text') continue;

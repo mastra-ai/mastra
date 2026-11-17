@@ -1,5 +1,6 @@
 ---
 '@mastra/server': patch
+'@mastra/memory': patch
 '@mastra/deployer': patch
 '@mastra/deployer-cloud': patch
 '@mastra/deployer-cloudflare': patch

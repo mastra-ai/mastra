@@ -119,4 +119,27 @@ describe('MCP app sandbox', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
     restore();
   });
+
+  it('replaces the guest frame when the proxy receives new HTML', () => {
+    const script = /<script>([\s\S]*)<\/script>/.exec(sandboxProxyHtml(HOST))?.[1];
+    expect(script).toBeTruthy();
+    new Function(script ?? '')();
+    const send = (html: string) =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: HOST,
+          source: window,
+          data: { jsonrpc: '2.0', method: 'ui/notifications/sandbox-resource-ready', params: { html } },
+        }),
+      );
+
+    send('<p>first app</p>');
+    send('<p>second app</p>');
+
+    const frames = document.body.querySelectorAll('iframe');
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.getAttribute('srcdoc')).toContain('second app');
+    expect(frames[0]?.getAttribute('srcdoc')).not.toContain('first app');
+    frames.forEach(frame => frame.remove());
+  });
 });
