@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { createProjectSessionsReader } from './project-sessions.js';
+import { createProjectSessionsReader, createSessionOwnerProfileResolver } from './project-sessions.js';
 
 const ORG = 'org1';
 
@@ -24,5 +24,23 @@ describe('createProjectSessionsReader', () => {
 
     expect(await read(scope(first!))).toBe(firstBuilt);
     expect(await read(scope(second!))).toBe(secondBuilt);
+  });
+});
+
+describe('createSessionOwnerProfileResolver', () => {
+  it('asks the user provider once for owners several reads need at the same moment', async () => {
+    const asked: string[][] = [];
+    const resolve = createSessionOwnerProfileResolver({
+      getUser: async () => null,
+      getUsers: async userIds => {
+        asked.push(userIds);
+        return userIds.map(id => ({ id, name: `Person ${id}` }));
+      },
+    });
+
+    const answers = await Promise.all([resolve(['u1', 'u2']), resolve(['u1', 'u2']), resolve(['u2'])]);
+
+    expect(asked).toEqual([['u1', 'u2']]);
+    expect(answers.map(owners => owners.get('u2')?.name)).toEqual(['Person u2', 'Person u2', 'Person u2']);
   });
 });
