@@ -25,7 +25,7 @@ export const DEFAULT_SESSION_LIST_VIEW: SessionListView = {
   groupBy: DEFAULT_SESSION_GROUP_BY,
   hiddenGroups: {},
   groupOrder: {},
-  compact: true,
+  compact: false,
   revealChildSessions: false,
 };
 

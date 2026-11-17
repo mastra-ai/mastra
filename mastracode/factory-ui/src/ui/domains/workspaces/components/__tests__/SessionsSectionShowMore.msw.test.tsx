@@ -14,7 +14,7 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { presentSessionRow } from '../../services/sessionRows';
 import { SessionGroupList } from '../SessionGroupList';
 import { SessionsSection } from '../SessionsSection';
-import { groupSessionsByBoard, pickSessionProperty } from './fixtures/sessionProperties';
+import { pickSessionProperty } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -82,7 +82,6 @@ function appReads(): URL[] {
 describe('Sessions sidebar show more', () => {
   beforeEach(() => {
     localStorage.removeItem('mastracode.pinnedSessions');
-    groupSessionsByBoard();
   });
 
   it('caps a group at 5 sessions and reveals a small remainder on demand', async () => {
