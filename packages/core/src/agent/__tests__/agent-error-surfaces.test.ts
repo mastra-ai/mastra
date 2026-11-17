@@ -970,6 +970,27 @@ describe('agent error surfaces', () => {
       expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
     });
 
+    it('errors on stream when the step only reasoned and cited a source', async () => {
+      const agent = new Agent({
+        id: 'length-source-only',
+        name: 'Length Source Only',
+        model: createLengthModel([
+          ...reasoningOnly,
+          { type: 'source', sourceType: 'url', id: 's-1', url: 'https://example.com', title: 'Example' },
+        ]),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const errorChunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errorChunks.push(chunk);
+      }
+
+      expect(errorChunks).toHaveLength(1);
+      expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
+    });
+
     it('still returns truncated text without an error when the step produced text', async () => {
       const agent = new Agent({
         id: 'length-with-text',
