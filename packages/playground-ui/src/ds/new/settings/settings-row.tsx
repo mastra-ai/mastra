@@ -25,17 +25,21 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
 
 /** Label left, control right; stacked below `sm`. The card around the row gives it its spacing. */
 const rowClassName = 'min-w-0 gap-3';
-/** Side by side: label left, control pushed right. A control below its label fills the row instead. */
-const sideRowClassName = 'sm:justify-between sm:gap-6';
+/**
+ * Side by side: label left, control pushed right. The label stays at the top, so a control that grows (an error or
+ * preview line under a field) doesn't pull it down. A control below its label fills the row instead.
+ */
+const sideRowClassName = 'sm:items-start sm:justify-between sm:gap-6';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
 /** Beside its control, the label column is as tall as a label with a one-line description, so rows with and without one match. */
 const sideHeadingClassName = 'sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
 /**
  * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
- * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
+ * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width. It is as tall as the row,
+ * so a control shorter than the label column is centered against it.
  */
 const sideControlClassName =
-  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
+  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0 sm:self-stretch';
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;
@@ -149,12 +153,7 @@ export function SettingsFieldsetRow({
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn(
-        'flex flex-col',
-        rowClassName,
-        !controlBelow && ['sm:flex-row sm:items-center', sideRowClassName],
-        className,
-      )}
+      className={cn('flex flex-col', rowClassName, !controlBelow && ['sm:flex-row', sideRowClassName], className)}
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
