@@ -1,5 +1,35 @@
 # mastra
 
+## 1.40.0-alpha.6
+
+### Patch Changes
+
+- The Factory sidebar now groups sessions by board and shows a second line under each session by default, with when it last changed and its pull request. Turn on **Compact view** or set **Group** to **None** in the sidebar's properties menu to get one line per session or a single list back. Settings you already changed keep their values; the rest follow the new defaults. ([#30656](https://github.com/mastra-ai/mastra/pull/30656))
+
+- Factory **Settings** now shows theme and completion sound on **My account**, next to your profile and log out, instead of on a separate **Preferences** page. Settings opens on **My account**, and old Preferences links go there. ([#30658](https://github.com/mastra-ai/mastra/pull/30658))
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/deployer@1.84.0-alpha.6
+
+## 1.40.0-alpha.5
+
+### Patch Changes
+
+- The Factory **Settings › Tools** page shows how many tools sessions get from each Mastra Connect connection. Expand one to see its tools with their descriptions, which ones ask for approval, and which ones Factory leaves out. With a `tools` option, a connection the code doesn't use shows no tools, and the code's other tools are listed under **Other tools from code**. ([#30610](https://github.com/mastra-ai/mastra/pull/30610))
+
+- The Factory **Settings › Tools** page lists a project's Mastra Connect connections when the Factory sets its session tools in code, with a note that the `tools` option decides which of their tools sessions get. When Connect isn't set up, it names the missing Platform credentials or `MASTRA_PROJECT_ID` (#30579). ([#30607](https://github.com/mastra-ai/mastra/pull/30607))
+
+- Added `mastra api factory work-item session-repository <project-id> <work-item-id>`. It shows the repository a session on a Factory card starts in, or why the card has none. ([#30609](https://github.com/mastra-ai/mastra/pull/30609))
+
+- Fixed board cards showing a different session status than the sidebar. A card with a suggested run and a running session now shows it waits on you on the board too, and a card with one working and one starting session shows it working. ([#30624](https://github.com/mastra-ai/mastra/pull/30624))
+
+- Fixed the session status in Factory's sidebar and board. A person's own session now shows "Waiting on you" while its agent waits for their answer, instead of "Working". A session now shows "Working" while it runs on a thread opened after its first one, such as a new thread or a Slack conversation. A session shows "Initializing" only while a run waits on its first setup, so a session whose setup never finished, or that never ran, no longer stays stuck on "Initializing". ([#30627](https://github.com/mastra-ai/mastra/pull/30627))
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/deployer@1.84.0-alpha.5
+
 ## 1.40.0-alpha.4
 
 ### Minor Changes

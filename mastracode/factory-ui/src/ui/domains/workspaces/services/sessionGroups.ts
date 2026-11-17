@@ -12,7 +12,7 @@ import type { SessionListRow, SessionOwner } from './sessionRows';
 
 export type SessionGroupBy = (typeof SESSION_ROW_GROUP_BYS)[number];
 
-export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
+export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
 
 export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   board: 'Board',

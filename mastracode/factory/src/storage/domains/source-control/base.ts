@@ -14,8 +14,6 @@ const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
 
-const NO_SESSIONS: readonly SourceControlSession[] = Object.freeze([]);
-
 /**
  * The user already holds this branch in a session of the same factory on
  * another repository link, so the insert hit the factory-wide unique index.
@@ -923,6 +921,19 @@ export class SourceControlStorage extends FactoryStorageDomain {
     for (const scope of scopes.values()) this.projectSessions.announce(scope);
   }
 
+  async #stampOnce(
+    key: { id: string } | { session_id: string },
+    column: 'materialized_at' | 'first_message_at' | 'first_meaningful_exec_at',
+  ): Promise<void> {
+    const now = new Date();
+    // `IS NULL` in the filter keeps the first stamp across processes; a resume or a later message changes nothing.
+    if ((await this.ops.updateMany(SESSIONS, { ...key, [column]: null }, { [column]: now, updated_at: now })) === 0) {
+      return;
+    }
+    const row = await this.ops.findOne<SessionDbRow>(SESSIONS, key);
+    if (row) this.#announceSessions([row]);
+  }
+
   /** Record that a session's threads are on their memory resource, so later starts skip it. */
   async markResourcesMigrated(sessionId: string): Promise<void> {
     await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });
@@ -1189,7 +1200,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
         factory_project_id: factoryProjectId,
         integration_id: integrationId,
       });
-      if (connections.length === 0) return NO_SESSIONS;
       const linkIds = new Set<string>();
       for (const connection of connections) {
         for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
@@ -1846,39 +1856,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }));
           if (row) this.#announceSessions([row]);
         },
-        markMaterialized: async ({ id }) => {
-          // `materialized_at: null` in the filter compiles to `IS NULL`, making
-          // this a write-once update: session resumes (idle-reap, checkpoint
-          // restore, sandbox recreate) match zero rows and cannot overwrite the
-          // initial-materialize timestamp that `materialize_s` is derived from.
-          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id, materialized_at: null }, () => ({
-            materialized_at: new Date(),
-            updated_at: new Date(),
-          }));
-          if (row) this.#announceSessions([row]);
-        },
-        markFirstMessage: async ({ sessionId }) => {
-          // `first_message_at: null` in the filter compiles to `IS NULL`, making
-          // this an atomic one-shot: concurrent callers and later messages
-          // match zero rows. Sessions without a source-control row (chat-only
-          // channels) are a zero-row no-op too.
-          const row = await db().updateAtomic<SessionDbRow>(
-            SESSIONS,
-            { session_id: sessionId, first_message_at: null },
-            () => ({ first_message_at: new Date(), updated_at: new Date() }),
-          );
-          if (row) this.#announceSessions([row]);
-        },
-        markFirstMeaningfulExec: async ({ sessionId }) => {
-          // Same atomic one-shot shape as markFirstMessage: the NULL filter
-          // makes concurrent callers and later execs zero-row no-ops.
-          const row = await db().updateAtomic<SessionDbRow>(
-            SESSIONS,
-            { session_id: sessionId, first_meaningful_exec_at: null },
-            () => ({ first_meaningful_exec_at: new Date(), updated_at: new Date() }),
-          );
-          if (row) this.#announceSessions([row]);
-        },
+        markMaterialized: ({ id }) => this.#stampOnce({ id }, 'materialized_at'),
+        markFirstMessage: ({ sessionId }) => this.#stampOnce({ session_id: sessionId }, 'first_message_at'),
+        markFirstMeaningfulExec: ({ sessionId }) =>
+          this.#stampOnce({ session_id: sessionId }, 'first_meaningful_exec_at'),
         delete: async id => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
           if (!row) return;

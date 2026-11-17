@@ -16,7 +16,6 @@ import { createQueryClient } from '../../../../query-client';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
-import { environmentPayload, environmentRepository } from '../../settings/components/__tests__/fixtures/environment';
 import {
   ACTIVE_FACTORY_ID,
   factoryProjects,
@@ -116,19 +115,8 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
     ),
-    // Every linked repository is in the environment, in link order.
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/environment`, () =>
-      HttpResponse.json({
-        environment: environmentPayload({
-          repositories: activeFactoryRepositories(options).map((repository, index) =>
-            environmentRepository({
-              projectRepositoryId: repository.projectRepositoryId,
-              slug: repository.slug,
-              position: index + 1,
-            }),
-          ),
-        }),
-      }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/session-repository`, () =>
+      HttpResponse.json({ status: 'unlinked', hint: 'No repository in this search stub.' }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
@@ -319,7 +307,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   return state;
 }
 
-function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
+function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/account`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
   renderWithProviders(
@@ -390,7 +378,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await screen.findByRole('heading', { name: 'Preferences' });
+    await screen.findByRole('heading', { name: 'My account' });
     const settingsNavigation = await screen.findByRole('navigation', { name: 'Settings sections' });
     const focusedBeforeSearch = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
     act(() => focusedBeforeSearch.focus());
@@ -488,7 +476,7 @@ describe('Global search', () => {
       'Work',
       'Pull requests',
       'Rules',
-      'Preferences',
+      'My account',
       'Manage Factory',
       'Connections',
       'Repositories',
@@ -1036,7 +1024,7 @@ describe('Global search', () => {
 
   it('selects Settings with origin state and closes without creating a session', async () => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();
@@ -1079,7 +1067,7 @@ describe('Global search', () => {
     },
   ])('selects $title on the declared route and closes search', async ({ title, path, preservesOrigin }) => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();

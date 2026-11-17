@@ -640,7 +640,7 @@ Each session context a card uses (`triage`, `work`, `review`, or a custom board'
 - **Finishing.** Entering a terminal phase stops every sandbox the card holds. A Factory process that never opened a sandbox stops it by identity through the configured sandbox provider, so a card finished on any replica stops its sandboxes.
 - **Coming back.** Stopping keeps the session, its branch and its files. A card that comes back to a context (PR review → Triage) resumes the same sandbox: E2B resumes the paused VM, Docker restarts the container, and the local sandbox reuses its directory. Platform sandboxes are not stopped remotely; they idle out under the environment's policy and the next run reattaches.
 
-Stopping is best-effort: a committed move never fails because a sandbox did not stop, and a card moved again before the stop runs keeps its sandbox. Deleting a session still destroys its sandbox.
+Stopping is best-effort: a committed move never fails because a sandbox did not stop, and a card moved again before the stop runs keeps its sandbox. Deleting a session still destroys its sandbox. A session whose sandbox stops is also unloaded from server memory, see [Unloading idle sessions](#unloading-idle-sessions).
 
 #### The pull request loop on any board
 
@@ -744,6 +744,23 @@ The board shows how many automated runs are waiting, and opens a list of them, o
 - `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
 - `queuedCount` and `queued` — every run waiting for a slot, and up to 50 of them, waiting replies first, then automated runs, each oldest first, with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
 
+### Unloading idle sessions
+
+A loaded session holds its conversation, tool results, workspace and process output in server memory. Factory unloads a session from the process when it no longer needs it, so memory follows the sessions in use rather than every session the process has ever opened:
+
+- **Released.** When Factory stops a session's sandbox (a card leaves the context, or finishes) the session is unloaded too.
+- **Idle.** A session with no activity for 30 minutes is unloaded. Each process checks its own sessions once a minute.
+
+A session stays loaded while a run is in flight, while it waits on an approval or an `ask_user` / `submit_plan` answer, and while a browser tab follows its stream. An idle session also stays loaded while its sandbox runs a background process the agent started, such as a dev server, because the agent can only read or stop that process through the loaded session. A released session that is busy is unloaded once its work ends.
+
+Unloading keeps the thread, its messages, the session row and the sandbox. Unloading does not stop the sandbox; a released session's sandbox was already stopped by the release. The next message, run, wake or opened tab loads the session again on its thread and reattaches to the sandbox. Without `auth`, a deferred wake for an unloaded session waits until something else loads it, as it does after a restart. What lives only in memory is lost: session state not stored on the thread, auto-approvals granted in the session, and events from before the reload.
+
+Change the timeout and check interval with `idleSessionUnload`. `idleMs: 0` turns off the idle check but still unloads released sessions, and `false` keeps every session loaded until it is deleted:
+
+```ts
+const factory = new MastraFactory({ storage, idleSessionUnload: { idleMs: 60 * 60_000, sweepIntervalMs: 5 * 60_000 } });
+```
+
 ### The `factory-work-item` signal
 
 Every session bound to a card gets a `<factory-work-item>` state signal describing it, re-rendered only when the card, its sources or the binding change. It carries the card's key, title, URL, board and phase, next phases, labels, author and whether they're trusted, and the session's branch; its sources (issue and each pull or merge request, with state, head commit, a head branch that passes Factory's branch-name check, and the tool to fetch details); and Factory's state: whether the plan was approved, self-review rounds used, the last self-review and PR review verdicts with the commits they covered and findings, and the card's open change request. The session that reviews a pull request also gets the procedure to follow, the checkout steps and the pull request head to review. The source description is included, inside an `<untrusted-source-description>` block when an outside author wrote it. Comment threads are not included.
@@ -755,6 +772,7 @@ A phase's `runner.skill` runs a skill when a card enters the phase. Use a built-
 1. **Code skills** — passed to `new MastraFactory({ skills })`, created with `createSkill()` from `@mastra/core/skills`.
 2. **Folder skills** — `src/mastra/factory-skills/<name>/SKILL.md` in your app. `mastra build` copies the folder into the build output. The older `src/mastra/public/factory-skills` still works; when both exist, `src/mastra/factory-skills` wins. Factory also looks in `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
 3. **Built-in skills** shipped with `@mastra/factory`.
+4. **Factory skills** — skills an organization admin created for one Factory in Settings › Skills (see [Create skills for one Factory](#create-skills-for-one-factory)). They only fill names the first three don't use.
 
 A skill with the same name as a built-in skill replaces it, for the built-in boards too. A code skill replaces the whole folder skill of the same name, including its supporting files. Repository skills in a project's own repository never replace these.
 
@@ -816,6 +834,20 @@ An edit applies to that Factory only and takes precedence over the code, folder 
 An edited skill shows an **Edited** badge. When the original changes after the edit, for example in a new release of `@mastra/factory` or of your app, the editor says so; the edit stays in place until you choose **Revert to original**. If the original skill is removed from your app, its edit stops applying.
 
 Saves and reverts are recorded in the audit log as `factory.skill.updated` and `factory.skill.reverted`. The API is `PUT` and `DELETE` on `/web/factory/projects/:id/skills/:name`, and `GET /web/factory/skills?projectId=<id>` lists a Factory's skills with its edits.
+
+### Create skills for one Factory
+
+Organization admins can also add a skill to one Factory without changing the app. Open Settings › Skills, choose **New skill**, enter a name, a description and instructions, and choose **Create**. The name uses 1–64 lowercase letters, digits and single hyphens, such as `release-notes`, and can't be one an app or built-in skill already uses; edit that skill instead.
+
+A created skill belongs to that Factory only and shows a **Custom** badge. Its sessions can load it from their next start, like any other skill, and a phase of its boards can run it as `runner.skill`. `factory.upsertBoard()` accepts a board that runs a created skill only when `projects` lists the projects, and each of them must have created it; a board for `'all'` projects may only run the app's skills. Choose **Edit** to change it, and **Delete** to remove it; a phase that runs a deleted skill shows it as missing, and cards entering that phase fail to start until you pick another skill. A repository skill with the same name is hidden in that Factory's sessions, as it is for app skills.
+
+If your app later ships a skill under the same name, the app's skill takes over the name and the Factory's text becomes an edit of it: it keeps applying, the editor notes that the original changed, and **Revert to original** switches to the app's skill.
+
+Creating and deleting are recorded in the audit log as `factory.skill.created` and `factory.skill.deleted`; changes to a created skill as `factory.skill.updated`. The API is `POST /web/factory/projects/:id/skills` with `{ "name", "content" }`, where `content` is the full `SKILL.md` whose frontmatter `name` matches; `PUT` and `DELETE` on `/web/factory/projects/:id/skills/:name` update and delete it. `GET /web/factory/skills?projectId=<id>` lists created skills with `origin: "project"`. From the CLI:
+
+```bash
+mastra api factory skill create <project-id> '{"name":"release-notes","content":"---\nname: release-notes\ndescription: Write release notes for a merged change\n---\n\n# Release notes\n"}'
+```
 
 ### Execute a custom board
 
@@ -1376,31 +1408,35 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions doing work for someone else, either bound to a work item's run or started as a side session, only get `factory_message_origin`, so they can report back and answer messages.
 
-| Tool                            | Input                                                                                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50)                |
-| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                                   |
-| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                                      |
-| `factory_list_audit_events`     | Optional `actor` (`me`, a user id or `agent:<threadId>`), `includeAgentRuns`, `namespace`, `actions`, `workItem`, `since`, `until`, `cursor`, `limit` (max 50) |
-| `factory_create_work_item`      | `title`, `description`, optional `repository` (`owner/name`, one this Factory links)                                                                           |
-| `factory_update_work_item`      | `workItem` plus any of `title`, `description`, `repository`, `parentWorkItem` (or `null` to detach)                                                            |
-| `factory_subscribe_work_item`   | `workItem`                                                                                                                                                     |
-| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                                     |
-| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                                            |
-| `factory_retry_decision`        | `decisionId`                                                                                                                                                   |
-| `factory_dismiss_decision`      | `decisionId`                                                                                                                                                   |
-| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                                |
-| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`; for a work-item role, `workItem` and `role`                                              |
-| `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                                  |
-| `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                                         |
-| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                                      |
-| `factory_message_origin`        | `message`, optional `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                                   |
+| Tool                            | Input                                                                                                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory_list_work_items`       | Optional `query` (title text, `#number`, or an issue or pull request reference), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` |
+| `factory_inspect_work_item`     | `workItem` (id, `#number`, or an issue or pull request reference)                                                                                               |
+| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                                       |
+| `factory_list_audit_events`     | Optional `actor` (`me`, a user id or `agent:<threadId>`), `includeAgentRuns`, `namespace`, `actions`, `workItem`, `since`, `until`, `cursor`, `limit` (max 50)  |
+| `factory_create_work_item`      | `title`, `description`, optional `repository` (`owner/name`, one this Factory links)                                                                            |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `description`, `repository`, `parentWorkItem` (or `null` to detach)                                                             |
+| `factory_subscribe_work_item`   | `workItem`                                                                                                                                                      |
+| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                                      |
+| `factory_transition_work_item`  | `workItem`, `stage`, optional `rerun`                                                                                                                           |
+| `factory_retry_decision`        | `decisionId`                                                                                                                                                    |
+| `factory_dismiss_decision`      | `decisionId`                                                                                                                                                    |
+| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                                 |
+| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`                                                                                            |
+| `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                                   |
+| `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                                          |
+| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                                       |
+| `factory_message_origin`        | `message`, optional `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                                    |
 
 Read tools and `factory_message_origin` are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. The one exception is `factory_signal_session`: on those turns it can still message the side sessions this session started and the active sessions of work items it follows, so the session can answer the sessions it is waiting on. None of them asks for approval: they are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
 
 `factory_switch_session_model` changes the model of a side, work item or review session you own in the same Factory, without recreating it. It refuses a model this server can't run. A running session switches right away; a stopped one uses the model on its next run.
 
 `factory_create_work_item` files the card as the caller where the project's [intake routes](#intake-routes) send it, or in the Work board's first phase when no route matches (a project without Work: its first board's), stores the description that its runs start from, and subscribes the session. Name the `repository` when you know it. A run on a card that names none starts in the environment's first repository, determines from the card which repository it belongs to, and records it on the card with its first push or change request. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the description and the parent item. It can't pre-approve plans: a plan waits for a person unless the board's phase auto-approves it. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. A session that moves a card follows it from then on, so it hears from the run the move starts. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+
+Every tool that takes `workItem` accepts the card's id, its `#number`, or the issue or pull request it tracks: its link (`https://github.com/acme/app/pull/12`, including links to a pull request's files or a comment), `owner/repo#12`, `group/project!7` for a GitLab merge request, or a tracker key such as `ENG-42`. A reference finds the issue's or pull request's own card first, then the card it is attached to, such as a pull request on its issue's card. A bare `#number` can belong to several repositories and prefers an issue's card, so with several repositories the link is the safe choice. A reference that matches more than one card is refused with the candidates' ids. `factory_list_work_items` takes the same references as its `query`.
+
+`factory_transition_work_item` sends the requests the board's own buttons send, through the same rules: a move to another stage, or, with `rerun: true` and the stage the card is already in, a rerun of that stage, as **Start** does on the board. Asked for the card's own stage without `rerun`, it changes nothing and says so, including whether the stage's run is waiting for approval, so "move it to review" on a card that was already reviewed doesn't start another review. On a turn a person started, the run either one starts counts as approved by that person, so a run the board was holding for approval no longer waits, and a card that already has a run in flight or queued is refused as busy, as on the board. A rerun needs a person in the turn. Its result has the card's `url`, so a chat can link the card it moved. Approving a held run with `factory_resolve_proposal` starts it as the person. Retrying a failed one with `factory_retry_decision` keeps the run's original approver and needs no person in the turn. Either one makes the session follow the run's card in the same way, and their results carry the card's `url`. Following is what lets the run's report reach the session, which can then pass the outcome on in its chat. `factory_inspect_work_item` lists the card's stage, whether it can run again, and the stages its board lets it move to next, with the keys the tool takes. When someone asks for a card's own stage work without naming a session, such as a review of a pull request that has a card, the agent moves or reruns the card, so the review is recorded on the card and posted on the pull request. A side session is for work the person asks to run in one, and for work no stage does, such as pushing fixes to a pull request or taking it over.
 
 #### Messaging between sessions
 
@@ -1412,12 +1448,11 @@ How a message is delivered depends on its priority. `urgent` always delivers, ev
 
 #### Sub-sessions
 
-`factory_start_session` starts another session for the caller and sends `prompt` as its first message. It has two modes:
+`factory_start_session` starts a side session for the caller and sends `prompt` as its first message: a standalone session with no work item, for work the person asks to run in a side session, or work no card stage does, such as an investigation or pushing fixes to an existing pull request. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility. It runs on the model of the session that started it, or on `model` when one is passed. That model has to be one the session's credentials can run; an unknown or unrunnable model is refused before anything is created. When the parent has no model set, the side session keeps the Factory's default worker model.
 
-- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility. It runs on the model of the session that started it, or on `model` when one is passed. That model has to be one the session's credentials can run; an unknown or unrunnable model is refused before anything is created. When the parent has no model set, the side session keeps the Factory's default worker model.
-- **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead. An item that names no repository among several starts in the environment's first repository, and the run determines from the card which one to work in. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
+The tool doesn't start a card's roles. A card's work starts the way the board starts it, with `factory_transition_work_item`, so the board's rules (which stage the card is in, whether it is busy) decide it, and the card's session belongs to whoever the board's runs belong to.
 
-A side session belongs to the caller and runs with the caller's credentials. A work-item role belongs to the caller only in a Factory on the `user` model scope. Where card work runs on the organization's keys (`factory` and `hybrid`), the role's session belongs to the Factory itself, as every phase session there does, whoever started or moved the card: the person is recorded as the one who started it, and their session follows the card so it hears when that run waits on someone and can approve or decline from there. Without an organization model key the start is refused with a message saying to add one. A work-item role keeps the Factory's default worker model. The first message runs with only the session's owner as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
+A side session belongs to the caller and runs with the caller's credentials. The first message runs with only the session's owner as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
 
 #### Reports
 

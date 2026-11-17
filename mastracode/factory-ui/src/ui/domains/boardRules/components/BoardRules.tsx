@@ -13,7 +13,7 @@ import { useBoardRulesQuery, useIntakeRouteWrites } from '../../../../hooks/useI
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { phaseOptions, reorderWithin } from '../ruleTargets';
-import { intakePosition, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
+import { arrivalFallback, intakePosition, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
 import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
@@ -166,6 +166,7 @@ function BoardLanes({
   };
 
   const position = order.data ? intakePosition(order.data.boards, board.id) : undefined;
+  const arrivalFooter = arrivalFallback(order.data?.boards, board.id);
 
   return (
     <div className="flex flex-col gap-8">
@@ -190,7 +191,7 @@ function BoardLanes({
                 note={
                   opened ? (
                     <Txt as="p" variant="caption" tone="muted">
-                      No card yet:{' '}
+                      Creates new work items:{' '}
                       {position && (
                         <>
                           <Link to={boardIntakePath(factoryId, board.id, INTAKE_ORDER_ANCHOR)} className="underline">
@@ -203,7 +204,7 @@ function BoardLanes({
                     </Txt>
                   ) : undefined
                 }
-                footer={opened ? 'Otherwise: checked by the next board, then Not routed' : undefined}
+                footer={opened ? arrivalFooter : undefined}
                 onEdit={(rule, focus: RuleFocus) => open({ rule, step: focus })}
                 onAdd={() => open({ event, step: 'conditions' })}
                 onMove={(from, to) => move(event, from, to)}
@@ -225,6 +226,7 @@ function BoardLanes({
         <RuleBuilderDialog
           // A reloaded rule has a new revision, so the dialog starts over from it.
           key={editing.rule ? `${editing.rule.id}:${editing.rule.revision}` : `new-${editing.event}`}
+          factoryId={factoryId}
           board={board}
           boards={boards}
           initial={editing.rule}

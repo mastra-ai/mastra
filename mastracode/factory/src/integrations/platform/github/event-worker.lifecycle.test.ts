@@ -41,7 +41,8 @@ const harness = vi.hoisted(() => {
     })),
     getSession: vi.fn<() => Promise<typeof session | undefined>>(async () => session),
     createSession: vi.fn(async (_input: { requestContext: { get(key: string): unknown } }) => session),
-    onSessionCreated: vi.fn(),
+    onSessionCreated: vi.fn(() => () => {}),
+    onSessionDeleted: vi.fn(() => () => {}),
     // Mastra's constructor probes each controller for channels wiring.
     getChannels: vi.fn(() => undefined),
   };
@@ -177,6 +178,9 @@ describe('Platform GitHub event worker factory lifecycle', () => {
       storage,
       pubsub,
       integrations: [github],
+      // The idle-session sweep is Factory background work stopped by `shutdown()`, not a
+      // Mastra worker; keep its timer out of this worker's timer count.
+      idleSessionUnload: false,
     });
 
     try {
