@@ -583,4 +583,26 @@ describe('ConnectClient token redaction', () => {
       expect(error.detail).toBe('Rejected Bearer [REDACTED]');
     }
   });
+
+  it('redacts an echoed access token that straddles the detail length limit', async () => {
+    // The token starts just before the 2,000-character cut, so truncating
+    // first would keep its first part.
+    const detail = `${'x'.repeat(1990)}${TOKEN} trailing`;
+    const client = makeClient(
+      vi.fn<typeof fetch>(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ detail }), {
+            status: 502,
+            headers: { 'content-type': 'application/problem+json' },
+          }),
+        ),
+      ),
+    );
+
+    const error = (await client.listConnections().catch((e: unknown) => e)) as MastraConnectError;
+
+    expect(error).toBeInstanceOf(MastraConnectError);
+    expect(error.detail?.startsWith(`${'x'.repeat(1990)}[REDACTED]`)).toBe(true);
+    expect(`${error.message} ${error.detail}`).not.toContain(TOKEN.slice(0, 6));
+  });
 });

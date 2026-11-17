@@ -9,7 +9,7 @@ packages:
 
 `EventsClient` reads a Mastra platform project's topics from the events service as a stream. Its main use is the `connect` topic, which carries the webhooks your project's connections receive, such as a new Linear issue or a GitHub pull request. Use it to react to provider changes as they happen instead of polling.
 
-The client reconnects on its own and resumes from the last event it delivered. Give it a cursor store and it saves each event you finish handling, so a restarted process resumes where it stopped.
+The client reconnects on its own and resumes from the last event it delivered. Give it a cursor store and it saves each event you finish handling. A restarted process then resumes where it stopped.
 
 ## Usage example
 
@@ -181,7 +181,7 @@ Subscribes to the `connect` topic and returns an `EventSubscription<ConnectEvent
     name: 'unverified',
     type: 'boolean',
     description:
-      "True when the platform couldn't verify the provider's signature. Don't act on such a payload; at most, re-fetch the resource from the provider.",
+      "True when the platform couldn't verify the provider's signature. Don't act on such a payload; at most, re-fetch the resource from the provider. `false` only means the platform didn't flag the delivery. It isn't proof that the signature was checked.",
   },
 ]}
 />

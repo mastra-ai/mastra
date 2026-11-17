@@ -156,12 +156,12 @@ export async function extractProblemDetail(
   secret?: string,
 ): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
   const problem = await readProblemDetail(response);
+  if (problem.detail === undefined) return problem;
   // A server that echoes the request's bearer token must not leak it into
-  // error messages and logs.
-  if (secret && problem.detail?.includes(secret)) {
-    return { ...problem, detail: problem.detail.split(secret).join('[REDACTED]') };
-  }
-  return problem;
+  // error messages and logs. Redact before truncating, so a token cut in two
+  // by the length limit can't leak its first part.
+  const detail = secret ? problem.detail.split(secret).join('[REDACTED]') : problem.detail;
+  return { ...problem, detail: truncate(detail) };
 }
 
 async function readProblemDetail(
@@ -188,32 +188,32 @@ async function readProblemDetail(
       for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
         if (typeof value === 'string' && value) {
-          return { detail: truncate(value), code, type, isProblemJson };
+          return { detail: value, code, type, isProblemJson };
         }
         // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
         if (field === 'error' && value && typeof value === 'object') {
           const message = value.message;
           if (typeof message === 'string' && message) {
-            return { detail: truncate(message), code, type, isProblemJson };
+            return { detail: message, code, type, isProblemJson };
           }
         }
       }
       // Jira: `{ errorMessages: ["..."], errors: {} }`.
       if (Array.isArray(data.errorMessages)) {
         const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
-        if (typeof message === 'string') return { detail: truncate(message), code, type, isProblemJson };
+        if (typeof message === 'string') return { detail: message, code, type, isProblemJson };
       }
       if (Array.isArray(data.errors)) {
         const message = extractFirstArrayMessage(data.errors);
-        if (message) return { detail: truncate(message), code, type, isProblemJson };
+        if (message) return { detail: message, code, type, isProblemJson };
       } else if (data.errors && typeof data.errors === 'object') {
         // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
         const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
-        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, type, isProblemJson };
+        if (entry) return { detail: `${entry[0]}: ${entry[1]}`, code, type, isProblemJson };
       }
       // Graph sometimes returns an empty message (e.g. a 401 `UnknownError`);
       // its code is then the only diagnostic it offers.
-      if (nestedCode) return { detail: truncate(nestedCode), code, type, isProblemJson };
+      if (nestedCode) return { detail: nestedCode, code, type, isProblemJson };
       return { code, type, isProblemJson };
     }
   } catch {

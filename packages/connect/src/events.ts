@@ -131,6 +131,8 @@ export interface ConnectEvent {
   /**
    * True when the platform could not verify the provider's signature. Never
    * act on such a payload; at most use it as a trigger to re-fetch state.
+   * False only means the platform didn't flag the delivery; it isn't proof
+   * the signature was checked.
    */
   unverified: boolean;
 }

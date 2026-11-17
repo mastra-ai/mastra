@@ -184,7 +184,7 @@ for await (const event of subscription) {
 }
 ```
 
-The cursor store saves each event once you've handled it, so a restart resumes after the last one. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
+The cursor store saves each event once you've handled it. After a restart, the client resumes after the last one. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
 
 ## Security model
 
