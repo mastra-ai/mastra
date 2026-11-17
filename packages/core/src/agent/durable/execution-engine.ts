@@ -798,6 +798,19 @@ export class DurableExecutionEngine {
     return { snapshot, workflowInput };
   }
 
+  async loadSuspendedRequestContextValue(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    agentId: string,
+    key: string,
+  ): Promise<unknown> {
+    const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
+    if (!persisted) return undefined;
+    const workflowInput = persisted.snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== agentId) return undefined;
+    return workflowInput.requestContextEntries?.[key];
+  }
+
   async loadPersistedRunSnapshot(workflowsStore: WorkflowsStorage, runId: string) {
     const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
     if (!persisted) return undefined;

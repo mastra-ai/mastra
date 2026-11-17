@@ -895,16 +895,7 @@ export class DurableAgent<
       });
     }
 
-    const persisted = await workflowsStore.getWorkflowRunById({
-      runId,
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-    });
-    if (!persisted) return undefined;
-    const snapshot: WorkflowRunState =
-      typeof persisted.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted.snapshot;
-    const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-    if (workflowInput?.__workflowKind !== 'durable-agent' || workflowInput.agentId !== this.id) return undefined;
-    return workflowInput.requestContextEntries?.[key];
+    return this.executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this.id, key);
   }
 
   // ===========================================================================
@@ -1108,11 +1099,9 @@ export class DurableAgent<
   async #loadRecalledMessages(runId: string, snapshot?: WorkflowRunState, requestContext?: RequestContext) {
     if (!snapshot) {
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-      snapshot =
-        typeof persisted?.snapshot === 'string'
-          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-          : persisted?.snapshot;
+      snapshot = workflowsStore
+        ? (await this.executionEngine.loadPersistedRunSnapshot(workflowsStore, runId))?.snapshot
+        : undefined;
     }
     if (!snapshot) return;
     await loadMessageListStateForResume({
@@ -3266,7 +3255,7 @@ export class DurableAgent<
       });
     }
     if (outcome?.status === 'failed' && outcome.error) throw outcome.error;
-    const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    const persisted = await this.executionEngine.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
       throw new MastraError({
         id: 'AGENT_RESUME_RUN_FINISHED',
@@ -3276,9 +3265,7 @@ export class DurableAgent<
         details: { agentName: this.name, runId },
       });
     }
-    return typeof persisted.snapshot === 'string'
-      ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-      : persisted.snapshot;
+    return persisted.snapshot;
   }
 
   async #resumeRun(
@@ -3298,10 +3285,9 @@ export class DurableAgent<
       // workflow snapshot. Keep warm resumes on the existing path to avoid
       // racing an active registry entry with a second preparation pass.
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const persisted = await workflowsStore?.getWorkflowRunById({
-        runId,
-        workflowName: DurableStepIds.AGENTIC_LOOP,
-      });
+      const persisted = workflowsStore
+        ? await this.executionEngine.loadPersistedRunSnapshot(workflowsStore, runId)
+        : undefined;
       if (!persisted) {
         throw new MastraError({
           id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
@@ -3312,10 +3298,7 @@ export class DurableAgent<
         });
       }
 
-      let snapshot =
-        typeof persisted.snapshot === 'string'
-          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-          : persisted.snapshot;
+      let snapshot = persisted.snapshot;
       const readWorkflowInput = (snapshot: WorkflowRunState, allowRunning = false) => {
         if (snapshot?.status !== 'suspended' && !(allowRunning && snapshot?.status === 'running')) {
           throw new MastraError({

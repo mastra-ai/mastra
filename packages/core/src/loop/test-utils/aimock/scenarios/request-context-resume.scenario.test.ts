@@ -17,8 +17,8 @@ import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
 import { RequestContext } from '../../../../request-context';
 import { InMemoryStore } from '../../../../storage';
-import { createTool } from '../../../../tools';
 import type { ChunkType } from '../../../../stream/types';
+import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 const threadId = 'tenant-thread';
@@ -109,6 +109,29 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
       expect(requests).toHaveLength(2);
       expect(requests[1]!.body!.messages.at(-1)).toMatchObject({ role: 'tool', content: JSON.stringify({ ok: true }) });
     });
+
+    // Inngest forwards this lookup to plain Agent, which reads requestContext rather than
+    // the durable snapshot's context.input.requestContextEntries (also fails before extraction).
+    const itReadsSuspendedContext = engine === 'inngest' ? it.fails : it;
+    itReadsSuspendedContext(
+      'exposes the saved caller context for approval routing before applying new context',
+      async () => {
+        const seen: unknown[] = [];
+        const shared = await createSharedAgent(getMock(), { engine, tools: { whoami: whoamiTool(seen) } });
+        const run = await suspendOnApproval(shared, 'whoami', { requestContext: contextWith('who', 'first') });
+        try {
+          expect(await shared.agent.__getSuspendedRunRequestContextValue({ runId: run.runId, key: 'who' })).toBe(
+            'first',
+          );
+          expect(
+            await shared.agent.__getSuspendedRunRequestContextValue({ runId: run.runId, key: 'missing-context-key' }),
+          ).toBeUndefined();
+        } finally {
+          await drainText(await shared.agent.approveToolCall({ ...run, requestContext: contextWith('who', 'second') }));
+        }
+        expect(seen).toEqual(['second']);
+      },
+    );
 
     it('is the replacement an input processor put in place of the configured tool', async () => {
       const seen: unknown[] = [];
