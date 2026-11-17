@@ -1,7 +1,7 @@
 import { SettingsContainer, SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { ReactNode } from 'react';
-import type { IntakeConfig } from '../../factory/services/intake';
+import type { IntakeConfig, IntakeSelection } from '../../factory/services/intake';
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
@@ -14,6 +14,16 @@ export function toggleSourceId(ids: string[] | null, id: string): string[] | nul
   return next.length ? next : null;
 }
 
+/** A provider syncs exactly the sources picked; `enabled` follows so older servers agree. */
+export function withSourceIds(selection: IntakeSelection, sourceIds: string[] | null): IntakeSelection {
+  const picked = sourceIds?.length ? sourceIds : null;
+  return { ...selection, sourceIds: picked, enabled: picked !== null };
+}
+
+export function toggleSource(selection: IntakeSelection, id: string): IntakeSelection {
+  return withSourceIds(selection, toggleSourceId(selection.sourceIds, id));
+}
+
 export function IntakeProviderCard({
   name,
   icon,
@@ -22,7 +32,6 @@ export function IntakeProviderCard({
   description,
   action,
   connection,
-  syncControl,
   children,
 }: {
   name: string;
@@ -32,11 +41,9 @@ export function IntakeProviderCard({
   description?: string;
   action?: ReactNode;
   connection?: ReactNode;
-  syncControl?: ReactNode;
   children?: ReactNode;
 }) {
-  const shownSync = listed ? syncControl : undefined;
-  const hasActions = Boolean(shownSync || action || connection);
+  const hasActions = Boolean(action || connection);
   const hasDetails = Boolean(account || description);
   const summary = (
     <SettingsItem
@@ -44,9 +51,7 @@ export function IntakeProviderCard({
       title={name}
       description={hasDetails ? <IntakeProviderDetails account={account} description={description} /> : undefined}
     >
-      {hasActions ? (
-        <IntakeProviderActions syncControl={shownSync} action={action} connection={connection} />
-      ) : undefined}
+      {hasActions ? <IntakeProviderActions action={action} connection={connection} /> : undefined}
     </SettingsItem>
   );
   if (!listed) return summary;
@@ -68,18 +73,9 @@ function IntakeProviderDetails({ account, description }: { account?: string; des
   );
 }
 
-function IntakeProviderActions({
-  syncControl,
-  action,
-  connection,
-}: {
-  syncControl?: ReactNode;
-  action?: ReactNode;
-  connection?: ReactNode;
-}) {
+function IntakeProviderActions({ action, connection }: { action?: ReactNode; connection?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-      {syncControl}
       {action}
       {connection}
     </div>

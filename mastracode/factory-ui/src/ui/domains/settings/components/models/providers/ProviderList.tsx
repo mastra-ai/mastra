@@ -3,6 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
+import { useCustomProvidersQuery } from '../../../../../../hooks/use-custom-providers';
 import { useCancelProviderOAuth, useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { MastraGatewayCreditsNotice } from '../../../../workspaces/components/MastraGatewayCreditsNotice';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
@@ -19,6 +20,8 @@ import type { CredentialScope } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
+import { CustomProviderDialog } from './CustomProviderDialog';
+import { CustomProviderRow } from './CustomProviderRow';
 import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
 
 const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
@@ -28,6 +31,9 @@ const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
   tone: 'error',
   description: 'Could not renew this sign-in. Sign in again to keep using it.',
 };
+
+/** The custom endpoint dialog: adding one, or editing the one with this id. */
+type CustomProviderDialogState = { mode: 'add' } | { mode: 'edit'; id: string };
 
 interface ActiveOAuthSession {
   provider: string;
@@ -53,15 +59,27 @@ function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): 
 
 export function ProviderList({ credentialScope }: { credentialScope: CredentialScope }) {
   const providersQuery = useProvidersQuery();
+  const customProvidersQuery = useCustomProvidersQuery();
   const { authEnabled, scope, requestScope, readOnly, actionsDisabled, memberReason } =
     useCredentialAccess(credentialScope);
   const cancelOAuthMutation = useCancelProviderOAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
+  const [customProviderDialog, setCustomProviderDialog] = useState<CustomProviderDialogState>();
 
-  const providers = providersQuery.data ?? [];
+  // Custom endpoints have their own rows and their own form, so the built-in
+  // list and its key actions never see them.
+  const providers = (providersQuery.data ?? []).filter(provider => !provider.custom);
   const connections = connectedProviders(providers, scope);
+  const customProviders = (customProvidersQuery.data ?? []).filter(provider => provider.scope === scope);
+  const editedProvider =
+    customProviderDialog?.mode === 'edit'
+      ? customProviders.find(provider => provider.id === customProviderDialog.id)
+      : undefined;
+  // An endpoint removed while its dialog is open closes the dialog.
+  const customProviderDialogOpen = customProviderDialog?.mode === 'add' || editedProvider !== undefined;
+  const error = providersQuery.error ?? customProvidersQuery.error;
 
   const openOAuth = (provider: string, session: OAuthStartResponse) => {
     setAddOpen(false);
@@ -73,13 +91,18 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
     setKeyDialogProvider(provider);
   };
 
+  const openCustomProviderDialog = () => {
+    setAddOpen(false);
+    setCustomProviderDialog({ mode: 'add' });
+  };
+
   const closeOAuth = () => {
     const flow = activeOAuth;
     setActiveOAuth(undefined);
     if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
   };
 
-  if (providersQuery.isPending) return <ProviderRowsSkeleton />;
+  if (providersQuery.isPending || customProvidersQuery.isPending) return <ProviderRowsSkeleton />;
 
   return (
     <div className="flex flex-col gap-2">
@@ -94,6 +117,14 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             onOAuthStarted={openOAuth}
           />
         ))}
+        {customProviders.map(provider => (
+          <CustomProviderRow
+            key={provider.id}
+            provider={provider}
+            disabled={actionsDisabled}
+            onEdit={() => setCustomProviderDialog({ mode: 'edit', id: provider.id })}
+          />
+        ))}
       </ProviderRows>
       {connections.some(connection => connection.provider.connectWithMastraAccount) && <MastraGatewayCreditsNotice />}
       {memberReason && (
@@ -106,9 +137,9 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           {ORG_SCOPE_AUDIENCE}
         </Txt>
       )}
-      {providersQuery.error && (
+      {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-          {providersQuery.error.message}
+          {error.message}
         </Txt>
       )}
 
@@ -119,6 +150,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
         requestScope={requestScope}
         onOAuthStarted={openOAuth}
         onAddKey={openKeyDialog}
+        onAddCustomProvider={openCustomProviderDialog}
         onClose={() => setAddOpen(false)}
       />
       {keyDialogProvider && (
@@ -127,6 +159,13 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           authEnabled={authEnabled}
           fixedScope={requestScope}
           onClose={() => setKeyDialogProvider(undefined)}
+        />
+      )}
+      {customProviderDialogOpen && (
+        <CustomProviderDialog
+          provider={editedProvider}
+          scope={scope}
+          onClose={() => setCustomProviderDialog(undefined)}
         />
       )}
       {activeOAuth && (

@@ -1,7 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { Fragment } from 'react';
+import { Link, useParams } from 'react-router';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -9,14 +11,13 @@ import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { boardIntakePath } from '../../boardConfig/boardConfigPaths';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
-import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
-import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
 
@@ -28,7 +29,6 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
-// Untitled: until every status loads, the sources can't be sorted into connected, unavailable or available.
 function IntakeSkeleton() {
   return (
     <SettingsContainer>
@@ -38,6 +38,7 @@ function IntakeSkeleton() {
 }
 
 export function IntakeSection() {
+  const { factoryId } = useParams<{ factoryId: string }>();
   const configQuery = useIntakeConfigQuery();
   useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
@@ -161,59 +162,35 @@ export function IntakeSection() {
         ]
       : []),
   ];
-  const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
-  const connectedSources = sourcesListed('connected');
-  const unavailableSources = sourcesListed('unavailable');
-  const availableSources = sourcesListed('available');
-  const anotherAccountRows = [
-    gitlab.data?.mode === 'platform' && gitlab.data.connections?.length ? (
-      <AddPlatformAccountRow key="gitlab" provider="gitlab" />
-    ) : null,
-    linear.data?.mode === 'platform' && linear.data.workspaces?.some(workspace => workspace.connected) ? (
-      <AddLinearWorkspaceRow key="linear" />
-    ) : null,
-    jira.data?.connections?.length ? <AddPlatformAccountRow key="jira" provider="jira" /> : null,
-    !incidentioDirect && incidentioConnections.data?.length ? (
-      <AddPlatformAccountRow key="incident-io" provider="incident-io" />
-    ) : null,
-    vantaConnections.data?.length ? <AddPlatformAccountRow key="vanta" provider="vanta" /> : null,
-  ].filter(row => row !== null);
 
   return (
-    <>
-      {connectedSources.length > 0 && (
-        <SettingsSubsection
-          scope="org"
-          title="Connected sources"
-          description="Choose which services bring work into your organization's boards."
-        >
-          {/* Each source is its own card: its summary row, then its sources and routing. */}
-          <div className="flex flex-col gap-3">
-            {connectedSources.map(source => (
-              <Fragment key={source.id}>{source.content}</Fragment>
-            ))}
-          </div>
-        </SettingsSubsection>
+    <SettingsSubsection
+      scope="org"
+      title="Sources"
+      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
+    >
+      <div className="flex flex-col gap-3">
+        {sources.flatMap(source =>
+          source.listing === undefined
+            ? []
+            : [
+                source.listing === 'available' ? (
+                  <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
+                ) : (
+                  <Fragment key={source.id}>{source.content}</Fragment>
+                ),
+              ],
+        )}
+      </div>
+      {factoryId && (
+        <Txt as="p" variant="caption" tone="muted">
+          Which board takes each item is set in each board's Rules, in the{' '}
+          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
+            intake order
+          </Link>
+          .
+        </Txt>
       )}
-      {unavailableSources.length > 0 && (
-        <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-3">
-            {unavailableSources.map(source => (
-              <Fragment key={source.id}>{source.content}</Fragment>
-            ))}
-          </div>
-        </SettingsSubsection>
-      )}
-      {(availableSources.length > 0 || anotherAccountRows.length > 0) && (
-        <SettingsSubsection title="Add a source">
-          <SettingsContainer>
-            {availableSources.map(source => (
-              <Fragment key={source.id}>{source.content}</Fragment>
-            ))}
-            {anotherAccountRows}
-          </SettingsContainer>
-        </SettingsSubsection>
-      )}
-    </>
+    </SettingsSubsection>
   );
 }

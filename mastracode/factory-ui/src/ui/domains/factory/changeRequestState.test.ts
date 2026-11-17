@@ -1,7 +1,7 @@
+import type { CardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { describe, expect, it } from 'vitest';
 
 import { changeRequestStatus } from './changeRequestState';
-import type { CardChangeRequest } from './changeRequestState';
 import type { PullRequestSubscription } from './services/githubSubscriptions';
 
 const URL_42 = 'https://github.com/acme/app/pull/42';
@@ -11,8 +11,8 @@ function request(overrides: Partial<CardChangeRequest> = {}): CardChangeRequest 
     url: URL_42,
     provider: 'github',
     number: 42,
-    state: 'open',
-    metadata: {},
+    status: 'open',
+    draft: false,
     syncedAt: Date.parse('2026-07-20T10:00:00.000Z'),
     ...overrides,
   };
@@ -23,20 +23,13 @@ function subscription(status: PullRequestSubscription['status'], updatedAt?: str
 }
 
 describe('changeRequestStatus', () => {
-  it('reads the source alone when no subscription matches', () => {
-    expect(changeRequestStatus(request())).toBe('open');
-    expect(changeRequestStatus(request({ metadata: { draft: true } }))).toBe('draft');
-    expect(changeRequestStatus(request({ provider: 'gitlab', state: 'opened' }))).toBe('open');
-    expect(changeRequestStatus(request({ state: 'closed' }))).toBe('closed');
-  });
-
   it('leaves an unknown state unknown, never guessing open or from the board stage', () => {
-    expect(changeRequestStatus(request({ state: undefined, syncedAt: undefined }))).toBeUndefined();
+    expect(changeRequestStatus(request({ status: undefined, syncedAt: undefined }))).toBeUndefined();
   });
 
   it('takes the subscription when the source never said', () => {
     expect(
-      changeRequestStatus(request({ state: undefined, syncedAt: undefined }), [
+      changeRequestStatus(request({ status: undefined, syncedAt: undefined }), [
         subscription('open', '2026-07-19T10:00:00.000Z'),
       ]),
     ).toBe('open');
@@ -55,21 +48,23 @@ describe('changeRequestStatus', () => {
   });
 
   it('treats a merge as final, whichever side heard of it', () => {
-    expect(changeRequestStatus(request({ state: 'merged' }), [subscription('open', '2026-07-21T10:00:00.000Z')])).toBe(
+    expect(changeRequestStatus(request({ status: 'merged' }), [subscription('open', '2026-07-21T10:00:00.000Z')])).toBe(
       'merged',
     );
     expect(changeRequestStatus(request(), [subscription('merged', '2026-07-19T10:00:00.000Z')])).toBe('merged');
   });
 
   it('keeps a known close when subscribing again reopens the subscription', () => {
-    expect(changeRequestStatus(request({ state: 'closed' }), [subscription('open', '2026-07-21T10:00:00.000Z')])).toBe(
+    expect(changeRequestStatus(request({ status: 'closed' }), [subscription('open', '2026-07-21T10:00:00.000Z')])).toBe(
       'closed',
     );
   });
 
   it('keeps a draft through an open subscription', () => {
     expect(
-      changeRequestStatus(request({ metadata: { draft: true } }), [subscription('open', '2026-07-21T10:00:00.000Z')]),
+      changeRequestStatus(request({ status: 'draft', draft: true }), [
+        subscription('open', '2026-07-21T10:00:00.000Z'),
+      ]),
     ).toBe('draft');
   });
 
@@ -88,6 +83,6 @@ describe('changeRequestStatus', () => {
       url: 'https://github.com/acme/docs/pull/42',
     };
     expect(changeRequestStatus(request({ url: undefined }), [otherRepository])).toBe('open');
-    expect(changeRequestStatus(request({ url: undefined, state: undefined }), [otherRepository])).toBeUndefined();
+    expect(changeRequestStatus(request({ url: undefined, status: undefined }), [otherRepository])).toBeUndefined();
   });
 });

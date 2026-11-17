@@ -110,7 +110,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   const description = login.description ? (
     <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
-      <IconLock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <IconLock className="mt-0.5 size-icon-md shrink-0 text-muted-foreground" />
       <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;

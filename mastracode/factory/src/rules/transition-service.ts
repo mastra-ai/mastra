@@ -69,6 +69,12 @@ export interface FactoryTransitionRequest {
    * included. The phase's `autoStart` and the dispatcher's approval check decide whether its run starts.
    */
   eventRoute?: { routeId: string };
+  /**
+   * Internal, with `eventRoute` only: the installed board the route moves the card to, at `stage`.
+   * `board` stays the card's current board. The target board's next phases don't restrict the
+   * move; its phase, card shape and policy checks still apply, and its phase's runner starts.
+   */
+  toBoard?: string;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -456,8 +462,8 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    const board = boards.get(request.board);
-    if (!board) {
+    const fromBoard = boards.get(request.board);
+    if (!fromBoard) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -465,8 +471,26 @@ export class FactoryTransitionService {
         `Board "${request.board}" is not installed.`,
       );
     }
+    if (request.toBoard !== undefined && !request.eventRoute) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Only a card-move rule can move a card to another board.',
+      );
+    }
+    const targetBoard = request.toBoard ?? request.board;
+    const board = targetBoard === request.board ? fromBoard : boards.get(targetBoard);
+    if (!board) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        `Board "${targetBoard}" is not installed.`,
+      );
+    }
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
-    if (!fromStage || !Object.prototype.hasOwnProperty.call(board.phases, fromStage)) {
+    if (!fromStage || !Object.prototype.hasOwnProperty.call(fromBoard.phases, fromStage)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -491,6 +515,14 @@ export class FactoryTransitionService {
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
       (!request.eventRoute && !board.allowsTransition(fromStage, request.stage))
     ) {
+      if (board !== fromBoard) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `The ${board.name} board has no phase ${request.stage}.`,
+        );
+      }
       const nextStages = [...new Set((board.transitions[fromStage] ?? []).map(transition => transition.to))];
       const nextStagesReason =
         nextStages.length > 0
@@ -542,7 +574,7 @@ export class FactoryTransitionService {
         acceptedAt: item.acceptedAt,
         metadata: item.metadata,
       },
-      board: request.board,
+      board: board.id,
       itemRevision: item.revision,
       source,
       fromStage,
@@ -560,7 +592,7 @@ export class FactoryTransitionService {
           // A phase with an exit tool holds the card until the tool succeeds (for submit_plan, with
           // an approved plan; autoApprove only decides whether it approves itself). Then the agent,
           // or the board's own rule for the tool, moves the card. A person can move it any time.
-          const fromPhase = board.phases[fromStage];
+          const fromPhase = fromBoard.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
@@ -605,7 +637,7 @@ export class FactoryTransitionService {
           });
           const validated = validateFactoryRuleDecisions(run ? [run] : [], contextBase.causalChain.length).filter(
             decision => {
-              assertFactoryDecisionTarget(decision, boards, itemBoard);
+              assertFactoryDecisionTarget(decision, boards, board.id);
               return !(startsRun(decision) && runAlreadyUnderway(request, decision));
             },
           );
@@ -700,6 +732,9 @@ export class FactoryTransitionService {
       workItemId: request.workItemId,
       expectedRevision: request.expectedRevision,
       destinationStage: request.stage,
+      ...(request.toBoard !== undefined && request.toBoard !== request.board
+        ? { destinationBoard: request.toBoard }
+        : {}),
       actorId: actorId(request.actor),
       ingress: { identity: request.ingress.identity, transitionId },
       causalChain: [...(request.causalChain ?? [])],
@@ -733,8 +768,9 @@ export class FactoryTransitionService {
         });
     }
     // Only an installed board's declaration releases resources; an unknown board or phase never does.
-    const board = result.status === 'accepted' ? boards?.get(request.board) : undefined;
+    const board = result.status === 'accepted' ? boards?.get(request.toBoard ?? request.board) : undefined;
     if (board && result.status === 'accepted') {
+      const crossesBoards = request.toBoard !== undefined && request.toBoard !== request.board;
       const hooks = {
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
@@ -746,10 +782,12 @@ export class FactoryTransitionService {
         const onTerminalStage = this.#onTerminalStage;
         if (onTerminalStage) await this.#bounded(() => onTerminalStage({ ...hooks, stage: result.stage }));
       } else if (fromStage !== undefined && this.#onContextLeft) {
-        const context = board.roleForPhase(fromStage);
+        const context = boards?.get(request.board)?.roleForPhase(fromStage);
         const toContext = board.roleForPhase(result.stage);
         const onContextLeft = this.#onContextLeft;
-        if (context !== undefined && context !== toContext) {
+        // Leaving the board leaves its context even under the same role name; the hook keeps a
+        // session the card's new phase still holds.
+        if (context !== undefined && (crossesBoards || context !== toContext)) {
           await this.#bounded(() => onContextLeft({ ...hooks, context, toContext }));
         }
       }

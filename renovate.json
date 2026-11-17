@@ -94,6 +94,13 @@
       "dependencyDashboardApproval": false
     },
     {
+      "description": "Store tests pin mongo to 7.x: 8.x and 9.x refuse to start on the CI runners' Linux kernel (SERVER-121912).",
+      "matchDatasources": ["docker"],
+      "matchFileNames": ["stores/mongodb/docker-compose.yaml"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
+    },
+    {
       "groupName": "AI provider SDKs",
       "commitMessageTopic": "AI provider SDKs",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
@@ -427,6 +434,12 @@
       "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
       "matchPackageNames": ["@opencode-ai/plugin"],
       "enabled": false
+    },
+    {
+      "description": "Keep the mongo Docker image used by stores/mongodb tests on 7.x. MongoDB 8.x and 9.0.8 refuse to start on Linux kernel 6.19.0 through 7.0.13 (SERVER-121912), which the CI runners run, so every MongoDB store job fails before any test. Remove once MongoDB ships a release that starts on those kernels.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
     },
     {
       "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",

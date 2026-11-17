@@ -194,9 +194,9 @@ export function PropertyFilterCreator({
                 className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
-                <IconArrowLeft className="size-4" />
+                <IconArrowLeft className="size-icon-md" />
               </button>
-              <IconFilter1 className="size-4 shrink-0 text-muted-foreground" />
+              <IconFilter1 className="size-icon-md shrink-0 text-muted-foreground" />
               <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}

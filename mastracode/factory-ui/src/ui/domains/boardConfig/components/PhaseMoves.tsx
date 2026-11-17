@@ -80,13 +80,13 @@ export function PhaseMoves({
             <Name>{other.name}</Name>
             <span className="text-muted-foreground grid size-3.5 shrink-0 place-items-center">
               {locked ? (
-                <IconLock className="size-3.5" aria-hidden />
+                <IconLock className="size-icon-sm" aria-hidden />
               ) : allowed ? (
-                <IconCheckmark2Medium className="size-3.5" aria-hidden />
+                <IconCheckmark2Medium className="size-icon-sm" aria-hidden />
               ) : (
                 !disabled && (
                   <IconPlusMedium
-                    className="invisible size-3.5 group-hover/move:visible group-focus-visible/move:visible"
+                    className="size-icon-sm invisible group-hover/move:visible group-focus-visible/move:visible"
                     aria-hidden
                   />
                 )
