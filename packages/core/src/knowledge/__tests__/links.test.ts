@@ -220,9 +220,9 @@ describe('Knowledge page link index', () => {
     }
     warnings.length = 0;
     await knowledge.upsertPage({ scope: 'org:acme', path: 'new', name: 'Target' });
-    expect(warnings.some(w => w.includes('More than 99 pages are named "Target"') && w.includes('reindexLinks()'))).toBe(
-      true,
-    );
+    expect(
+      warnings.some(w => w.includes('More than 99 pages are named "Target"') && w.includes('reindexLinks()')),
+    ).toBe(true);
 
     await knowledge.reindexLinks();
     expect(await out(hub.id)).toEqual([]);
