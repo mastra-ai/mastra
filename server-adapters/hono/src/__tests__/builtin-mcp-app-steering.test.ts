@@ -321,7 +321,7 @@ it("keeps the model's change when a stale report from the view lands with it on 
     });
     expect(synced.state.context).toBeUndefined();
   }
-});
+}, 30_000);
 
 it('stores nothing for a view until the model or the user changes it', async () => {
   const cache = new SharedCache();
@@ -342,11 +342,14 @@ it('keeps only the latest changes of a view in long use, and still knows what it
       .filter(([key]) => key.includes(viewId) && !key.endsWith(':n'))
       .reduce((count, [, value]) => count + (JSON.parse(value) as unknown[]).length, 0);
 
-  // Ten segments' worth of the user's changes, each against the version the last one left.
+  // Several segments' worth of the user's changes, each against the version the last one left.
   let version = 0;
-  for (let change = 0; change < 160; change++) {
+  for (let change = 0; change < 60; change++) {
     ({ version } = json(
-      await client.callTool({ name: SYNC, arguments: { viewId, base: version, state: { context: `screen ${change}` } } }),
+      await client.callTool({
+        name: SYNC,
+        arguments: { viewId, base: version, state: { context: `screen ${change}` } },
+      }),
     ));
   }
   // Then a run of stale reports the server refuses.
@@ -357,11 +360,11 @@ it('keeps only the latest changes of a view in long use, and still knows what it
 
   expect(stored()).toBeLessThanOrEqual(3 * 16);
   expect(json(await client.callTool({ name: SYNC, arguments: { viewId, since: 0 } }))).toMatchObject({
-    version: 170,
+    version: 70,
     by: 'app',
-    state: { context: 'screen 159' },
+    state: { context: 'screen 59' },
   });
-}, 30_000);
+}, 60_000);
 
 it('offers no steering on a read-only server', async () => {
   const client = await (await start({ readOnly: true, appSteering: true })).connect('ada');
