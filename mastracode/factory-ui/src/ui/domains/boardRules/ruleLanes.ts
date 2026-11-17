@@ -207,14 +207,14 @@ export function skipsOutsidersOn(rule: IntakeRouteInfo, event: RuleEvent): boole
  * conditions hides everything below it: on an arrival lane the same rules also move the issue cards a pull request
  * links to or was opened from, so a rule testing only the kind hides just the rules that need that kind too. A rule
  * whose old outsider gate holds (`skipsOutsidersOn`) lets outside authors' pull requests fall through, so it hides
- * nothing on those lanes.
+ * nothing on those lanes — unless the rule below skips them too, and nothing falls through to it either.
  */
 export function shadowedBy(lane: readonly IntakeRouteInfo[], event: RuleEvent, index: number): number {
   const rule = lane[index];
   if (!rule) return -1;
   const kinds = requiredKinds(rule);
   return lane.slice(0, index).findIndex(taker => {
-    if (skipsOutsidersOn(taker, event)) return false;
+    if (skipsOutsidersOn(taker, event) && !skipsOutsidersOn(rule, event)) return false;
     if (catchAllIndex([taker], event) !== 0) return false;
     if (taker.when === null) return true;
     const needs = kindsTakenWhole(taker);

@@ -1290,6 +1290,40 @@ describe('intake routes moving existing cards on status events', () => {
       expect(started).not.toContain('proposed');
     });
 
+    // An outside author's push may move even the pull request's own card where a rule says, but
+    // the run the auto-starting destination queues is code execution on that author's say-so: it
+    // parks for a person, the bar auto-review already holds. A trusted author's push starts it.
+    it.each([
+      ['parks the run', "an outside author's", false],
+      ['starts the run', "a trusted author's", true],
+    ] as const)(
+      "%s when %s push moves the pull request's own card into an auto-starting phase",
+      async (_what, _whose, trusted) => {
+        const { boards, scope, route, deliver, deliverEvent, runs } = await setup();
+        await boards.create(scope, shipBoard, 'admin');
+        await route({
+          name: 'Pushed pull requests ship',
+          on: ['pull_request.synchronized'],
+          target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+        });
+        const card = (await deliver({
+          sourceKey: 'github-pr:17',
+          source: 'github-pr',
+          title: 'PR 17',
+          metadata: { authorTrusted: trusted, state: 'open' },
+        }))!;
+
+        const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: trusted }))
+          .card!;
+
+        expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+        const started = await runs(card.id);
+        expect(started).toHaveLength(1);
+        if (trusted) expect(started).not.toContain('proposed');
+        else expect(started).toEqual(['proposed']);
+      },
+    );
+
     it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {
       const { boards, scope, route, deliver, deliverEvent, putAt, runs, workItems, otherWorker } = await setup();
       // Ship's run waits for a person's approval: a worker parks it as a proposal.

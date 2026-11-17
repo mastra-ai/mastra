@@ -11,7 +11,6 @@ import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
-  cardRuleFacts,
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
@@ -36,7 +35,7 @@ import {
   resolveIntake,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
-  untrustedLinkedPullRequestEvent,
+  untrustedPullRequestEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -2709,8 +2708,9 @@ export class FactoryDecisionDispatcher {
       eventRoute: {
         routeId: route.routeId,
         // The rule owns the move; a run the destination queues on an outside author's pull
-        // request event still waits for a person.
-        ...(untrustedLinkedPullRequestEvent(event, cardRuleFacts(item)) ? { untrustedPullRequest: true } : {}),
+        // request event still waits for a person, whether the card is the pull request's own
+        // or an issue's it links to.
+        ...(untrustedPullRequestEvent(event) ? { untrustedPullRequest: true } : {}),
       },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.

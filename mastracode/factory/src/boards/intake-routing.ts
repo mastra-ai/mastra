@@ -473,18 +473,24 @@ export function routesHandleEvent(
 }
 
 /**
- * Whether the event is an outside author's pull request event on an issue's card: a pull request
- * event that doesn't settle the pull request, whose author the event doesn't vouch for, on a card
- * that isn't the pull request's own. Merging and closing settle the pull request either way, so
- * they never count.
+ * Whether the event is a pull request event whose author the event doesn't vouch for, and that
+ * doesn't settle the pull request. A run that such an event queues is compute and code execution
+ * on an outside author's say-so: it waits for a person, whatever card it moves. Merging and
+ * closing settle the pull request either way, so they never count.
+ */
+export function untrustedPullRequestEvent(event: BoardEventFacts): boolean {
+  return (
+    isPullRequestEvent(event.type) && !SETTLING_PULL_REQUEST_EVENTS.has(event.type) && event.pullRequestTrusted !== true
+  );
+}
+
+/**
+ * Whether the event is an outside author's pull request event on an issue's card: an untrusted
+ * pull request event on a card that isn't the pull request's own. The legacy rule gate only ever
+ * held moves of linked cards back, so it keeps that scope; run approval uses the event-only check.
  */
 export function untrustedLinkedPullRequestEvent(event: BoardEventFacts, cardFacts: RuleFacts): boolean {
-  return (
-    isPullRequestEvent(event.type) &&
-    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
-    cardFacts['source.kind'] !== 'pull_request' &&
-    event.pullRequestTrusted !== true
-  );
+  return cardFacts['source.kind'] !== 'pull_request' && untrustedPullRequestEvent(event);
 }
 
 /** A card-move route that matched but can't take the card where it points, and why. */

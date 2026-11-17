@@ -906,6 +906,14 @@ describe('Board rules', () => {
           target: { ...target, phaseKey: 'triage' },
         }),
         rule({
+          id: ruleId('gated-below-gated'),
+          name: 'Old docs pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
           id: ruleId('closed-all'),
           name: 'Closed pull requests cancel',
           on: ['pull_request.closed'],
@@ -929,6 +937,13 @@ describe('Board rules', () => {
     expect(
       within(lane(PUSHES).getByRole('listitem', { name: 'Docs pushes wait in Triage' })).queryByText(/Never reached/),
     ).not.toBeInTheDocument();
+    // A gated rule below it skips the same pull requests: trusted ones stop at the catch-all,
+    // outside authors' fall through both, so nothing ever reaches it.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Old docs pushes re-review' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
     // Closing settles the pull request whoever wrote it: there the gate holds nothing back.
     expect(
       within(lane('Pull request closed unmerged').getByRole('listitem', { name: 'Closed docs cancel too' })).getByText(
