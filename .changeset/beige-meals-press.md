@@ -6,4 +6,4 @@ Fixed tool calls running without their required approval after a resume. When th
 
 On `Agent`, a `requireToolApproval` function is not stored with the run. When a run is resumed without passing it again, every tool call that starts after the resume now asks for approval, including calls the function would not have matched. Pass the same `requireToolApproval` to `resumeStream()` or `approveToolCall()` to keep per-call decisions.
 
-A tool that called `suspend()` on a version older than 1.50.0 and is resumed after the upgrade still receives its resume data, but no longer receives the payload it suspended with.
+A tool that called `suspend()` on a version older than 1.50.0 and is resumed after the upgrade no longer receives the payload it suspended with. If that tool also requires approval, it asks for approval again and then runs without the data it was resumed with, so it can suspend once more.
