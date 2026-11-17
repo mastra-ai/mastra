@@ -92,7 +92,7 @@ Use Explore mode for questions like "find all usages of X" or "how does module Y
 ### Rules
 
 - The agent has read-only access. It can't modify files or run shell commands.
-- It searches broadly, then reads the relevant files to answer the question.
+- It searches across the codebase, then reads the relevant files to answer the question.
 - It can inspect saved workflows with `list-workflows` and `get-workflow`, but can't create, run, or delete them.
 - It answers directly in the conversation rather than handing work back to another agent.
 
