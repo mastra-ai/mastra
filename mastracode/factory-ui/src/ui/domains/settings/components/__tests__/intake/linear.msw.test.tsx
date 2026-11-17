@@ -635,7 +635,7 @@ describe('IntakeSection linear', () => {
       renderIntakeSection();
 
       await userEvent.click(
-        within(await screen.findByRole('region', { name: 'Add a source' })).getByRole('button', {
+        within(await screen.findByRole('region', { name: 'Sources' })).getByRole('button', {
           name: 'Connect Linear',
         }),
       );
