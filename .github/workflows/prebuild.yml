@@ -10,9 +10,13 @@ on:
   # caller's commit.
   workflow_call:
 
+# A new push cancels the PR's running Prebuild, except on the Changesets versioning PR: its
+# runs feed the release alert and the test-tier update, so each one finishes. GitHub then keeps
+# one running and one pending run there and drops older pending ones. A fork can pick any branch
+# name, so the versioning PR head must also live in this repository.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
 
 permissions: {}
 
