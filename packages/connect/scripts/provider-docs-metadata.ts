@@ -66,6 +66,7 @@ export interface ChannelConnectionDocs {
 export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
   'anthropic',
   'google-analytics',
+  'sendgrid',
   'stripe',
   'twitter-v2',
 ]);

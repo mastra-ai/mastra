@@ -24,6 +24,7 @@ import { openaiScenario } from './openai.js';
 import { outlookScenario } from './outlook.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
+import { sendgridScenario } from './sendgrid.js';
 import { sharepointOnlineScenario } from './sharepoint-online.js';
 import { slackScenario } from './slack.js';
 import { snowflakeScenario } from './snowflake.js';
@@ -63,6 +64,7 @@ export const scenarios: Scenario[] = [
   outlookScenario,
   posthogScenario,
   resendScenario,
+  sendgridScenario,
   sharepointOnlineScenario,
   slackScenario,
   snowflakeScenario,

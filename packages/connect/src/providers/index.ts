@@ -27,6 +27,7 @@ import { openaiProvider } from './openai/index.js';
 import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
+import { sendgridProvider } from './sendgrid/index.js';
 import { sharepointOnlineProvider } from './sharepoint-online/index.js';
 import { slackProvider } from './slack/index.js';
 import { snowflakeProvider } from './snowflake/index.js';
@@ -61,6 +62,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   outlookProvider,
   posthogProvider,
   resendProvider,
+  sendgridProvider,
   sharepointOnlineProvider,
   slackProvider,
   snowflakeProvider,
