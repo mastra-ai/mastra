@@ -236,20 +236,23 @@ export function cardActions({
   retry?: CardPrimaryAction;
   run?: CardPrimaryAction;
 }): CardAction[] {
-  const { owner } = state;
-  if (owner.kind === 'free') return freeCardActions(state.status, { retry, run });
-  if (owner.kind === 'session' || run === undefined) return [];
-  return [{ label: owner.progressLabel, start: run.start, disabled: true }];
+  const { owner, status } = state;
+  if (owner.kind === 'free') return freeCardActions(status, { retry, run });
+  if (run === undefined) return [];
+  if (owner.kind !== 'session') return [{ label: owner.progressLabel, start: run.start, disabled: true }];
+  // The session holds the card, so its suggested run waits for that session to end.
+  return status.kind === 'waiting' ? [{ ...suggestedRun(run, status), disabled: true }] : [];
+}
+
+function suggestedRun(run: CardPrimaryAction, status: BoardCardStatus): CardPrimaryAction {
+  return status.kind === 'waiting' ? { ...run, ariaLabel: `Start suggested run: ${status.label}` } : run;
 }
 
 function freeCardActions(
   status: BoardCardStatus,
   { retry, run }: { retry?: CardPrimaryAction; run?: CardPrimaryAction },
 ): CardAction[] {
-  const namedRun =
-    run !== undefined && status.kind === 'waiting'
-      ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
-      : run;
+  const namedRun = run === undefined ? undefined : suggestedRun(run, status);
   const main = retry ?? namedRun;
   if (main === undefined) return [];
   const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';

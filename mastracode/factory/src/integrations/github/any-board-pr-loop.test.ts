@@ -198,6 +198,7 @@ async function harness(
     connectionId: connection.id,
     repositoryId: repository.id,
   });
+  await seeded.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/repo'] } } });
 
   if (loop.storedWithSelfReview) {
     // The project's Work row as Factory stored it back then: its row is its board from then on.
@@ -262,6 +263,7 @@ async function harness(
     sourceControl,
     integrationStorage,
     projects: seeded.projects,
+    intake: seeded.intake,
     storage: workItems,
     boards,
     configVersion,

@@ -29,12 +29,15 @@ export interface RowSession {
   readonly followedWorkItemIds?: readonly string[];
 }
 
-export interface SessionRowViewer {
+export interface SessionStatusViewer {
   viewerUserId: string;
   /** Card ids. */
   awaitingPerson: ReadonlySet<string>;
   runningSessionIds: ReadonlySet<string>;
   parkedSessionIds: ReadonlySet<string>;
+}
+
+export interface SessionRowViewer extends SessionStatusViewer {
   pinnedSessionIds: ReadonlySet<string>;
   revealChildSessions: boolean;
 }
@@ -44,10 +47,18 @@ export interface RunReach {
   viewerUserId: string;
   factoryProjectId: string;
   visibleSessionIds: Pick<ReadonlySet<string>, 'has'>;
+  sessionOnThread(threadId: string): string | undefined;
 }
 
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
 type SessionActivityStatus = SessionRow['status'];
+
+/** A card's status as its sidebar row shows it, and whether one of its sessions holds it. */
+export interface CardSessionStatus {
+  status: SessionActivityStatus;
+  /** One of its sessions is running or parked on a person, so no rival run may start. */
+  held: boolean;
+}
 
 interface CardSession {
   card: Card;
@@ -80,6 +91,7 @@ interface BuiltRow {
 }
 
 const CARRIED_STATUSES: readonly SessionActivityStatus[] = ['waiting', 'working'];
+const NO_CARDS: ReadonlySet<string> = new Set();
 
 function changeRequestOf(card: Card): CardChangeRequest | undefined {
   return cardChangeRequest({
@@ -225,20 +237,26 @@ function indexSession(
   };
 }
 
+function sessionStatus(entry: IndexedSession, viewer: SessionStatusViewer): SessionActivityStatus {
+  const { session, card, person } = entry;
+  const running = viewer.runningSessionIds.has(session.sessionId);
+  return activityStatus({
+    initializing: running && session.materializedAt === null,
+    running,
+    attention:
+      viewer.parkedSessionIds.has(session.sessionId) ||
+      (!person && card !== undefined && viewer.awaitingPerson.has(card.id)),
+    settled: !person && entry.settled,
+  });
+}
+
 function factoryRow(entry: IndexedSession, viewer: SessionRowViewer): SessionRowFields {
-  const { session, card } = entry;
   return {
     session: entry.wire,
     origin: 'factory',
     board: entry.board,
-    status: activityStatus({
-      initializing: session.materializedAt === null,
-      running: viewer.runningSessionIds.has(session.sessionId),
-      attention:
-        viewer.parkedSessionIds.has(session.sessionId) || (card !== undefined && viewer.awaitingPerson.has(card.id)),
-      settled: entry.settled,
-    }),
-    pinned: viewer.pinnedSessionIds.has(session.sessionId),
+    status: sessionStatus(entry, viewer),
+    pinned: viewer.pinnedSessionIds.has(entry.session.sessionId),
     updatedAt: entry.updatedAt,
     ...entry.cardFields,
   };
@@ -249,28 +267,29 @@ function userRow(entry: IndexedSession, viewer: SessionRowViewer): SessionRowFie
   return {
     session: entry.wire,
     origin: 'user',
-    status: activityStatus({
-      initializing: session.materializedAt === null,
-      running: viewer.runningSessionIds.has(session.sessionId),
-      attention: false,
-      settled: false,
-    }),
+    status: sessionStatus(entry, viewer),
     pinned: viewer.pinnedSessionIds.has(session.sessionId),
     updatedAt: entry.updatedAt,
     ...entry.cardFields,
   };
 }
 
-function rowsByCard(rows: readonly BuiltRow[]): ReadonlyMap<string, readonly BuiltRow[]> {
-  const byCard = new Map<string, BuiltRow[]>();
+function rowsByCard<T extends { readonly entry: IndexedSession }>(
+  rows: readonly T[],
+): ReadonlyMap<string, readonly T[]> {
+  const byCard = new Map<string, T[]>();
   for (const built of rows) {
-    const { itemId } = built.row;
+    const { itemId } = built.entry.cardFields;
     if (itemId === undefined) continue;
     const cardRows = byCard.get(itemId);
     if (cardRows) cardRows.push(built);
     else byCard.set(itemId, [built]);
   }
   return byCard;
+}
+
+function cardStatus(lead: SessionActivityStatus, statuses: readonly SessionActivityStatus[]): SessionActivityStatus {
+  return CARRIED_STATUSES.find(status => statuses.includes(status)) ?? lead;
 }
 
 function cardRow(cardRows: readonly BuiltRow[], viewer: SessionRowViewer): { lead: BuiltRow; row: SessionRow } {
@@ -280,9 +299,12 @@ function cardRow(cardRows: readonly BuiltRow[], viewer: SessionRowViewer): { lea
   );
   const lead = ordered[0];
   if (!shown || !lead) throw new Error('A card row needs at least one session');
-  const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.row.status === status));
+  const status = cardStatus(
+    shown.status,
+    cardRows.map(candidate => candidate.row.status),
+  );
   if (viewer.revealChildSessions) {
-    return { lead, row: { ...shown, cardStatus: carried ?? shown.status, childRows: others } };
+    return { lead, row: { ...shown, cardStatus: status, childRows: others } };
   }
   return {
     lead,
@@ -290,7 +312,7 @@ function cardRow(cardRows: readonly BuiltRow[], viewer: SessionRowViewer): { lea
       ...shown,
       pinned: cardRows.some(candidate => candidate.row.pinned),
       cardSessionIds: cardRows.map(candidate => candidate.row.session.sessionId),
-      status: carried ?? shown.status,
+      status,
     },
   };
 }
@@ -374,6 +396,36 @@ export class SessionRowIndex {
     const byCard = rowsByCard(factoryRows);
     return [...oneRowPerCard(factoryRows, byCard, viewer), ...linkFollowedCards(userRows, byCard, viewer)];
   }
+
+  /** Each card's status as its sidebar row shows it, and whether one of its sessions holds it, by card id. */
+  cardStatuses(viewer: SessionStatusViewer): ReadonlyMap<string, CardSessionStatus> {
+    const sessionsAlone = { ...viewer, awaitingPerson: NO_CARDS };
+    const sessions = this.#sessions.flatMap(entry =>
+      entry.person || !isSeenBy(entry.session, viewer.viewerUserId)
+        ? []
+        : [{ entry, status: sessionStatus(entry, viewer), held: isInFlight(sessionStatus(entry, sessionsAlone)) }],
+    );
+    return new Map(
+      Array.from(rowsByCard(sessions), ([itemId, cardSessions]) => {
+        const [lead] = cardSessions.toSorted((a, b) => a.entry.cardRank - b.entry.cardRank);
+        if (!lead) throw new Error('A card row needs at least one session');
+        return [
+          itemId,
+          {
+            status: cardStatus(
+              lead.status,
+              cardSessions.map(candidate => candidate.status),
+            ),
+            held: cardSessions.some(candidate => candidate.held),
+          },
+        ];
+      }),
+    );
+  }
+}
+
+export function isInFlight(status: SessionActivityStatus): boolean {
+  return status !== 'idle' && status !== 'done';
 }
 
 // A run predating shared resources also ran under its session id as resource.
@@ -388,8 +440,8 @@ export function runningSessionIds(
     reach.visibleSessionIds.has(resourceId);
   return new Set(
     runs.flatMap(run => {
-      if (run.resourceId === undefined) return [run.threadId];
-      return reachable(run.resourceId) ? [run.threadId, run.resourceId] : [];
+      if (run.resourceId !== undefined && !reachable(run.resourceId)) return [];
+      return [run.threadId, run.resourceId, reach.sessionOnThread(run.threadId)].filter(id => id !== undefined);
     }),
   );
 }

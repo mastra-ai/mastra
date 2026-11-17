@@ -1,11 +1,12 @@
 import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { queryKeys } from '../../api/keys';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -853,6 +854,43 @@ describe('Board card pending states', () => {
     expect(within(triageColumn).getByText('Fix login bug')).toBeVisible();
     expect(within(planningColumn).queryByTestId('work-item-card')).not.toBeInTheDocument();
     expect(cardReads).toBeGreaterThan(readsBeforeDrop);
+  });
+
+  it('sends a drop to the server once the read that held the card for its session fails to refresh', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: THREAD_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    const dropIntoPlanning = () => {
+      const column = screen.getByTestId('board-column-planning');
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(card, { dataTransfer });
+      fireEvent.dragOver(column, { dataTransfer });
+      fireEvent.drop(column, { dataTransfer });
+    };
+    dropIntoPlanning();
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(transitionRequests).toEqual([]);
+
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-activity`, () =>
+        HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
+      ),
+    );
+    await client.refetchQueries({ queryKey: queryKeys.sessionActivity(FACTORY_ID) });
+    // The board hears of the failed refresh on the next tick.
+    await act(() => delay(0));
+    dropIntoPlanning();
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
   });
 
   it('moves a mapped Linear card into a working lane without asking for a repository while intake config loads', async () => {

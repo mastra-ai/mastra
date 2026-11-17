@@ -46,7 +46,8 @@ function stubProject(runningSessionIds: () => string[]) {
       HttpResponse.json({
         runningSessionIds: runningSessionIds(),
         parkedSessionIds: [],
-        initializingSessionIds: [],
+        cardStatuses: {},
+        sessionHeldCardIds: [],
         cards: { working: 0, waiting: 0 },
       } satisfies SessionActivity),
     ),
