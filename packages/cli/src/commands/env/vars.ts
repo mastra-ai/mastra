@@ -88,7 +88,7 @@ export async function envVarsPullAction(
     envVarsAuthority === 'project' ? await getServerProjectEnv(token, orgId, project.id) : (environment.envVars ?? {});
 
   // Write-only secrets come back as a placeholder, not their value. Writing
-  // the placeholder would make the next deploy upload it as the real value.
+  // the placeholder would put a value in the file that looks real but isn't.
   const vars: Record<string, string> = {};
   const secretVarNames: string[] = [];
   for (const [name, value] of Object.entries(pulled)) {
