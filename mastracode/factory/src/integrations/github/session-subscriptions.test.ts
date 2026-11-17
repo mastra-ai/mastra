@@ -9,6 +9,15 @@ const mocks = vi.hoisted(() => ({
     data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'factory/issue-1' } },
   })),
   upsertSessionRepository: vi.fn(async () => undefined),
+  listPullRequests: vi.fn(
+    async (_input: {
+      sourceId: string;
+      cursor?: string | null;
+    }): Promise<{
+      pullRequests: Array<{ id: string; headBranch: string; baseBranch: string }>;
+      nextCursor: string | null;
+    }> => ({ pullRequests: [], nextCursor: null }),
+  ),
   getRepositoryAccess: vi.fn(async () => ({
     cloneUrl: 'https://github.com/mastra-ai/mastra.git',
     authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
@@ -93,6 +102,7 @@ const githubStub = {
   },
   versionControl: {
     getRepositoryAccess: mocks.getRepositoryAccess,
+    listPullRequests: mocks.listPullRequests,
   },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
   upsertFactoryTriageComment: mocks.upsertTriageComment,
@@ -101,8 +111,10 @@ const githubStub = {
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
+  parsePushedBranches,
   refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
+  subscribeCurrentSessionToPushedPullRequests,
   unsubscribeCurrentSessionFromPullRequest,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
@@ -212,6 +224,127 @@ describe('parseCreatedPullRequest', () => {
     expect(
       parseCreatedPullRequest({ toolName: 'source_control_create_change_request', input: {}, ...context }),
     ).toBeUndefined();
+  });
+});
+
+describe('parsePushedBranches', () => {
+  const push = (output: unknown, command = 'git push') => ({ toolName: 'execute_command', input: { command }, output });
+
+  it('reads updated branches from git push output, whatever the remote URL form', () => {
+    expect(
+      parsePushedBranches(
+        push(
+          {
+            stderr: [
+              'To https://x-access-token:secret@github.com/mastra-ai/mastra.git',
+              '   1a2b3c4..5d6e7f8  fix/review -> fix/review',
+              'To git@github.com:mastra-ai/docs',
+              ' + 1a2b3c4...5d6e7f8 HEAD -> refs/heads/docs/fix (forced update)',
+            ].join('\n'),
+          },
+          'cd /workspace/mastra && git push -u origin HEAD',
+        ),
+      ),
+    ).toEqual([
+      { repository: 'mastra-ai/mastra', branch: 'fix/review' },
+      { repository: 'mastra-ai/docs', branch: 'docs/fix' },
+    ]);
+  });
+
+  it('ignores new, deleted, rejected and up-to-date refs and non-GitHub remotes', () => {
+    expect(
+      parsePushedBranches(
+        push(
+          [
+            'To https://github.com/mastra-ai/mastra.git',
+            ' * [new branch]      feat/new -> feat/new',
+            ' - [deleted]         old',
+            ' ! [rejected]        main -> main (fetch first)',
+            ' = [up to date]      same -> same',
+            'To https://gitlab.com/mastra-ai/mastra.git',
+            '   1a2b3c4..5d6e7f8  other -> other',
+          ].join('\n'),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores failed calls and commands that do not push', () => {
+    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+    expect(parsePushedBranches({ ...push(output), error: new Error('exit 1') })).toEqual([]);
+    expect(parsePushedBranches(push(output, 'echo "git push"'))).toEqual([]);
+    expect(parsePushedBranches({ toolName: 'view', input: { command: 'git push' }, output })).toEqual([]);
+  });
+
+  it('reads the shared push tool result', () => {
+    expect(
+      parsePushedBranches({
+        toolName: 'source_control_push_branch',
+        input: {},
+        output: { pushed: true, branch: 'slack/1', repository: 'mastra-ai/mastra' },
+      }),
+    ).toEqual([{ repository: 'mastra-ai/mastra', branch: 'slack/1' }]);
+  });
+});
+
+describe('subscribeCurrentSessionToPushedPullRequests', () => {
+  it('subscribes the thread to the open pull request whose head the push updated', async () => {
+    mocks.listPullRequests
+      .mockResolvedValueOnce({
+        pullRequests: [{ id: '5', headBranch: 'factory/issue-1', baseBranch: 'factory/issue-1' }],
+        nextCursor: '2',
+      })
+      .mockResolvedValueOnce({
+        pullRequests: [{ id: '7', headBranch: 'factory/issue-1', baseBranch: 'main' }],
+        nextCursor: null,
+      });
+
+    await expect(
+      subscribeCurrentSessionToPushedPullRequests(
+        authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
+        [{ repository: 'Mastra-AI/Docs', branch: 'factory/issue-1' }],
+        githubStub,
+      ),
+    ).resolves.toEqual([7]);
+
+    expect(mocks.listPullRequests).toHaveBeenCalledTimes(2);
+    expect(mocks.listPullRequests).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourceId: 'mastra-ai/docs', state: 'open', cursor: '2' }),
+    );
+    expect(mocks.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({ changeRequestId: '7', repositorySlug: 'mastra-ai/docs', source: 'auto-git-push' }),
+      integrationStorage,
+    );
+    expect(mocks.upsertSessionRepository).toHaveBeenCalledWith(
+      expect.objectContaining({ projectRepositoryId: 'project-repository-2', changeRequestId: '7' }),
+    );
+  });
+
+  it('subscribes nothing for a branch without an open pull request or a repository outside the environment', async () => {
+    await expect(
+      subscribeCurrentSessionToPushedPullRequests(
+        authenticatedRequestContext(),
+        [
+          { repository: 'mastra-ai/mastra', branch: 'no-pr' },
+          { repository: 'other/repo', branch: 'factory/issue-1' },
+        ],
+        githubStub,
+      ),
+    ).resolves.toEqual([]);
+
+    expect(mocks.listPullRequests).toHaveBeenCalledTimes(1);
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('does nothing outside repository sessions', async () => {
+    await expect(
+      subscribeCurrentSessionToPushedPullRequests(
+        new RequestContext(),
+        [{ repository: 'mastra-ai/mastra', branch: 'factory/issue-1' }],
+        githubStub,
+      ),
+    ).resolves.toEqual([]);
+    expect(mocks.listPullRequests).not.toHaveBeenCalled();
   });
 });
 

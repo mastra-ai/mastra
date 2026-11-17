@@ -77,7 +77,9 @@ import type { GitIdentity } from '../../github/sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
+  parsePushedBranches,
   subscribeCurrentSessionToPullRequest,
+  subscribeCurrentSessionToPushedPullRequests,
 } from '../../github/session-subscriptions.js';
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
@@ -1224,13 +1226,19 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     toolContext,
     requestContext,
   }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    if (!requestContext) return;
+    const github = this as unknown as GithubIntegration;
     const pullRequestUrl = parseCreatedPullRequest(toolContext);
-    if (!pullRequestUrl || !requestContext) return;
-    await subscribeCurrentSessionToPullRequest(
-      requestContext,
-      pullRequestUrl,
-      'auto-gh-pr-create',
-      this as unknown as GithubIntegration,
+    if (pullRequestUrl) {
+      await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', github);
+      return;
+    }
+    const pushes = parsePushedBranches(toolContext);
+    if (pushes.length === 0) return;
+    // Not awaited: finding the pull request can page through every open one,
+    // and the push already succeeded.
+    void subscribeCurrentSessionToPushedPullRequests(requestContext, pushes, github).catch(error =>
+      console.warn('[GitHub] Subscribing to the pushed pull request failed', error),
     );
   }
 

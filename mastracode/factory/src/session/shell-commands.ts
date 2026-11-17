@@ -1,4 +1,4 @@
-/** Two tool observers read the same `gh pr create`, so the reading lives here rather than once per observer. */
+/** Tool observers read the same shell commands, so the reading lives here rather than once per observer. */
 
 const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
 
@@ -23,4 +23,10 @@ export function executableCommand(command: string): string {
 
 export function runsPullRequestCreate(command: string): boolean {
   return GH_PR_CREATE_RE.test(executableCommand(command));
+}
+
+const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+(?:-C\s+\S+\s+)?push(?:\s|$)/;
+
+export function runsGitPush(command: string): boolean {
+  return GIT_PUSH_RE.test(executableCommand(command));
 }

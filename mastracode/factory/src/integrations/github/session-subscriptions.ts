@@ -5,12 +5,13 @@ import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
 import { findEnvironmentRepository, resolveSessionRepositories } from '../../session/environment-repositories.js';
 import type { EnvironmentRepository } from '../../session/environment-repositories.js';
-import { runsPullRequestCreate } from '../../session/shell-commands.js';
+import { runsGitPush, runsPullRequestCreate } from '../../session/shell-commands.js';
 import type { SourceControlInstallation, SourceControlSession } from '../../storage/domains/source-control/base.js';
 import type { IntegrationTools } from '../base.js';
 import type { GithubIntegration } from './integration.js';
 import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
+import type { GithubSignalSubscriptionSource } from './subscriptions.js';
 import { getGithubRefreshTarget, getRegisteredGithubPatKind, requireGithubTokenInjector } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string };
@@ -189,6 +190,29 @@ function subscriptionInput(target: SessionTarget, pullRequest: PullRequestTarget
   };
 }
 
+async function subscribeResolvedPullRequest(
+  target: SessionTarget,
+  resolved: PullRequestTarget,
+  source: GithubSignalSubscriptionSource,
+  github: GithubIntegration,
+) {
+  const headRef = await verifyPullRequest(resolved, github);
+  await subscribeToPullRequest({ ...subscriptionInput(target, resolved), source }, github.integrationStorage);
+  // The session-repository row is the per-repository record of what this
+  // session opened, so only a pull request from the session's own branch
+  // lands there; subscribing to someone else's pull request leaves it alone.
+  // An existing row keeps the branch its push wrote.
+  if (target.session && headRef === target.session.branch) {
+    await github.sourceControlStorage.sessionRepositories.upsert({
+      sessionId: target.session.sessionId,
+      projectRepositoryId: resolved.link.id,
+      changeRequestId: String(resolved.number),
+      changeRequestUrl: `https://github.com/${resolved.repository.slug}/pull/${resolved.number}`,
+      fallbackBranch: headRef,
+    });
+  }
+}
+
 export async function subscribeCurrentSessionToPullRequest(
   requestContext: RequestContext,
   pullRequest: number | string,
@@ -213,22 +237,69 @@ export async function subscribeCurrentSessionToPullRequest(
     }
   }
   const resolved = await resolvePullRequest(target, pullRequest, github);
-  const headRef = await verifyPullRequest(resolved, github);
-  await subscribeToPullRequest({ ...subscriptionInput(target, resolved), source }, github.integrationStorage);
-  // The session-repository row is the per-repository record of what this
-  // session opened, so only a pull request from the session's own branch
-  // lands there; subscribing to someone else's pull request leaves it alone.
-  // An existing row keeps the branch its push wrote.
-  if (target.session && headRef === target.session.branch) {
-    await github.sourceControlStorage.sessionRepositories.upsert({
-      sessionId: target.session.sessionId,
-      projectRepositoryId: resolved.link.id,
-      changeRequestId: String(resolved.number),
-      changeRequestUrl: `https://github.com/${resolved.repository.slug}/pull/${resolved.number}`,
-      fallbackBranch: headRef,
-    });
-  }
+  await subscribeResolvedPullRequest(target, resolved, source, github);
   return resolved.number;
+}
+
+/** Bounds the open pull request scan one push triggers. */
+const PUSHED_BRANCH_MAX_PAGES = 20;
+
+/** The open pull request whose head is `branch` in `repository`, if any. */
+async function findOpenPullRequestForBranch(
+  github: GithubIntegration,
+  installationId: number,
+  repository: string,
+  branch: string,
+): Promise<number | undefined> {
+  let cursor: string | null = '1';
+  for (let page = 0; cursor !== null && page < PUSHED_BRANCH_MAX_PAGES; page += 1) {
+    const listed = await github.versionControl.listPullRequests({
+      connection: { type: 'app-installation', installationId },
+      sourceId: repository,
+      state: 'open',
+      includeDrafts: true,
+      cursor,
+    });
+    // The listing carries no head repository, so a fork's `main -> main`
+    // pull request would otherwise match every push to `main`.
+    const match = listed.pullRequests.find(
+      pullRequest => pullRequest.headBranch === branch && pullRequest.baseBranch !== branch,
+    );
+    if (match) return Number(match.id);
+    cursor = listed.nextCursor;
+  }
+  return undefined;
+}
+
+/**
+ * Subscribe the session's thread to the open pull requests its pushes
+ * updated, so a thread that pushed fixes to a pull request it did not open
+ * still hears how that pull request ends. Pushes to repositories outside the
+ * environment, or to branches no open pull request has, subscribe nothing.
+ */
+export async function subscribeCurrentSessionToPushedPullRequests(
+  requestContext: RequestContext,
+  pushes: PushedBranch[],
+  github: GithubIntegration,
+): Promise<number[]> {
+  if (pushes.length === 0 || !isGithubProjectSession(requestContext)) return [];
+  const target = await resolveSessionTarget(requestContext, github);
+  const subscribed: number[] = [];
+  for (const push of pushes) {
+    const repository = findEnvironmentRepository(target.repositories, push.repository);
+    if (!repository) continue;
+    const installation = await github.sourceControlStorage.installations.get({
+      orgId: target.orgId,
+      id: repository.connection.installationId,
+    });
+    const installationId = Number(installation?.externalId);
+    if (!installation || !Number.isSafeInteger(installationId) || installationId <= 0) continue;
+    const number = await findOpenPullRequestForBranch(github, installationId, repository.repository.slug, push.branch);
+    if (number === undefined) continue;
+    await subscribeResolvedPullRequest(target, { ...repository, installation, number }, 'auto-git-push', github);
+    subscribed.push(number);
+  }
+  return subscribed;
 }
 
 export async function unsubscribeCurrentSessionFromPullRequest(
@@ -372,4 +443,68 @@ export function parseCreatedPullRequest(context: {
   if (typeof stdout !== 'string') return undefined;
   const urls = stdout.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/g) ?? [];
   return urls.length === 1 ? urls[0] : undefined;
+}
+
+/** One branch a push updated on GitHub. */
+export interface PushedBranch {
+  /** `owner/repo`, as the remote URL names it. */
+  repository: string;
+  branch: string;
+}
+
+const PUSH_REMOTE_LINE = /^To\s+(\S+)\s*$/;
+const GITHUB_REMOTE = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
+/**
+ * A `git push` ref line that moved an existing branch: ` abc..def src -> dst`
+ * or `+ abc...def src -> dst (forced update)`. New branches, deletions,
+ * rejections and up-to-date refs print a bracketed summary instead, and none
+ * of them can have updated an open pull request.
+ */
+const UPDATED_REF_LINE = /^\s*\+?\s*[0-9a-f]{7,}\.{2,3}[0-9a-f]{7,}\s+\S+\s+->\s+(\S+)/;
+
+function toolText(output: unknown): string | undefined {
+  if (typeof output === 'string') return output;
+  const fields = output as { stdout?: unknown; stderr?: unknown; result?: unknown } | undefined;
+  const parts = [fields?.stdout, fields?.stderr, fields?.result].filter(part => typeof part === 'string');
+  return parts.length > 0 ? parts.join('\n') : undefined;
+}
+
+/**
+ * The existing GitHub branches a completed tool call pushed to. Reads what
+ * `git push` reported rather than its arguments, so `git push`, `git push -u
+ * origin HEAD` and pushes from another directory all read the same.
+ */
+export function parsePushedBranches(context: {
+  toolName: string;
+  input: unknown;
+  output?: unknown;
+  error?: unknown;
+}): PushedBranch[] {
+  if (context.error) return [];
+  if (context.toolName === 'source_control_push_branch') {
+    const output = context.output as { pushed?: unknown; branch?: unknown; repository?: unknown } | undefined;
+    return output?.pushed === true && typeof output.branch === 'string' && typeof output.repository === 'string'
+      ? [{ repository: output.repository, branch: output.branch }]
+      : [];
+  }
+  if (context.toolName !== 'execute_command') return [];
+  const command = (context.input as { command?: unknown } | undefined)?.command;
+  if (typeof command !== 'string' || !runsGitPush(command)) return [];
+  const text = toolText(context.output);
+  if (!text) return [];
+  const pushes = new Map<string, PushedBranch>();
+  let repository: string | undefined;
+  for (const line of text.split('\n')) {
+    const remote = line.match(PUSH_REMOTE_LINE);
+    if (remote) {
+      const slug = remote[1]!.match(GITHUB_REMOTE);
+      repository = slug ? `${slug[1]}/${slug[2]}` : undefined;
+      continue;
+    }
+    const ref = repository ? line.match(UPDATED_REF_LINE) : null;
+    if (!ref || !repository) continue;
+    const branch = ref[1]!.replace(/^refs\/heads\//, '');
+    pushes.set(`${repository.toLowerCase()}\0${branch}`, { repository, branch });
+  }
+  return [...pushes.values()];
 }
