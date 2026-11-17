@@ -26,7 +26,7 @@ const ITEMS = [{ k: 0 }, { k: 1 }, { k: 2 }];
 const ITEM = z.object({ k: z.number() });
 const APPROVED = { approved: true };
 /** A call that received its own approval and its own suspend payload. */
-const resumed = (k: number): Call => ({ k, resumeData: APPROVED, suspendData: { ask: k } });
+const resumed = (k: number, ask: unknown = k): Call => ({ k, resumeData: APPROVED, suspendData: { ask } });
 /** A call that started the item fresh. */
 const fresh = (k: number): Call => ({ k, resumeData: undefined, suspendData: undefined });
 
@@ -456,6 +456,131 @@ describe('restart while a resumed foreach item runs', () => {
     expect(calls(seen, 2)).toEqual(row.gen2);
     expect(result.status).toBe('suspended');
     if (row.shape.statuses) expect(await statuses(result)).toEqual(row.statuses ?? [S, OK, S]);
+  });
+
+  // A resumed item consumes the payload and suspends again with a new request while a sibling keeps
+  // the foreach running. The crash point is the first write that stores either item 0's new request
+  // or the sibling's progress: the sibling, finishing after item 0 suspends again, is not stored yet
+  // and runs again.
+  describe.each([1, 2] as const)('storage v%s', storageVersion => {
+    it.each(
+      [false, true].flatMap(nested => [
+        {
+          name: `${nested ? 'inside a nested workflow, ' : ''}resume without an index, item 1 still running when item 0 suspends again`,
+          nested,
+          forEachIndex: undefined,
+          finisher: 1,
+          gen2: [resumed(1), fresh(2)],
+          statuses: [S, OK, S],
+        },
+        {
+          name: `${nested ? 'inside a nested workflow, ' : ''}resume of item 0 by index, never-reached item 2 still running when item 0 suspends again`,
+          nested,
+          forEachIndex: 0,
+          finisher: 2,
+          gen2: [fresh(2)],
+          statuses: [S, S, S],
+        },
+      ]),
+    )('keeps an item that consumed the resume at its new request: $name', async row => {
+      const id = `fo-consumed-${row.finisher}-${row.nested}-v${storageVersion}`;
+      const child = `${id}-child`;
+      const runId = `${id}-run`;
+      // The workflow whose foreach the items belong to.
+      const owner = row.nested ? child : id;
+      const seen: Seen[] = [];
+      const item0Suspended = newGate();
+      const foreachOf = (core: CoreGraph, generation: number, workflowId: string) =>
+        core
+          .createWorkflow({
+            id: workflowId,
+            inputSchema: z.array(ITEM),
+            outputSchema: z.any(),
+            options: { storageVersion },
+          })
+          .foreach(
+            core.createStep({
+              id: 'approve',
+              inputSchema: ITEM,
+              outputSchema: ITEM,
+              resumeSchema: z.object({ approved: z.boolean() }),
+              execute: async ({ inputData: { k }, resumeData, suspendData, suspend }: any) => {
+                seen.push({ generation, k, resumeData, suspendData });
+                if (generation === 1 && k === row.finisher && (resumeData !== undefined || k > 1)) {
+                  await item0Suspended.wait();
+                  return { k };
+                }
+                if (resumeData === undefined) return suspend({ ask: k }, { resumeLabel: `item-${k}` });
+                // Item 0's approval leads to a second request.
+                if (k === 0 && suspendData?.ask === 0) return suspend({ ask: 'second-0' }, { resumeLabel: 'second-0' });
+                return { k };
+              },
+            }),
+            { concurrency: 2 },
+          )
+          .commit();
+      const scenario = createRestartScenario({
+        kind: 'workflow',
+        runId,
+        storageVersion,
+        build: ({ core, generation }) =>
+          row.nested
+            ? core
+                .createWorkflow({ id, inputSchema: z.array(ITEM), outputSchema: z.any(), options: { storageVersion } })
+                .then(foreachOf(core, generation, child))
+                .commit()
+            : foreachOf(core, generation, id),
+      });
+      scenarios.push(scenario);
+      const parked = newGate();
+      const original = await scenario.start(async ({ workflow, workflows }) => {
+        const run = await workflow.createRun({ runId });
+        expect((await run.start({ inputData: ITEMS })).status).toBe('suspended');
+        run.watch((event: any) => {
+          const payload = event.payload;
+          if (
+            event.type === 'workflow-step-progress' &&
+            payload?.currentIndex === 0 &&
+            payload.iterationStatus === 'suspended'
+          ) {
+            item0Suspended.release();
+          }
+        });
+        interceptWrites(workflows, async (args, write) => {
+          const written = await write(args);
+          if (!parked.waiters && args?.workflowName === owner) {
+            const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: owner, runId });
+            const progress = (snapshot?.context?.approve as any)?.metadata?.foreachProgress;
+            if (progress?.[0] || progress?.[row.finisher]) await parked.wait();
+          }
+          return written;
+        });
+        return run.resume({
+          step: row.nested ? [child, 'approve'] : 'approve',
+          ...(row.forEachIndex !== undefined ? { forEachIndex: row.forEachIndex } : {}),
+          resumeData: APPROVED,
+        });
+      });
+      await parked.reached;
+      const checkpoint = await original.checkpoint();
+      expect(calls(seen, 1).filter(c => c.k === 0 && c.resumeData !== undefined)).toEqual([resumed(0)]);
+
+      const { result, graph } = await scenario.restart(checkpoint);
+
+      expect(calls(seen, 2)).toEqual(row.gen2);
+      expect(result.status).toBe('suspended');
+      const ownerRun = await graph.workflows.loadWorkflowSnapshot({ workflowName: owner, runId });
+      expect(statusesOf(ownerRun.context, 'approve')).toEqual(row.statuses);
+      const stored = await graph.workflows.loadWorkflowSnapshot({ workflowName: id, runId });
+      expect(JSON.stringify([result, stored, ownerRun])).not.toMatch(
+        /foreachResumeTarget|nestedResumeTarget|foreachProgress/,
+      );
+
+      // Item 0's second request is the one waiting, and its own answer reaches it.
+      const from = seen.length;
+      await (await graph.workflow.createRun({ runId })).resume({ label: 'second-0', resumeData: APPROVED });
+      expect(calls(seen, 2, from)).toEqual([resumed(0, 'second-0')]);
+    });
   });
 
   // Runs stored before targets were recorded carry the payload but no target.

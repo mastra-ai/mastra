@@ -45,7 +45,9 @@ import {
   getForeachProgress,
   getForeachResumeTarget,
   getNestedResumeTarget,
+  isResuspendedItem,
   omitForeachProgress,
+  takesStoredForeachResume,
 } from './foreach-progress';
 import type { ForeachProgress, ForeachResumeTarget, NestedResumeTarget } from './foreach-progress';
 import { emitStepResultEvents } from './step';
@@ -1224,7 +1226,15 @@ export async function executeForeach(
     ...(prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput || []),
   ] as PersistedForeachStepResult[];
   const foreachProgress: ForeachProgress = { ...restartProgress };
-  for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
+  for (const [index, entry] of Object.entries(foreachProgress)) {
+    if (isResuspendedItem(entry)) {
+      // It already used the stored resume data: it waits at the request it made after.
+      const { resumeLabels: labels, ...suspended } = entry;
+      prevForeachOutput[Number(index)] = { ...suspended, payload: prevOutput[Number(index)], startedAt: Date.now() };
+      for (const label of labels) executionContext.resumeLabels[label] = { stepId, foreachIndex: Number(index) };
+      continue;
+    }
+    const { output, nestedRunId } = entry;
     prevForeachOutput[Number(index)] = {
       status: 'success',
       output,
@@ -1234,6 +1244,8 @@ export async function executeForeach(
       ...(nestedRunId ? { metadata: { nestedRunId } } : {}),
     };
   }
+  /** Items that run with the resume data in this pass. */
+  const takesResume = new Set<number>();
   const nestedRunIds: string[] = [];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
@@ -1294,7 +1306,9 @@ export async function executeForeach(
             serializedStepGraph,
             stepResults: { ...stepResults, [stepId]: runningWithProgress() },
             foreachItems: { stepId, indices },
-            executionContext,
+            // A copy: an item that ends while the write is in flight removes the foreach's entry
+            // from the shared `activeStepsPath`, and storage v1 serializes it only when it writes.
+            executionContext: { ...executionContext, activeStepsPath: { ...executionContext.activeStepsPath } },
             workflowStatus: 'running',
             requestContext,
             phase: `foreach-progress.${checkpointCount++}`,
@@ -1489,6 +1503,22 @@ export async function executeForeach(
         scheduleCheckpoint();
       }
 
+      if (result.status === 'suspended' && checkpointProgress && takesResume.has(k)) {
+        // It used the resume data and asks again: checkpoint the new request, so a restart before the
+        // foreach ends leaves the item waiting there instead of handing it the resume data again.
+        foreachProgress[k] = {
+          status: 'suspended',
+          suspendPayload: result.suspendPayload,
+          suspendedAt: result.suspendedAt,
+          ...(result.metadata ? { metadata: result.metadata } : {}),
+          resumeLabels: Object.keys(executionContext.resumeLabels).filter(
+            label => executionContext.resumeLabels[label]?.foreachIndex === k,
+          ),
+        };
+        unsentItems.push(k);
+        scheduleCheckpoint();
+      }
+
       if (result.status !== 'success') {
         await handleNonSuccessResult(result, k);
       } else {
@@ -1530,10 +1560,13 @@ export async function executeForeach(
     if (
       prevItemResult?.status === 'success' ||
       (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined) ||
-      // On a restart, a suspended item stays suspended when the stored resume targeted another item or recorded no target.
+      // On a restart, a suspended item stays suspended when the stored resume targeted another item or recorded no target,
+      // or when the item already used it and suspended again.
       (prevItemResult?.status === 'suspended' &&
         restartsRunning &&
-        (resumeTarget === undefined || (typeof resumeTarget === 'number' && resumeTarget !== k)))
+        (resumeTarget === undefined ||
+          (typeof resumeTarget === 'number' && resumeTarget !== k) ||
+          isResuspendedItem(foreachProgress[k])))
     ) {
       if (prevItemResult?.status === 'success') {
         // Already succeeded in a previous run – clean up resume label
@@ -1572,6 +1605,7 @@ export async function executeForeach(
       }
     }
 
+    if (resumeToUse || (restartsRunning && takesStoredForeachResume(prevPayload, k))) takesResume.add(k);
     inFlight++;
     queue.push({ item: prevOutput[k]!, k, resumeToUse });
   }

@@ -5,7 +5,24 @@
  * after a crash skips items that already ran (#26214). It is removed once the
  * foreach ends and never appears in a final step result.
  */
-export type ForeachProgress = Record<number, { output: unknown; nestedRunId?: string }>;
+export type ForeachProgress = Record<number, { output: unknown; nestedRunId?: string } | ForeachResuspendedItem>;
+
+/**
+ * A progress entry for an item that took the stored `resumePayload` and suspended again before the
+ * foreach ended: a restart leaves it suspended at this new request instead of handing it the
+ * payload again.
+ */
+export type ForeachResuspendedItem = {
+  status: 'suspended';
+  suspendPayload: unknown;
+  suspendedAt: number;
+  metadata?: Record<string, unknown>;
+  resumeLabels: string[];
+};
+
+export function isResuspendedItem(entry: ForeachProgress[number] | undefined): entry is ForeachResuspendedItem {
+  return (entry as { status?: unknown } | undefined)?.status === 'suspended';
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
