@@ -528,6 +528,7 @@ describe('ConnectGithubTransport', () => {
       private: true,
       defaultBranch: 'main',
       htmlUrl: 'https://github.com/acme/repo-1',
+      pushedAt: null,
     });
     expect(github.requests.every(request => request.token === 'tok-github')).toBe(true);
   });

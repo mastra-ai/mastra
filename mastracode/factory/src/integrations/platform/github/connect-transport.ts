@@ -764,6 +764,7 @@ type RawRepository = {
   private: boolean;
   default_branch?: string;
   html_url: string;
+  pushed_at?: string | null;
   owner: { login: string; type?: string };
 };
 
@@ -776,6 +777,7 @@ function toRepository(raw: RawRepository): LegacyInstallationRepository {
     private: raw.private,
     defaultBranch: raw.default_branch ?? 'main',
     htmlUrl: raw.html_url,
+    pushedAt: raw.pushed_at ?? null,
   };
 }
 
