@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Added `CardInset`, a sunken panel for a list of rows inside a `Card` or a dialog. The panel pads each row and draws a divider between them, so plain elements and `SettingsRow`s both work as rows.
