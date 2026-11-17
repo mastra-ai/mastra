@@ -454,7 +454,7 @@ function TriggerStep({
     <div className="flex flex-col gap-5">
       {on.includes(LEGACY_OPENED_EVENT) && (
         <Notice variant="info">
-          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new issues and pull requests. Saving
+          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new work items and pull requests. Saving
           keeps it.
         </Notice>
       )}
