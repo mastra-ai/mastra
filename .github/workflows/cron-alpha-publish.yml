@@ -20,11 +20,12 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
     uses: ./.github/workflows/prebuild.yml
     # Must cover every permission prebuild's jobs request, or the run fails at startup.
-    # id-token: write is for StarSling Disks.
+    # id-token: write is for StarSling Disks; pull-requests: read lets PR runs list PR files.
     permissions:
       actions: read
       contents: read
       id-token: write
+      pull-requests: read
     secrets: inherit
 
   notify-test-failure:
