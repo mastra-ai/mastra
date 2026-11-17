@@ -23,7 +23,7 @@ import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { SpanType, getResumeTracingContext } from '../../../observability';
+import { SpanType, getWorkflowResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import {
@@ -724,7 +724,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * events), so we resolve it via runId here.
    */
   private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
-    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
+    return getWorkflowResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**
@@ -1258,6 +1258,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // runs — that have no pre-existing snapshot — get attributed.
     const runStorage = this.#runStorage(workflow.id, runId);
     const resourceId = (await runStorage.loadResourceId()) ?? eventResourceId;
+    // The process that started the run saved its resume tracing context with the run record. This
+    // worker may have no live span for the run, so a suspend here can only save what it carries over.
+    const tracingContext = (await runStorage.loadHeader())?.tracingContext;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -1304,6 +1307,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
+        ...(tracingContext ? { tracingContext } : {}),
       };
       const pruneSnapshot = this.#pruneSnapshotOf(workflow);
       await runStorage.writeSnapshot(
