@@ -1,23 +1,20 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PIIDetector, UnicodeNormalizer } from '@mastra/core/processors';
-import { openai } from '@ai-sdk/openai';
+import type { ToolsResolverContext } from '@mastra/connect';
 import { searchKnowledge } from '../tools/knowledge-search';
-import { mcpClient } from '../mcp';
+import { connectTools } from '../connect';
+import { webSearchTool } from '../tools/web-search';
 
-/**
- * Linear and Notion tools are loaded dynamically from MCP servers.
- * Linear: hosted at mcp.linear.app (25+ tools — search, create, update issues, projects, etc.)
- * Notion: via the installed @notionhq/notion-mcp-server subprocess (search, read, create, update pages/databases)
- *
- * Tool names are namespaced: linear_<tool> and notion_<tool>.
- */
-async function getMcpTools() {
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5.4';
+
+async function getConnectTools(context: ToolsResolverContext) {
+  if (!connectTools) return {};
   try {
-    return await mcpClient.listTools();
+    return await connectTools(context);
   } catch (error) {
     console.warn(
-      'Failed to load Linear/Notion MCP tools. The agent will continue with indexed search and web search only.',
+      'Failed to load Linear/Notion tools from Mastra Connect. The agent will continue with indexed search and web search only.',
       error,
     );
     return {};
@@ -36,12 +33,12 @@ export const knowledgeAgent = new Agent({
 **Indexed search (fastest, search here first):**
 - search-knowledge — semantic vector search over the pre-indexed Linear + Notion corpus. Returns scored snippets with source, title, URL. Use this for any factual question about the company.
 
-**Live Linear lookups (via MCP — tools prefixed with \`linear_\`):**
-Linear tools are loaded dynamically from the official Linear MCP server. The exact tool names are discovered at runtime. Look for tools prefixed with \`linear_\` — they cover searching issues, fetching issue details, listing projects, and more.
+**Live Linear lookups (via Mastra Connect — tools prefixed with \`linear_\`):**
+Linear tools come from the Linear connection attached to this project. They cover searching issues, fetching issue details, listing projects, and more.
 Use these when indexed results are stale or missing, or the user references a specific Linear issue/project.
 
-**Live Notion lookups (via MCP — tools prefixed with \`notion_\`):**
-Notion tools are loaded dynamically from the official Notion MCP server. The exact tool names are discovered at runtime. Look for tools prefixed with \`notion_\` — they cover searching pages/databases, reading page content, creating pages, and more.
+**Live Notion lookups (via Mastra Connect — tools prefixed with \`notion_\`):**
+Notion tools come from the Notion connection attached to this project. They cover searching pages and databases, reading page content, creating pages, and more.
 Use these when indexed results are stale or the user asks about a specific Notion doc.
 
 **Public fallback:**
@@ -65,7 +62,7 @@ Follow this order strictly — it saves API calls and gives faster answers:
 - If indexed results are outdated (e.g. an issue was closed since indexing), note that and supplement with the live lookup.
 - If you can't find the answer anywhere, say so. Never invent issue identifiers, page IDs, or URLs.
 - For ambiguous questions, ask one clarifying question rather than guessing.`,
-  model: 'mastra/openai/gpt-5.4',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
   },
@@ -85,9 +82,9 @@ Follow this order strictly — it saves API calls and gives faster answers:
       detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key'],
     }),
   ],
-  tools: async () => ({
+  tools: async ({ requestContext, mastra }) => ({
     searchKnowledge,
-    ...(await getMcpTools()),
-    web_search: openai.tools.webSearch({}),
+    ...(await getConnectTools({ requestContext, mastra })),
+    web_search: webSearchTool,
   }),
 });

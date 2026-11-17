@@ -1,12 +1,12 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { SettingsLayout } from '@mastra/playground-ui/new/settings';
 import { useEffect, useId } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
-import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderSidebarTrigger';
-import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import {
@@ -36,7 +36,7 @@ export function SettingsPage() {
   }
 
   if (!isSettingsSection(section)) {
-    return <Navigate to="../preferences" replace state={location.state} />;
+    return <Navigate to="../account" replace state={location.state} />;
   }
   return (
     <SettingsPageLayout
@@ -73,20 +73,14 @@ export function SettingsPageLayout({
   header: ReactNode;
   breadcrumbs?: ReactNode;
 }) {
-  const { isMobile, desktopState } = useSidebar();
-  const sidebarCollapsed = !isMobile && desktopState === 'collapsed';
+  const { isMobile } = useSidebar();
+  const slots = useSidebarHeaderSlots({
+    breadcrumbs: breadcrumbs ?? (isMobile ? <SettingsHeader autoFocus /> : undefined),
+  });
 
   return (
-    <PageLayout
-      variant="narrow"
-      header={header}
-      breadcrumbs={
-        breadcrumbs ??
-        (isMobile ? <SettingsHeader autoFocus /> : sidebarCollapsed ? <ChatHeaderSidebarTrigger /> : undefined)
-      }
-      headerActions={sidebarCollapsed ? <GlobalSearchButton id="global-search-collapsed-trigger" /> : undefined}
-    >
-      {children}
+    <PageLayout {...slots}>
+      <SettingsLayout header={header}>{children}</SettingsLayout>
     </PageLayout>
   );
 }

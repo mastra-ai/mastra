@@ -195,8 +195,13 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
   /**
    * When true, callers only need run metadata. Adapters MAY reduce each run's
-   * snapshot to `{ status, timestamp }` to avoid loading the full snapshot.
-   * Adapters that ignore this return full snapshots.
+   * snapshot to `{ status, timestamp, parentWorkflow?: { workflowId, runId } }`
+   * to avoid loading the full snapshot. A reduced snapshot has no `context` or
+   * any other snapshot field, and leaves out `status` or `timestamp` when the
+   * run has none. `parentWorkflow` is present only when the run's parent has
+   * both IDs, and is never `null`. Every other run field is unchanged.
+   * Adapters that ignore this return full snapshots; every adapter that
+   * supports run fencing reduces them.
    */
   summary?: boolean;
 };
@@ -492,14 +497,11 @@ export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
  * Serializable subset of `AgentDurableOption` that can be persisted on a stored
  * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
  * intentionally excluded — they are inherited from the Mastra instance at
- * hydration time. `id`/`name` are excluded because a stored agent's durable
- * wrapper must keep the agent's own id/name to stay addressable.
+ * hydration time. This controls resumable streams, not durable execution.
  */
 export type StorageDurableConfig =
   | boolean
   | {
-      /** Maximum steps for the durable agentic loop. */
-      maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
       cleanupTimeoutMs?: number;
     };
@@ -2361,6 +2363,8 @@ export interface UpdateWorkflowStateOptions {
   resumeClaimedAt?: number;
   /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
   resumeLeasedClaimAt?: number;
+  /** What an agent resume claims this run with. See `WorkflowRunState.resumeClaimIntent`. */
+  resumeClaimIntent?: WorkflowRunState['resumeClaimIntent'];
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a

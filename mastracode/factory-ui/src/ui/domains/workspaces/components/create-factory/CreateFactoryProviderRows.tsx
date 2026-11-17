@@ -5,6 +5,7 @@ import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
 import { matchesProviderQuery } from '../../hooks/useProviderConnection';
+import { MastraGatewayBilling } from '../MastraGatewayBilling';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -21,6 +22,10 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
   if (connection.catalogError)
     return <CreateFactoryPaletteAlert>{connection.catalogError.message}</CreateFactoryPaletteAlert>;
 
+  const gateway =
+    connection.gatewayProvider && matchesProviderQuery(connection.gatewayProvider, query)
+      ? connection.gatewayProvider
+      : undefined;
   const signIn = connection.signInProviders.filter(provider => matchesProviderQuery(provider, query));
   const withKey = connection.keyProviders.filter(
     provider => provider.oauth?.supported !== true && matchesProviderQuery(provider, query),
@@ -29,8 +34,21 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
   return (
     <>
       {error && <CreateFactoryPaletteAlert>{error}</CreateFactoryPaletteAlert>}
-      {signIn.length === 0 && withKey.length === 0 && (
+      {!gateway && signIn.length === 0 && withKey.length === 0 && (
         <CreateFactoryPaletteMessage>No providers match this search.</CreateFactoryPaletteMessage>
+      )}
+      {gateway && (
+        <CommandGroup heading="Recommended">
+          <CommandPaletteItem
+            icon={<ProviderBrandIcon provider={gateway.provider} />}
+            title={providerDisplayName(gateway.provider)}
+            subtitle={<MastraGatewayBilling />}
+            badge={connection.isConfigured(gateway) ? 'Connected' : undefined}
+            value={`gateway-${gateway.provider}`}
+            disabled={connection.pending}
+            onSelect={connection.chooseGateway}
+          />
+        </CommandGroup>
       )}
       {signIn.length > 0 && (
         <CommandGroup heading="Sign in">

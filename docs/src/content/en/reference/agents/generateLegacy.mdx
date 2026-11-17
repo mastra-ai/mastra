@@ -60,66 +60,6 @@ Scorer judges with legacy model adapters call `generateLegacy()`. They don't rec
             description: 'Additional context messages to provide to the agent.',
           },
           {
-            name: 'structuredOutput',
-            type: 'StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>',
-            isOptional: true,
-            description:
-              'Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.',
-            properties: [
-              {
-                type: 'StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>',
-                parameters: [
-                  {
-                    name: 'schema',
-                    type: 'z.ZodSchema<S>',
-                    isOptional: false,
-                    description: 'Zod schema to validate the output against.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'model',
-                    type: 'MastraLanguageModel',
-                    isOptional: false,
-                    description: 'Model to use for the internal structuring agent.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'errorStrategy',
-                    type: "'strict' | 'warn' | 'fallback'",
-                    isOptional: true,
-                    description: "Strategy when parsing or validation fails. Defaults to 'strict'.",
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'fallbackValue',
-                    type: '<S extends ZodTypeAny>',
-                    isOptional: true,
-                    description: "Fallback value when errorStrategy is 'fallback'.",
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'instructions',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Custom instructions for the structuring agent.',
-                  },
-                ],
-              },
-            ],
-          },
-          {
             name: 'outputProcessors',
             type: 'Processor[]',
             isOptional: true,
@@ -138,7 +78,7 @@ Scorer judges with legacy model adapters call `generateLegacy()`. They don't rec
             type: 'Zod schema | JsonSchema7',
             isOptional: true,
             description:
-              'Note, the preferred route is to use the `structuredOutput` property. Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.',
+              'Enables structured output generation alongside text generation and tool calls. The model will generate responses that conform to the provided schema.',
           },
           {
             name: 'instructions',
@@ -176,7 +116,7 @@ Scorer judges with legacy model adapters call `generateLegacy()`. They don't rec
                   {
                     name: 'resource',
                     type: 'string',
-                    isOptional: false,
+                    isOptional: true,
                     description: 'Identifier for the user or resource associated with the thread.',
                   },
                 ],
@@ -435,7 +375,7 @@ Scorer judges with legacy model adapters call `generateLegacy()`. They don't rec
     type: 'object',
     isOptional: true,
     description:
-      'The generated structured response. Present when a schema is provided via `output`, `structuredOutput`, or `experimental_output`.',
+      'The generated structured response when a schema is provided via `output` or `experimental_output`. With `experimental_output`, it may be undefined when generation finishes with a reason other than `stop`.',
   },
   {
     name: 'toolCalls',
@@ -536,15 +476,11 @@ await agent.generateLegacy(
         reasoningEffort: 'high',
       },
     },
-    // Structured output with better DX
-    structuredOutput: {
-      schema: z.object({
-        sentiment: z.enum(['positive', 'negative', 'neutral']),
-        confidence: z.number(),
-      }),
-      model: '__GATEWAY_OPENAI_MODEL__',
-      errorStrategy: 'warn',
-    },
+    // Structured output alongside tool calls
+    experimental_output: z.object({
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      confidence: z.number(),
+    }),
     // Output processors for response validation
     outputProcessors: [
       new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),

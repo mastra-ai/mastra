@@ -13,7 +13,12 @@ import {
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
-import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
+import type {
+  FeedbackOptions,
+  TracesExplorerLayoutProps,
+  TracesExplorerPanelProps,
+  TracesExplorerRootProps,
+} from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
@@ -155,6 +160,8 @@ type HarnessProps = {
   scope?: { entityId: string; entityType?: 'agent' };
   metricsSupport?: MetricsSupport;
   features?: TracesExplorerFeatures;
+  rootSource?: TracesExplorerRootProps['rootSource'];
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters, passed to the explorer as `initialFilters`. */
   baselineFilters?: TracesFilters;
   filterBar?: ReactNode;
@@ -184,6 +191,8 @@ function Harness({
   scope,
   metricsSupport = METRICS_SUPPORTED,
   features,
+  rootSource,
+  feedbackOptions,
   baselineFilters,
   filterBar = <TracesExplorer.FilterBar />,
   onChange,
@@ -215,6 +224,8 @@ function Harness({
       scope={scope}
       metricsSupport={metricsSupport}
       features={features}
+      rootSource={rootSource}
+      feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
     >
       <TracesExplorer.Layout
@@ -1174,6 +1185,51 @@ describe('TracesExplorer', () => {
     });
   });
 
+  it('does not carry a feedback draft into another selected trace', async () => {
+    setExplorerHandlers();
+    const { queryClient } = renderExplorer();
+    await settle(queryClient);
+    fireEvent.click(traceRow('What is the weather in Paris'));
+    const panel = within(await screen.findByRole('dialog', { name: 'Trace details' }));
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    // Visit both traces first, so navigation reuses cached spans without a loading unmount.
+    fireEvent.click(panel.getByRole('button', { name: 'Go to next trace' }));
+    await settle(queryClient);
+    fireEvent.click(panel.getByRole('button', { name: 'Go to previous trace' }));
+    await settle(queryClient);
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    fireEvent.change(await panel.findByPlaceholderText('Leave feedback'), { target: { value: 'Weather draft' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Go to next trace' }));
+    await settle(queryClient);
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    expect(panel.getByRole<HTMLInputElement>('textbox', { name: 'Leave feedback' }).value).toBe('');
+  });
+
+  it('forwards host feedback write options into the trace composer', async () => {
+    setExplorerHandlers();
+    const onPost = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/feedback`, async ({ request }) => {
+        onPost(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    renderExplorer({
+      initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      feedbackOptions: { contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false },
+    });
+    const panel = within(await screen.findByRole('dialog', { name: 'Trace details' }));
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    fireEvent.change(await panel.findByPlaceholderText('Leave feedback'), { target: { value: 'Explorer note' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Send feedback' }));
+    await waitFor(() =>
+      expect(onPost).toHaveBeenCalledWith({
+        contextMode: 'resolve',
+        feedback: expect.objectContaining({ traceId: 'trace-weather', feedbackUserId: null, value: 'Explorer note' }),
+      }),
+    );
+  });
+
   describe('when the host turns feedback off', () => {
     it('does not request feedback for the open trace', async () => {
       setExplorerHandlers();
@@ -1460,50 +1516,131 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('host-selected root sources', () => {
+    it('starts a fresh page without showing legacy rows while aggregated roots load', async () => {
+      setExplorerHandlers();
+      const { rerender, queryClient } = renderExplorer();
+      await settle(queryClient);
+      expect(screen.getByText('What is the weather in Paris?')).toBeTruthy();
+      onTraceQuery.mockClear();
+
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onTraceQuery(await request.json());
+          await pending;
+          return HttpResponse.json(emptyTracesPage);
+        }),
+      );
+      rerender(
+        <TestLinkProvider>
+          <Harness rootSource="aggregated" />
+        </TestLinkProvider>,
+      );
+      try {
+        await waitFor(() => expect(onTraceQuery).toHaveBeenCalled());
+        expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ rootSource: 'aggregated', page: { after: null } });
+        expect(screen.queryByText('What is the weather in Paris?')).toBeNull();
+      } finally {
+        release();
+      }
+      await settle(queryClient);
+      onTraceQuery.mockClear();
+      rerender(
+        <TestLinkProvider>
+          <Harness />
+        </TestLinkProvider>,
+      );
+      await settle(queryClient);
+      expect(onTraceQuery.mock.calls[0]?.[0]).not.toHaveProperty('rootSource');
+      expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ page: { after: null } });
+    });
+
+    it('surfaces a refused aggregated request without falling back to light traces', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onTraceQuery(await request.json());
+          return HttpResponse.json({ error: 'Aggregated roots unavailable' }, { status: 404 });
+        }),
+      );
+      const { queryClient } = renderExplorer({ rootSource: 'aggregated', features: { traceQuery: false } });
+      await settle(queryClient);
+      expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ rootSource: 'aggregated' });
+      expect(onLightListRequest).not.toHaveBeenCalled();
+      expect(screen.queryByText('What is the weather in Paris?')).toBeNull();
+      expect(screen.getByText(/Aggregated roots unavailable/)).toBeTruthy();
+    });
+  });
+
   describe.each([
     {
+      rootSource: undefined,
       server: 'polls deltas',
       capabilities: traceQueryCapabilities,
       tickRequests: onDeltaPoll,
       interval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
     },
     {
+      rootSource: undefined,
       server: 'reloads the list',
       capabilities: noDeltaPollingCapabilities,
       tickRequests: onTraceQuery,
       interval: OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
     },
-  ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests, interval }) => {
-    it('does not re-render the filter bar or the columns menu', async () => {
-      setExplorerHandlers(capabilities);
-      // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      const onToolbarRender = vi.fn();
-      const toolbar = (
-        <Profiler id="toolbar" onRender={onToolbarRender}>
-          <TracesExplorer.FilterBar />
-          <TracesExplorer.ColumnsMenu />
-        </Profiler>
-      );
-      try {
-        const { queryClient } = renderExplorer({ filterBar: toolbar });
-        await settle(queryClient);
-        const requestsBefore = tickRequests.mock.calls.length;
-        onToolbarRender.mockClear();
+    {
+      rootSource: 'aggregated' as const,
+      server: 'reloads aggregated roots despite advertising delta polling',
+      capabilities: traceQueryCapabilities,
+      tickRequests: onTraceQuery,
+      interval: OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+    },
+  ])(
+    'when the auto-refresh tick fires and the explorer $server',
+    ({ rootSource, capabilities, tickRequests, interval }) => {
+      it('does not re-render the filter bar or the columns menu', async () => {
+        setExplorerHandlers(capabilities);
+        // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const onToolbarRender = vi.fn();
+        const toolbar = (
+          <Profiler id="toolbar" onRender={onToolbarRender}>
+            <TracesExplorer.FilterBar />
+            <TracesExplorer.ColumnsMenu />
+          </Profiler>
+        );
+        try {
+          const { queryClient } = renderExplorer({ filterBar: toolbar, rootSource });
+          await settle(queryClient);
+          const requestsBefore = tickRequests.mock.calls.length;
+          onToolbarRender.mockClear();
 
-        act(() => {
-          vi.advanceTimersByTime(interval);
-        });
-        vi.useRealTimers();
-        await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
-        await settle(queryClient);
+          act(() => {
+            vi.advanceTimersByTime(interval);
+          });
+          vi.useRealTimers();
+          await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
+          await settle(queryClient);
 
-        expect(onToolbarRender).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
+          expect(onToolbarRender).not.toHaveBeenCalled();
+          if (rootSource === 'aggregated') {
+            expect(onDeltaPoll).not.toHaveBeenCalled();
+            expect(
+              onTraceQuery.mock.calls.every(
+                ([body]) =>
+                  typeof body === 'object' && body !== null && 'rootSource' in body && body.rootSource === 'aggregated',
+              ),
+            ).toBe(true);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    },
+  );
 });
 
 describe('TracesExplorer.Layout', () => {

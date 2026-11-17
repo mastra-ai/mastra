@@ -285,7 +285,7 @@ export function ChatProvider({
     requireToolApproval,
   };
 
-  const { send, cancel } = useChatSendHandler({
+  const { send, cancel, setModelContext } = useChatSendHandler({
     agentId,
     requestContext,
     agentVersionId,
@@ -346,7 +346,7 @@ export function ChatProvider({
     () => ({ isRunning, activeRunId, cancelRun: cancel, canSendWhileStreaming }),
     [isRunning, activeRunId, cancel, canSendWhileStreaming],
   );
-  const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
+  const sendValue = useMemo<SendContextValue>(() => ({ send, setModelContext }), [send, setModelContext]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
     () => ({ agentId, agentVersionId, requestContext }),

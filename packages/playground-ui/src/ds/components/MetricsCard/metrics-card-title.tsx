@@ -9,5 +9,5 @@ export function MetricsCardTitle({
   className?: string;
   as?: 'h2' | 'h3' | 'h4';
 }) {
-  return <Tag className={cn('text-body font-medium text-foreground', className)}>{children}</Tag>;
+  return <Tag className={cn('text-subheading text-foreground', className)}>{children}</Tag>;
 }

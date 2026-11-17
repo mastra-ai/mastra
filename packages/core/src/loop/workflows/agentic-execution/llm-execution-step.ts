@@ -86,6 +86,7 @@ import {
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
   RESOURCE_ID_KEY,
+  SKIP_BG_TASK_WAIT_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
@@ -97,6 +98,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
@@ -107,7 +109,7 @@ import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-m
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
-import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import { TERMINAL_FINISH_REASONS, TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
@@ -1650,7 +1652,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
         materializeFailedAttempt = undefined;
         settleRequest();
-        settleRequest = startRunStep(options?.abortSignal);
+        settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1990,6 +1992,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
+        // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+        // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+        const backgroundOutcomes = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
+          ? snapshotBackgroundOutcomes(messageList)
+          : undefined;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
           if (!isDownloadAssetsError(error)) {
@@ -1998,6 +2005,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        const builtPrompt = inputMessages;
         removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
@@ -2095,6 +2103,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
+        // A cached reply may come from a different prompt under a custom cache key, so it never
+        // counts as having answered a background result.
+        const backgroundResultTaskIds =
+          backgroundOutcomes && !cachedResponse
+            ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+            : [];
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -2123,10 +2137,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               for (const chunk of replayChunks) {
                 // Reattach per-run metadata that was stripped at cache time. A cached
                 // step-start timestamp belongs to the original provider call, so omit it
-                // rather than reporting stale inference timing for the replay.
+                // rather than reporting stale inference timing for the replay. Cached background
+                // task ids belong to the original run.
                 let replayChunk = chunk;
                 if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
-                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
+                  const {
+                    startedAt: _startedAt,
+                    backgroundResultTaskIds: _cachedTaskIds,
+                    ...payload
+                  } = chunk.payload as Record<string, unknown>;
                   replayChunk = { ...chunk, payload };
                 }
                 controller.enqueue({
@@ -2186,7 +2205,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // runs while the retry waits, so a lease lost during that wait stops the run too.
                 onRequestFailed: () => settleRequest(),
                 onRequestRetry: () => {
-                  settleRequest = startRunStep(options?.abortSignal);
+                  settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
                 },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,
@@ -2236,6 +2255,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       startedAt: inferenceStartedAt,
                       modelId: currentStep.model.modelId,
                       provider: currentStep.model.provider,
+                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                     },
                   };
                 },
@@ -3380,11 +3400,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // some models return finishReason='stop' alongside tool calls, which the
       // loop must process.
       const hasPendingToolCalls =
-        toolCalls &&
-        toolCalls.some(tc => !tc.providerExecuted) &&
-        finishReason !== 'error' &&
-        finishReason !== 'length' &&
-        finishReason !== 'content-filter';
+        toolCalls && toolCalls.some(tc => !tc.providerExecuted) && !TOOL_CALL_TERMINAL_FINISH_REASONS.has(finishReason);
       // A non-terminal finish reason only re-enters the loop when the step produced tool calls
       // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
       // when the stream omits finish_reason) re-sending the same request would duplicate the

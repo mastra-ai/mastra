@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createTool } from '@mastra/core/tools';
 import { CLIENT_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { serveHTTP } from '../server/__tests__/harness.mock';
 import { MCPServer } from '../server/server';
 import { InternalMastraMCPClient } from './client';
@@ -857,3 +859,105 @@ async function recordingLegacyServer() {
     },
   };
 }
+
+describe('MCPClient app-only tools', () => {
+  const echo = (id: string, visibility?: Array<'model' | 'app'>) =>
+    createTool({
+      id,
+      description: id,
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+      ...(visibility ? { mcp: { _meta: { ui: { visibility } } } } : {}),
+    });
+
+  async function connectToAppServer() {
+    const served = await serveHTTP(
+      new MCPServer({
+        name: 'Apps',
+        version: '1.0.0',
+        tools: {
+          plain: echo('plain'),
+          shared: echo('shared', ['model', 'app']),
+          appOnly: echo('appOnly', ['app']),
+        },
+      }),
+    );
+    const client = new MCPClient({ id: `app-only-${++clientId}`, servers: { apps: { url: served.url } } });
+    return {
+      client,
+      close: async () => {
+        await client.disconnect();
+        await served.close();
+      },
+    };
+  }
+
+  it('keeps tools meant only for MCP Apps away from agents', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      expect(Object.keys(await client.listTools()).sort()).toEqual(['apps_plain', 'apps_shared']);
+      expect(Object.keys((await client.listToolsets()).apps ?? {}).sort()).toEqual(['plain', 'shared']);
+    } finally {
+      await close();
+    }
+  });
+
+  it('keeps them out of cached tool catalogs, so agents rebuilt from a cache never get them', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      expect(Object.keys(definitions.apps ?? {}).sort()).toEqual(['plain', 'shared']);
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('drops app-only tools from a catalog cached before they were filtered out', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      definitions.apps.appOnly = { ...definitions.apps.plain, name: 'appOnly', _meta: { ui: { visibility: ['app'] } } };
+
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('never hands app-only tools to the per-server discovery callback', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const seen: Record<string, string[]> = {};
+      await client.listToolsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`tools:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolsetsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`toolsets:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolDefinitionsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`definitions:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+
+      expect(seen).toEqual({
+        'tools:apps': ['plain', 'shared'],
+        'toolsets:apps': ['plain', 'shared'],
+        'definitions:apps': ['plain', 'shared'],
+      });
+    } finally {
+      await close();
+    }
+  });
+});

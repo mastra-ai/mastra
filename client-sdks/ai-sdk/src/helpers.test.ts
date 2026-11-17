@@ -2,6 +2,8 @@ import { readUIMessageStream } from '@internal/ai-v6';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
+import { toAISdkStream } from './convert-streams';
+
 import {
   convertMastraChunkToAISDKv5,
   convertMastraChunkToAISDKv6,
@@ -66,6 +68,84 @@ describe('replay-safe text metadata', () => {
       }),
     ).toMatchObject({ providerExecuted: true, providerMetadata });
   });
+});
+
+describe('tool display titles in AI SDK streams', () => {
+  it.each(['v6', 'v7'] as const)('emits tool titles through toAISdkStream %s', async version => {
+    const fullStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'start', runId: 'run-1', from: ChunkFrom.AGENT, payload: { messageId: 'msg-1' } });
+        controller.enqueue({
+          type: 'tool-call-input-streaming-start',
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId: 'call-1', toolName: 'getWeather', title: 'Get Weather' },
+        });
+        controller.enqueue({
+          type: 'tool-call',
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId: 'call-1', toolName: 'getWeather', title: 'Get Weather', args: { city: 'London' } },
+        });
+        controller.close();
+      },
+    });
+    const parts: Array<{ type: string; title?: string }> = [];
+    for await (const part of toAISdkStream({ fullStream } as any, { from: 'agent', version })) {
+      parts.push(part);
+    }
+    expect(
+      parts.filter(part => part.type === 'tool-input-start' || part.type === 'tool-input-available'),
+    ).toMatchObject([
+      { type: 'tool-input-start', title: 'Get Weather' },
+      { type: 'tool-input-available', title: 'Get Weather' },
+    ]);
+  });
+
+  it('does not add titles to v5 tool calls', () => {
+    const part = convertMastraChunkToAISDKv5({
+      chunk: {
+        type: 'tool-call',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'call-1', toolName: 'getWeather', title: 'Get Weather', args: {} },
+      },
+    });
+    expect(part).not.toHaveProperty('title');
+  });
+
+  for (const [chunkType, expectedType] of [
+    ['tool-call-input-streaming-start', 'tool-input-start'],
+    ['tool-call', 'tool-input-available'],
+  ] as const) {
+    it(`preserves optional titles for ${expectedType} in v6 UI streams`, () => {
+      for (const title of ['Get Weather', undefined]) {
+        const chunk = {
+          type: chunkType,
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            ...(title ? { title } : {}),
+            ...(chunkType === 'tool-call' ? { args: { city: 'London' } } : {}),
+          },
+        } as Parameters<typeof convertMastraChunkToAISDKv6>[0]['chunk'];
+        const part = convertMastraChunkToAISDKv6({ chunk });
+        const uiPart = convertFullStreamChunkToUIMessageStream({ part, onError: String });
+
+        expect(part).toMatchObject({ type: chunkType === 'tool-call' ? 'tool-call' : expectedType });
+        expect(uiPart).toMatchObject({ type: expectedType });
+        if (title) {
+          expect(part).toHaveProperty('title', title);
+          expect(uiPart).toHaveProperty('title', title);
+        } else {
+          expect(part).not.toHaveProperty('title');
+          expect(uiPart).not.toHaveProperty('title');
+        }
+      }
+    });
+  }
 });
 
 describe('tool payload transform conversion', () => {

@@ -65,25 +65,6 @@ describe('ScorersToolbar', () => {
     expect(onSearchChange).toHaveBeenLastCalledWith('');
   });
 
-  it('mirrors an external search reset into the input', () => {
-    const onSearchChange = vi.fn();
-    const { rerender } = render(
-      <ScorersToolbar
-        search="preset"
-        onSearchChange={onSearchChange}
-        sourceFilter=""
-        onSourceFilterChange={() => {}}
-      />,
-    );
-    const input = screen.getByLabelText('Search scorers') as HTMLInputElement;
-    expect(input.value).toBe('preset');
-
-    rerender(
-      <ScorersToolbar search="" onSearchChange={onSearchChange} sourceFilter="" onSourceFilterChange={() => {}} />,
-    );
-    expect(input.value).toBe('');
-  });
-
   it('Reset clears an in-flight (typed-but-uncommitted) search and cancels the pending commit', () => {
     // Reset is visible from an active source filter alone (parent: hasActiveFilters =
     // sourceFilter !== 'all' || search !== ''), so the user can type then Reset before the

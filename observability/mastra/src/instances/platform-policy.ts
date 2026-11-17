@@ -18,3 +18,18 @@ export function isMastraBuiltInStorageExporter(exporter: ObservabilityExporter):
     MASTRA_BUILT_IN_STORAGE_EXPORTER_NAMES.has(exporter.name)
   );
 }
+
+export function isMastraDeprecatedStorageExporter(exporter: ObservabilityExporter): boolean {
+  return exporter instanceof DefaultExporter || exporter.name === 'mastra-default-observability-exporter';
+}
+
+export function shouldSkipStorageExporterOnPlatform(
+  exporter: ObservabilityExporter,
+  retainStorageExporterOnPlatform = false,
+): boolean {
+  return (
+    isMastraPlatformDeployment() &&
+    isMastraBuiltInStorageExporter(exporter) &&
+    (!retainStorageExporterOnPlatform || isMastraDeprecatedStorageExporter(exporter))
+  );
+}

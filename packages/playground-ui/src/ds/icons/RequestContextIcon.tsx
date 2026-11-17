@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const RequestContextIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="16" height="16" viewBox="0 0 11.185 11.185" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="18"
+    height="18"
+    viewBox="-0.6991 -0.6991 12.5831 12.5831"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

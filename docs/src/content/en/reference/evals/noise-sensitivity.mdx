@@ -241,14 +241,21 @@ Checks if noise causes the agent to generate false or fabricated information tha
 
 ### Formula
 
+```text
+selected_score = |llm_score - calculated_score| > discrepancy_threshold
+  ? min(llm_score, calculated_score)
+  : llm_score
+
+Final Score = max(0, selected_score - issues_penalty)
 ```
-Final Score = max(0, min(llm_score, calculated_score): issues_penalty)
-```
+
+The final score is rounded to two decimal places.
 
 Where:
 
 - `llm_score` = Direct robustness score from LLM analysis
 - `calculated_score` = Average of impact weights across dimensions
+- `discrepancy_threshold` = `scoring.discrepancyThreshold` (default `0.2`)
 - `issues_penalty` = min(major_issues × penalty_rate, max_penalty)
 
 ### Impact Level Weights

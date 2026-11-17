@@ -83,6 +83,51 @@ export const mastra = new Mastra({
 })
 ```
 
+## Export to storage and Platform
+
+On Mastra Platform, a nonempty `MASTRA_DEPLOYMENT_ID` disables `MastraStorageExporter` and the deprecated `DefaultExporter` by default. Other exporters remain enabled. The opt-in below applies only to `MastraStorageExporter`. Deprecated `DefaultExporter` stays disabled on Platform even with the flag set to `true`. Migrate to `MastraStorageExporter` to use this option.
+
+:::warning Local storage remains blocked even with the opt-in
+
+`retainStorageExporterOnPlatform: true` **doesn't** enable in-memory, local libSQL, or DuckDB observability writes on Platform. When the observability domain reports local persistence, the built-in storage exporter stays disabled: it won't persist traces, logs, metrics, scores, or feedback to that database. Other exporters continue to receive events.
+
+:::
+
+With updated adapters and `retainStorageExporterOnPlatform: true`, the behavior on Platform is:
+
+| Observability database | Storage export on Platform |
+| - | - |
+| PostgreSQL | Allowed |
+| Remote libSQL/Turso (`libsql://` or `https://`) | Allowed |
+| Local libSQL (`file:` or `:memory:`) | Blocked |
+| libSQL embedded replica with a remote sync URL | Blocked: it still writes locally |
+| DuckDB, including in-memory databases | Blocked |
+| `InMemoryStore`, including the fallback when no storage is configured | Blocked |
+
+To keep writing to your own remote database alongside Platform observability, set [`retainStorageExporterOnPlatform`](/reference/observability/tracing/configuration#observabilityinstanceconfig) to `true` on the observability config:
+
+```typescript
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
+
+const observability = new Observability({
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      retainStorageExporterOnPlatform: true,
+      exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+    },
+  },
+})
+```
+
+Pass this `observability` instance to `new Mastra()` alongside your configured `storage` provider. The option applies only to this config, including exporters registered later. It doesn't configure a database or add exporters automatically. Other configs keep the default suppression unless they also opt in.
+
+The restriction applies to the **observability domain**, which can use a different provider from your default application storage. It doesn't disable other storage domains. Outside Platform, local observability storage continues to work.
+
+To enable this guard, upgrade `@mastra/core` and any `@mastra/libsql` or `@mastra/duckdb` adapters alongside `@mastra/observability`: older or custom adapters without the `persistenceLocation` capability retain the existing opt-in behavior and aren't checked for local persistence.
+
+A blocked exporter logs a warning during initialization, but the restriction applies even if your logging setup hides that warning. If dual export isn't writing to your database, check the observability provider against the table above and configure a remote database. Retrying or increasing the batch interval won't enable a blocked exporter.
+
 ## Studio
 
 Access your traces through Studio:
@@ -100,10 +145,16 @@ MastraStorageExporter automatically selects the optimal tracing strategy based o
 
 | Strategy | Description | Use Case |
 | - | - | - |
-| **realtime** | Process each event immediately | Development, debugging, low traffic |
+| **realtime** | Process each event immediately | Single-process local development and debugging |
 | **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production |
 | **insert-only** | Only process completed spans, ignore updates | High volume Production |
 | **event-sourced** | Write one row when a span starts and another when it ends, then collapse them on read | High volume Production, in-progress traces |
+
+:::note
+
+`realtime` assumes one process owns a span from start to end, so it isn't supported with durable execution (durable agents, and Inngest, Temporal, or evented workflows). When any of these is registered, the exporter logs one warning and runs `batch-with-updates`.
+
+:::
 
 ### Strategy Configuration
 
@@ -157,7 +208,7 @@ The following storage providers **don't support** the observability domain. If y
 
 ### Strategy Benefits
 
-- **realtime**: Immediate visibility, best for debugging
+- **realtime**: Immediate visibility, best for debugging in a single process
 - **batch-with-updates**: 10-100x throughput improvement, full span lifecycle
 - **insert-only**: Additional 70% reduction in database operations, perfect for analytics
 - **event-sourced**: Append-only like insert-only, but in-progress traces stay visible in Studio while a run executes
@@ -199,6 +250,23 @@ The MastraStorageExporter includes reliable error handling for production use:
 - **Persistent Failures**: Drop batch after 4 failed attempts
 - **Buffer Overflow**: Prevent memory issues during storage outages
 
+### Spans ended by another process
+
+With durable execution, a worker can end a span before the process that started it stores the span. With `batch-with-updates`, the worker's exporter holds that end and retries it with `maxRetries` and `retryDelayMs`. Other flushes don't send it before its retry time. With `realtime`, the exporter doesn't retry and drops the end right away. An update that doesn't apply is dropped right away, because a retried update could overwrite a newer one. Only an end is retried, since it carries the span's full state.
+
+This retry needs a store with conditional span updates: libSQL, PostgreSQL, or the in-memory store. On other stores, the exporter holds the end until its retries run out, then drops it with `retry-exhausted`.
+
+The retries must last longer than the other process takes to store the span:
+
+- **Worker**: The defaults retry for about 7.5 seconds (500ms, 1s, 2s, 4s).
+- **Process that started the span**: It stores the span within its `maxBatchWaitMs` (5 seconds by default), plus write time and any retries of its own.
+
+If you raise `maxBatchWaitMs` on that process, or lower `maxRetries` or `retryDelayMs` on the worker, change the other settings to keep this margin. When the retries run out, the exporter drops the end with `span-not-updatable` and the span stays open in Studio.
+
+At `shutdown()`, the exporter tries each held end one last time. It reports an end that still doesn't apply as `span-not-updatable`, and an end whose write fails as `retry-exhausted`.
+
+A serverless worker can freeze right after a run's flush. The retry timer may then never fire, so the end isn't stored and no drop event is emitted.
+
 ## Dropped observability events
 
 `DefaultExporter` emits structured drop events when it can't persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
@@ -207,7 +275,7 @@ Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
-- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change. With `batch-with-updates`, an end for a span another process started is dropped only after its [retries](#spans-ended-by-another-process) run out.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 
@@ -241,7 +309,7 @@ class DropAlertExporter extends BaseExporter {
 // Zero config - recommended for most users
 new MastraStorageExporter()
 
-// Development override
+// Single-process development override
 new MastraStorageExporter({
   strategy: 'realtime', // Immediate visibility for debugging
 })

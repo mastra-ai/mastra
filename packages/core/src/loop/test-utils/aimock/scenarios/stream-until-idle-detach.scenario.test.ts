@@ -288,10 +288,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
           await vi.waitFor(async () => {
             expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'completed' });
           });
-          const completes =
-            action === 'read' ||
-            action === 'cancel-local-only' ||
-            (action === 'cancel' && isDurableEngineVariant(engine));
+          const completes = action === 'read' || action === 'cancel-local-only' || action === 'cancel';
           if (completes) {
             await vi.waitFor(
               async () => {
@@ -316,7 +313,15 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         }
       }, 30_000);
     }
-    for (const action of ['cancel', 'signal', 'cancel-signal', 'signal-cancel', 'race', 'cancel-abort'] as const) {
+    for (const action of [
+      'cancel',
+      ...(isDurableEngineVariant(engine) ? [] : (['cancel-default'] as const)),
+      'signal',
+      'cancel-signal',
+      'signal-cancel',
+      'race',
+      'cancel-abort',
+    ] as const) {
       it(`${resumed === 'legacy' ? 'legacy resumed' : resumed ? 'resumed' : 'initial'} reader ${action} preserves execution cancellation authority`, async () => {
         const llm = getMock();
         const memory = new MockMemory();
@@ -388,7 +393,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         let result;
         if (resumed) {
           const parked = await agent.streamUntilIdle('Start', {
-            _detachObserverOnCancel: true,
+            _detachObserverOnCancel: action === 'cancel-default' ? undefined : true,
             memory: thread,
             maxSteps: 8,
           });
@@ -397,7 +402,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
           }
           const options = {
             untilIdle: true,
-            _detachObserverOnCancel: true,
+            _detachObserverOnCancel: action === 'cancel-default' ? undefined : true,
             runId: parked.runId,
             toolCallId: 'authorize-1',
             memory: thread,
@@ -410,7 +415,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               : await agent.resumeStream({ approved: true }, options);
         } else {
           result = await agent.streamUntilIdle('Start', {
-            _detachObserverOnCancel: true,
+            _detachObserverOnCancel: action === 'cancel-default' ? undefined : true,
             memory: thread,
             maxSteps: 8,
             abortSignal: signal.signal,
@@ -425,7 +430,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
           if (action === 'cancel-signal') signal.abort();
           if (action === 'cancel-abort') await agent.abortRunStream(result.runId);
 
-          const completes = action === 'cancel' && isDurableEngineVariant(engine);
+          const completes = action === 'cancel';
           if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
           else {
             expect(toolSignal?.aborted).toBe(false);
@@ -438,7 +443,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               expect(toolSignal?.aborted).toBe(false);
             }
           }
-          const observation = isDurableEngineVariant(engine) ? await agent.observe(result.runId) : undefined;
+          const observation = await agent.observe(result.runId);
           gate.resolve();
           if (observation) {
             const chunks = [];

@@ -143,7 +143,101 @@ afterEach(() => {
   }
 });
 
+const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses';
+
+/**
+ * A response body that fails after HTTP 200, as the AI SDK reports it
+ * (provider-utils `wrapResponseBodyStream` + `handleFetchError`), here at the
+ * ChatGPT Codex 900 s stream cut.
+ */
+function streamCutError(): Error {
+  const socket = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+  const terminated = new TypeError('terminated', { cause: socket });
+  return Object.assign(new Error('Failed to process successful response', { cause: terminated }), {
+    name: 'AI_APICallError',
+    statusCode: 200,
+    url: CODEX_URL,
+    isRetryable: true,
+  });
+}
+
+/** The error frame the Codex backend sends before closing a stream at 900 s (openai/codex#51886). */
+const STREAM_LIMIT_FRAME = {
+  type: 'error',
+  sequence_number: 29810,
+  error: {
+    type: 'server_error',
+    code: 'request_timeout',
+    message: 'stream error: stream disconnected before completion: stream closed before response.completed',
+    param: null,
+  },
+};
+
 describe('classifyRotationError (locked Q7 taxonomy)', () => {
+  it('classifies a stream cut after HTTP 200 as a stream cut, not an outage', () => {
+    expect(classifyRotationError(streamCutError())).toEqual({ kind: 'stream-cut' });
+    expect(classifyRotationError(new Error('provider request failed', { cause: streamCutError() }))).toEqual({
+      kind: 'stream-cut',
+    });
+  });
+
+  it('classifies the Codex request_timeout stream frame as a stream cut', () => {
+    expect(classifyRotationError(STREAM_LIMIT_FRAME)).toEqual({ kind: 'stream-cut' });
+  });
+
+  it('classifies the request_timeout frame as @ai-sdk/openai raises it, despite its derived 504', async () => {
+    const OUTPUT_FRAME = {
+      type: 'response.output_text.delta',
+      content_index: 0,
+      delta: 'Partial output.',
+      item_id: 'msg-1',
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 1,
+    };
+    const providerError = async (frames: Array<Record<string, unknown>>) => {
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const openai = createOpenAI({
+        apiKey: 'test-key',
+        fetch: async () =>
+          new Response(frames.map(frame => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      });
+      try {
+        const { stream } = await openai.responses('gpt-5.4').doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        });
+        for await (const chunk of stream) {
+          if (chunk.type === 'error') return chunk.error;
+        }
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected the stream to fail');
+    };
+
+    // After output the frame arrives as a stream error chunk; before any output the provider throws it.
+    const midStream = await providerError([OUTPUT_FRAME, STREAM_LIMIT_FRAME]);
+    const beforeOutput = await providerError([STREAM_LIMIT_FRAME]);
+    expect(midStream).toMatchObject({ code: 'request_timeout', statusCode: 504 });
+    expect(beforeOutput).toMatchObject({ statusCode: 504, data: STREAM_LIMIT_FRAME });
+    expect(classifyRotationError(midStream)).toEqual({ kind: 'stream-cut' });
+    expect(classifyRotationError(beforeOutput)).toEqual({ kind: 'stream-cut' });
+  });
+
+  it('keeps hopping on network failures and 5xx that never got a response', () => {
+    const refused = new Error('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), { code: 'ECONNREFUSED' }),
+    });
+    expect(classifyRotationError(refused)).toEqual({ kind: 'hop' });
+    expect(classifyRotationError(apiError(502, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
+    expect(classifyRotationError(apiError(504, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
+    expect(classifyRotationError({ type: 'error', error: { type: 'server_error', message: 'boom' } })).toEqual({
+      kind: 'hop',
+    });
+  });
   it('rejects prototype-chain names as account-switch reasons', () => {
     expect(isAccountSwitchReason('toString')).toBe(false);
     expect(isAccountSwitchReason('constructor')).toBe(false);
@@ -315,6 +409,49 @@ describe('provider attribution', () => {
 });
 
 describe('AccountRotationProcessor.processAPIError', () => {
+  it('retries a cut stream on the same account and never declares a persistent outage', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 64 });
+    const emitEvent = vi.fn();
+    const requestContext = { get: (key: string) => (key === 'controller' ? { emitEvent } : undefined) };
+    const args = makeArgs({ error: Object.assign(streamCutError(), { url: ANTHROPIC_URL }), requestContext });
+
+    // MAX_STREAM_CUT_RETRIES (2) same-account retries, then the error surfaces.
+    const MAX_STREAM_CUT_RETRIES = 2;
+    const results = [];
+    for (let attempt = 0; attempt < MAX_STREAM_CUT_RETRIES + 1; attempt++) {
+      results.push(await processor.processAPIError({ ...args, retryCount: attempt + 1 } as any));
+    }
+
+    expect(results).toEqual([
+      ...Array.from({ length: MAX_STREAM_CUT_RETRIES }, () => ({ retry: true })),
+      { retry: false },
+    ]);
+    // No account was switched or marked unavailable, and no fallback was announced.
+    expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(readAuthJson(seeded.authPath)[`accounts:${seeded.accountA.id}`]).toMatchObject({ active: true });
+    expect(args.rotateResponseMessageId).toHaveBeenCalledTimes(MAX_STREAM_CUT_RETRIES);
+    expect(emitEvent).toHaveBeenCalledTimes(MAX_STREAM_CUT_RETRIES);
+    expect(emitEvent.mock.calls.map(([event]) => event.message).join('\n')).not.toMatch(/persistent outage/i);
+  });
+
+  it('gives each model step its own stream-cut budget', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 64 });
+    const args = makeArgs({ error: Object.assign(streamCutError(), { url: ANTHROPIC_URL }) });
+    const cut = (stepNumber: number, retryCount: number) =>
+      processor.processAPIError({ ...args, stepNumber, retryCount } as any);
+
+    // Step 0 spends its whole budget and then succeeds on the last retry.
+    expect([await cut(0, 0), await cut(0, 1)]).toEqual([{ retry: true }, { retry: true }]);
+    // A later step's cut shares the request's processor state but still gets its retries.
+    expect([await cut(1, 0), await cut(1, 1), await cut(1, 2)]).toEqual([
+      { retry: true },
+      { retry: true },
+      { retry: false },
+    ]);
+  });
+
   it.each([429, 402])(
     'rotates to the next account on %d, persists the switch part, swaps the slot',
     async statusCode => {

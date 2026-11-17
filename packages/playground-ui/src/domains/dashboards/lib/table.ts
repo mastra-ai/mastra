@@ -127,7 +127,8 @@ export const tableOptionsSchema = z.strictObject({
   defaultSort: z.strictObject({ column: z.string().min(1), direction: z.enum(['asc', 'desc']) }),
   /** Rows per page. Without it every row shows. */
   pageSize: z.number().int().min(1).optional(),
-  emptyMessage: z.string(),
+  /** Shown when no row comes back; defaults to "No data". */
+  emptyMessage: z.string().optional(),
   ariaLabel: z.string().optional(),
   /** Leaves out rows without a name. */
   hideUnnamed: z.boolean().optional(),

@@ -71,16 +71,18 @@ describe('IncidentioIntegration', () => {
     expect(incidentioReconciliationInterval()).toBe(60000);
   });
 
-  it('does not register reconciliation when disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switch', () => {
     vi.stubEnv('MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED', 'false');
     const integration = new IncidentioIntegration({ apiKey: 'incident-key' });
 
     expect(
-      integration.workers({
-        storage: { projects: { listAll: async () => [] } },
-        runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
-      } as never),
-    ).toEqual([]);
+      integration
+        .workers({
+          storage: { projects: { listAll: async () => [] } },
+          runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
+        } as never)
+        .map(worker => worker.name),
+    ).toEqual(['incidentio-issue-reconcile']);
   });
 
   it('requires and uses INCIDENT_IO_API_KEY', async () => {

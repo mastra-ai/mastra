@@ -57,9 +57,6 @@ async function setup() {
     orgId: ORG,
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: OWNER,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   const sourceSession = await ensureFactorySourceSession({
     sourceControl,

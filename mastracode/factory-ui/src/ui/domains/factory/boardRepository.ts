@@ -1,13 +1,6 @@
 import type { LinkedRepositoryPayload } from '../workspaces/services/github';
-import type { IntakeConfig } from './services/intake';
 
-export function cardLinearProjectId(source: string, metadata: Record<string, unknown> | undefined) {
-  if (source !== 'linear-issue') return undefined;
-  if (typeof metadata?.linearProjectId !== 'string') return undefined;
-  return metadata.linearProjectId;
-}
-
-export function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
+function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
   const provider = repository.provider ?? 'github';
   if (source === 'github-issue' || source === 'github-pr') return provider === 'github';
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return provider === 'gitlab';
@@ -35,31 +28,23 @@ function findUniqueRepositoryByProviderId(
   return matches.length === 1 ? match : undefined;
 }
 
-export function cardRepositorySlug(
-  source: string,
-  metadata: Record<string, unknown> | undefined,
-  config: IntakeConfig | undefined,
-  repositories: LinkedRepositoryPayload[],
-) {
-  // The provider id survives repository renames, so it outranks a possibly stale slug.
-  const repository = findUniqueRepositoryByProviderId(repositories, source, metadata);
-  if (repository) return repository.slug;
-  if (typeof metadata?.repository === 'string') return metadata.repository;
-  const projectId = cardLinearProjectId(source, metadata);
-  if (projectId === undefined) return undefined;
-  return config?.linear.repositoryByLinearProject?.[projectId];
+interface CardRepositoryFacts {
+  source: string;
+  metadata?: Record<string, unknown>;
+  workItem?: { metadata: Record<string, unknown> | null };
 }
 
-/** The linked repository a card's source lives in, else the board's primary repository. */
-export function cardProjectRepositoryId(
+function cardSourceMetadata(card: CardRepositoryFacts): Record<string, unknown> {
+  return { ...card.metadata, ...card.workItem?.metadata };
+}
+
+export function cardProjectRepositoryId<Fallback extends string | undefined>(
   repositories: LinkedRepositoryPayload[],
-  card: {
-    source: string;
-    metadata?: Record<string, unknown>;
-    workItem?: { metadata: Record<string, unknown> | null };
-  },
-  fallback: string,
-) {
-  const metadata = { ...card.metadata, ...card.workItem?.metadata };
-  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? fallback;
+  card: CardRepositoryFacts,
+  fallback: Fallback,
+): string | Fallback {
+  return (
+    findUniqueRepositoryByProviderId(repositories, card.source, cardSourceMetadata(card))?.projectRepositoryId ??
+    fallback
+  );
 }

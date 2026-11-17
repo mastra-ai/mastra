@@ -1096,6 +1096,176 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // #29424: a run started with null or omitted input. Time travel replays the first step with
+  // the input it originally received, so the step must get that same null or undefined again.
+  {
+    const createReplayInputWorkflow = (id: string, schema: z.ZodType) => {
+      const observeInput = vi.fn();
+      const step = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [step],
+      });
+      workflow.then(step).commit();
+
+      workflows[id] = { workflow, mocks: { observeInput }, resetMocks: () => observeInput.mockClear() };
+    };
+
+    createReplayInputWorkflow('tt-replay-nullable-input', z.string().nullable());
+    createReplayInputWorkflow('tt-replay-optional-input', z.string().optional());
+
+    // The same replay one level down: the parent's first step is a nested workflow, and time
+    // travel targets the nested workflow's first step, which receives the parent's input.
+    const createNestedReplayInputWorkflow = (id: string, schema: z.ZodType) => {
+      const observeInput = vi.fn();
+      const step = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+
+      const child = createWorkflow({
+        id: `${id}-child`,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [step],
+      });
+      child.then(step).commit();
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [child],
+      });
+      workflow.then(child).commit();
+
+      workflows[id] = { workflow, mocks: { observeInput }, resetMocks: () => observeInput.mockClear() };
+    };
+
+    createNestedReplayInputWorkflow('tt-replay-nested-object-input', z.object({}));
+    createNestedReplayInputWorkflow('tt-replay-nested-nullable-input', z.string().nullable());
+    createNestedReplayInputWorkflow('tt-replay-nested-optional-input', z.string().optional());
+
+    // A parent whose first entry is a nested workflow, followed by a parent step that reads the
+    // parent's own input. inputData passed to time travel belongs to the nested step, not the parent.
+    {
+      const observeInput = vi.fn();
+      const observeInitData = vi.fn();
+      const schema = z.string().nullable();
+      const inner = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+      const child = createWorkflow({
+        id: 'tt-replay-nested-parent-input-child',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [inner],
+      });
+      child.then(inner).commit();
+      const readInit = createStep({
+        id: 'read-init',
+        inputSchema: z.object({ received: schema }),
+        outputSchema: z.object({ init: schema }),
+        execute: async ({ getInitData }) => {
+          const init = getInitData<string | null>();
+          observeInitData(init);
+          return { init };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'tt-replay-nested-parent-input',
+        inputSchema: schema,
+        outputSchema: z.object({ init: schema }),
+        steps: [child, readInit],
+      });
+      workflow.then(child).then(readInit).commit();
+      workflows['tt-replay-nested-parent-input'] = {
+        workflow,
+        mocks: { observeInput, observeInitData },
+        resetMocks: () => {
+          observeInput.mockClear();
+          observeInitData.mockClear();
+        },
+      };
+    }
+  }
+
+  // Test: timeTravel delivers schema-valid falsy resumeData (#29390)
+  {
+    const createFalsyResumeWorkflow = (id: string, resumeSchema: z.ZodTypeAny) => {
+      mockRegistry.register(`${id}:ask`, () =>
+        vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+          if (resumeData === undefined) {
+            return suspend({ reason: 'answer required' });
+          }
+          return { answer: resumeData };
+        }),
+      );
+
+      const prep = createStep({
+        id: 'prep',
+        execute: async () => ({}),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const ask = createStep({
+        id: 'ask',
+        execute: async ctx => mockRegistry.get(`${id}:ask`)(ctx),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ answer: z.unknown() }),
+        resumeSchema,
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ answer: z.unknown() }),
+        steps: [prep, ask],
+      });
+
+      workflow.then(prep).then(ask).commit();
+
+      workflows[id] = {
+        workflow,
+        mocks: {
+          get ask() {
+            return mockRegistry.get(`${id}:ask`);
+          },
+        },
+        resetMocks: () => mockRegistry.reset(),
+      };
+    };
+
+    createFalsyResumeWorkflow(
+      'tt-falsy-resume-workflow',
+      z.union([z.literal(false), z.literal(0), z.literal(''), z.null()]),
+    );
+    createFalsyResumeWorkflow('tt-boolean-resume-workflow', z.boolean());
+  }
+
   return workflows;
 }
 
@@ -1739,5 +1909,179 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(mocks.promptAgent).toHaveBeenCalledTimes(2);
       },
     );
+
+    // #29424: the evented engine replayed a stored null or undefined step input as {}, so the
+    // step's inputSchema rejected it on time travel even though the original run accepted it.
+    describe.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
+      'time travel replays a null or omitted workflow input (#29424)',
+      () => {
+        const uniqueRunId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        it('replays explicit null input under a nullable inputSchema', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-null');
+
+          const started = await execute(workflow, null, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: null });
+          expect(mocks.observeInput.mock.calls).toEqual([[null], [null]]);
+        });
+
+        it('replays omitted input under an optional inputSchema', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-optional-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-omitted');
+
+          const started = await execute(workflow, undefined, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId });
+
+          expect(replayed.status).toBe('success');
+          expect(mocks.observeInput.mock.calls).toEqual([[undefined], [undefined]]);
+        });
+
+        it('uses new inputData passed to time travel over the stored null input', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-override');
+
+          const started = await execute(workflow, null, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId, inputData: 'replayed' });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: 'replayed' });
+          expect(mocks.observeInput.mock.calls).toEqual([[null], ['replayed']]);
+        });
+
+        it('uses an explicit null inputData passed to time travel over a stored value', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-null-override');
+
+          const started = await execute(workflow, 'stored', { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId, inputData: null });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: null });
+          expect(mocks.observeInput.mock.calls).toEqual([['stored'], [null]]);
+        });
+
+        it.each([{ override: 'new' }, { override: null }])(
+          'keeps the parent input when inputData $override targets a nested first step',
+          async ({ override }) => {
+            const { workflow, mocks, resetMocks } = registry!['tt-replay-nested-parent-input']!;
+            resetMocks?.();
+            const runId = uniqueRunId('tt-replay-nested-parent');
+
+            const started = await execute(workflow, 'stored', { runId });
+            expect(started.status).toBe('success');
+
+            const replayed = await timeTravel!(workflow, {
+              step: 'tt-replay-nested-parent-input-child.observe',
+              runId,
+              inputData: override,
+            });
+
+            expect(replayed.status).toBe('success');
+            expect(mocks.observeInput.mock.calls).toEqual([['stored'], [override]]);
+            expect(mocks.observeInitData.mock.calls).toEqual([['stored'], ['stored']]);
+          },
+        );
+
+        it.each([
+          { id: 'tt-replay-nested-object-input', input: {} },
+          { id: 'tt-replay-nested-nullable-input', input: null },
+          { id: 'tt-replay-nested-optional-input', input: undefined },
+        ])('replays $input into the first step of a nested workflow ($id)', async ({ id, input }) => {
+          const { workflow, mocks, resetMocks } = registry![id]!;
+          resetMocks?.();
+          const runId = uniqueRunId(id);
+
+          const started = await execute(workflow, input, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: `${id}-child.observe`, runId });
+
+          expect(replayed.status).toBe('success');
+          expect(mocks.observeInput.mock.calls).toEqual([[input], [input]]);
+        });
+      },
+    );
+
+    // A user answers a suspended step with a value that is valid for its
+    // resumeSchema but falsy. timeTravel used to drop these because resume data
+    // was checked by truthiness instead of presence. (#29390)
+    describe('timeTravel with falsy resumeData (#29390)', () => {
+      const startSuspendedRun = async (workflowId: string) => {
+        const { workflow, mocks, resetMocks } = registry![workflowId]!;
+        resetMocks?.();
+        const runId = `${workflowId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const started = await execute(workflow, {}, { runId });
+        expect(started.steps['ask']?.status).toBe('suspended');
+        resetMocks?.();
+
+        const resumeDataSeenByAsk = () => mocks.ask.mock.calls.map(([stepContext]: any[]) => stepContext.resumeData);
+        return { workflow, runId, resumeDataSeenByAsk };
+      };
+
+      const falsyAnswers = [
+        { label: 'false', value: false },
+        { label: '0', value: 0 },
+        { label: "''", value: '' },
+        { label: 'null', value: null },
+      ];
+
+      for (const { label, value } of falsyAnswers) {
+        for (const step of ['ask', 'prep']) {
+          it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+            `should deliver ${label} to the suspended step when time traveling from ${step}`,
+            async () => {
+              const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-falsy-resume-workflow');
+
+              const result = await timeTravel!(workflow, { step, runId, resumeData: value });
+
+              expect(resumeDataSeenByAsk()).toEqual([value]);
+              expect(result.status).toBe('success');
+              expect(result.result).toEqual({ answer: value });
+            },
+          );
+        }
+      }
+
+      it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+        'should leave the step suspended when time travel omits resumeData',
+        async () => {
+          const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-boolean-resume-workflow');
+
+          const result = await timeTravel!(workflow, { step: 'ask', runId });
+
+          expect(resumeDataSeenByAsk()).toEqual([undefined]);
+          expect(['paused', 'suspended']).toContain(result.status);
+        },
+      );
+
+      it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+        'should not deliver a falsy value that fails the resumeSchema',
+        async () => {
+          const { workflow, runId, resumeDataSeenByAsk } = await startSuspendedRun('tt-boolean-resume-workflow');
+
+          const result = await timeTravel!(workflow, { step: 'ask', runId, resumeData: 0 });
+
+          expect(resumeDataSeenByAsk()).toEqual([undefined]);
+          expect(['paused', 'suspended']).toContain(result.status);
+        },
+      );
+    });
   });
 }

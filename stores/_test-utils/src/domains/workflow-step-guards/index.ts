@@ -1,6 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import type { MastraStorage } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  WorkflowStepCompletionGuard,
+  WorkflowStepStartGuard,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { assert, beforeEach, describe, expect, it } from 'vitest';
+
+type StepWrite = {
+  stepId: string;
+  result: StepResult<any, any, any, any>;
+  requestContext: Record<string, any>;
+  state?: Record<string, any>;
+  startGuard?: WorkflowStepStartGuard;
+  completionGuard?: WorkflowStepCompletionGuard;
+};
 
 export function createWorkflowStepGuardTests({
   storage,
@@ -9,46 +24,66 @@ export function createWorkflowStepGuardTests({
   storage: MastraStorage;
   peerStorage?: MastraStorage;
 }) {
-  describe('Workflow occurrence guards', () => {
+  describe.each([1, 2] as const)('Workflow occurrence guards (storage v%i)', storageVersion => {
     const stores = [storage, peerStorage];
     const workflowName = 'guarded-workflow';
     beforeEach(async ctx => {
       const workflows = await storage.getStore('workflows');
       if (!workflows?.supportsWorkflowStepGuards()) ctx.skip();
+      if (storageVersion === 2 && !workflows?.supportsRunJournal()) ctx.skip();
     });
+
+    // v1 writes the step into the run's snapshot; v2 appends it, with `state` as a patch.
+    async function writeStep(worker: WorkflowsStorage | undefined, runId: string, { state, ...write }: StepWrite) {
+      if (storageVersion === 1) {
+        await worker!.updateWorkflowResults({ workflowName, runId, ...write, state });
+        return;
+      }
+      await worker!.appendWorkflowRunEntries({
+        workflowName,
+        runId,
+        steps: { [write.stepId]: write.result },
+        requestContext: write.requestContext,
+        statePatch: state && Object.entries(state).map(([key, value]) => ({ op: 'set' as const, path: [key], value })),
+        startGuard: write.startGuard,
+        completionGuard: write.completionGuard,
+      });
+    }
+    // v1 keeps a run's state in the snapshot's `__state` step, v2 in `value`.
+    const stateOf = (snapshot: WorkflowRunState | null | undefined) =>
+      storageVersion === 1 ? snapshot?.context.__state : snapshot?.value;
+
     async function setup() {
       const [a, b] = await Promise.all(stores.map(store => store.getStore('workflows')));
       const runId = randomUUID();
-      await a!.persistWorkflowSnapshot({
-        workflowName,
+      const snapshot: WorkflowRunState = {
         runId,
-        snapshot: {
-          runId,
-          status: 'running',
-          context: {},
-          value: {},
-          activePaths: [],
-          activeStepsPath: {},
-          serializedStepGraph: [],
-          suspendedPaths: {},
-          waitingPaths: {},
-          resumeLabels: {},
-          timestamp: Date.now(),
-        },
-      });
+        status: 'running',
+        context: {},
+        value: {},
+        activePaths: [],
+        activeStepsPath: {},
+        serializedStepGraph: [],
+        suspendedPaths: {},
+        waitingPaths: {},
+        resumeLabels: {},
+        timestamp: Date.now(),
+      };
+      if (storageVersion === 1) {
+        await a!.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+      } else {
+        const { context, value, ...header } = snapshot;
+        await a!.writeWorkflowRunCheckpoint({ workflowName, runId, header, steps: context, state: value });
+      }
       const write = (worker: typeof a, eventId: string, expectedStartedBy?: string) =>
-        worker!.updateWorkflowResults({
-          workflowName,
-          runId,
+        writeStep(worker, runId, {
           stepId: 'step',
           result: { status: 'running', startedAt: 1, payload: {}, metadata: { startedBy: eventId } },
           requestContext: {},
           startGuard: { eventId, expectedStartedBy },
         });
       const finish = (eventId: string, n: number) =>
-        a!.updateWorkflowResults({
-          workflowName,
-          runId,
+        writeStep(a, runId, {
           stepId: 'step',
           result: {
             status: 'success',
@@ -62,7 +97,7 @@ export function createWorkflowStepGuardTests({
           state: { n },
           completionGuard: { eventId },
         });
-      const load = () => a!.loadWorkflowSnapshot({ workflowName, runId });
+      const load = () => a!.loadWorkflowSnapshot({ workflowName, runId, storageVersion });
       return { a, b, runId, write, finish, load };
     }
 
@@ -78,7 +113,15 @@ export function createWorkflowStepGuardTests({
       await write(a, 'first');
       await finish('first', 1);
       const before = await load();
-      await expect(write(b, 'first')).rejects.toMatchObject({ code: 'WORKFLOW_STEP_CONFLICT', reason: 'completed' });
+      const error = await write(b, 'first').catch(e => e);
+      // The rejection carries the stored run, so the delivery continues from what was committed.
+      expect(error).toMatchObject({
+        code: 'WORKFLOW_STEP_CONFLICT',
+        reason: 'completed',
+        storedResult: { status: 'success', output: 1 },
+        storedRequestContext: { n: 1 },
+      });
+      expect(stateOf(error.storedSnapshot)).toEqual({ n: 1 });
       expect(await load()).toEqual(before);
     });
 
@@ -95,12 +138,10 @@ export function createWorkflowStepGuardTests({
     });
 
     it('does not rewind state or request context when a committed completion is replayed', async () => {
-      const { a, write, finish, load } = await setup();
+      const { a, runId, write, finish, load } = await setup();
       await write(a, 'first');
       await finish('first', 1);
-      await a!.updateWorkflowResults({
-        workflowName,
-        runId: (await load())!.runId,
+      await writeStep(a, runId, {
         stepId: 'later',
         result: { status: 'success', payload: {}, output: 2, startedAt: 1, endedAt: 2 },
         requestContext: { n: 2 },
@@ -117,18 +158,14 @@ export function createWorkflowStepGuardTests({
       await finish('first', 1);
       const predecessor = (await load())!.context.step;
       assert(predecessor?.status === 'success');
-      await a!.updateWorkflowResults({
-        workflowName,
-        runId,
+      await writeStep(a, runId, {
         stepId: 'later',
         result: { status: 'success', payload: {}, output: 2, startedAt: 1, endedAt: 2 },
         requestContext: { n: 2 },
         state: { n: 2 },
       });
       const prune = () =>
-        b!.updateWorkflowResults({
-          workflowName,
-          runId,
+        writeStep(b, runId, {
           stepId: 'step',
           result: { ...predecessor, output: undefined },
           requestContext: { n: 999 },
@@ -140,7 +177,7 @@ export function createWorkflowStepGuardTests({
       expect(pruned!.context.step).toMatchObject({ metadata: { __continuationStarted: true } });
       assert(pruned?.context.step?.status === 'success');
       expect(pruned.context.step.output).toBeUndefined();
-      expect(pruned!.context.__state).toEqual({ n: 2 });
+      expect(stateOf(pruned)).toEqual({ n: 2 });
       expect(pruned!.requestContext).toEqual({ n: 2 });
       await prune();
       expect(await load()).toEqual(pruned);
@@ -164,9 +201,7 @@ export function createWorkflowStepGuardTests({
 
     it('allows only one delivery to claim a checkpointed restart successor', async () => {
       const { a, b, runId, write, load } = await setup();
-      await a!.updateWorkflowResults({
-        workflowName,
-        runId,
+      await writeStep(a, runId, {
         stepId: 'step',
         requestContext: {},
         result: {
@@ -193,9 +228,7 @@ export function createWorkflowStepGuardTests({
       const predecessor = (await load())!.context.step;
       assert(predecessor?.status === 'success');
       const claim = (eventId: string) =>
-        b!.updateWorkflowResults({
-          workflowName,
-          runId,
+        writeStep(b, runId, {
           stepId: 'next',
           requestContext: { n: 1 },
           result: { status: 'running', startedAt: 3, payload: 1, metadata: { startedBy: eventId } },
@@ -224,9 +257,7 @@ export function createWorkflowStepGuardTests({
     it('fails explicitly rather than executing a guarded step without its run snapshot', async () => {
       const worker = await stores[0]!.getStore('workflows');
       await expect(
-        worker!.updateWorkflowResults({
-          workflowName,
-          runId: randomUUID(),
+        writeStep(worker, randomUUID(), {
           stepId: 'step',
           requestContext: {},
           result: { status: 'running', startedAt: 1, payload: {}, metadata: { startedBy: 'first' } },
@@ -237,9 +268,7 @@ export function createWorkflowStepGuardTests({
 
     it.each(['start', 'completion'] as const)('accepts a legacy row on a guarded %s write', async phase => {
       const { a, b, runId, write, finish, load } = await setup();
-      await a!.updateWorkflowResults({
-        workflowName,
-        runId,
+      await writeStep(a, runId, {
         stepId: 'step',
         requestContext: {},
         result: { status: 'running', startedAt: 1, payload: {} },

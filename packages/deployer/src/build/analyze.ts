@@ -12,10 +12,10 @@ import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE } from './analyze/constants';
-import { normalizeExternals } from './analyze/externals';
+import { isUserListedExternal, normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
-import { detectPinoTransports } from './babel/detect-pino-transports';
-import { getPackageMetadata } from './package-info';
+import { detectPinoTransports, mayContainPinoTransport } from './babel/detect-pino-transports';
+import { getPackageMetadata, getPackageRootPath, isOptionalPeerOfImporter } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
@@ -71,6 +71,26 @@ async function resolveDependencyInfo(
   }
 
   return existing ?? {};
+}
+
+/**
+ * An external that its importer declares as an optional peer and that isn't installed (no install metadata and no
+ * package root), unless the user listed it in `bundler.externals`: leave it out.
+ */
+async function isUninstalledOptionalPeer(
+  dep: string,
+  pkgName: string,
+  info: ExternalDependencyInfo,
+  importerId: string | undefined,
+  parentPaths: string[],
+  mergedExternals: string[],
+): Promise<boolean> {
+  if (info.version || info.packageSpec || isUserListedExternal(dep, mergedExternals)) return false;
+  if (!(await isOptionalPeerOfImporter(pkgName, importerId))) return false;
+  for (const parentPath of [...parentPaths, undefined]) {
+    if (await getPackageRootPath(pkgName, parentPath)) return false;
+  }
+  return true;
 }
 
 function importerParentPaths(importerId: string | undefined, base: string[]): string[] {
@@ -325,11 +345,11 @@ async function validateOutput(
       if (pkgName) {
         // Use version info from analysis if available, then resolve from the module that imported the external.
         const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
-          dep,
-          versionInfo,
-          importerParentPaths(importerId, externalMetadataParentPaths),
-        );
+        const parentPaths = importerParentPaths(importerId, externalMetadataParentPaths);
+        const dependencyInfo = await resolveDependencyInfo(dep, versionInfo, parentPaths);
+        if (await isUninstalledOptionalPeer(dep, pkgName, dependencyInfo, importerId, parentPaths, mergedExternals)) {
+          continue;
+        }
         result.externalDependencies.set(
           pkgName,
           preferDependencyInfo(result.externalDependencies.get(pkgName), dependencyInfo),
@@ -387,6 +407,7 @@ export async function analyzeBundle(
     isDev = false,
     bundlerOptions,
     env = { 'process.env.NODE_ENV': JSON.stringify('production') },
+    configEntryFile = mastraEntry,
   }: {
     outputDir: string;
     projectRoot: string;
@@ -397,14 +418,19 @@ export async function analyzeBundle(
       'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
     > | null;
     env?: Record<string, string>;
+    /**
+     * File holding `new Mastra({...})`. Differs from `mastraEntry` when that is the generated
+     * file-based agents wrapper, which only imports it.
+     */
+    configEntryFile?: string;
   },
   logger: IMastraLogger,
 ) {
-  const mastraConfig = await readFile(mastraEntry, 'utf-8');
+  const mastraConfig = await readFile(configEntryFile, 'utf-8');
   const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
 
   await transformAsync(mastraConfig, {
-    filename: mastraEntry,
+    filename: configEntryFile,
     presets: [import.meta.resolve('@babel/preset-typescript')],
     plugins: [() => checkConfigExport(mastraConfigResult)],
   });
@@ -452,16 +478,20 @@ export async function analyzeBundle(
       externalsPreset,
       alias: bundlerOptions?.alias,
       platform,
+      configEntryFile,
     });
 
-    // Detect pino transports in the bundled output
-    transformSync(analyzeResult.output.code, {
-      filename: 'pino-detection.js',
-      plugins: [() => detectPinoTransports(detectedPinoTransports)],
-      configFile: false,
-      babelrc: false,
-      code: false,
-    });
+    // The output includes the bundled server code (often several MB), so skip the Babel parse
+    // when the text has no possible transport call.
+    if (mayContainPinoTransport(analyzeResult.output.code)) {
+      transformSync(analyzeResult.output.code, {
+        filename: 'pino-detection.js',
+        plugins: [() => detectPinoTransports(detectedPinoTransports)],
+        configFile: false,
+        babelrc: false,
+        code: false,
+      });
+    }
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
     await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
@@ -578,14 +608,14 @@ export async function analyzeBundle(
       if (pkgName) {
         // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
         const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
-          i,
-          versionInfo,
-          importerParentPaths(importerId, [
-            projectRoot,
-            ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
-          ]),
-        );
+        const parentPaths = importerParentPaths(importerId, [
+          projectRoot,
+          ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+        ]);
+        const dependencyInfo = await resolveDependencyInfo(i, versionInfo, parentPaths);
+        if (await isUninstalledOptionalPeer(i, pkgName, dependencyInfo, importerId, parentPaths, mergedExternals)) {
+          continue;
+        }
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
     }

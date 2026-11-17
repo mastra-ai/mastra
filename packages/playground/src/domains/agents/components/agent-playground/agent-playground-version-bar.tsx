@@ -20,10 +20,15 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useAgentVersions } from '@mastra/react/hooks/agents';
-import { Check, ChevronDown, Download, GitPullRequest, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 interface AgentPlaygroundVersionBarProps {
@@ -88,10 +93,12 @@ export function AgentPlaygroundVersionBar({
       versions.map(v => {
         const isPublished = v.id === activeVersionId;
         const isDraftVersion = activeVersionNumber !== undefined && v.versionNumber > activeVersionNumber;
+        const versionName = `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber}`;
+        const createdAt = formatDate(v.createdAt, 'date-time');
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
+          label: createdAt ? `${versionName} (${createdAt})` : versionName,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
             <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
@@ -155,7 +162,7 @@ export function AgentPlaygroundVersionBar({
       <div className="flex items-center justify-end border-t border-border bg-card px-3 py-2">
         {showCodeModeActions ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
+            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<IconArrowInbox />}>
               Download JSON
             </Button>
             {canOpenPr ? (
@@ -164,7 +171,7 @@ export function AgentPlaygroundVersionBar({
                 size="md"
                 onClick={() => void onOpenPr?.()}
                 title={openPrTitle}
-                icon={<GitPullRequest />}
+                icon={<IconPullRequest />}
               >
                 Open PR
               </Button>
@@ -183,7 +190,7 @@ export function AgentPlaygroundVersionBar({
                 ) : (
                   <>
                     <Icon size="xs">
-                      <Save />
+                      <IconFloppyDisk1 />
                     </Icon>
                     Save to filesystem
                   </>
@@ -203,7 +210,7 @@ export function AgentPlaygroundVersionBar({
                 ) : (
                   <>
                     <Icon size="xs">
-                      <Save />
+                      <IconFloppyDisk1 />
                     </Icon>
                     Save new version
                   </>
@@ -212,13 +219,13 @@ export function AgentPlaygroundVersionBar({
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
                   <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown />
+                    <IconChevronDownMedium />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
                     <Icon size="xs">
-                      <MessageSquare />
+                      <IconChatBubble7 />
                     </Icon>
                     Save with message
                   </DropdownMenu.Item>
@@ -244,7 +251,7 @@ export function AgentPlaygroundVersionBar({
               ) : (
                 <>
                   <Icon size="xs">
-                    <Check />
+                    <IconCheckmark2Medium />
                   </Icon>
                   {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
                 </>

@@ -31,3 +31,12 @@ export {
   type PreviousFigures,
 } from './breakdown';
 export { previousWindow, windowLength } from './time-window';
+export {
+  LAB_HUES,
+  SERIES_HUES,
+  seriesColor,
+  seriesColors,
+  seriesLab,
+  type SeriesColorItem,
+  type SeriesHue,
+} from './series-colors';

@@ -459,25 +459,28 @@ async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
 }
 
 /**
- * Removes overridden packages from every importer of a copied pnpm lockfile. When the Mastra app is the
+ * Removes overridden packages from the root importer of a copied pnpm lockfile. When the Mastra app is the
  * workspace root, the root importer still resolves its workspace dependencies to `link:` versions. pnpm
  * keeps those versions although the output overrides them with packed tarballs, so the tarball is never
  * installed and the dependency symlink dangles. Without the entries, pnpm resolves them from the overrides.
+ *
+ * Other importers are left alone because the output installs only the root one (#29279). Any edit changes
+ * the lockfile hash, so pnpm 11 can't reuse the source install's supply-chain check and checks every entry
+ * against the registry again, which needs credentials for every private registry in the graph.
  */
 async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: string[]): Promise<void> {
   const { leadingDocuments, project } = parsePnpmLockfile(await fsPromises.readFile(lockfilePath, 'utf-8'));
   const lockfile = project as {
     importers?: Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
   } | null;
+  const rootImporter = lockfile?.importers?.['.'];
   let changed = false;
-  for (const importer of Object.values(lockfile?.importers ?? {})) {
-    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
-      const dependencies = importer?.[field];
-      for (const name of packageNames) {
-        if (dependencies && name in dependencies) {
-          delete dependencies[name];
-          changed = true;
-        }
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    const dependencies = rootImporter?.[field];
+    for (const name of packageNames) {
+      if (dependencies && name in dependencies) {
+        delete dependencies[name];
+        changed = true;
       }
     }
   }

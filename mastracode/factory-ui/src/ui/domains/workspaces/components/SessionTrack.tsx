@@ -4,10 +4,16 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 
-import { formatDuration } from '../../../../lib/date/formatDuration';
-import { stageStrongTintClass, stageTintClass } from '../../factory/components/BoardIcons';
-import type { FactoryMentionMember } from '../../factory/services/members';
-import { stageLabel } from '../../factory/stages';
+import type { BoardInfo } from '../../factory/boardFlow';
+import { phaseLabel } from '../../factory/boardStages';
+import { elapsedLabel } from '../../factory/cardStageBar';
+import {
+  boardPhaseIconKind,
+  stageStrongTintClass,
+  stageTintClass,
+  unfocusedStageClass,
+} from '../../factory/components/BoardIcons';
+import type { TrailPerson } from '../hooks/useSessionTrail';
 import { trackMomentLabel, trackStartLabel } from '../services/sessionTrack';
 import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/sessionTrack';
 
@@ -27,22 +33,28 @@ const stageKey = (stage: TrackStage) => `stage:${stage.stage}:${stage.from}`;
 const runKey = (run: TrackSpan) => `run:${run.from}`;
 const pinKey = (pin: TrackPin) => `pin:${pin.personId}:${pin.at}`;
 
-function pinCaption(pin: TrackPin, name: string): string {
-  return pin.stage === undefined ? `${name} took over` : `${name} moved it to ${stageLabel(pin.stage)}`;
+function pinCaption(pin: TrackPin, name: string, board: BoardInfo | undefined): string {
+  return pin.stage === undefined ? `${name} took over` : `${name} moved it to ${phaseLabel(board, pin.stage)}`;
 }
 
-function stageFocus(stage: TrackStage): TrackFocus {
+function stageFocus(stage: TrackStage, board: BoardInfo | undefined): TrackFocus {
   const { from, to } = stage;
-  return { key: stageKey(stage), label: stageLabel(stage.stage), duration: formatDuration(to - from), from, to };
+  return {
+    key: stageKey(stage),
+    label: phaseLabel(board, stage.stage),
+    duration: elapsedLabel(from, to),
+    from,
+    to,
+  };
 }
 
 function runFocus(run: TrackSpan): TrackFocus {
   const { from, to } = run;
-  return { key: runKey(run), label: 'Agent run', duration: formatDuration(to - from), from, to };
+  return { key: runKey(run), label: 'Agent run', duration: elapsedLabel(from, to), from, to };
 }
 
-function pinFocus(pin: TrackPin, name: string): TrackFocus {
-  return { key: pinKey(pin), label: pinCaption(pin, name), from: pin.at };
+function pinFocus(pin: TrackPin, name: string, board: BoardInfo | undefined): TrackFocus {
+  return { key: pinKey(pin), label: pinCaption(pin, name, board), from: pin.at };
 }
 
 function axisEndLabel(focus: TrackFocus | undefined, now: number): string {
@@ -56,9 +68,9 @@ function agentRunCount(runs: number): string {
   return runs === 1 ? '1 agent run' : `${runs} agent runs`;
 }
 
-function trackSummary(layout: TrackLayout, nameOf: (personId: string) => string): string {
-  const stages = layout.stages.map(stage => `${stageLabel(stage.stage)} ${formatDuration(stage.to - stage.from)}`);
-  const pins = layout.pins.map(pin => pinCaption(pin, nameOf(pin.personId)));
+function trackSummary(layout: TrackLayout, nameOf: (personId: string) => string, board: BoardInfo | undefined): string {
+  const stages = layout.stages.map(stage => `${phaseLabel(board, stage.stage)} ${elapsedLabel(stage.from, stage.to)}`);
+  const pins = layout.pins.map(pin => pinCaption(pin, nameOf(pin.personId), board));
   return ['Session timeline', stages.join(', '), agentRunCount(layout.runs.length), ...pins].filter(Boolean).join('. ');
 }
 
@@ -87,18 +99,20 @@ export function SessionTrack({
   startedAt,
   now,
   people,
+  board,
 }: {
   layout: TrackLayout;
   startedAt: number;
   now: number;
-  people: ReadonlyMap<string, FactoryMentionMember>;
+  people: ReadonlyMap<string, TrailPerson>;
+  board: BoardInfo | undefined;
 }) {
   const [focus, setFocus] = useState<TrackFocus>();
   const nameOf = (personId: string) => people.get(personId)?.name ?? personId;
-  const fadedUnlessFocused = (key: string) => focus !== undefined && focus.key !== key && 'opacity-40';
+  const fadedUnlessFocused = (key: string) => focus !== undefined && focus.key !== key && unfocusedStageClass;
 
   return (
-    <div role="img" aria-label={trackSummary(layout, nameOf)} className="flex flex-col gap-1">
+    <div role="img" aria-label={trackSummary(layout, nameOf, board)} className="flex flex-col gap-1">
       <div aria-hidden className="relative h-3">
         {focus ? (
           <div className="flex min-w-0 gap-1">
@@ -121,7 +135,7 @@ export function SessionTrack({
               className="absolute top-0 truncate leading-3"
               style={{ left: `${stage.left}%`, maxWidth: `${stage.width}%` }}
             >
-              {stageLabel(stage.stage)}
+              {phaseLabel(board, stage.stage)}
             </Txt>
           ))
         )}
@@ -132,7 +146,9 @@ export function SessionTrack({
             key={stageKey(stage)}
             className={cn(
               'pointer-events-none absolute inset-y-0 rounded-[3px]',
-              focus?.key === stageKey(stage) ? stageStrongTintClass(stage.stage) : stageTintClass(stage.stage),
+              focus?.key === stageKey(stage)
+                ? stageStrongTintClass(stage.stage, boardPhaseIconKind(board, stage.stage))
+                : stageTintClass(stage.stage, boardPhaseIconKind(board, stage.stage)),
               fadedUnlessFocused(stageKey(stage)),
             )}
             style={{ left: `${stage.left}%`, width: `max(calc(${stage.width}% - 2px), 2px)` }}
@@ -151,10 +167,10 @@ export function SessionTrack({
         {widestFirst(layout.stages).map(stage => (
           <span
             key={stageKey(stage)}
-            data-track-hit={stageLabel(stage.stage)}
+            data-track-hit={phaseLabel(board, stage.stage)}
             className="absolute -inset-y-1 -translate-x-1/2"
             style={hitAreaStyle(stage)}
-            onPointerEnter={() => setFocus(stageFocus(stage))}
+            onPointerEnter={() => setFocus(stageFocus(stage, board))}
           />
         ))}
         {widestFirst(layout.runs).map(run => (
@@ -171,15 +187,14 @@ export function SessionTrack({
           return (
             <span
               key={pinKey(pin)}
-              className={cn(
-                'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
-                fadedUnlessFocused(pinKey(pin)),
-              )}
-              data-track-hit={pinCaption(pin, nameOf(pin.personId))}
+              className="ring-popover bg-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2"
+              data-track-hit={pinCaption(pin, nameOf(pin.personId), board)}
               style={{ left: `${pin.left}%` }}
-              onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId)))}
+              onPointerEnter={() => setFocus(pinFocus(pin, nameOf(pin.personId), board))}
             >
-              <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              <span className={cn('flex', fadedUnlessFocused(pinKey(pin)))}>
+                <Avatar src={person?.avatarUrl} name={nameOf(pin.personId)} size="xs" />
+              </span>
             </span>
           );
         })}

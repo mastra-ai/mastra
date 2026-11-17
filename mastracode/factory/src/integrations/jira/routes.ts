@@ -17,25 +17,19 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { JiraApiError } from './api.js';
 import { scopeJiraSourcesToProject } from './binding-scope.js';
-import { unfilteredJiraScopes } from './intake-jql.js';
 import { DEPLOYMENT_CONNECTION } from './integration.js';
 import type { JiraIntegration } from './integration.js';
-import type { JiraRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Jira feature gate, mirroring the
@@ -56,16 +50,10 @@ export interface MountJiraRoutesOptions {
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
-   * Cross-integration intake selection domain. Required for the issues route's
-   * project filter; when absent, only the disabled `status` route is served.
+   * Cross-integration intake selection domain. Required for the issue detail
+   * route's project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed issues. When present, a board-scoped
-   * issue listing also materializes new cards through the Jira event rules —
-   * the same automatic intake Linear has.
-   */
-  ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
   /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
   workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
@@ -94,17 +82,6 @@ async function resolveOrgTenant(
     };
   }
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
-}
-
-/**
- * Validate an opaque Jira pagination cursor from the query string. Cursors are
- * server-issued (`nextPageToken`), so anything outside a conservative
- * charset/length is rejected rather than forwarded to Jira.
- */
-function parseAfterCursor(raw: string | undefined): string | undefined | null {
-  if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 512 || !/^[\w+/=.:-]+$/.test(raw)) return null;
-  return raw;
 }
 
 /** Map a Jira read failure to the API response for the SPA. */
@@ -213,85 +190,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
     }),
   );
 
-  // ── List the site's active issues (cursor-paged) ────────────────────────
-  // Respects the caller's intake config: disabled Jira intake 404s the
-  // source, and an explicit project selection narrows the issue filter.
-  routes.push(
-    registerApiRoute('/web/jira/issues', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const resolved = await resolveOrgTenant(loose(c), auth);
-        if ('response' in resolved) return resolved.response;
-
-        const after = parseAfterCursor(c.req.query('after'));
-        if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
-        const factoryProjectId = c.req.query('factoryProjectId');
-        if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
-          return c.json({ error: 'invalid_factory_project_id' }, 400);
-        }
-
-        await intake.ensureReady();
-        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['jira'] });
-        const selection = config.jira!;
-        if (!selection.enabled) {
-          return c.json({ error: 'jira_intake_disabled', message: 'Jira intake is turned off in Settings.' }, 404);
-        }
-
-        // No projects selected means nothing is synced — don't fan out to Jira.
-        const selectedIds = selection.sourceIds ?? [];
-        // A board request only ever sees the projects routed to a board of
-        // that Factory project; unscoped listing stays available to callers
-        // that don't view a specific board.
-        const projectScope = factoryProjectId
-          ? await scopeJiraSourcesToProject({
-              intake,
-              orgId: resolved.tenant.orgId,
-              factoryProjectId,
-              selectedIds,
-            })
-          : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
-        const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
-        if (scopes.length === 0) {
-          return c.json({ issues: [], nextCursor: null });
-        }
-
-        try {
-          const { issues, nextCursor } = await jira.listActiveIssues(after, scopes);
-          const issuePayload = issues.map(issue => ({
-            id: issue.id,
-            identifier: issue.identifier,
-            title: issue.title,
-            url: issue.url,
-            author: issue.author,
-            state: issue.state ?? '',
-            stateType: issue.stateType ?? '',
-            priorityLabel: issue.priority ?? '',
-            assignee: issue.assignee,
-            project: issue.source,
-            labels: issue.labels,
-            createdAt: issue.createdAt,
-            updatedAt: issue.updatedAt,
-            sourceId: issue.sourceId || null,
-          }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload.map(issue => ({ ...issue, site: null })),
-              intakeBoards,
-            });
-          }
-          return c.json({ issues: issuePayload, nextCursor });
-        } catch (err) {
-          return jiraFetchError(loose(c), err);
-        }
-      },
-    }),
-  );
-
   routes.push(
     registerApiRoute('/web/jira/issues/:identifier', {
       method: 'GET',
@@ -329,7 +227,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           // Factory never filed, reads like one that doesn't exist (as on Linear).
           const routed =
             issue?.sourceId != null &&
-            issue.sourceId in projectScope.intakeBoards &&
+            projectScope.sourceIds.includes(issue.sourceId) &&
             (projectScope.takes(issue.sourceId, issue.labels) ||
               !!(await workItems?.getByProjectSource({
                 orgId: resolved.tenant.orgId,

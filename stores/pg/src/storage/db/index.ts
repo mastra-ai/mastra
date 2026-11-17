@@ -15,6 +15,7 @@ import type {
   TABLE_NAMES,
   TABLE_MEMORY_RUN_FENCES,
   TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_RUNS,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -36,8 +37,12 @@ import type { SchemaSnapshot } from './schema-snapshot';
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
 
-/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
-export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+/** Tables retention can prune: the core tables plus the run fencing and storage v2 run tables, which aren't in TABLE_NAMES. */
+export type PrunableTable =
+  | TABLE_NAMES
+  | typeof TABLE_WORKFLOW_RUN_OWNERS
+  | typeof TABLE_WORKFLOW_RUNS
+  | typeof TABLE_MEMORY_RUN_FENCES;
 
 const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
 
@@ -328,12 +333,24 @@ export function generateTableSQL({
   return sql;
 }
 
+function indexColumnsSQL(columns: string[], opclass?: string): string {
+  return columns
+    .map(col => {
+      const [colName, ...modifiers] = col.includes(' DESC') || col.includes(' ASC') ? col.split(' ') : [col];
+      if (!colName) {
+        throw new Error(`Invalid column specification: ${col}`);
+      }
+      return [`"${parseSqlIdentifier(colName, 'column name')}"`, opclass, ...modifiers].filter(Boolean).join(' ');
+    })
+    .join(', ');
+}
+
 /**
  * Generates a CREATE INDEX SQL statement from index options.
  * Used by exportSchemas to produce index DDL without a database connection.
  */
 export function generateIndexSQL(options: CreateIndexOptions, schemaName?: string): string {
-  const { name, table, columns, unique = false, where, method = 'btree' } = options;
+  const { name, table, columns, unique = false, where, method = 'btree', opclass } = options;
 
   const quotedSchemaName = getSchemaName(schemaName);
   const fullTableName = getTableName({ indexName: table, schemaName: quotedSchemaName });
@@ -341,18 +358,7 @@ export function generateIndexSQL(options: CreateIndexOptions, schemaName?: strin
   const uniqueStr = unique ? 'UNIQUE ' : '';
   const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-  const columnsStr = columns
-    .map(col => {
-      if (col.includes(' DESC') || col.includes(' ASC')) {
-        const [colName, ...modifiers] = col.split(' ');
-        if (!colName) {
-          throw new Error(`Invalid column specification: ${col}`);
-        }
-        return `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
-      }
-      return `"${parseSqlIdentifier(col, 'column name')}"`;
-    })
-    .join(', ');
+  const columnsStr = indexColumnsSQL(columns, opclass);
 
   const whereStr = where ? ` WHERE ${where}` : '';
   const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
@@ -1110,6 +1116,7 @@ export class PgDB extends MastraBase {
       // least-privilege role finish init instead of failing with
       // "permission denied".
       if (!snapshot || !this.snapshotShowsTableConverged(snapshot, tableName)) {
+        const isNewTable = snapshot ? !snapshot.tables.has(tableName) : false;
         const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
         try {
@@ -1123,15 +1130,23 @@ export class PgDB extends MastraBase {
 
         if (snapshot) {
           snapshot.tables.add(tableName);
-          // generateTableSQL emits the declared columns plus a `Z` twin for
-          // every timestamp column; record both so the alterTable pass below
-          // and later domains don't re-probe for them.
-          const created = this.snapshotColumns(snapshot, tableName);
-          for (const [name, def] of Object.entries(schema)) {
-            const parsedName = parseSqlIdentifier(name, 'column name');
-            created.add(parsedName);
-            if (def.type === 'timestamp') {
-              created.add(`${parsedName}Z`);
+          if (isNewTable) {
+            snapshot.createdTables.add(tableName);
+            // A concurrent older process may have created a legacy version of
+            // the table after the snapshot was loaded. Reconcile with the live
+            // table instead of assuming IF NOT EXISTS created the declared schema.
+            snapshot.columns.set(tableName, new Set(await this.getTableColumns(tableName as TABLE_NAMES)));
+          } else {
+            // generateTableSQL emits the declared columns plus a `Z` twin for
+            // every timestamp column; record both so the alterTable pass below
+            // and later domains don't re-probe for them.
+            const created = this.snapshotColumns(snapshot, tableName);
+            for (const [name, def] of Object.entries(schema)) {
+              const parsedName = parseSqlIdentifier(name, 'column name');
+              created.add(parsedName);
+              if (def.type === 'timestamp') {
+                created.add(`${parsedName}Z`);
+              }
             }
           }
         }
@@ -1797,23 +1812,10 @@ export class PgDB extends MastraBase {
       if (snapshot?.indexes.has(name)) return;
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
-      const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
+      const concurrentStr = concurrent && !this.isTableCreatedInThisInit(table) ? 'CONCURRENTLY ' : '';
       const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-      const columnsStr = columns
-        .map(col => {
-          if (col.includes(' DESC') || col.includes(' ASC')) {
-            const [colName, ...modifiers] = col.split(' ');
-            if (!colName) {
-              throw new Error(`Invalid column specification: ${col}`);
-            }
-            const quotedCol = `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
-            return opclass ? `${quotedCol} ${opclass}` : quotedCol;
-          }
-          const quotedCol = `"${parseSqlIdentifier(col, 'column name')}"`;
-          return opclass ? `${quotedCol} ${opclass}` : quotedCol;
-        })
-        .join(', ');
+      const columnsStr = indexColumnsSQL(columns, opclass);
 
       const whereStr = where ? ` WHERE ${where}` : '';
       const tablespaceStr = tablespace ? ` TABLESPACE ${tablespace}` : '';
@@ -1871,6 +1873,14 @@ export class PgDB extends MastraBase {
     ) {
       snapshot?.indexes.add(indexName);
     }
+  }
+
+  /**
+   * Whether `tableName` was absent when this init's snapshot was read and this
+   * init created it, so its indexes can be built without CONCURRENTLY.
+   */
+  isTableCreatedInThisInit(tableName: string): boolean {
+    return this.schemaSnapshot?.createdTables.has(tableName) ?? false;
   }
 
   private async timedIndexBuild(indexName: string, sql: string): Promise<void> {

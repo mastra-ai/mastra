@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { activityStart } from '../periodActivity';
+import { activityDepth, activityStart } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '../services/audit';
 
@@ -10,7 +10,7 @@ const MAX_PAGES = 20;
 
 export function useRunStarts(factoryId: string, period: ActivityPeriod) {
   const { baseUrl } = useApiConfig();
-  const depth: ActivityPeriod = period === 'month' ? 'month' : 'week';
+  const depth = activityDepth(period);
   return useQuery({
     queryKey: queryKeys.factoryAudit(factoryId, 'run-starts', depth),
     staleTime: 60_000,

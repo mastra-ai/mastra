@@ -7,7 +7,7 @@ description: "Browse Tencent Token Plan model IDs, capabilities, context windows
 
 # <img src="https://models.dev/logos/tencent-token-plan.svg" alt="Tencent Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tencent Token Plan
 
-Access 2 Tencent Token Plan models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKEN_PLAN_API_KEY` environment variable.
+Access 3 Tencent Token Plan models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKEN_PLAN_API_KEY` environment variable.
 
 Learn more in the [Tencent Token Plan documentation](https://cloud.tencent.com/document/product/1823/130060).
 
@@ -56,6 +56,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "tencent-token-plan/hy4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.834,
+    "outputCost": 2.501
   },
   {
     "model": "tencent-token-plan/hy4-preview",

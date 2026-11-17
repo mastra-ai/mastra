@@ -3,36 +3,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   externalLinkLabel,
   isPersistedCandidate,
-  itemThreadSession,
   itemSessionSpec,
   metadataLabelColors,
   persistedSourceKeys,
-  workItemMeta,
 } from './boardItems';
-import type { WorkItem, WorkItemSessionRef } from './services/workItems';
+import { workItemMeta } from './services/relationships';
+import type { WorkItem } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     id: 'item-1',
     orgId: 'org1',
-    factoryProjectId: 'factory-1',
+    githubProjectId: 'factory-1',
+    createdBy: 'user-1',
+    triageType: null,
+    acceptedAt: null,
     board: 'review',
     source: 'github-pr',
     sourceKey: 'github-pr:22765',
     parentWorkItemId: null,
     title: 'docs: improve generated model page metadata',
-    stage: 'intake',
     url: 'https://github.com/acme/repo/pull/22765',
     stages: ['intake', 'review'],
     stageHistory: [],
     sessions: {},
     metadata: { githubPullRequestNumber: 22765, author: 'LekoArts' },
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: '2026-09-02T12:00:00.000Z',
     updatedAt: '2026-09-02T12:00:00.000Z',
     ...overrides,
-  } as WorkItem;
+  };
 }
 
 describe('workItemMeta', () => {
@@ -46,18 +47,18 @@ describe('workItemMeta', () => {
     const item = workItem({
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: '2026-08-30T12:00:00.000Z' },
     });
-    expect(workItemMeta(item)).toBe('#22765 · LekoArts · 3d');
+    expect(workItemMeta(item)).toEqual(['PR #22765', 'LekoArts', '3d']);
   });
 
   it('falls back to the factory import time when the source date is unknown', () => {
-    expect(workItemMeta(workItem())).toBe('#22765 · LekoArts · just now');
+    expect(workItemMeta(workItem())).toEqual(['PR #22765', 'LekoArts', 'just now']);
   });
 
   it('falls back to the factory import time when the source date is not a valid timestamp', () => {
     const item = workItem({
       metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
     });
-    expect(workItemMeta(item)).toBe('#22765 · LekoArts · just now');
+    expect(workItemMeta(item)).toEqual(['PR #22765', 'LekoArts', 'just now']);
   });
 
   it('shows the Jira assignee instead of the reporter', () => {
@@ -66,7 +67,7 @@ describe('workItemMeta', () => {
       sourceKey: 'jira-issue-1',
       metadata: { identifier: 'ENG-42', author: 'Grace', assignee: 'Ada' },
     });
-    expect(workItemMeta(item)).toBe('ENG-42 · Ada · just now');
+    expect(workItemMeta(item)).toEqual(['ENG-42', 'Ada', 'just now']);
   });
 
   it('shows the incident.io identifier and assignee like other issue sources', () => {
@@ -75,14 +76,20 @@ describe('workItemMeta', () => {
       sourceKey: 'incidentio:follow-up:01HFOLLOWUP',
       metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
     });
-    expect(workItemMeta(item)).toBe('INC-42 · Grace Hopper · just now');
+    expect(workItemMeta(item)).toEqual(['INC-42', 'Grace Hopper', 'just now']);
   });
 
   it('names a GitLab merge request by its IID and links to GitLab', () => {
     expect(
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
-    ).toBe('!5 · Rhys · just now');
+    ).toEqual(['MR !5', 'Rhys', 'just now']);
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+
+  it('names a card filed by hand by its card number', () => {
+    expect(
+      workItemMeta(workItem({ source: 'manual', sourceKey: null, url: null, metadata: { cardNumber: 12 } })),
+    ).toEqual(['#12', 'just now']);
   });
 });
 
@@ -146,29 +153,6 @@ describe('metadataLabelColors', () => {
   });
 });
 
-describe('itemThreadSession', () => {
-  const session = (id: string): WorkItemSessionRef => ({
-    sessionId: id,
-    threadId: id,
-    branch: 'factory/issue-24244',
-    startedBy: 'user-1',
-  });
-
-  it('keeps the original triage conversation when session keys arrive in different orders', () => {
-    const triage = session('triage-session');
-    const work = session('work-session');
-
-    expect(itemThreadSession({ triage, plan: work, work })).toBe(triage);
-    expect(itemThreadSession({ work, plan: work, triage })).toBe(triage);
-  });
-
-  it('falls back to a custom role session', () => {
-    const custom = session('custom-session');
-
-    expect(itemThreadSession({ release: custom })).toBe(custom);
-  });
-});
-
 describe('persistedSourceKeys', () => {
   it('keeps a same-numbered candidate from another linked repository visible', () => {
     const keys = persistedSourceKeys([
@@ -198,5 +182,53 @@ describe('persistedSourceKeys', () => {
         url: 'https://github.com/acme/repo/pull/22765',
       }),
     ).toBe(true);
+  });
+
+  it("counts a pull request attached to an issue card as filed, so Intake doesn't offer it again", () => {
+    const pullRequest = {
+      id: 'source-pr',
+      workItemId: 'work-1',
+      provider: 'github' as const,
+      integrationId: 'github',
+      sourceType: 'pull-request',
+      workspaceId: null,
+      externalId: 'pull-request:github:10:pull-request:2',
+      sourceKey: 'github:pull-request:github:10:pull-request:2',
+      key: null,
+      url: 'https://github.com/acme/repo/pull/2',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { githubPullRequestNumber: 2 },
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date('2026-09-02T12:00:00.000Z'),
+      updatedAt: new Date('2026-09-02T12:00:00.000Z'),
+    };
+    const issueCard = workItem({
+      source: 'github-issue',
+      sourceKey: 'github:10:issue:1',
+      url: 'https://github.com/acme/repo/issues/1',
+      metadata: { githubIssueNumber: 1, githubRepositoryId: 10 },
+      workItem: {
+        provider: 'github',
+        key: null,
+        url: 'https://github.com/acme/repo/issues/1',
+        title: 'init repo',
+        state: 'open',
+        labels: [],
+        author: null,
+        metadata: {},
+        sources: [pullRequest],
+      },
+    });
+
+    const keys = persistedSourceKeys([issueCard]);
+
+    expect(isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:2', url: '' })).toBe(true);
+    expect(isPersistedCandidate(keys, { sourceKey: 'none', url: 'https://github.com/acme/repo/pull/2' })).toBe(true);
+    expect(
+      isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:3', url: 'https://github.com/acme/repo/pull/3' }),
+    ).toBe(false);
   });
 });

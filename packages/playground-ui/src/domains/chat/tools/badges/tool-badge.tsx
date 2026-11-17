@@ -11,13 +11,13 @@ import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-appro
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import {
-  hasToolArguments,
   presentTool,
   stringifyToolValue,
-  stripSerializedAnsi,
-  ToolCallArguments,
+  ToolCallBody,
+  toolCallHasBody,
   ToolCallOutput,
 } from '@/ds/components/ai/tool-call';
+import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
@@ -66,8 +66,14 @@ export const ToolBadge = ({
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
-  const resultPretty =
-    result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
+  const view: ToolCallView = {
+    toolName,
+    args: argsObject,
+    argsText: argsPretty,
+    hideArguments: withoutArgs,
+    status,
+    result,
+  };
 
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -76,12 +82,7 @@ export const ToolBadge = ({
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
   const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
-  const hasBody =
-    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
-    Boolean(suspendPayload) ||
-    Boolean(resultPretty) ||
-    toolOutput.length > 0 ||
-    needsApproval;
+  const hasBody = toolCallHasBody(view) || Boolean(suspendPayload) || toolOutput.length > 0 || needsApproval;
 
   const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
   const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
@@ -129,14 +130,7 @@ export const ToolBadge = ({
     >
       {hasBody && (
         <>
-          <ToolCallArguments
-            toolName={toolName}
-            args={argsObject}
-            showFullContent={needsApproval}
-            argsText={argsPretty}
-            hideArguments={withoutArgs}
-            data-testid="tool-args"
-          />
+          <ToolCallBody {...view} showFullArguments={needsApproval} />
 
           {suspendPayload !== undefined && suspendPayload && (
             <div>
@@ -148,8 +142,6 @@ export const ToolBadge = ({
               )}
             </div>
           )}
-
-          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
 
           {toolOutput.length > 0 && (
             <div>

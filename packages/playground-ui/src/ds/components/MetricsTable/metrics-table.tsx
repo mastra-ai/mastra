@@ -115,7 +115,7 @@ export function MetricsTable<Row>({
           <div
             role="row"
             className={cn(
-              'relative col-span-full grid grid-cols-subgrid items-end px-3 pb-1.5 text-body-sm font-medium text-placeholder',
+              'relative col-span-full grid grid-cols-subgrid items-end px-3 pb-1.5 text-label text-placeholder',
               HEADER_LINE,
             )}
           >

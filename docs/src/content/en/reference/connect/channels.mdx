@@ -21,7 +21,7 @@ export const mastra = new Mastra({
 
 Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
 
-The [documented channel setup](/docs/mastra-platform/connect/channels#connect-a-provider) covers Slack, Telegram, Discord, and Microsoft Teams. Their implementations come from `@mastra/slack`, `@mastra/telegram`, `@mastra/discord`, and `@mastra/teams`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
+Each provider's integration page covers its channel setup: [Slack](/integrations/channels/slack#agent-chat), [Telegram](/integrations/channels/telegram#connect), [Discord](/integrations/channels/discord#agent-chat), and [Microsoft Teams](/integrations/channels/teams#agent-chat). Their implementations come from `@mastra/slack`, `@mastra/telegram`, `@mastra/discord`, and `@mastra/teams`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
 
 The Teams provider encrypts stored bot secrets with `MASTRA_ENCRYPTION_KEY` when set. When it isn't, the key is derived from the platform access token and a warning is logged while a Teams connection is active. Rotating the platform access token makes stored bot credentials unreadable (disconnect and reconnect to re-provision). Projects without a Teams connection are unaffected.
 
@@ -113,6 +113,60 @@ The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver con
 Providers without an active connection don't appear in the resolved map. Their routes stay mounted and begin working once a connection is attached.
 
 Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, an unknown or malformed provider ID, both spellings of the Slack key) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, credential sync failure) are downgraded to warn-and-skip. Several active connections for one provider aren't a skip: the resolver warns and uses the first, and `providers.<id>.connectionId` pins the choice. The initial resolution rejects if its platform fetch fails. A failed background refresh warns and preserves the cached snapshot, while an explicit `refresh()` rejects on fetch failure.
+
+## Combine with self-managed channels
+
+`channels()` replaces the whole `channels` option, and there is no built-in helper to merge it with providers you construct yourself. To use Connect for some channels and manage another yourself, wrap both in one resolver. The wrapper must stay callable and expose a `getRoutes()` that returns every provider's routes, because Mastra mounts channel routes once at construction:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+import { TelegramProvider } from '@mastra/telegram'
+import { assistant } from './agents/assistant'
+
+const connectChannels = await channels({ providers: ['slack', 'discord'] })
+const telegram = new TelegramProvider()
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  channels: Object.assign(async () => ({ ...(await connectChannels()), telegram }), {
+    getRoutes: () => [...connectChannels.getRoutes(), ...telegram.getRoutes()],
+  }),
+})
+```
+
+Exclude the self-managed channel from the Connect selection, as the array form does here. Mastra doesn't detect two providers that register the same route, so a channel enabled in both places mounts conflicting webhooks. Create the self-managed provider once, outside the wrapper: Mastra attaches each distinct provider instance only once. Configure its credentials as described in the [Telegram provider reference](/reference/channels/telegram-provider).
+
+## Vary tools by channel
+
+Channel messages put a [`ChannelContext`](/integrations/channels/slack#request-context) on the [request context](/docs/server/request-context) under the `channel` key. It includes the platform, whether the conversation is a direct message (`isDM`), channel and thread IDs, and the sender's user ID and name. An agent's `tools` function can read it to filter the record that [`tools()`](/reference/connect/tools) resolves:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import type { ChannelContext } from '@mastra/core/channels'
+import { tools } from '@mastra/connect'
+
+const connectTools = tools({ providers: ['linear'] })
+const readTools = new Set(['linear_list_issues'])
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'You help the team track work in Linear from Slack and Discord.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: async ctx => {
+    const channel = ctx.requestContext?.get('channel') as ChannelContext | undefined
+    const all = await connectTools(ctx)
+
+    if (channel?.isDM && ctx.requestContext?.get('role') === 'operator') {
+      return all
+    }
+    return Object.fromEntries(Object.entries(all).filter(([key]) => readTools.has(key)))
+  },
+})
+```
+
+Here, only direct messages from users your application identifies as operators get the full Linear toolset. Other requests get only `linear_list_issues`. Set `role` in trusted server-side code after you verify the sender's identity and permissions. Don't grant write access based on conversation type alone. To filter by options instead of post-processing, see [per-request options](/reference/connect/tools#per-request-options).
 
 ## Discord permissions
 

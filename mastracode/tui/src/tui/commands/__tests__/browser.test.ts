@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -302,6 +303,19 @@ describe('handleBrowserCommand', () => {
 
     expect(browserInstance.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('expands browser paths from the OS home directory when HOME is unset', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    vi.stubEnv('HOME', undefined);
+    try {
+      await handleBrowserCommand(ctx, ['set', 'profile', '~/browser-profile']);
+      expect(settings.browser.profile).toBe(`${homedir()}/browser-profile`);
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   describe('set model', () => {

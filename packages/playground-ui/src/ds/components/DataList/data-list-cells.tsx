@@ -135,7 +135,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mx-3 w-auto max-w-none px-3 text-left text-label text-foreground',
+        'data-list-row-header -ml-3 w-auto max-w-none px-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}

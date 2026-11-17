@@ -251,7 +251,11 @@ async function startProcess(
     },
     ...(processDefaultHooks ? { defaultOptions: { hooks: processDefaultHooks } } : {}),
   });
-  const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+  // Checkpoints are captured and restored through v1's snapshot writes.
+  const durableAgent =
+    kind === 'durable'
+      ? createDurableAgent({ agent, storageVersion: 1 })
+      : createEventedAgent({ agent, storageVersion: 1 });
   const storage =
     storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore(

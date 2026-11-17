@@ -371,6 +371,42 @@ describe('Cancellation of in-flight Observational Memory (#27792)', () => {
   });
 });
 
+it("names the abort's reason when a sync observation is cancelled", async () => {
+  const observer = createLatchedModel('<observations>\n- Observed later\n</observations>');
+  const actor = createLatchedModel('Actor', false);
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: observer.model, messageTokens: 1, bufferTokens: false, bufferOnIdle: false },
+        reflection: { model: observer.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const threadId = 'lease-lost-sync-observation';
+  const controller = new AbortController();
+  const agent = new Agent({ id: threadId, name: threadId, instructions: 'Help.', model: actor.model, memory });
+  const result = await agent.stream('Remember the cancelled request. '.repeat(20), {
+    abortSignal: controller.signal,
+    memory: { thread: threadId, resource: 'lease-lost-resource' },
+  });
+  const consumed = result.consumeStream().catch(() => undefined);
+  try {
+    await observer.started;
+    controller.abort(new Error('Thread run run-1 lost its lease before publishing a terminal event'));
+    await consumed;
+    expect(result.tripwire?.reason).toBe(
+      'Agent execution was aborted: Thread run run-1 lost its lease before publishing a terminal event',
+    );
+  } finally {
+    controller.abort();
+    observer.release();
+    await consumed;
+  }
+});
+
 it("leaves a cancelled sync observation's messages for a later cycle (#27792)", async () => {
   const observer = createLatchedModel('<observations>\n- Observed later\n</observations>');
   const actor = createLatchedModel('Actor', false);

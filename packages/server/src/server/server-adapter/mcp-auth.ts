@@ -1,7 +1,15 @@
 import type { IncomingMessage } from 'node:http';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { MASTRA_AUTH_TOKEN_KEY, MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_TOKEN_KEY, MASTRA_USER_KEY, RESERVED_REQUEST_CONTEXT_KEYS } from '../constants';
+
+/**
+ * Key under which `applyMcpRequestAuth` attaches the trusted request context to
+ * `req.auth`. `@mastra/mcp` reads the same registered symbol and copies the
+ * values into the request context its tools receive. A symbol cannot come out
+ * of a token or JSON payload, so only server code can supply it.
+ */
+export const MCP_TRUSTED_REQUEST_CONTEXT = Symbol.for('mastra.mcp.trustedRequestContext');
 
 /**
  * Shape the MCP SDK expects on `req.auth`.
@@ -20,6 +28,11 @@ export interface McpAuthInfo {
  * request context, which carries whatever server auth or your own middleware
  * resolved for this request. Setting `req.auth` is the caller's job; leaving it
  * unset is an explicit opt-out of the default bridge.
+ *
+ * The hook only owns `authInfo`. Whenever `req.auth` ends up set, the reserved
+ * request context values (user, permissions, roles, resource, organization)
+ * are still attached to it, so tools' `requestContext` reflects Mastra server
+ * auth even if the hook's `authInfo` names a different principal.
  */
 export type SetMcpRequestAuth = (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
 
@@ -66,10 +79,13 @@ export function buildMcpAuthInfoFromRequestContext(requestContext: RequestContex
  * transport.
  *
  * Resolution order:
- * 1. An already-set `req.auth` is left untouched.
+ * 1. An already-set `req.auth` keeps its identity.
  * 2. A configured `setRequestAuth` hook runs and fully owns the result.
  * 3. Otherwise the principal resolved by Mastra server auth is bridged from the
  *    request context using the default mapping.
+ *
+ * Whichever way `req.auth` is set, the trusted request context is attached to
+ * it so MCP tools see the same principal as Mastra routes.
  */
 export async function applyMcpRequestAuth({
   req,
@@ -81,16 +97,33 @@ export async function applyMcpRequestAuth({
   setRequestAuth?: SetMcpRequestAuth;
 }): Promise<void> {
   const request = req as IncomingMessage & { auth?: unknown };
-  if (request.auth) return;
   if (!requestContext) return;
 
-  if (setRequestAuth) {
-    await setRequestAuth(req, requestContext);
-    return;
+  if (!request.auth) {
+    if (setRequestAuth) {
+      await setRequestAuth(req, requestContext);
+    } else {
+      const authInfo = buildMcpAuthInfoFromRequestContext(requestContext);
+      if (authInfo) request.auth = authInfo;
+    }
   }
 
-  const authInfo = buildMcpAuthInfoFromRequestContext(requestContext);
-  if (authInfo) {
-    request.auth = authInfo;
+  if (request.auth && typeof request.auth === 'object') {
+    attachTrustedRequestContext(request.auth, requestContext);
   }
+}
+
+/**
+ * Hands MCP tools the values Mastra server auth resolved for this request
+ * (user, permissions, roles, resource id, tenant, auth mode), so a tool called
+ * over MCP is authorized the same way as the matching HTTP route. The token is
+ * left out; it is already on `authInfo`.
+ */
+function attachTrustedRequestContext(auth: object, requestContext: RequestContext): void {
+  const trusted: Record<string, unknown> = {};
+  for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
+    if (key === MASTRA_AUTH_TOKEN_KEY || !requestContext.has(key)) continue;
+    trusted[key] = requestContext.get(key);
+  }
+  Object.defineProperty(auth, MCP_TRUSTED_REQUEST_CONTEXT, { value: trusted, configurable: true });
 }

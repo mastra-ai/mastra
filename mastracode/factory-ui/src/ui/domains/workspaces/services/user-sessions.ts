@@ -7,9 +7,6 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
-export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
-
 export interface FactoryUserSessionOwner {
   id: string;
   name: string;
@@ -39,6 +36,8 @@ export interface FactoryUserSession {
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
   capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
+  /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
+  followedWorkItemIds?: readonly string[];
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -63,7 +62,7 @@ export async function listUserSessions(
 }
 
 export type CreateUserSessionOptions = (
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { branch: string; baseBranch?: string; sessionId?: string; title?: never }
   | { sessionId: string; title: string; branch?: never; baseBranch?: never }
 ) & {
   /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */
@@ -110,6 +109,11 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
   return normalizeUserSession(body.session);
 }
 
+/** The server answers a missing session and a teammate's private one with the same 404. */
+export function isSessionNotFound(error: Error): boolean {
+  return 'status' in error && error.status === 404;
+}
+
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
     method: 'DELETE',
@@ -151,6 +155,24 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   const body: { title?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
   return body.title;
+}
+
+/** Approve or decline the tool call a card's phase session waits on. Its owner, an admin, or anyone following the card may. */
+export async function answerParkedApproval(
+  baseUrl: string,
+  sessionId: string,
+  decision: 'approve' | 'decline',
+  toolCallId?: string,
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-approval`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ decision, ...(toolCallId ? { toolCallId } : {}) }),
+  });
+  if (res.ok) return;
+  const body: { error?: string } = await res.json().catch(() => ({}));
+  throw new Error(body.error ?? `Failed to answer the approval (${res.status})`);
 }
 
 export type UserSessionVisibility = FactoryUserSession['visibility'];

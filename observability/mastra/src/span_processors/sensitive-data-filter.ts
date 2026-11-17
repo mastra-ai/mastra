@@ -189,11 +189,11 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       const normKey = this.normalizeKey(key);
 
       if (this.isSensitive(normKey)) {
-        if (obj[key] && typeof obj[key] === 'object') {
-          filtered[key] = this.deepFilter(obj[key], seen, indexedState);
-        } else {
-          filtered[key] = this.redactValue(obj[key], normKey, indexedState);
-        }
+        // Everything under a sensitive key is sensitive, including nested objects and arrays.
+        filtered[key] =
+          obj[key] && typeof obj[key] === 'object'
+            ? this.redactionToken
+            : this.redactValue(obj[key], normKey, indexedState);
       } else {
         filtered[key] = this.deepFilter(obj[key], seen, indexedState);
       }

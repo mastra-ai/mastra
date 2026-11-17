@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.95",
+  "version": "0.0.96",
   "description": "",
   "type": "module",
   "private": true,
@@ -40,7 +40,7 @@
   "devDependencies": {
     "@ai-sdk/gateway": "^3.0.226",
     "@ai-sdk/provider": "^3.0.19",
-    "@ai-sdk/provider-utils": "^4.0.63",
+    "@ai-sdk/provider-utils": "^4.0.66",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",
@@ -63,7 +63,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/_ai-sdk-v4"
+    "directory": "packages/_vendored/ai_v6"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

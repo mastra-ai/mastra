@@ -66,10 +66,10 @@ export function readExtent(output: Record<string, unknown>, args: Record<string,
   }
   if (isRange(page.range) && typeof page.lines === 'string') {
     const tag = `${linesText(page.range)}${of}`;
-    const section = typeof args.section === 'string' && args.section ? `section "${args.section}" · ` : '';
+    const section = typeof args.section === 'string' && args.section ? `section "${args.section}", ` : '';
     const next = page.range.end.line + 1;
     const tail =
-      count === undefined ? '' : page.range.end.line >= count ? ' · end of page' : ` · continues at line ${next}`;
+      count === undefined ? '' : page.range.end.line >= count ? ', end of page' : `, continues at line ${next}`;
     return { row: `${section}${tag}`, summary: `${tag[0]?.toUpperCase()}${tag.slice(1)}${tail}` };
   }
   if (typeof page.lines === 'string' && count !== undefined) {

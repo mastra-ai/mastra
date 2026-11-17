@@ -120,7 +120,7 @@ function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment })
   const TargetIcon = targetType ? TARGET_ICON[targetType] : null;
 
   return (
-    <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
+    <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-icon-sm [&_svg]:shrink-0">
       {TargetIcon && (
         <span className="flex text-muted-foreground" role="img" aria-label={TARGET_LABEL[targetType!]}>
           <TargetIcon />

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTestBoard } from '../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -54,10 +54,15 @@ async function githubSetup(
     rules?: GithubRuleOverrides;
     board?: string;
     boards?: BoardRegistry;
+    githubSources?: string[];
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+  await seeded.intake.saveConfig({
+    orgId: project.orgId,
+    config: { github: { enabled: true, sourceIds: input.githubSources ?? [repository.fullName] } },
+  });
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const installation = await sourceControl.installations.upsert({
     orgId: project.orgId,
@@ -83,9 +88,6 @@ async function githubSetup(
     orgId: project.orgId,
     connectionId: connection.id,
     repositoryId: storedRepository.id,
-    createdByUserId: project.createdBy,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const workItem = (
     await seeded.workItems.upsert({
@@ -115,8 +117,9 @@ async function githubSetup(
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
       storage: seeded.workItems,
+      intake: seeded.intake,
       configVersion: 'factory-config-v1',
-      boards: input.boards ?? createBoardRegistry(),
+      boards: input.boards ?? createTriageWorkRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
     input.listOpenIssues,
@@ -415,6 +418,40 @@ describe('issue reconcilers', () => {
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(1);
   });
 
+  it('does not look for missed issues on a linked repository that is not selected for intake', async () => {
+    const listOpenIssues = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          ...githubState({ url: 'https://github.com/acme/repo/issues/39' }),
+          number: 39,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ labels: [] })),
+      listOpenIssues,
+      metadata: { labels: [] },
+      githubSources: ['acme/other'],
+    });
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ created: 0, failed: 0 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
+  });
+
+  it('still reconciles the cards already filed when the intake selection cannot be read', async () => {
+    const listOpenIssues = vi.fn().mockResolvedValue([]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
+      listOpenIssues,
+    });
+    vi.spyOn(setup.intake, 'getConfig').mockRejectedValue(new Error('intake down'));
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 1 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+  });
+
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {
     const setup = await githubSetup({
       fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
@@ -483,17 +520,16 @@ describe('issue reconcilers', () => {
 
     // Dispatch the committed decision and the existing card is relocated onto
     // Planning — the same landing an arrival gets, with no phase rule run for it.
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -531,17 +567,16 @@ describe('issue reconcilers', () => {
       { type: 'upsertLinkedWorkItem', board: 'work', stage: 'triage', skipRules: true },
     ]);
 
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -657,17 +692,16 @@ describe('issue reconcilers', () => {
       fetchIssue: fetched,
       rules: { issueOpened },
     });
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     const sweep = async (labels: string[], version: string, tick: string) => {
@@ -779,10 +813,12 @@ describe('issue reconcilers', () => {
           rules: resolveLinearRules(
             mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
           ),
+          loadConnection: async () => null,
+          getFreshAccessToken: async () => 'token',
         },
         {
-          storage: { projects: seeded.projects },
-          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+          storage: { projects: seeded.projects, intake: seeded.intake },
+          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createTriageWorkRegistry() },
         } as never,
       );
 

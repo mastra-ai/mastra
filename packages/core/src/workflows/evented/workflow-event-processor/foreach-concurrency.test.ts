@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_AUTH_TOKEN_KEY } from '../../../request-context';
+import { createRunStorage } from '../../run-storage';
 import { processWorkflowForEach } from './loop';
 
 /**
@@ -49,7 +50,12 @@ async function kickOffForeach({
       published.push(event);
     },
   } as any;
-  const mastra = { getStorage: () => ({ getStore: async () => ({ updateWorkflowResults }) }) } as any;
+  const runStorage = createRunStorage({
+    storageVersion: 1,
+    workflowName: 'wf',
+    runId: 'run-1',
+    getStore: async () => ({ updateWorkflowResults }) as any,
+  });
 
   await processWorkflowForEach(
     {
@@ -76,7 +82,7 @@ async function kickOffForeach({
       prevResult: { status: 'success', output: items, startedAt: 1, endedAt: 2, payload: {} },
       requestContext,
     } as any,
-    { pubsub, mastra, step: makeForeachStep(concurrency) },
+    { pubsub, runStorage, step: makeForeachStep(concurrency) },
   );
 
   return published;

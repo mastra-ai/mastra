@@ -50,12 +50,10 @@ describe('MetricsTimeRangeChip', () => {
       const onCustomRangeChange = renderChip();
 
       fireEvent.click(screen.getByRole('button', { name: /last|custom|time|\d/i }));
-      // The chip only knows the limit once capabilities load; then the 30-days-ago start day is disabled.
-      const startDay = String(new Date(Date.now() - 30 * DAY).getDate());
+      // The chip only knows the limit once capabilities load; then the calendar can't page back
+      // past the oldest kept month.
       await vi.waitFor(() =>
-        expect(screen.getAllByRole('gridcell', { name: startDay }).some(day => day.hasAttribute('disabled'))).toBe(
-          true,
-        ),
+        expect(screen.getByRole('button', { name: /previous month/i }).getAttribute('aria-disabled')).toBe('true'),
       );
       fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 

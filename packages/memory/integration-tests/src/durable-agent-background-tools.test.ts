@@ -184,24 +184,20 @@ describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider,
               expect(recorder.requests[i]!.responseText).toMatch(/does not support assistant message prefill/);
             }
             expect(repairs.repaired.length).toBe(repairs.ended.length);
-            // Background dispositions re-enter the model after the tool result, which is the request
-            // shape that trips Anthropic's prefill guard; the foreground path never produces it, so
-            // there is nothing to reject there.
-            if (variant === 'foreground') {
-              expect(rejected).toEqual([]);
-            } else {
-              expect(rejected.length).toBeGreaterThan(0);
-            }
+            // Only the untilIdle follow-up request ends on an assistant turn, the shape that trips
+            // Anthropic's prefill guard. A foreground or awaited call hands its result to the model
+            // inside the run, so no follow-up is sent (#29679). A deferred task gets one when it
+            // finished after the run's last model request, as it does in these recordings except on
+            // evented, so those cells keep the repair check from passing with nothing to repair.
+            if (variant === 'deferred' && engine !== 'evented') expect(rejected.length).toBeGreaterThan(0);
+            if (variant !== 'deferred') expect(rejected).toEqual([]);
           } else {
             expect(repairs.ended).toEqual([]);
             expect(recorder.requests.every(request => request.status === 200)).toBe(true);
-            // The control must see the contrast: an OpenAI request ending on an assistant turn is
-            // accepted as-is (200) and is not pre-repaired.
-            if (variant === 'foreground') {
-              expect(endedByProvider.accepted).toEqual([]);
-            } else {
-              expect(endedByProvider.accepted.length).toBeGreaterThan(0);
-            }
+            // The control: an OpenAI request ending on an assistant turn is accepted as-is (200) and
+            // is not pre-repaired. As above, only a deferred task produces one.
+            if (variant === 'deferred') expect(endedByProvider.accepted.length).toBeGreaterThan(0);
+            if (variant !== 'deferred') expect(endedByProvider.accepted).toEqual([]);
             for (const { i } of endedByProvider.accepted) {
               expect(recorder.requests[i]!.status).toBe(200);
               expect(bodies[i]!).not.toContain(PREFILL_REPAIR_MARKER);

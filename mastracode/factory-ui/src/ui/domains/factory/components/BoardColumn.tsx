@@ -10,7 +10,7 @@ import { BoardStageIcon } from './BoardIcons';
 
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
-  return cn('w-80 min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed && 'lg:w-14');
+  return cn('min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed ? 'w-14' : 'w-80');
 }
 
 function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {
@@ -73,12 +73,7 @@ export function BoardColumnHeader({
 }) {
   if (collapsed) {
     return (
-      <div
-        className={cn(
-          columnWidthClass(true),
-          'group/column relative flex min-h-8 items-center justify-end lg:justify-center',
-        )}
-      >
+      <div className={cn(columnWidthClass(true), 'group/column relative flex min-h-8 items-center justify-center')}>
         <Txt
           as="span"
           variant="meta"
@@ -93,12 +88,7 @@ export function BoardColumnHeader({
           {taskCount}
         </Txt>
         {headerAction ? (
-          <div
-            className={cn(
-              'absolute inset-y-0 right-0 flex items-center justify-center lg:inset-x-0',
-              COLUMN_ACTION_REVEAL_CLASS,
-            )}
-          >
+          <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
             {headerAction}
           </div>
         ) : null}
@@ -106,7 +96,7 @@ export function BoardColumnHeader({
           tone="muted"
           as="h2"
           variant="label"
-          className="pointer-events-none absolute top-full right-0 m-0 py-1 [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
+          className="pointer-events-none absolute top-full left-1/2 m-0 -translate-x-1/2 py-1 whitespace-nowrap [writing-mode:vertical-rl]"
         >
           {label}
         </Txt>

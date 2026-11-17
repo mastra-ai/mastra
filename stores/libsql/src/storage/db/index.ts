@@ -13,6 +13,7 @@ import type {
   TABLE_NAMES,
   TABLE_MEMORY_RUN_FENCES,
   TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_RUNS,
   StorageColumn,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -28,8 +29,12 @@ import {
 } from './utils';
 import { withClientWriteLock } from './write-lock';
 
-/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
-export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+/** Tables retention can prune: the core tables plus the run fencing and storage v2 run tables, which aren't in TABLE_NAMES. */
+export type PrunableTable =
+  | TABLE_NAMES
+  | typeof TABLE_WORKFLOW_RUN_OWNERS
+  | typeof TABLE_WORKFLOW_RUNS
+  | typeof TABLE_MEMORY_RUN_FENCES;
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -1161,10 +1166,15 @@ export class LibSQLDB extends MastraBase {
           // Nullable columns use DEFAULT NULL; non-nullable use the type's default.
           const defaultValue = columnDef.nullable ? 'DEFAULT NULL' : this.getDefaultValue(columnDef.type);
 
-          // SQLite doesn't support ADD COLUMN IF NOT EXISTS, but we checked above
+          // SQLite has no ADD COLUMN IF NOT EXISTS. Another connection can add the column
+          // between the check above and this ALTER, in which case the column exists.
           const alterSql = `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${defaultValue}`;
-          await this.client.execute(alterSql);
-          this.logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          try {
+            await this.client.execute(alterSql);
+            this.logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          } catch (error) {
+            if (!(error instanceof Error && /duplicate column name/i.test(error.message))) throw error;
+          }
         }
       }
     } catch (error) {

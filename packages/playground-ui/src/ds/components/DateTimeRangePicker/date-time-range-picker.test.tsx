@@ -16,10 +16,13 @@ function renderCustom(props: Partial<React.ComponentProps<typeof DateTimeRangePi
 }
 
 describe('DateTimeRangePicker (custom range popover)', () => {
+  // The calendar names each day button by its full date, e.g. "Monday, September 14th, 2026".
+  const day = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
+
   it('renders the Presets link as a ghost design-system Button', () => {
     renderCustom();
 
-    const presets = screen.getByRole('button', { name: /presets/i });
+    const presets = screen.getByRole('button', { name: 'Presets' });
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
     // the recipe's aria-disabled:pointer-events-none would satisfy a substring match
@@ -33,14 +36,30 @@ describe('DateTimeRangePicker (custom range popover)', () => {
       presets: TRACE_PRESETS,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /presets/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(onPresetChange).not.toHaveBeenCalled();
     expect(checkedPreset()).toBe('Custom range...');
   });
 
+  it("picks a range with two clicks and applies it at each end's time", () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1, 8, 0),
+      dateTo: new Date(2026, 8, 20, 18, 0),
+      onDateRangeChange,
+    });
+
+    fireEvent.click(day('September 10th, 2026'));
+    fireEvent.click(day('September 14th, 2026'));
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '09:30' } });
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(onDateRangeChange).toHaveBeenCalledWith(new Date(2026, 8, 10, 9, 30), new Date(2026, 8, 14, 18, 0));
+  });
+
   it('renders the range error with the shared field message', () => {
-    renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
+    renderCustom({ dateFrom: new Date(2026, 0, 10, 18, 0), dateTo: new Date(2026, 0, 10, 9, 0) });
 
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
@@ -51,19 +70,28 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     const range = screen.getByRole('group', { name: 'Custom date range' });
     expect(range.getAttribute('aria-invalid')).toBe('true');
     expect(range.getAttribute('aria-describedby')).toBe(error.id);
-    expect(screen.getAllByRole('combobox').filter(select => select.hasAttribute('aria-invalid'))).toEqual([]);
   });
 
   it('clears the range error once the range is fixed', () => {
-    renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
+    renderCustom({ dateFrom: new Date(2026, 0, 10, 18, 0), dateTo: new Date(2026, 0, 10, 9, 0) });
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
     expect(screen.queryByRole('alert')).not.toBeNull();
 
-    const [startCalendarDay] = screen.getAllByRole('gridcell', { name: '4' });
-    fireEvent.click(startCalendarDay);
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: '20:00' } });
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('group', { name: 'Custom date range' }).getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('asks for a time instead of applying an end whose time field was cleared', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({ dateFrom: new Date(2026, 8, 1, 8, 0), dateTo: new Date(2026, 8, 20, 18, 0), onDateRangeChange });
+
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Enter a time for the start and end');
+    expect(onDateRangeChange).not.toHaveBeenCalled();
   });
 
   it('rejects a custom range wider than maxRangeMs', () => {
@@ -96,7 +124,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(onDateRangeChange).toHaveBeenCalledTimes(1);
   });
 
-  it('disables days before minDate in both calendars', () => {
+  it('disables days before minDate', () => {
     const onDateRangeChange = vi.fn();
     renderCustom({
       dateFrom: new Date(2026, 8, 20),
@@ -105,31 +133,13 @@ describe('DateTimeRangePicker (custom range popover)', () => {
       onDateRangeChange,
     });
 
-    const [startCalendar, endCalendar] = screen.getAllByRole('grid');
-    // Each calendar shows September; the 14th is the last day before minDate.
-    for (const calendar of [startCalendar, endCalendar]) {
-      const [day14] = within(calendar).getAllByRole('gridcell', { name: '14' });
-      expect(day14.hasAttribute('disabled')).toBe(true);
-    }
-    const [day15] = within(startCalendar).getAllByRole('gridcell', { name: '15' });
-    expect(day15.hasAttribute('disabled')).toBe(false);
+    expect(day('September 14th, 2026').hasAttribute('disabled')).toBe(true);
+    expect(day('September 15th, 2026').hasAttribute('disabled')).toBe(false);
 
-    fireEvent.click(within(startCalendar).getAllByRole('gridcell', { name: '14' })[0]);
+    fireEvent.click(day('September 14th, 2026'));
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
     const [[from]] = onDateRangeChange.mock.calls;
     expect(from.getDate()).toBe(20);
-  });
-
-  it('keeps the end calendar from minDate when the draft start is earlier', () => {
-    renderCustom({
-      dateFrom: new Date(2026, 8, 1),
-      dateTo: new Date(2026, 8, 20),
-      minDate: new Date(2026, 8, 15, 13, 30),
-    });
-
-    const [, endCalendar] = screen.getAllByRole('grid');
-    const [day14] = within(endCalendar).getAllByRole('gridcell', { name: '14' });
-    expect(day14.hasAttribute('disabled')).toBe(true);
   });
 
   it('applies a range that starts on the minDate day when minDate carries a time', () => {
@@ -163,7 +173,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
   });
 
   it('starts the range editor fresh each time it opens', () => {
-    renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
+    renderCustom({ dateFrom: new Date(2026, 0, 10, 18, 0), dateTo: new Date(2026, 0, 10, 9, 0) });
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
     expect(screen.queryByRole('alert')).not.toBeNull();
 
@@ -176,15 +186,12 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('names each time select on its own, with its own id', () => {
+  it('names each time field on its own', () => {
     renderCustom();
 
-    const selects = ['Start time', 'End time'].flatMap(time => {
-      const group = screen.getByRole('group', { name: time });
-      return ['Hour', 'Minute', 'AM or PM'].map(part => within(group).getByRole('combobox', { name: part }));
-    });
+    const fields = ['Start time', 'End time'].map(name => screen.getByLabelText(name));
 
-    expect(new Set(selects.map(select => select.id)).size).toBe(6);
+    expect(new Set(fields.map(field => field.id || field)).size).toBe(2);
   });
 });
 
@@ -263,7 +270,7 @@ describe('DateTimeRangePicker (presets)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
-    fireEvent.click(screen.getByRole('button', { name: /presets/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();
     expect(checkedPreset()).toBe('Last 3 days');
@@ -289,7 +296,7 @@ describe('DateTimeRangePicker (presets restored by a slow parent)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
-    fireEvent.click(screen.getByRole('button', { name: /presets/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(onPendingPreset).toHaveBeenCalledWith('last-3d');
     expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();

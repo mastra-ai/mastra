@@ -572,7 +572,8 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
   const feedbackSource = nullableString(row.feedbackSource);
-  const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
+  const feedbackUserId =
+    row.feedbackUserId !== undefined ? nullableString(row.feedbackUserId) : nullableString(row.userId);
   return {
     feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
@@ -620,7 +621,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
-  const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
+  const feedbackUserId = feedback.feedbackUserId !== undefined ? feedback.feedbackUserId : (feedback.userId ?? null);
 
   return {
     feedbackId: feedback.feedbackId,
@@ -640,7 +641,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     rootEntityType: feedback.rootEntityType ?? null,
     rootEntityId: feedback.rootEntityId ?? null,
     rootEntityName: feedback.rootEntityName ?? null,
-    userId: feedbackUserId,
+    userId: feedback.userId ?? null,
     organizationId: feedback.organizationId ?? null,
     resourceId: feedback.resourceId ?? null,
     runId: feedback.runId ?? null,
