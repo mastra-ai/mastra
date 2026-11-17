@@ -86,7 +86,9 @@ const secretEncryption = createFactorySecretEncryption({
  */
 
 const controllerMock = {
-  onSessionCreated: vi.fn(),
+  onSessionCreated: vi.fn(() => () => {}),
+  onSessionDeleted: vi.fn(() => () => {}),
+  deleteSession: vi.fn(async () => false),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
   getSession: vi.fn(),
@@ -3222,7 +3224,9 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
+        base: {
+          controller: { onSessionCreated: vi.fn(() => () => {}), onSessionDeleted: vi.fn(() => () => {}), setChannels },
+        },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);

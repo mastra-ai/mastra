@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Card } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
@@ -10,6 +11,7 @@ import {
   awaitsAcceptance,
   boardFlow,
   boardForWorkItem,
+  boundChangeRequestNumber,
   cardOwnsBranch,
   isTerminalWorkItem,
   resolveBoardClosure,
@@ -419,5 +421,31 @@ describe("a card's working pull request", () => {
   it('is what a review pass reviews', () => {
     expect(reviewedPullRequest(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
     expect(reviewedPullRequest(card([pr(17, 'open')]))).toMatchObject({ externalId: 'github-pr:17' });
+  });
+});
+
+describe('boundChangeRequestNumber', () => {
+  const githubPullRequestCard = (externalId: string) =>
+    ({
+      board: 'work',
+      stages: [],
+      metadata: {},
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId },
+      workItem: { metadata: {}, sources: [] },
+    }) as unknown as Card;
+
+  it('falls back to the digits ending a GitHub pull request key', () => {
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard('github-pr:34'))).toBe('34');
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard('github-pr:007'))).toBe('007');
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard('github-pr:'))).toBeUndefined();
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard('github-pr:12x'))).toBeUndefined();
+  });
+
+  it('reads the number in linear time on a pathological key', () => {
+    const key = `${'0'.repeat(100_000)}x`;
+    const started = performance.now();
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard(key))).toBeUndefined();
+    expect(boundChangeRequestNumber(createBoardRegistry(), githubPullRequestCard(`${key}5`))).toBe('5');
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

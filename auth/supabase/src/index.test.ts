@@ -154,6 +154,19 @@ describe('MastraAuthSupabase', () => {
     const supabase = new MastraAuthSupabase({ url: 'https://test.supabase.co/', anonKey: mockSupabaseAnonKey });
     expect(supabase.getOAuthMetadata()).toEqual({ authorizationServers: ['https://test.supabase.co/auth/v1'] });
   });
+
+  it('normalizes a URL with a pathological run of slashes in linear time', () => {
+    const slashes = '/'.repeat(100_000);
+    const started = performance.now();
+    const supabase = new MastraAuthSupabase({
+      url: `https://test.supabase.co${slashes}x${slashes}`,
+      anonKey: mockSupabaseAnonKey,
+    });
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(supabase.getOAuthMetadata()).toEqual({
+      authorizationServers: [`https://test.supabase.co${slashes}x/auth/v1`],
+    });
+  });
 });
 
 describe('MastraAuthSupabase.toMastraUser', () => {
