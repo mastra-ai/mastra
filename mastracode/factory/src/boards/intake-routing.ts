@@ -12,6 +12,8 @@ import {
   eventRuleFacts,
   isPullRequestEvent,
   LEGACY_ARRIVAL_EVENT,
+  SETTLING_PULL_REQUEST_EVENTS,
+  testsField,
 } from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
@@ -24,7 +26,10 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly'> & {
+type IntakeRoute = Pick<
+  StoredIntakeRouteRecord,
+  'id' | 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly' | 'outsiderPullRequestsGated'
+> & {
   target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'phaseKey' | 'joinClosedIssue'> & {
     moveToBoardKey?: string | null;
   };
@@ -467,14 +472,6 @@ export function routesHandleEvent(
   return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
 }
 
-const SETTLING_PULL_REQUEST_EVENTS = new Set<string>(['pull_request.merged', 'pull_request.closed']);
-
-function testsField(group: RuleGroup | null, field: string): boolean {
-  return (
-    group?.conditions.some(member => ('field' in member ? member.field === field : testsField(member, field))) ?? false
-  );
-}
-
 /** A card-move route that matched but can't take the card where it points, and why. */
 export interface SkippedEventRoute {
   routeId: string;
@@ -532,9 +529,11 @@ export function traceEventRoute(
         }
       : {}),
   };
-  // An outsider's pull request linked to an issue's card moves the card only by a rule that asks
-  // about the pull request's trust; one that doesn't was never written with outsiders in mind.
-  // Merging and closing settle the pull request either way, so those still move the card.
+  // Rules decide outsiders' pull requests themselves: one that should only act for a maintainer
+  // says so with a `pullRequest.trusted` condition. Only a rule stored before that
+  // (`outsiderPullRequestsGated`) keeps the old gate: an outsider's pull request linked to an
+  // issue's card moves the card only by a rule that asks about the pull request's trust. Merging
+  // and closing settle the pull request either way, so those still move the card.
   const untrustedLinkedPullRequest =
     isPullRequestEvent(event.type) &&
     !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
@@ -549,12 +548,16 @@ export function traceEventRoute(
       rules.push({ ...named, outcome: 'disabled' });
       continue;
     }
-    // Not a skip the dispatcher logs: the rule was never meant for this pull request.
-    if (untrustedLinkedPullRequest && !testsField(route.when, 'pullRequest.trusted')) {
+    // Not a skip the dispatcher logs: the older rule was never meant for this pull request.
+    if (
+      untrustedLinkedPullRequest &&
+      route.outsiderPullRequestsGated &&
+      !testsField(route.when, 'pullRequest.trusted')
+    ) {
       rules.push({
         ...named,
         outcome: 'skipped',
-        reason: "the pull request's author is an outsider, and this rule doesn't test pullRequest.trusted",
+        reason: "the pull request's author is an outsider, and this older rule skips outside authors' pull requests",
       });
       continue;
     }

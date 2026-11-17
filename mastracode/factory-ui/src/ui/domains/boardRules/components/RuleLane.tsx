@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { SETTLING_PULL_REQUEST_EVENTS, testsField } from '@mastra/factory/boards/board-events';
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
 import { useRowDrag } from '../../settings/components/useRowDrag';
 import {
@@ -59,6 +60,7 @@ export function RuleLane({
   onMove,
   onToggle,
   onDelete,
+  onUngate,
 }: {
   event: RuleEvent;
   rules: IntakeRouteInfo[];
@@ -77,6 +79,8 @@ export function RuleLane({
   onMove: (from: number, to: number) => void;
   onToggle: (rule: IntakeRouteInfo, enabled: boolean) => void;
   onDelete: (rule: IntakeRouteInfo) => void;
+  /** Lets an older rule's card moves match outside authors' pull requests, like every newer rule. */
+  onUngate: (rule: IntakeRouteInfo) => void;
 }) {
   const text = laneText(event);
   const Icon = text.icon;
@@ -265,6 +269,24 @@ export function RuleLane({
                 </Txt>
               ))}
               {skip && <SkipWarning skips={skip} />}
+              {rule.outsiderPullRequestsGated &&
+                !testsField(rule.when, 'pullRequest.trusted') &&
+                event.startsWith('pull_request.') &&
+                !SETTLING_PULL_REQUEST_EVENTS.has(event) && (
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="mt-1 ml-3 flex flex-wrap items-center gap-x-1.5 gap-y-1"
+                  >
+                    Skips outside authors’ pull requests (older rule).
+                    {canEdit && (
+                      <button type="button" onClick={() => onUngate(rule)} className="underline">
+                        Let outside authors match
+                      </button>
+                    )}
+                  </Txt>
+                )}
               {movesCardsOnly(rule, event) && (
                 <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3">
                   Moves cards only: files no new pull requests

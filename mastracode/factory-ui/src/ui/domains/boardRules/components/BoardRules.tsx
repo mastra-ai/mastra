@@ -216,6 +216,15 @@ function BoardLanes({
                     done => done && toast.success(`Deleted “${rule.name}”`),
                   )
                 }
+                onUngate={rule =>
+                  void run([
+                    {
+                      kind: 'update',
+                      id: rule.id,
+                      patch: { outsiderPullRequestsGated: false, expectedRevision: rule.revision },
+                    },
+                  ]).then(done => done && toast.success(`“${rule.name}” now matches outside authors’ pull requests`))
+                }
               />
             );
           })}

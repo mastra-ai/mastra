@@ -105,17 +105,33 @@ export const PULL_REQUEST_CLOSED_ISSUE_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'intake' },
 };
 
-/** A push to a pull request in review restarts its review in Review. */
+/**
+ * A push to a pull request in review restarts its review in Review. It asks for the pusher's
+ * trust itself: rules decide outsiders' pull requests, and an outside author's push should not
+ * restart a review until a person vouches for the pull request.
+ */
 export const PULL_REQUEST_UPDATED_ROUTE: StoredIntakeRouteInput = {
   name: 'Pushes to a reviewed pull request re-review it',
   on: ['pull_request.synchronized'],
+  when: {
+    operator: 'AND',
+    conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+  },
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
-/** A maintainer asking Factory to review a pull request again sends it to Review. */
+/**
+ * A maintainer asking Factory to review a pull request again sends it to Review. It asks for the
+ * pull request's trust itself: rules decide outsiders' pull requests, and a review request on an
+ * outside author's pull request waits for a person to vouch for it.
+ */
 export const PULL_REQUEST_REVIEW_REQUESTED_ROUTE: StoredIntakeRouteInput = {
   name: 'Requested reviews go to Review',
   on: ['pull_request.review_requested'],
+  when: {
+    operator: 'AND',
+    conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+  },
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 

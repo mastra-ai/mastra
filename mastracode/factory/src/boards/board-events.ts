@@ -167,6 +167,30 @@ export function isPullRequestEvent(type: StatusEvent): type is PullRequestEvent 
   return type.startsWith('pull_request.');
 }
 
+/** Merging or closing settles a pull request whoever its author is, so those events always move the card. */
+export const SETTLING_PULL_REQUEST_EVENTS: ReadonlySet<string> = new Set([
+  'pull_request.merged',
+  'pull_request.closed',
+]);
+
+/** Whether any condition in the group, however nested, asks about the field. */
+export function testsField(group: RuleGroup | null, field: string): boolean {
+  return (
+    group?.conditions.some(member => ('field' in member ? member.field === field : testsField(member, field))) ?? false
+  );
+}
+
+/**
+ * Whether a rule's card moves would also act for outside authors' pull requests: it listens on a
+ * pull request event that doesn't settle one, and its conditions never ask about `pullRequest.trusted`.
+ */
+export function matchesOutsiderPullRequests(on: readonly string[], when: RuleGroup | null): boolean {
+  return (
+    on.some(event => event.startsWith('pull_request.') && !SETTLING_PULL_REQUEST_EVENTS.has(event)) &&
+    !testsField(when, 'pullRequest.trusted')
+  );
+}
+
 /**
  * Whether the event may move a card that is, or isn't, finished: a reopen moves only a finished
  * card, a close or a merge only an unfinished one. A push or a review request re-reviews a pull

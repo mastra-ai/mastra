@@ -178,6 +178,12 @@ export interface StoredIntakeRouteInput {
   on?: RouteEvent[];
   /** Writes the route as 0.28 did, moving cards on `pull_request.opened` and filing none: how a deleted one is restored. */
   pullRequestOpenedMovesOnly?: true;
+  /**
+   * Writes the route as one stored before rules decided outsiders' pull requests, whose card moves
+   * skip an outside author's pull request: how a deleted one is restored. `false` lets them match
+   * (what every new route gets); on an update, only an explicit `false` clears the gate.
+   */
+  outsiderPullRequestsGated?: boolean;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -195,6 +201,12 @@ export interface StoredIntakeRouteRecord {
    * names that event and only moves cards on it, as it always has. Writing `on` again clears it.
    */
   pullRequestOpenedMovesOnly?: true;
+  /**
+   * Set on a route stored before rules decided outsiders' pull requests: its card moves skip an
+   * outside author's pull request unless its `when` tests `pullRequest.trusted`, as they always
+   * have. Edits never change it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
+   */
+  outsiderPullRequestsGated?: true;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -366,6 +378,8 @@ interface IntakeRouteRow extends Record<string, unknown> {
   join_closed_issue: boolean | null;
   /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
   opened_files_pull_requests?: boolean | null;
+  /** Null on rows written before rules decided outsiders' pull requests: their card moves skip them. False since. */
+  outsider_pull_requests_gated?: boolean | null;
   move_to_board_key: string | null;
   revision: number;
   created_by: string;
@@ -1178,6 +1192,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
+        // Only an explicit `false` lets outsiders' pull requests match: no other edit, Undo
+        // included, may quietly widen an older rule onto outside authors' pull requests.
+        ...(patch.outsiderPullRequestsGated === false && { outsider_pull_requests_gated: false }),
         ...(patch.target !== undefined && {
           board_key: patch.target.boardKey,
           phase_key: patch.target.phaseKey ?? null,
@@ -1554,6 +1571,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     },
     on: routeEvents(row),
     ...(routeArrivals(row).pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true as const }),
+    ...(row.outsider_pull_requests_gated !== false && { outsiderPullRequestsGated: true as const }),
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1690,6 +1708,7 @@ async function insertIntakeRoute(
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
     opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
+    outsider_pull_requests_gated: route.input.outsiderPullRequestsGated === true ? null : false,
     move_to_board_key: route.input.target.moveToBoardKey ?? null,
     revision: 1,
     created_by: route.actor,
