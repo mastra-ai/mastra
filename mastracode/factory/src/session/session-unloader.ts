@@ -22,16 +22,13 @@ interface UnloadableWorkspace {
  * Whether the session's sandbox runs a process its process manager tracks, such as a dev server
  * the agent started. The handle lives in this process: a reloaded session gets a new sandbox
  * object that no longer lists it, so the agent could neither read its output nor stop it.
- * Only a running sandbox is asked, because listing would start a stopped one.
+ * Only a running sandbox is asked, because listing would start a stopped one. Rejects when
+ * the sandbox cannot be asked.
  */
 async function hasRunningProcess(session: UnloadableSession): Promise<boolean> {
   const sandbox = session.getWorkspace?.()?.sandbox;
   if (sandbox?.status !== 'running' || !sandbox.processes) return false;
-  try {
-    return (await sandbox.processes.list()).some(process => process.running);
-  } catch {
-    return false;
-  }
+  return (await sandbox.processes.list()).some(process => process.running);
 }
 
 export interface UnloadableController {
@@ -258,7 +255,7 @@ export class SessionUnloader {
     let unloaded = 0;
     for (const { tracked, idleSince } of due) {
       // A released session's sandbox was stopped with it; an idle one may still run a process.
-      if (!tracked.unloadWhenIdle && (await hasRunningProcess(tracked.session))) {
+      if (!tracked.unloadWhenIdle && (await this.#runsProcess(tracked.session))) {
         // Looked at again once another idle timeout has passed, not on every sweep.
         if (tracked.lastActiveAt === idleSince) tracked.lastActiveAt = this.#now();
         continue;
@@ -268,6 +265,19 @@ export class SessionUnloader {
       if (await this.#unload(tracked, stillIdle)) unloaded += 1;
     }
     return unloaded;
+  }
+
+  /** A sandbox that cannot be asked counts as running one: unloading would lose the handle for good. */
+  async #runsProcess(session: UnloadableSession): Promise<boolean> {
+    try {
+      return await hasRunningProcess(session);
+    } catch (error) {
+      this.#warn('Factory session kept loaded: its sandbox processes could not be listed', {
+        sessionId: session.identity.getId(),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return true;
+    }
   }
 
   #inUse(tracked: TrackedSession): boolean {

@@ -242,6 +242,28 @@ describe('SessionUnloader on a real controller', () => {
     expect(await loaded(mounted.controller, 'dev-server')).toBe(false);
   });
 
+  it('keeps an idle session when its running sandbox cannot list its processes', async () => {
+    const sandbox = new LocalSandbox();
+    const mounted = await mountController(new Workspace({ name: 'unlistable-workspace', sandbox }));
+    const { unloader, advance } = clockedUnloader(mounted);
+    await sessionWithHistory(mounted.controller, 'unlistable');
+    const server = await sandbox.processes.spawn('sleep 30');
+    onTestFinished(async () => {
+      await server.kill();
+    });
+    const list = vi.spyOn(sandbox.processes, 'list').mockRejectedValue(new Error('provider unavailable'));
+
+    advance(61_000);
+    expect(await unloader.sweep()).toBe(0);
+    expect(await loaded(mounted.controller, 'unlistable')).toBe(true);
+
+    list.mockRestore();
+    await server.kill();
+    await server.wait();
+    advance(61_000);
+    expect(await unloader.sweep()).toBe(1);
+  });
+
   it('unloads a released session at once when idle, and on the first sweep after its work ends when busy', async () => {
     const mounted = await mountController();
     const { unloader } = clockedUnloader(mounted, { idleMs: 0 });
