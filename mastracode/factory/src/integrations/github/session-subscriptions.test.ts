@@ -303,6 +303,24 @@ describe('parsePushedBranches', () => {
     },
   );
 
+  it('reads updated branches from --porcelain output and skips new, deleted, rejected and unchanged refs', () => {
+    const output = [
+      'To https://github.com/mastra-ai/mastra.git',
+      ' \trefs/heads/a:refs/heads/a\t1a2b3c4..5d6e7f8',
+      '+\trefs/heads/b:refs/heads/b\t1a2b3c4...5d6e7f8 (forced update)',
+      '*\trefs/heads/c:refs/heads/c\t[new branch]',
+      '-\t:refs/heads/d\t[deleted]',
+      '!\trefs/heads/e:refs/heads/e\t[rejected] (fetch first)',
+      '=\trefs/heads/f:refs/heads/f\t[up to date]',
+      ' \trefs/tags/v1:refs/tags/v1\t1a2b3c4..5d6e7f8',
+      'Done',
+    ].join('\n');
+    expect(parsePushedBranches(push(output, 'git push --porcelain origin a b c'))).toEqual([
+      { repository: 'mastra-ai/mastra', branch: 'a' },
+      { repository: 'mastra-ai/mastra', branch: 'b' },
+    ]);
+  });
+
   it('ignores a dry run even when its output is redirected', () => {
     const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
     expect(parsePushedBranches(push(output, 'git push -n origin a 2>&1 | tail'))).toEqual([]);

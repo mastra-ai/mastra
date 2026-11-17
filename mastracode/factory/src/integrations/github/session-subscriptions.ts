@@ -476,6 +476,8 @@ const GITHUB_REMOTE =
  * of them can have updated an open pull request.
  */
 const UPDATED_REF_LINE = /^\s*\+?\s*[0-9a-f]{7,}\.{2,3}[0-9a-f]{7,}\s+\S+\s+->\s+(\S+)/;
+/** The `--porcelain` form: `<flag>\t<src>:refs/heads/<dst>\t<old>..<new>`, flag ` ` or `+`. */
+const UPDATED_PORCELAIN_REF_LINE = /^[ +]\t[^\t]*:(refs\/heads\/[^\t\s]+)\t[0-9a-f]{7,}\.{2,3}[0-9a-f]{7,}/;
 
 function toolText(output: unknown): string | undefined {
   if (typeof output === 'string') return output;
@@ -516,7 +518,7 @@ export function parsePushedBranches(context: {
       repository = slug ? `${slug[1]}/${slug[2]}` : undefined;
       continue;
     }
-    const ref = repository ? line.match(UPDATED_REF_LINE) : null;
+    const ref = repository ? (line.match(UPDATED_REF_LINE) ?? line.match(UPDATED_PORCELAIN_REF_LINE)) : null;
     if (!ref || !repository) continue;
     const branch = ref[1]!.replace(/^refs\/heads\//, '');
     pushes.set(`${repository.toLowerCase()}\0${branch}`, { repository, branch });
