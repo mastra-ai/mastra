@@ -448,7 +448,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     const fresh = await send('/intake/test', {
       itemId: docsCard.id,
       boards: [
-        { boardKey: 'work', routes: [{ name: 'Pushes go back to Triage', on: review.on, target: { phaseKey: 'triage' } }, asDraft(workAll)] },
+        {
+          boardKey: 'work',
+          routes: [
+            { name: 'Pushes go back to Triage', on: review.on, target: { phaseKey: 'triage' } },
+            asDraft(workAll),
+          ],
+        },
       ],
     });
     expect(fresh.status).toBe(200);

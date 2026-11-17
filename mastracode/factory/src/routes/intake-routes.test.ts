@@ -638,7 +638,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const route = restored.body.intakeRoute as Route;
 
     // Only saying so lets outside authors match; a new rule never carries the gate at all.
-    expect(await replicaA.send('PATCH', `${base}/${route.id}`, { outsiderPullRequestsGated: true, expectedRevision: route.revision })).toMatchObject({
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, {
+        outsiderPullRequestsGated: true,
+        expectedRevision: route.revision,
+      }),
+    ).toMatchObject({
       status: 422,
     });
     const cleared = await replicaA.send('PATCH', `${base}/${route.id}`, {
@@ -646,7 +651,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       expectedRevision: route.revision,
     });
     expect(cleared.status).toBe(200);
-    expect((cleared.body.intakeRoute as Route & { outsiderPullRequestsGated?: true }).outsiderPullRequestsGated).toBeUndefined();
+    expect(
+      (cleared.body.intakeRoute as Route & { outsiderPullRequestsGated?: true }).outsiderPullRequestsGated,
+    ).toBeUndefined();
     const fresh = await replicaA.send('POST', base, {
       name: 'New pushes go to Review',
       target: { boardKey: 'work', phaseKey: 'pr-review' },
