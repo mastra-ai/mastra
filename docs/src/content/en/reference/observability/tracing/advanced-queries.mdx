@@ -649,15 +649,20 @@ PostgreSQL enforces the timeout with `statement_timeout`, which can't stop a que
 import { Pool } from 'pg'
 import { PostgresStoreVNext } from '@mastra/pg'
 
+const observabilityPool = new Pool({
+  connectionString: process.env.OBSERVABILITY_DATABASE_URL,
+  options: '-c jit=off',
+})
+
+// The store only handles errors on pools it creates, so handle them here.
+observabilityPool.on('error', err => {
+  console.error('Observability pool error', err)
+})
+
 const storage = new PostgresStoreVNext({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
-  observability: {
-    pool: new Pool({
-      connectionString: process.env.OBSERVABILITY_DATABASE_URL,
-      options: '-c jit=off',
-    }),
-  },
+  observability: { pool: observabilityPool },
 })
 ```
 
