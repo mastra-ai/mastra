@@ -785,7 +785,7 @@ Deletes a vector index. Mastra records which search indexes and collections it c
 - **Managed index** (created without `collectionName`): drops the collection and all its data. If a collection with that name already existed when `createIndex()` ran, Mastra keeps it and drops only the search indexes it created. Managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15 through 1.27 without an ownership record, aren't dropped until you call [`claimLegacyIndex()`](#claimlegacyindex) for them.
 - **Bring-your-own index** (created with `collectionName`): drops the vector and full-text indexes Mastra created. The collection and its documents are kept.
 
-Mastra keeps any search index that existed before `createIndex()` or `createSearchIndex()` ran, that another logical index still uses, or that an earlier version registered. Drop those yourself if you no longer need them. Pointing an index at a different `searchIndexName` counts as a new index that Mastra doesn't own unless that call creates it. Mastra doesn't keep cleanup responsibility for the old vector index across that change, so `deleteIndex()` leaves the old vector index behind even when Mastra created it. Drop it yourself. When one logical index is deleted and another registration still uses a search index, Mastra keeps that index and passes cleanup responsibility to the other registration. The last registration to be deleted drops it. Renaming a text index with `createSearchIndex()` keeps responsibility for the old index Mastra created, and Mastra drops it when the logical index is deleted, not at rename time.
+Mastra keeps any search index that existed before `createIndex()` or `createSearchIndex()` ran, that another logical index still uses, or that an earlier version registered. Drop those yourself if you no longer need them. Pointing an index at a different `searchIndexName` counts as a new index that Mastra doesn't own unless that call creates it. If Mastra created the old vector index, it keeps cleanup responsibility for it and drops it when the logical index is deleted. When one logical index is deleted and another registration still uses a search index, Mastra keeps that index and passes cleanup responsibility to the other registration. The last registration to be deleted drops it. Renaming a text index with `createSearchIndex()` keeps responsibility for the old index Mastra created, and Mastra drops it when the logical index is deleted, not at rename time.
 
 `deleteIndex()` throws these errors:
 
@@ -795,11 +795,15 @@ Mastra keeps any search index that existed before `createIndex()` or `createSear
 - `CAPABILITY_CHECK_FAILED`: the check for transaction support failed. Nothing changed, so retry.
 - `OUTCOME_UNKNOWN`: MongoDB couldn't confirm whether the delete committed. Retry. If the retry throws `NOT_REGISTERED`, the delete completed.
 
-`createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` throw `INDEX_DELETING` while a delete is half-finished. Retrying `deleteIndex()` resumes and finishes a half-finished delete.
+`createIndex()`, `createSearchIndex()` and `claimLegacyIndex()` throw `INDEX_DELETING` while a delete is half-finished, and while Mastra is still removing a search index it created under the same name (see [cleanup errors and logs](#cleanup-errors-and-logs)). Retrying `deleteIndex()` resumes and finishes a half-finished delete.
 
-Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, and neither is a create that runs during a delete, so don't run them at the same time there. A `createIndex()` or `createSearchIndex()` call that starts using a search index a running `deleteIndex()` is about to drop throws `INDEX_DELETING`. Retry it once the delete finishes. Retrying is safe: if the delete already handed the search index to the new registration, that registration is kept and drops the index when it's deleted. A call throws `CONFLICT` and provisions nothing when, before its last check ahead of provisioning, `deleteIndex()` removes its registration or another call changes the registration's collection or the names of the search indexes the call is about to create. A `createSearchIndex()` call also throws `CONFLICT` when another call changed the registration after it was read. Some interleavings can still leave a search index Mastra created that no registration owns, or that no registration records at all: a change made after that last check, a `deleteIndex()` followed by a `createIndex()` with the same collection and index names, and concurrent identical calls. Unless `deleteIndex()` drops the managed collection the index is on, it keeps that index, so drop it yourself if you no longer need it. No data is lost.
+Concurrent deletes of indexes that share a collection are coordinated with transactions on Atlas, Atlas Local and replica sets. On a standalone server they aren't, and neither is a create that runs during a delete, so don't run them at the same time there. A `createIndex()` or `createSearchIndex()` call that starts using a search index a running `deleteIndex()` is about to drop throws `INDEX_DELETING`. Retry it once the delete finishes. Retrying is safe: if the delete already handed the search index to the new registration, that registration is kept and drops the index when it's deleted. A call throws `CONFLICT` and provisions nothing when, before its last check ahead of provisioning, `deleteIndex()` removes its registration or another call changes the registration's collection or the names of the search indexes the call is about to create. A `createSearchIndex()` call also throws `CONFLICT` when another call changed the registration after it was read.
 
-If `createIndex()` fails to create the vector index, or `createSearchIndex()` the full-text index, Mastra removes or restores the registration that call wrote.
+Mastra records the Atlas ID of every search index it creates and drops or updates search indexes only by ID, so it never drops an index someone else recreated under the same name. Identical calls that run at the same time both succeed, and the index is recorded once. When the registration changes after that last check, or a `deleteIndex()` and a re-create with the same names overlap, the call throws `CONFLICT`. The index it created is still recorded: it's kept as a retired index that `deleteIndex()` drops, handed to the registration that now uses the name, or dropped. If a process crashes or stalls during a create or a cleanup, the next `createIndex()`, `createSearchIndex()`, `deleteIndex()` or `claimLegacyIndex()` on that collection finishes the work once 5 minutes have passed.
+
+If `createIndex()` or `createSearchIndex()` fails before its search index is created, Mastra removes the registration that call inserted, or restores only the fields that call wrote. Mastra never undoes a search index it created. If `createIndex()` creates the vector index and then fails to create the companion full-text index, it throws and keeps the vector index registered, so a retry or `deleteIndex()` handles it.
+
+Mastra reads and writes its registry (`__mastra_vector_indexes__`) and its internal provisioning journal (`__mastra_vector_ops__`) on the primary with majority read and write concerns, and commits its transactions the same way, whatever the client's read preference and concerns. This adds latency to these methods. While a majority of the replica set's voting members is unavailable, for example a primary-secondary-arbiter (PSA) replica set with its secondary down, these writes wait for the majority. Don't modify `__mastra_vector_ops__`.
 
 The BYO classification is recorded durably when the index is created, so it's applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
@@ -812,6 +816,43 @@ The BYO classification is recorded durably when the index is created, so it's ap
   },
 ]}
 />
+
+#### Cleanup errors and logs
+
+`createIndex()` and `createSearchIndex()` can throw these errors while search indexes are being created or removed. Each message is shown verbatim, with placeholders in angle brackets:
+
+- `CONFLICT`: `search index "<name>" on "<collection>" is in status <status> (id <id>); the previous index under this name is still being removed. Retry. If it persists, drop it manually.` Atlas still lists an earlier index under this name with status `DELETING` or `DOES_NOT_EXIST`, and Mastra doesn't create over it. A `DELETING` row usually clears within seconds. If the error persists, drop the row by ID as shown below. The error only delays the create; nothing is dropped or lost while it lasts.
+- `CONFLICT`: `Index "<indexName>" was removed or recreated by another call while this one ran, so nothing was provisioned. Retry.`
+- `CONFLICT`: `the target changed concurrently; the index this call created is kept as a retired index of the registration and removed by deleteIndex`
+- `CONFLICT`: `the registration was removed or recreated while this call ran; what it created was handed over or removed`
+- `INDEX_DELETING`: `search index "<name>" on "<collection>" is pending removal of an index Mastra created (cleanup record <_id>). Retry: retrying runs the cleanup. If the drop keeps failing, the block remains and the failure is logged at error level.`
+- `FAILED`: `The create of search index "<name>" on "<collection>" may or may not have reached Atlas. Retry.`
+
+Mastra also logs these messages:
+
+- `warn`: `search index "<name>" on "<collection>" (id <id>) may have been created by Mastra; kept; drop it manually if unused`. Mastra couldn't confirm whether its create reached Atlas, for example after a lost response or a crash, and an index with that name now exists. Mastra doesn't record it as its own, so `deleteIndex()` keeps it. The message can repeat when Mastra removes its internal record. If no logical index uses the search index, drop it by ID.
+- `warn`: `search index "<name>" on "<collection>" (id <id>) is not recorded as created by Mastra: its id time <time> is more than 30 s before the pre-list at <time>`. The index Atlas returned is older than Mastra's create, so Mastra treats it as created by someone else and keeps it.
+- `error`: `could not drop search index "<name>" (id <id>) on "<collection>"; cleanup record <_id> keeps blocking the name: <error>`. Mastra retries the drop, and logs this again if it fails, on each later `createIndex()` or `createSearchIndex()` on that collection. Until the drop succeeds, calls that use that name throw `INDEX_DELETING`.
+
+To drop a search index by ID in `mongosh`, list the collection's search indexes and pass the `id` of the one to drop:
+
+```javascript
+db.getCollection('movies').getSearchIndexes()
+db.runCommand({ dropSearchIndex: 'movies', id: '<id>' })
+```
+
+:::note
+
+On Atlas Local, dropping a collection that still has search indexes can leave rows with status `DOES_NOT_EXIST` that reappear when a collection with the same name is created again. Mastra then throws the `CONFLICT` for a row that is still being removed, and retrying doesn't help. Drop the stuck row by ID as shown above. To avoid it, drop a collection's search indexes before you drop the collection.
+
+:::
+
+#### Cleanup limits
+
+- **Unconfirmed creates:** if a create's response is lost, or the process crashes before Mastra records the new index, Mastra keeps the index and logs the `may have been created by Mastra` warning. In rarer cases, such as a process paused for more than 5 minutes in the middle of a create, the index is kept without a log. Drop it by ID if unused.
+- **Indexes registered by earlier versions:** these have no recorded ID, so Mastra lists the name just before the drop and drops by the listed ID. If someone drops and recreates the index under the same name in between, Mastra drops the recreated one. Search indexes that earlier versions created and left unregistered stay unrecorded. Drop them yourself.
+- **Mixed versions:** upgrade every instance before relying on these cleanup guarantees. Older instances drop search indexes by name and ignore the provisioning journal.
+- **Identical external creates on an Atlas cluster:** if another client creates a search index with the same name and a byte-identical definition within about one round trip before Mastra's own create, Atlas returns that index's ID to Mastra, Mastra records the index as its own, and `deleteIndex()` drops it. Only a definition that matches the one Mastra generates triggers this, so in practice the other client is another Mastra process. An index whose ID is more than 30 seconds older than Mastra's create is treated as someone else's and logged at `warn`. Mastra never drops a search index that another logical index uses, so only a client outside Mastra can lose an index this way. Atlas Local isn't affected. A future release may generate unique search index names, which would remove this case.
 
 ### `claimLegacyIndex()`
 
@@ -842,7 +883,7 @@ Calling it again for a claimed index does nothing. It never overwrites another r
 `claimLegacyIndex()` throws these errors:
 
 - `BYO`: the index is bring-your-own. Mastra keeps those collections, so there's nothing to claim.
-- `CONFLICT`: another registration already uses the name for something else.
+- `CONFLICT`: another registration already uses the name for something else, or a search index changed during the claim (`index changed while it was being claimed; nothing was claimed; retry`).
 - `IN_USE`: another registration uses the same collection.
 - `NOT_FOUND`: the name has no registration, and its collection or `<name>_vector_index` doesn't exist.
 - `INDEX_DELETING`: a delete of this index is half-finished. Retry `deleteIndex()`.
@@ -857,9 +898,11 @@ Call `claimLegacyIndex()` once for each of these indexes:
 
 Indexes you only query, upsert into or list need no claim. Mastra refuses to delete or rewrite what it can't prove it created, so it asks you to confirm instead of guessing.
 
+Upgrade every instance that shares the database before you rely on the cleanup guarantees in [`deleteIndex()`](#deleteindex). Older instances drop search indexes by name and ignore the provisioning journal. See [cleanup limits](#cleanup-limits) for indexes that earlier versions created.
+
 ### `listIndexes()`
 
-Lists the **logical** Mastra index names (the `indexName` values passed to `createIndex`), not physical collection names. For a bring-your-own index whose data lives in an operational collection, the logical index name is returned instead of the physical collection name. The value can be passed straight back into `describeIndex()`, and into `deleteIndex()` for indexes Mastra has ownership records for. A legacy managed index needs [`claimLegacyIndex()`](#claimlegacyindex) first. Managed indexes created before durable metadata was introduced are still discovered via their `${name}_vector_index` search index. The internal registry collection is never listed.
+Lists the **logical** Mastra index names (the `indexName` values passed to `createIndex`), not physical collection names. For a bring-your-own index whose data lives in an operational collection, the logical index name is returned instead of the physical collection name. The value can be passed straight back into `describeIndex()`, and into `deleteIndex()` for indexes Mastra has ownership records for. A legacy managed index needs [`claimLegacyIndex()`](#claimlegacyindex) first. Managed indexes created before durable metadata was introduced are still discovered via their `${name}_vector_index` search index. The internal registry and provisioning journal collections are never listed.
 
 Returns: `Promise<string[]>`
 
