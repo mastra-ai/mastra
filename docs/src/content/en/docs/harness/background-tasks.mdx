@@ -361,7 +361,7 @@ On the resumed run, `context.agent.suspendPayload` holds the `data` the tool sus
 
 On a [durable agent](/docs/harness/durable-agents), a background tool can call `suspend()` after the agent has replied and its run has finished. The task is marked `suspended` and resumes as usual when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership), for example `InMemoryStore`, `@mastra/libsql`, or `@mastra/pg`. These adapters record each claim on the run, so Mastra can check that no other execution claimed the run in the meantime.
 
-The task fails instead in two cases. When the storage adapter doesn't support run fencing, run ownership is only a PubSub lease, and a released lease can't show whether another execution claimed and finished the run since. On an agent from `createEventedAgent()`, the task also fails when an approval for another tool call resumed the run in the same turn, because the resume's claim counts as another execution.
+The task still fails with a storage adapter that lacks run fencing, because run ownership is then only a PubSub lease, and a released lease can't show whether another execution claimed and finished the run since. On an agent from `createEventedAgent()`, the task also fails when an approval for another tool call resumed the run in the same turn, because the resume's claim counts as another execution.
 
 ### Answer a suspended task from a client
 
