@@ -1744,6 +1744,26 @@ describe('agent-controller routes', () => {
         expect(wire.ok && wire.json).toContain(`"result":${resultJson}`);
       });
 
+      // `JSON.stringify` unwraps boxed numbers, strings and booleans, so the
+      // display snapshot must agree with the `tool_end` event before it.
+      it('a tool result holding boxed primitives reads the same in the event and the display state', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-boxed', id: 'user-boxed', ownerId: 'code' });
+        const reader = await openStream('user-boxed');
+
+        const result = { count: new Number(7), label: new String('seven'), done: new Boolean(false) };
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'count', args: {} });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result, isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.find(frame => frame.type === 'tool_end')!;
+        expect(toolEnd.result).toEqual({ count: 7, label: 'seven', done: false });
+        expect(displayAfter(frames, 'tool_end').activeTools['call-1'].result).toEqual(toolEnd.result);
+      });
+
       it('re-emitting a held display_state_changed event sends the state as it is now', async () => {
         const controller = mastra.getAgentController('code')!;
         await controller.init();

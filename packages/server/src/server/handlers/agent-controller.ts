@@ -634,7 +634,9 @@ function snapshotForWire(value: unknown, key: string, copies: Map<object, unknow
     return copy;
   }
   const toJSON = (value as { toJSON?: unknown }).toJSON;
-  const source: unknown = typeof toJSON === 'function' ? toJSON.call(value, key) : value;
+  let source: unknown = typeof toJSON === 'function' ? toJSON.call(value, key) : value;
+  // `JSON.stringify` writes a boxed number, string or boolean as its primitive.
+  if (source instanceof Number || source instanceof String || source instanceof Boolean) source = source.valueOf();
   if (source === null || typeof source !== 'object') {
     copies.set(value, source);
     return source;
