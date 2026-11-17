@@ -1569,6 +1569,125 @@ describe('provisioning protocol', () => {
         });
       });
 
+      /** A vector index `N` on a fresh collection, and an `orphaned` cleanup record for it (lease active). */
+      async function seedOrphan(prefix: string) {
+        const coll = await byoColl(prefix);
+        await createRawSearchIndex(db, coll, 'N', {
+          fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }],
+        });
+        await waitFor(async () => (await listedId(db, coll, 'N')) !== undefined);
+        const r = (await listedId(db, coll, 'N'))!;
+        const doc = {
+          _id: `orphan-${coll}:vector`,
+          indexName: `${coll}_gone`,
+          generation: 'gone',
+          collectionName: coll,
+          name: 'N',
+          type: 'vectorSearch',
+          role: 'vector',
+          state: 'orphaned',
+          indexId: r,
+          leaseUntil: new Date(Date.now() + 300_000),
+          createdAt: new Date(),
+        };
+        await seedJournal(db, doc);
+        return { coll, r, doc };
+      }
+      const m8 = (coll: string, record: string) =>
+        `search index "N" on "${coll}" is pending removal of an index Mastra created (cleanup record ${record}). Retry: retrying runs the cleanup. If the drop keeps failing, the block remains and the failure is logged at error level.`;
+      const attachN = (coll: string) => create(a, coll, { indexName: `${coll}_c`, searchIndexName: 'N' });
+
+      it('R11-DECIDED: a second cleaner follows a decided drop; an attach written after the decision is refused, never handed R', async () => {
+        const { coll, r, doc } = await seedOrphan('r11dec');
+        const pB = pause();
+        const pC = pause();
+        const pA = pause();
+        hooks(b, { beforeOrphanDrop: pB.hook });
+        hooks(a, { beforePendingDropCheck: pC.hook, beforeOrphanDrop: pA.hook });
+        const dropsA = recordDrops(a).drops;
+        const dropsB = recordDrops(b).drops;
+        const cleanerB = (b as any).cleanupOrphan(doc, 2).catch((e: unknown) => e);
+        let cleanerA: Promise<unknown> | undefined;
+        let attach: any;
+        try {
+          // B saw no user and decided to drop.
+          await reached(pB);
+          expect(await docsOn(coll)).toMatchObject([{ state: 'orphaned', dropDecided: true }]);
+          // C writes its registration of N; its handshake has not run yet.
+          const c = attachN(coll).catch(e => e);
+          await reached(pC);
+          // A sees C, but follows B's decision instead of handing R to C.
+          cleanerA = (a as any).cleanupOrphan(doc, 2).catch((e: unknown) => e);
+          await reached(pA);
+          expect((await entry(`${coll}_c`))?.ownsVectorIndex).not.toBe(true);
+          pC.release.resolve();
+          attach = await c;
+        } finally {
+          pC.release.resolve();
+          pA.release.resolve();
+          pB.release.resolve();
+        }
+        expect(attach?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+        expect(attach?.message).toBe(m8(coll, doc._id));
+        expect(await cleanerA).toBe('dropped');
+        expect(await cleanerB).toBe('dropped');
+        expect(await entry(`${coll}_c`)).toBeNull();
+        expect(await docsOn(coll)).toEqual([]);
+        for (const d of [...dropsA, ...dropsB]) expect(d).toEqual({ collectionName: coll, name: 'N', id: r });
+        await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+      });
+
+      it('R11-SERIAL: concurrent step-3 transactions on one cleanup record hand R over exactly once', async () => {
+        const { coll, r, doc } = await seedOrphan('r11ser');
+        const pC = pause();
+        const both = deferred();
+        let arrived = 0;
+        const beforeOrphanDecide = async () => {
+          if (++arrived === 2) both.resolve();
+          await reached({ reached: both });
+        };
+        hooks(a, { beforePendingDropCheck: pC.hook, beforeOrphanDecide });
+        hooks(b, { beforeOrphanDecide });
+        const c = attachN(coll).catch(e => e);
+        let results: unknown[];
+        let rev: number;
+        try {
+          await reached(pC);
+          rev = (await entry(`${coll}_c`))!.rev;
+          results = await Promise.all([a, b].map(s => (s as any).cleanupOrphan(doc, 2)));
+        } finally {
+          pC.release.resolve();
+        }
+        expect(results.sort()).toEqual(['kept', 'transferred']);
+        expect(await c).toBeUndefined();
+        const e = await entry(`${coll}_c`);
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(e?.indexIds).toEqual([{ name: 'N', id: r }]);
+        // One transfer: rev + 1 over the attach's P0.
+        expect(e?.rev).toBe(rev + 1);
+        expect(await docsOn(coll)).toEqual([]);
+        expect(await listedId(db, coll, 'N')).toBe(r);
+      });
+
+      it('ORPHAN-DROP-FAIL: a failed drop keeps the decided record, which blocks attaches, and logs at error', async () => {
+        const { coll, r, doc } = await seedOrphan('pdropfail');
+        const logs = captureLogs(b);
+        hooks(b, {
+          beforeOrphanDrop: async () => {
+            throw new Error('injected drop failure');
+          },
+        });
+        expect(await (b as any).cleanupOrphan(doc, 2)).toBe('failed');
+        expect(await docsOn(coll)).toMatchObject([{ state: 'orphaned', dropDecided: true, indexId: r }]);
+        expect(logs.error.some(m => m.includes(r) && m.includes(doc._id) && m.includes('injected'))).toBe(true);
+        const attach: any = await attachN(coll).catch(e => e);
+        expect(attach?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+        expect(attach?.message).toBe(m8(coll, doc._id));
+        expect(await entry(`${coll}_c`)).toBeNull();
+        expect(await listedId(db, coll, 'N')).toBe(r);
+        clean.opts = { journalExpected: true };
+      });
+
       describe('P-ATTACH-ORPHAN', () => {
         it('an attach before the mark gets the index handed over', async () => {
           const coll = await byoColl('pattach1');

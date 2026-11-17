@@ -105,6 +105,8 @@ export interface JournalDoc {
   creatingAt?: Date;
   indexId?: string;
   candidateId?: string;
+  /** Set by §3.8 step 3 when it decided to drop (R11): later cleaners go straight to the drop. */
+  dropDecided?: true;
   leaseUntil: Date;
   createdAt: Date;
 }

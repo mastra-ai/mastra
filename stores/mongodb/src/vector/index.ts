@@ -543,6 +543,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     afterOrphanMarked?: (indexName: string, name: string) => Promise<void>;
     /** Called by orphan cleanup (§3.8) right before its drop by id; a throw is a failed drop. */
     beforeOrphanDrop?: (indexName: string, name: string) => Promise<void>;
+    /** Called by orphan cleanup (§3.8) after its listing, right before the step-3 transaction. */
+    beforeOrphanDecide?: (indexName: string, name: string) => Promise<void>;
   };
   /**
    * Name of the mastra-owned collection that durably records the logical-index → target
@@ -1661,28 +1663,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * the users are read, so an attach either sees it or is seen). Step 3 decides in a transaction
    * that re-reads the doc and the users: any live user blocks the drop (I11a); owners are released,
    * else the lowest-`_id` user gets R when the listing confirms it; every user written gets
-   * `rev + 1` and a fresh `claimToken` (R4-2). With no user, step 4 drops R by id. A failed drop
-   * keeps the doc, which keeps blocking attaches (M8), and logs at error.
+   * `rev + 1` and a fresh `claimToken` (R4-2). With no user, the decision to drop is written to the
+   * doc (R11), so every later cleaner drops too instead of handing R to a later attacher, and step
+   * 4 drops R by id. The doc goes only after the drop, so attaches stay refused (M8) until then. A
+   * failed drop keeps the doc, logs at error and returns `failed`.
    */
   private async cleanupOrphan(
     doc: JournalDoc,
     fromStep: 1 | 2,
     op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX' = 'CREATE_INDEX',
-  ): Promise<'dropped' | 'released' | 'transferred' | 'kept'> {
+  ): Promise<'dropped' | 'released' | 'transferred' | 'kept' | 'failed'> {
     const { _id, indexName, collectionName, name } = doc;
     const R = doc.indexId!;
     const journal = this.journal();
     const registry = this.registry();
+    const leaseMs = this.testHooks?.leaseMs ?? LEASE_MS;
+    const renewLease = { leaseUntil: { $add: ['$$NOW', leaseMs] } };
     if (fromStep === 1) {
-      const leaseMs = this.testHooks?.leaseMs ?? LEASE_MS;
       const marked = await journal.updateOne({ _id, state: { $in: ['created', 'orphaned'] } }, [
-        {
-          $set: {
-            state: { $literal: 'orphaned' },
-            indexId: { $literal: R },
-            leaseUntil: { $add: ['$$NOW', leaseMs] },
-          },
-        },
+        { $set: { state: { $literal: 'orphaned' }, indexId: { $literal: R }, ...renewLease } },
       ]);
       // Another cleaner finished it already.
       if (marked.matchedCount === 0) return 'kept';
@@ -1704,62 +1703,73 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       { retiredTextIndexNames: name },
       { retiredVectorIndexNames: name },
     ];
+    // Thrown inside the step-3 transaction when a filter missed, so the round commits nothing.
+    const recheck = new Error('orphan cleanup: a user changed; recheck');
     for (let round = 0; round < 3; round++) {
       // Outside the transaction: listings never run in one (I7a). Evidence for I11b only.
       const observed = await this.liveIdOf(this.db.collection(collectionName), name, 'orphan');
-      const outcome = await this.inTransaction(async session => {
-        if (!(await journal.findOne({ _id, state: 'orphaned' }, { session }))) return 'gone' as const;
-        const current: (OwnershipView & { generation?: string })[] = await registry.find(users, { session }).toArray();
-        const plan = planOrphanCleanup(name, R, observed, current);
-        if (plan.kind === 'drop') return 'drop' as const;
-        const generationOf = (toId: string) =>
-          current.find(u => u._id === toId)?.generation ?? { $exists: false as const };
-        if (plan.kind === 'release') {
-          for (const o of plan.owners) {
-            const held = idFor(
-              current.find(u => u._id === o.toId)!,
-              name,
-            );
-            if (!o.rewriteId && held !== undefined && held !== R) {
-              this.logger.warn(
-                `search index "${name}" on "${collectionName}": index "${o.toId}" records id ${held}, not ${R} (cleanup record ${_id}); kept, as the listing does not confirm ${R}`,
-              );
-            }
-            const released = await registry.updateOne(
-              { _id: o.toId, generation: generationOf(o.toId), deleting: { $ne: true }, $or: ownsName },
-              [
-                {
-                  $set: { ...(o.rewriteId ? { indexIds: indexIdsWith(name, o.rewriteId) } : {}), ...mutationFields() },
-                },
-              ],
+      await this.testHooks?.beforeOrphanDecide?.(indexName, name);
+      let outcome: 'gone' | 'drop' | 'released' | 'transferred' | 'kept';
+      try {
+        outcome = await this.inTransaction(async session => {
+          const j = await journal.findOne({ _id, state: 'orphaned' }, { session });
+          if (!j) return 'gone' as const;
+          if (j.dropDecided) return 'drop' as const;
+          const current: (OwnershipView & { generation?: string })[] = await registry
+            .find(users, { session })
+            .toArray();
+          const plan = planOrphanCleanup(name, R, observed, current);
+          if (plan.kind === 'drop') {
+            // R11: durable, and a write to J, so a concurrent step 3 on J conflicts and re-reads it.
+            await journal.updateOne(
+              { _id, state: 'orphaned' },
+              [{ $set: { dropDecided: { $literal: true }, ...renewLease } }],
               { session },
             );
-            if (released.matchedCount === 0) return 'recheck' as const;
+            return 'drop' as const;
           }
-        } else if (plan.kind === 'transfer') {
-          const nameField = plan.field === 'ownsTextIndex' ? 'textSearchIndexName' : 'searchIndexName';
-          const moved = await registry.updateOne(
-            { _id: plan.toId, generation: generationOf(plan.toId), deleting: { $ne: true }, [nameField]: name },
-            [
-              {
-                $set: { [plan.field]: { $literal: true }, indexIds: indexIdsWith(name, plan.id), ...mutationFields() },
-              },
-            ],
-            { session },
-          );
-          if (moved.matchedCount === 0) return 'recheck' as const;
-        } else {
-          this.logger.warn(
-            `search index "${name}" on "${collectionName}": the incarnation ${R} of cleanup record ${_id} is no longer listed, and registrations still reference the name; neither dropped nor handed over`,
-          );
-        }
-        await journal.deleteOne({ _id, state: 'orphaned' }, { session });
-        return plan.kind === 'release' ? ('released' as const) : plan.kind === 'transfer' ? 'transferred' : 'kept';
-      });
+          const userOf = (toId: string) => current.find(u => u._id === toId)!;
+          const generationOf = (toId: string) => userOf(toId).generation ?? { $exists: false as const };
+          if (plan.kind === 'release') {
+            for (const o of plan.owners) {
+              const held = idFor(userOf(o.toId), name);
+              if (!o.rewriteId && held !== undefined && held !== R) {
+                this.logger.warn(
+                  `search index "${name}" on "${collectionName}": index "${o.toId}" records id ${held}, not ${R} (cleanup record ${_id}); kept, as the listing does not confirm ${R}`,
+                );
+              }
+              const rewrite = o.rewriteId ? { indexIds: indexIdsWith(name, o.rewriteId) } : {};
+              const released = await registry.updateOne(
+                { _id: o.toId, generation: generationOf(o.toId), deleting: { $ne: true }, $or: ownsName },
+                [{ $set: { ...rewrite, ...mutationFields() } }],
+                { session },
+              );
+              if (released.matchedCount === 0) throw recheck;
+            }
+          } else if (plan.kind === 'transfer') {
+            const nameField = plan.field === 'ownsTextIndex' ? 'textSearchIndexName' : 'searchIndexName';
+            const owned = { [plan.field]: { $literal: true }, indexIds: indexIdsWith(name, plan.id) };
+            const moved = await registry.updateOne(
+              { _id: plan.toId, generation: generationOf(plan.toId), deleting: { $ne: true }, [nameField]: name },
+              [{ $set: { ...owned, ...mutationFields() } }],
+              { session },
+            );
+            if (moved.matchedCount === 0) throw recheck;
+          } else {
+            this.logger.warn(
+              `search index "${name}" on "${collectionName}": the incarnation ${R} of cleanup record ${_id} is no longer listed, and registrations still reference the name; neither dropped nor handed over`,
+            );
+          }
+          await journal.deleteOne({ _id, state: 'orphaned' }, { session });
+          return plan.kind === 'release' ? 'released' : plan.kind === 'transfer' ? 'transferred' : 'kept';
+        });
+      } catch (error) {
+        if (error === recheck) continue;
+        throw error;
+      }
       if (outcome === 'gone') return 'kept';
-      if (outcome === 'recheck') continue;
       if (outcome !== 'drop') return outcome;
-      // Step 4: no user. The doc stays `orphaned` until the drop by id is done.
+      // Step 4. The doc stays until the drop by id is done; IndexNotFound counts as done.
       try {
         await this.testHooks?.beforeOrphanDrop?.(indexName, name);
         await this.dropSearchIndexById(collectionName, name, R);
@@ -1767,7 +1777,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         this.logger.error(
           `could not drop search index "${name}" (id ${R}) on "${collectionName}"; cleanup record ${_id} keeps blocking the name: ${error}`,
         );
-        return 'kept';
+        return 'failed';
       }
       await journal.deleteOne({ _id, state: 'orphaned' });
       return 'dropped';
