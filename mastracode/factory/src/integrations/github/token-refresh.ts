@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
+import type { SandboxGithubAuth } from '../../sandbox/vault.js';
 import type { GithubPatKind } from './pat.js';
 
 const GITHUB_TOKEN_INJECTOR_CONTEXT_KEY = 'factoryGithubTokenInjector';
@@ -22,6 +23,8 @@ export interface GithubRefreshTarget {
    * signal). Absent for a single-repository session, which re-mints its own.
    */
   mint?: () => Promise<string>;
+  /** How the session's started sandbox authenticates GitHub; `token` before it starts. */
+  sandboxAuth?: () => SandboxGithubAuth;
 }
 
 /** Recorded by the workspace resolver once it has authorized a GitHub-backed

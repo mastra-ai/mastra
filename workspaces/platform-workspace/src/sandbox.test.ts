@@ -451,6 +451,12 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBeUndefined();
     });
 
+    it('takes the mode from a reattach by recovery id that reports it', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null, vault: true });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
+
     it('leaves the mode unknown when a reattach does not report it', async () => {
       const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing');
       await sandbox._start();

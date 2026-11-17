@@ -338,6 +338,24 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
       inputSchema: z.object({}),
       execute: async () => {
+        // A credential-vault sandbox holds only a placeholder token and the
+        // vault authenticates its GitHub traffic, so there is nothing to
+        // refresh; say so instead of failing, so the agent retries or reports.
+        const auth = getGithubRefreshTarget(requestContext)?.sandboxAuth?.() ?? 'token';
+        if (auth === 'vault') {
+          return {
+            refreshed: false,
+            message:
+              'This sandbox authenticates GitHub through the credential vault, so it holds no token to refresh. Retry the command; if it still fails, the vault denied the request.',
+          };
+        }
+        if (auth === 'unknown') {
+          return {
+            refreshed: false,
+            message:
+              'The platform did not report whether this sandbox runs in credential-vault mode, so Factory withholds GitHub tokens from it. Use the source_control_* tools for GitHub until the sandbox is reprovisioned.',
+          };
+        }
         await refreshGithubToken(requestContext, github);
         return { refreshed: true };
       },

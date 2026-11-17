@@ -20,6 +20,7 @@ import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
+import { sandboxAcceptsGithubToken } from '../../sandbox/vault.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
@@ -312,14 +313,22 @@ function credentialScope(
  * Provide HTTP Basic credentials to one Git process without putting a secret
  * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
  * extra header from its process environment and discards it on exit.
+ *
+ * A credential-vault sandbox gets no header for GitHub: its git rewrites
+ * github.com to the vault, which adds the real credential itself, so the
+ * token never enters the sandbox.
  */
 function gitAuthenticationEnvironment(
+  sandbox: ExecutableSandbox,
   cloneUrl: string,
   token: string,
   username: string,
   code: 'clone-failed' | 'pull-failed' | 'push-failed' = 'clone-failed',
 ): Record<string, string> {
   const scope = credentialScope(cloneUrl, code);
+  if (!sandboxAcceptsGithubToken(sandbox) && new URL(scope).hostname === 'github.com') {
+    return { GIT_TERMINAL_PROMPT: '0' };
+  }
   if (!token || !username) {
     throw new MaterializeError('Repository access did not include usable credentials.', code);
   }
@@ -470,6 +479,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
     // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
+      sandbox,
       cleanCloneUrl,
       token,
       repoInfo.authUsername ?? 'x-access-token',
@@ -633,11 +643,14 @@ export async function syncEnvironmentRepository(
   }
   assertRepositoryLocator(repoFullName, cloneUrl, 'pull-failed');
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(sandbox, cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
 
   // Raw git in this checkout (push, fetch) authenticates through gh with the
-  // token that covers this repository, like the session repository does.
-  if (!authUsername) {
+  // token that covers this repository, like the session repository does. A
+  // vault sandbox holds no token for gh to hand out; the vault authenticates.
+  if (!authUsername && !sandboxAcceptsGithubToken(sandbox)) {
+    await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', 'credential.helper']);
+  } else if (!authUsername) {
     const configured = await execute(sandbox, 'git', [
       '-C',
       workdir,
@@ -765,6 +778,7 @@ export async function refreshMergeRequestCheckout(
   const token = access.authorization?.token;
   if (!token) throw new Error('GitLab repository access did not include a bearer token.');
   const env = gitAuthenticationEnvironment(
+    sandbox,
     access.cloneUrl,
     token,
     access.authorization?.username ?? 'oauth2',
@@ -825,9 +839,10 @@ async function checkoutSessionBranchImpl(
   // helper when reopening an older checkout so a stale sandbox cannot retain
   // credentials injected by an earlier implementation.
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(sandbox, cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
   const credentialKey = authUsername ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper' : 'credential.helper';
-  if (authUsername) {
+  // A vault sandbox holds no token for gh to hand out; the vault authenticates.
+  if (authUsername || !sandboxAcceptsGithubToken(sandbox)) {
     await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', credentialKey]);
   } else {
     const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
@@ -1039,7 +1054,7 @@ async function pushAuthenticatedBranch(
 ): Promise<PushedBranch> {
   const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', `refs/heads/${branch}`]);
   if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
-  const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
+  const env = gitAuthenticationEnvironment(sandbox, cloneUrl, token, username, 'push-failed');
   const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '--porcelain', '-u', 'origin', branch], { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
   // Porcelain lines read `<flag>\t<src>:<dst>\t<summary>`; `=` marks a ref the remote already had.
@@ -1355,7 +1370,7 @@ function parsePullRequestUrl(stdout: string): string | undefined {
 /**
  * Open a pull request from inside the sandbox via `gh pr create`. The token is
  * passed only through a per-invocation `GH_TOKEN` env scoped to the single `gh`
- * process (never persisted), all arguments are passed as structured argv, and
+ * process (never persisted, and never in a credential-vault sandbox), all arguments are passed as structured argv, and
  * the resulting PR URL is parsed from stdout.
  *
  * @param sandbox live sandbox containing the checkout
@@ -1379,7 +1394,8 @@ export async function createPullRequest(
     sandbox,
     'gh',
     ['pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body ?? ''],
-    { cwd: workdir, env: { GH_TOKEN: token } },
+    // A vault sandbox keeps its placeholder GH_TOKEN; the vault authenticates gh.
+    { cwd: workdir, env: sandboxAcceptsGithubToken(sandbox) ? { GH_TOKEN: token } : {} },
   );
   if (result.exitCode !== 0) {
     const classified = classifyGitFailure(result, 'push-failed');

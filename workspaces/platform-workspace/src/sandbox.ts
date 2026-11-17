@@ -199,7 +199,8 @@ interface CreateSandboxResponse {
   instanceUrl?: string | null;
   /**
    * `true` when the platform provisioned the sandbox in credential-vault mode.
-   * Only emitted by the create route, and only for a fresh provision.
+   * A fresh provision reports it only when `true`; reattach responses report
+   * it once the platform echoes it there (mastra-ai/platform#5029).
    */
   vault?: boolean;
   /** `true` when `POST /sandbox` reattached a live sandbox instead of provisioning one. */
@@ -589,10 +590,11 @@ export class PlatformSandbox extends MastraSandbox {
    * A vault sandbox holds only placeholder GitHub tokens, and its git and `gh`
    * traffic to GitHub goes through the vault, which adds the real credential.
    *
-   * `true` or `false` after this instance provisioned the sandbox. `undefined`
-   * before the first start and after a reattach the platform did not report
-   * the mode for; a caller that must know then reads the sandbox's
-   * `SANDBOX_VAULT` variable, which is `1` in a vault sandbox.
+   * Set only from the platform's provision, reattach and get responses.
+   * `undefined` before the first start and after a reattach whose response did
+   * not report the mode. Callers that hand out credentials must treat
+   * `undefined` as unknown and fail closed, and must never read the mode from
+   * the sandbox's own env, which code inside the sandbox controls.
    */
   vault: boolean | undefined = undefined;
 
@@ -973,9 +975,9 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
-    // The platform reports `vault` only for a vault provision, and not at all
-    // when it reattached a live sandbox by recovery id, so that mode is unknown.
-    this.vault = json.vault === true ? true : json.reattached ? undefined : false;
+    // A fresh provision reports `vault` only when it is on. A reattach by
+    // recovery id that does not report it leaves the mode unknown.
+    this.vault = typeof json.vault === 'boolean' ? json.vault : json.reattached ? undefined : false;
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
