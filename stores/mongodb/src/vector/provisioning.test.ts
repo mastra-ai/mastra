@@ -1,6 +1,15 @@
 import { MongoNetworkError, MongoServerError } from 'mongodb';
 import { describe, expect, it } from 'vitest';
-import { classify, idTimestampMs, isLiveRow, isNewerId, p4OutcomeOf, resolveCreating } from './provisioning';
+import type { OwnershipView } from './ownership';
+import {
+  classify,
+  idTimestampMs,
+  isLiveRow,
+  isNewerId,
+  p4OutcomeOf,
+  planOrphanCleanup,
+  resolveCreating,
+} from './provisioning';
 
 const at = new Date('2026-11-17T12:00:00Z');
 const idAt = (d: Date) =>
@@ -121,6 +130,66 @@ describe('resolveCreating', () => {
     expect(resolveCreating({ name: 'n', id: recent, status: 'DELETING' }, at, new Set([X]))).toEqual({
       action: 'uncertain',
       candidateId: recent,
+    });
+  });
+});
+
+describe('planOrphanCleanup', () => {
+  const STALE = '0'.repeat(24);
+  const user = (_id: string, extra: Partial<OwnershipView> = {}): OwnershipView => ({
+    _id,
+    searchIndexName: `${_id}_vec`,
+    ...extra,
+  });
+  it('an owner holding R is released without a rewrite', () => {
+    const u = user('u', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: R }] });
+    expect(planOrphanCleanup('N', R, R, [u])).toEqual({ kind: 'release', owners: [{ toId: 'u' }] });
+  });
+  it('an owner with a stale or missing id is rewritten to R only when the listing shows R', () => {
+    const stale = user('s', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: STALE }] });
+    const none = user('n', { searchIndexName: 'N', ownsVectorIndex: true });
+    expect(planOrphanCleanup('N', R, R, [stale, none])).toEqual({
+      kind: 'release',
+      owners: [
+        { toId: 's', rewriteId: R },
+        { toId: 'n', rewriteId: R },
+      ],
+    });
+    expect(planOrphanCleanup('N', R, X, [stale])).toEqual({ kind: 'release', owners: [{ toId: 's' }] });
+    expect(planOrphanCleanup('N', R, undefined, [stale])).toEqual({ kind: 'release', owners: [{ toId: 's' }] });
+  });
+  it('owners come first; non-owners are left alone', () => {
+    const owner = user('z', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: R }] });
+    expect(planOrphanCleanup('N', R, R, [user('a', { textSearchIndexName: 'N' }), owner])).toEqual({
+      kind: 'release',
+      owners: [{ toId: 'z' }],
+    });
+  });
+  it('non-owners only: a transfer of R to the lowest _id when the listing shows R', () => {
+    const b = user('b', { textSearchIndexName: 'N' });
+    const a = user('a', { searchIndexName: 'N' });
+    expect(planOrphanCleanup('N', R, R, [b, a])).toEqual({
+      kind: 'transfer',
+      toId: 'a',
+      field: 'ownsVectorIndex',
+      id: R,
+    });
+    expect(planOrphanCleanup('N', R, R, [b])).toEqual({ kind: 'transfer', toId: 'b', field: 'ownsTextIndex', id: R });
+  });
+  it('non-owners only and R not listed: forget', () => {
+    const a = user('a', { textSearchIndexName: 'N' });
+    expect(planOrphanCleanup('N', R, undefined, [a])).toEqual({ kind: 'forget' });
+    expect(planOrphanCleanup('N', R, X, [a])).toEqual({ kind: 'forget' });
+  });
+  it('no users: drop', () => {
+    expect(planOrphanCleanup('N', R, R, [])).toEqual({ kind: 'drop' });
+    expect(planOrphanCleanup('N', R, R, [user('a', { textSearchIndexName: 'M' })])).toEqual({ kind: 'drop' });
+  });
+  it('a retired-vector-name holder counts as an owner', () => {
+    const r = user('r', { retiredVectorIndexNames: ['N'] });
+    expect(planOrphanCleanup('N', R, R, [user('a', { textSearchIndexName: 'N' }), r])).toEqual({
+      kind: 'release',
+      owners: [{ toId: 'r', rewriteId: R }],
     });
   });
 });

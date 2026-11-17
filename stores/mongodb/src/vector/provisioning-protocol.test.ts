@@ -26,6 +26,7 @@ import {
   hooks,
   installInvariantChecker,
   recordDrops,
+  seedJournal,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -1310,6 +1311,318 @@ describe('provisioning protocol', () => {
         await raw.close();
         await s.disconnect();
       }
+    });
+
+    it('P2-DUP: an intent never overwrites an existing journal doc', async () => {
+      const coll = await byoColl('p2dup');
+      const token = `tok-${coll}`;
+      const seeded = {
+        _id: `${token}:vector`,
+        indexName: coll,
+        generation: 'g',
+        collectionName: coll,
+        name: 'V',
+        type: 'vectorSearch',
+        role: 'vector',
+        state: 'orphaned',
+        indexId: '1'.repeat(24),
+        leaseUntil: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+      };
+      await seedJournal(db, seeded);
+      const abort = await (a as any)
+        .provisionSearchIndex({
+          indexName: coll,
+          collection: (a as any).db.collection(coll),
+          role: 'vector',
+          op: 'CREATE_INDEX',
+          description: { name: 'V', type: 'vectorSearch', definition: { fields: [] } },
+          pin: { generation: 'g', claimToken: token, rev: 1 },
+          check: async () => {},
+        })
+        .catch((e: any) => e);
+      expect(abort?.error?.code).toBe(11000);
+      expect(await docsOn(coll)).toEqual([seeded]);
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+      await db.collection(JOURNAL).deleteMany({ collectionName: coll });
+    });
+
+    describe('P7b, P7c and orphan cleanup', () => {
+      const P7B =
+        'the target changed concurrently; the index this call created is kept as a retired index of the registration and removed by deleteIndex';
+      const P7C =
+        'the registration was removed or recreated while this call ran; what it created was handed over or removed';
+      const idOf = (e: Document | null, name: string) =>
+        e?.indexIds?.find((x: { name: string }) => x.name === name)?.id as string | undefined;
+      const create = (s: MongoDBVector, coll: string, extra: Document = {}) =>
+        s.createIndex({ indexName: coll, dimension: 4, collectionName: coll, ...extra });
+
+      /** Start `call` with `a` parked at `seam`; run `between`; release; return the call's settled value. */
+      async function parkedAt(seam: string, call: () => Promise<unknown>, between: () => Promise<unknown>) {
+        const p = pause();
+        hooks(a, { [seam]: p.hook });
+        const running = call().catch(e => e);
+        try {
+          await reached(p);
+          await between();
+        } finally {
+          p.release.resolve();
+        }
+        return running;
+      }
+
+      it('P-R1b: a vector index whose target changed in the same generation is retired with its id', async () => {
+        const coll = await byoColl('pr1b');
+        await create(a, coll, { searchIndexName: 'V0' });
+        const err: any = await parkedAt(
+          'beforeRecordOwnership',
+          () => create(a, coll, { searchIndexName: 'V1' }),
+          () => create(b, coll, { searchIndexName: 'V2' }),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(P7B);
+        const e = await entry(coll);
+        expect(e?.searchIndexName).toBe('V2');
+        expect(e?.retiredVectorIndexNames).toEqual(expect.arrayContaining(['V0', 'V1']));
+        expect(idOf(e, 'V1')).toBe(await listedId(db, coll, 'V1'));
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-R2b: a refresh whose registration was recreated on another collection drops what it created', async () => {
+        const x = await byoColl('pr2bx');
+        const y = await byoColl('pr2by');
+        const name = uniqueName('pr2b');
+        await create(a, x, { indexName: name, searchIndexName: 'V0' });
+        const err: any = await parkedAt(
+          'beforeRecordOwnership',
+          // A refresh that creates: a rename to V1.
+          () => create(a, x, { indexName: name, searchIndexName: 'V1' }),
+          async () => {
+            await b.deleteIndex({ indexName: name });
+            await create(b, y, { indexName: name });
+          },
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(P7C);
+        await waitFor(async () => (await searchIndexNames(db, x)).length === 0);
+        const e = await entry(name);
+        expect(e?.collectionName).toBe(y);
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(idOf(e, `${name}_vector_index`)).toBe(await listedId(db, y, `${name}_vector_index`));
+        expect(await docsOn(x)).toEqual([]);
+        await b.deleteIndex({ indexName: name });
+      });
+
+      it('P-R3b: a text index whose target changed in the same generation is retired with its id', async () => {
+        const coll = await byoColl('pr3b');
+        await create(a, coll);
+        const err: any = await parkedAt(
+          'beforeRecordOwnership',
+          () => a.createSearchIndex({ indexName: coll, searchIndexName: 'N1' }),
+          () => b.createSearchIndex({ indexName: coll, searchIndexName: 'N2' }),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(P7B);
+        const e = await entry(coll);
+        expect(e?.textSearchIndexName).toBe('N2');
+        expect(e?.retiredTextIndexNames).toContain('N1');
+        expect(idOf(e, 'N1')).toBe(await listedId(db, coll, 'N1'));
+      });
+
+      describe.each<[string, boolean]>([
+        ['local', false],
+        ['cluster', true],
+      ])('P-SAME (%s)', (_label, cluster) => {
+        it('a delete and identical recreate during provisioning ends owned with R', async () => {
+          const coll = await byoColl('psame');
+          const vec = `${coll}_vector_index`;
+          if (cluster)
+            hooks(b, {
+              createSearchIndexesCommand: clusterCreateMode(db),
+              // b's pre-lists ran before a's create landed, so b creates too and gets R back.
+              listSearchIndexesStub: (_n: string, phase: string) =>
+                phase === 'P1' || phase === 'P3a' ? [] : undefined,
+            });
+          const err: any = await parkedAt(
+            'beforeRecordOwnership',
+            () => create(a, coll),
+            async () => {
+              await b.deleteIndex({ indexName: coll });
+              await create(b, coll);
+            },
+          );
+          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+          expect(err?.message).toBe(P7C);
+          const e = await entry(coll);
+          expect(e?.ownsVectorIndex).toBe(true);
+          expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+          expect(await docsOn(coll)).toEqual([]);
+        });
+      });
+
+      describe.each<[string, boolean]>([
+        ['local', false],
+        ['cluster', true],
+      ])('P-DIFF (%s)', (_label, cluster) => {
+        it('a delete and recreate on another collection during provisioning drops R by id', async () => {
+          const x = await byoColl('pdiffx');
+          const y = await byoColl('pdiffy');
+          const name = uniqueName('pdiff');
+          const vec = `${name}_vector_index`;
+          if (cluster) for (const s of [a, b]) hooks(s, { createSearchIndexesCommand: clusterCreateMode(db) });
+          const { drops } = recordDrops(a);
+          let r: string | undefined;
+          const err: any = await parkedAt(
+            'beforeRecordOwnership',
+            () => create(a, x, { indexName: name }),
+            async () => {
+              r = await listedId(db, x, vec);
+              await b.deleteIndex({ indexName: name });
+              await create(b, y, { indexName: name });
+            },
+          );
+          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+          expect(err?.message).toBe(P7C);
+          expect(r).toBeDefined();
+          expect(drops).toEqual([{ collectionName: x, name: vec, id: r }]);
+          await waitFor(async () => (await searchIndexNames(db, x)).length === 0);
+          expect((await entry(name))?.collectionName).toBe(y);
+          expect(await docsOn(x)).toEqual([]);
+          await b.deleteIndex({ indexName: name });
+        });
+      });
+
+      it('P-ABA-inflight: A -> B in flight, then back to A: A owned, B retired with its id', async () => {
+        const coll = await byoColl('pabain');
+        await create(a, coll, { searchIndexName: 'A' });
+        const err: any = await parkedAt(
+          'beforeRecordOwnership',
+          () => create(a, coll, { searchIndexName: 'B' }),
+          () => create(b, coll, { searchIndexName: 'A' }),
+        );
+        expect(err?.message).toBe(P7B);
+        const e = await entry(coll);
+        expect(e?.searchIndexName).toBe('A');
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(e?.retiredVectorIndexNames).toEqual(['B']);
+        expect(idOf(e, 'B')).toBe(await listedId(db, coll, 'B'));
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      describe.each<[string, boolean]>([
+        ['R listed', true],
+        ['R not listed', false],
+      ])('P-STALEID-ORPHAN (%s)', (_label, listed) => {
+        it('a stale-id owner blocks the drop; its id becomes R only when the listing shows R', async () => {
+          const STALE = '0'.repeat(24);
+          const coll = await byoColl('pstaleorph');
+          await createRawSearchIndex(db, coll, 'N', { mappings: { dynamic: true } }, 'search');
+          const r = (await listedId(db, coll, 'N'))!;
+          const seedUser = (key: string, extra: Document) =>
+            seedRegistry(db, {
+              _id: `${coll}_${key}`,
+              indexName: `${coll}_${key}`,
+              collectionName: coll,
+              searchIndexName: `${coll}_${key}_vec`,
+              isByo: true,
+              allowWrites: false,
+              generation: 'g',
+              rev: 1,
+              claimToken: 't',
+              ...extra,
+            });
+          await seedUser('u1', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: STALE }] });
+          await seedUser('u2', { textSearchIndexName: 'N' });
+          const doc = {
+            _id: `orphan-${coll}:text`,
+            indexName: `${coll}_gone`,
+            generation: 'gone',
+            collectionName: coll,
+            name: 'N',
+            type: 'search',
+            role: 'text',
+            state: 'orphaned',
+            indexId: r,
+            leaseUntil: new Date(Date.now() + 300_000),
+            createdAt: new Date(),
+          };
+          await seedJournal(db, doc);
+          const logs = captureLogs(b);
+          const { drops } = recordDrops(b);
+          if (!listed)
+            hooks(b, { listSearchIndexesStub: (_n: string, phase: string) => (phase === 'orphan' ? [] : undefined) });
+          expect(await (b as any).cleanupOrphan(doc, 2)).toBe('released');
+          const u1 = await entry(`${coll}_u1`);
+          expect(u1?.indexIds).toEqual([{ name: 'N', id: listed ? r : STALE }]);
+          expect(u1?.rev).toBe(2);
+          expect(u1?.claimToken).not.toBe('t');
+          expect((await entry(`${coll}_u2`))?.rev).toBe(1);
+          expect(await docsOn(coll)).toEqual([]);
+          expect(drops).toEqual([]);
+          expect(await listedId(db, coll, 'N')).toBe(r);
+          if (!listed) {
+            expect(logs.warn.some(m => m.includes('"N"') && m.includes(STALE) && m.includes(r))).toBe(true);
+            clean.opts = { userIndexes: ['N'] };
+          }
+        });
+      });
+
+      describe('P-ATTACH-ORPHAN', () => {
+        it('an attach before the mark gets the index handed over', async () => {
+          const coll = await byoColl('pattach1');
+          const vec = `${coll}_vector_index`;
+          const err: any = await parkedAt(
+            'beforeRecordOwnership',
+            () => create(a, coll),
+            async () => {
+              await b.deleteIndex({ indexName: coll });
+              await create(b, coll, { indexName: `${coll}_c`, searchIndexName: vec });
+            },
+          );
+          expect(err?.message).toBe(P7C);
+          const c = await entry(`${coll}_c`);
+          expect(c?.ownsVectorIndex).toBe(true);
+          expect(c?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+          expect(await docsOn(coll)).toEqual([]);
+        });
+
+        it('an attach after the mark refuses with INDEX_DELETING and the orphan is dropped', async () => {
+          const coll = await byoColl('pattach2');
+          const vec = `${coll}_vector_index`;
+          const parked = pause();
+          const marked = pause();
+          hooks(a, { beforeRecordOwnership: parked.hook, afterOrphanMarked: marked.hook });
+          const { drops } = recordDrops(a);
+          const call = create(a, coll).catch(e => e);
+          let attach: any;
+          let cleanupRecord: string | undefined;
+          try {
+            await reached(parked);
+            await b.deleteIndex({ indexName: coll });
+            parked.release.resolve();
+            // The P7c path, parked right after the mark.
+            await reached(marked);
+            const [doc] = await docsOn(coll);
+            expect(doc?.state).toBe('orphaned');
+            cleanupRecord = doc?._id;
+            attach = await create(b, coll, { indexName: `${coll}_c`, searchIndexName: vec }).catch(e => e);
+          } finally {
+            parked.release.resolve();
+            marked.release.resolve();
+          }
+          expect((await call)?.message).toBe(P7C);
+          expect(attach?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
+          expect(attach?.message).toBe(
+            `search index "${vec}" on "${coll}" is pending removal of an index Mastra created (cleanup record ${cleanupRecord}). Retry: retrying runs the cleanup. If the drop keeps failing, the block remains and the failure is logged at error level.`,
+          );
+          expect(await entry(`${coll}_c`)).toBeNull();
+          expect(drops).toEqual([{ collectionName: coll, name: vec, id: expect.any(String) }]);
+          expect(await docsOn(coll)).toEqual([]);
+          expect(checker.violations).toEqual([]);
+        });
+      });
     });
   });
 });

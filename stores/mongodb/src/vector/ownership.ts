@@ -27,12 +27,14 @@ export interface DeleteCleanupPlan {
 
 const retired = (v: OwnershipView) => [...(v.retiredTextIndexNames ?? []), ...(v.retiredVectorIndexNames ?? [])];
 
-const owns = (v: OwnershipView, name: string) =>
+/** Whether `v` owns `name`: a current name with its flag, or a retired name of either role. */
+export const owns = (v: OwnershipView, name: string) =>
   (v.ownsVectorIndex === true && v.searchIndexName === name) ||
   (v.ownsTextIndex === true && v.textSearchIndexName === name) ||
   retired(v).includes(name);
 
-const uses = (v: OwnershipView, name: string) =>
+/** Whether `v` references `name`: a current or retired name of either role. */
+export const uses = (v: OwnershipView, name: string) =>
   v.searchIndexName === name || v.textSearchIndexName === name || retired(v).includes(name);
 
 /** The id `v` records for search index `name`, if any. */

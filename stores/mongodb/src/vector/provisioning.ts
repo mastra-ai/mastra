@@ -1,5 +1,7 @@
 import { MongoServerError } from 'mongodb';
 import type { Document } from 'mongodb';
+import { idFor, owns, uses } from './ownership';
+import type { OwnershipView } from './ownership';
 
 /** The driver types listSearchIndexes() rows as `{ name }`; these are the fields this store reads. */
 export type SearchIndexRow = { name: string; id?: string; status?: string; latestDefinition?: Document };
@@ -122,4 +124,35 @@ export function resolveCreating(
   if (ts !== undefined && ts < creatingAt.getTime() - ID_TIMESTAMP_MARGIN_MS)
     return { action: 'delete', byTimestamp: true };
   return { action: 'uncertain', candidateId: row.id };
+}
+
+export type OrphanPlan =
+  | { kind: 'release'; owners: { toId: string; rewriteId?: string }[] }
+  | { kind: 'transfer'; toId: string; field: 'ownsVectorIndex' | 'ownsTextIndex'; id: string }
+  | { kind: 'forget' }
+  | { kind: 'drop' };
+
+/**
+ * §3.8 step 3 for proven incarnation `R` of `name`, given its live `users` and the listed id
+ * `observed`. Any user blocks the drop (I11a). Owners come first: each is released, and rewritten
+ * to R only when the listing confirms R (I11b). Otherwise the lowest-`_id` user gets R, again only
+ * when the listing shows R; else nothing is transferred, as R is gone and the name may be a stranger's.
+ */
+export function planOrphanCleanup(
+  name: string,
+  R: string,
+  observed: string | undefined,
+  users: OwnershipView[],
+): OrphanPlan {
+  const owners = users.filter(u => owns(u, name));
+  if (owners.length)
+    return {
+      kind: 'release',
+      owners: owners.map(o => ({ toId: o._id, ...(observed === R && idFor(o, name) !== R ? { rewriteId: R } : {}) })),
+    };
+  const [recipient] = users.filter(u => uses(u, name)).sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
+  if (!recipient) return { kind: 'drop' };
+  if (observed !== R) return { kind: 'forget' };
+  const field = recipient.textSearchIndexName === name ? 'ownsTextIndex' : 'ownsVectorIndex';
+  return { kind: 'transfer', toId: recipient._id, field, id: R };
 }

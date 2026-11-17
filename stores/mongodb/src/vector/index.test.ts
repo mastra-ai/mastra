@@ -164,6 +164,8 @@ const stubJournal = (v: MongoDBVector) => {
   return {
     createIndexes: async () => [],
     find: () => ({ limit: () => ({ toArray: async () => [] }), toArray: async () => [] }),
+    // No orphan cleanup pending (the P3 handshake's M8 check).
+    findOne: async () => null,
     updateOne: async () => ({ matchedCount: 1 }),
     // The fence (P3b) returns the fenced doc.
     findOneAndUpdate: async ({ _id }: { _id: string }) => ({ _id, creatingAt: new Date() }),
