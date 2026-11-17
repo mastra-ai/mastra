@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import type { RefCallback } from 'react';
+import { useRef, useState } from 'react';
+import type { RefObject } from 'react';
 
 import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
 
 export interface UseMiddleTruncationResult<TElement extends HTMLElement> {
   /** The box the text has to fit; it must lay out at the room the text gets, not at the text's width. */
-  ref: RefCallback<TElement>;
+  ref: RefObject<TElement | null>;
   /** The value, or its start and end joined by `…` so it fits the box. */
   text: string;
   truncated: boolean;
@@ -20,10 +20,13 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
   value: string,
   tail = 6,
 ): UseMiddleTruncationResult<TElement> {
-  const [element, setElement] = useState<TElement | null>(null);
+  const ref = useRef<TElement>(null);
   const [text, setText] = useState(value);
 
+  // Measuring needs the laid-out box, so it runs in a layout effect (before paint) and again whenever the box
+  // resizes or the real font arrives.
   useIsomorphicLayoutEffect(() => {
+    const element = ref.current;
     if (!element) return;
 
     let stopped = false;
@@ -74,7 +77,7 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
       stopped = true;
       observer?.disconnect();
     };
-  }, [element, value, tail]);
+  }, [value, tail]);
 
-  return { ref: setElement, text, truncated: text !== value };
+  return { ref, text, truncated: text !== value };
 }
