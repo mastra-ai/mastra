@@ -25,47 +25,11 @@ export type ListedSession = SourceControlSession & { owner?: SessionOwnerProfile
 
 export type ProjectSessionsReader = (scope: { orgId: string; factoryProjectId: string }) => Promise<ProjectSessions>;
 
-async function loadOwnerProfiles(
-  users: SessionOwnerUserProvider,
-  userIds: string[],
-): Promise<Map<string, SessionOwnerProfile>> {
-  let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
-  if (users.getUsers) {
-    try {
-      resolvedUsers = await users.getUsers(userIds);
-    } catch (error) {
-      console.warn('[Factory Sessions] Bulk owner profile lookup failed; falling back to individual lookups', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      resolvedUsers = (await Promise.allSettled(userIds.map(userId => users.getUser(userId))))
-        .filter(result => result.status === 'fulfilled')
-        .map(result => result.value);
-    }
-  } else {
-    resolvedUsers = (await Promise.allSettled(userIds.map(userId => users.getUser(userId))))
-      .filter(result => result.status === 'fulfilled')
-      .map(result => result.value);
-  }
-
-  const profiles = new Map<string, SessionOwnerProfile>();
-  for (const user of resolvedUsers) {
-    if (!user) continue;
-    const name = user.name?.trim() || user.email?.trim();
-    if (!name) continue;
-    profiles.set(user.id, {
-      id: user.id,
-      name,
-      ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-    });
-  }
-  return profiles;
-}
-
 export function createSessionOwnerProfileResolver(
   users: SessionOwnerUserProvider | undefined,
 ): SessionOwnerProfileResolver {
-  const cache = new Map<string, { profile: Promise<SessionOwnerProfile | undefined>; expiresAt: number }>();
-  const cacheProfile = (userId: string, profile: Promise<SessionOwnerProfile | undefined>, expiresAt: number) => {
+  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
+  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
     cache.delete(userId);
     cache.set(userId, { profile, expiresAt });
     if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
@@ -84,29 +48,50 @@ export function createSessionOwnerProfileResolver(
     const requestedUserIds = [...new Set(userIds)]
       .filter(userId => !isFactoryPrincipalId(userId))
       .slice(0, MAX_SESSION_OWNER_PROFILES);
-    const now = Date.now();
-    const pending: Array<Promise<SessionOwnerProfile | undefined>> = [];
     const unresolvedUserIds: string[] = [];
+    const now = Date.now();
+
     for (const userId of requestedUserIds) {
       const cached = cache.get(userId);
-      if (cached && cached.expiresAt > now) pending.push(cached.profile);
-      else unresolvedUserIds.push(userId);
-    }
-    if (unresolvedUserIds.length > 0) {
-      const loading = loadOwnerProfiles(users, unresolvedUserIds);
-      const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
-      for (const userId of unresolvedUserIds) {
-        const profile = loading.then(loaded => loaded.get(userId));
-        cacheProfile(userId, profile, expiresAt);
-        profile.catch(() => {
-          if (cache.get(userId)?.profile === profile) cache.delete(userId);
-        });
-        pending.push(profile);
+      if (!cached || cached.expiresAt <= now) {
+        cache.delete(userId);
+        unresolvedUserIds.push(userId);
+      } else if (cached.profile) {
+        profiles.set(userId, cached.profile);
       }
     }
-    for (const profile of await Promise.all(pending)) {
-      if (profile) profiles.set(profile.id, profile);
+    if (unresolvedUserIds.length === 0) return profiles;
+
+    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
+    if (users.getUsers) {
+      try {
+        resolvedUsers = await users.getUsers(unresolvedUserIds);
+      } catch (error) {
+        console.warn('[Factory Sessions] Bulk owner profile lookup failed; falling back to individual lookups', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+          .filter(result => result.status === 'fulfilled')
+          .map(result => result.value);
+      }
+    } else {
+      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
     }
+
+    for (const user of resolvedUsers) {
+      if (!user) continue;
+      const name = user.name?.trim() || user.email?.trim();
+      if (!name) continue;
+      profiles.set(user.id, {
+        id: user.id,
+        name,
+        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      });
+    }
+    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
+    for (const userId of unresolvedUserIds) cacheProfile(userId, profiles.get(userId), expiresAt);
     return profiles;
   };
 }
