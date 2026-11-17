@@ -40,10 +40,10 @@ type ScopePath = Array<{ p: string | null; c?: string }>;
 
 /**
  * Progress inside the page (or scope page) the position points at, kept when a 429 stops a call
- * part way through it: `body` once the page itself is embedded, then notes from listing cursor `nc`
- * with `ns` of that listing already handled.
+ * part way through it: `bc` body chunks already stored, `body` once the whole page is embedded, then
+ * notes from listing cursor `nc` with `ns` of that listing already handled.
  */
-type Progress = { body: boolean; nc?: string; ns: number };
+type Progress = { body: boolean; bc?: number; nc?: string; ns: number };
 
 type Position = (
   | { scope?: string; phase: 'scope-notes' }
@@ -141,14 +141,18 @@ export async function reembedKnowledge(
   const handlePage = async (page: KnowledgePage) => {
     if (!item.body) {
       try {
-        const chunks = await index.indexPage(page);
+        const chunks = await index.indexPage(page, item.bc ?? 0);
         result.embedded.pages++;
         if (chunks > KNOWLEDGE_MAX_PAGE_CHUNKS) result.overChunkCap.push({ pageId: page.id, chunks });
       } catch (error) {
-        if (isRateLimit(error)) throw new RateLimited();
+        if (isRateLimit(error)) {
+          const stored = (error as { knowledgeStoredChunks?: number }).knowledgeStoredChunks;
+          if (stored) item = { ...item, bc: stored };
+          throw new RateLimited();
+        }
         result.failed.push({ kind: 'page', id: page.id, error: message(error) });
       }
-      item = { ...item, body: true };
+      item = { ...item, body: true, bc: undefined };
     }
     await notesOn(page.id);
   };
@@ -212,7 +216,7 @@ export async function reembedKnowledge(
   } catch (error) {
     if (!(error instanceof RateLimited)) throw error;
     result.rateLimited = true;
-    if (position && (item.body || item.ns > 0 || item.nc)) position = { ...position, item };
+    if (position && (item.body || item.bc || item.ns > 0 || item.nc)) position = { ...position, item };
   }
 
   if (position) result.nextCursor = encode(position);

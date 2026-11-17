@@ -67,6 +67,8 @@ type EmbedderState = {
   rateLimited?: number;
   /** Calls after this many answer 429 until it's cleared. */
   rateLimitAfter?: number;
+  /** Calls that returned a vector. */
+  succeeded?: number;
   dimension?: number;
 };
 
@@ -101,6 +103,7 @@ function embedder(state: EmbedderState): MastraEmbeddingModel<string> {
           isRetryable: false,
         });
       }
+      state.succeeded = (state.succeeded ?? 0) + 1;
       return { embeddings: values.map(() => Array.from({ length: state.dimension ?? 4 }, () => 0.5)) };
     },
   } as unknown as MastraEmbeddingModel<string>;
@@ -370,6 +373,32 @@ describe('Knowledge reembed()', () => {
     expect(results.reduce((sum, r) => sum + r.embedded.notes, 0)).toBe(7);
     expect(results.reduce((sum, r) => sum + r.embedded.pages, 0)).toBe(1);
     expect(vector.ids()).toEqual([`page:${busy!.id}`, ...notes.map(n => `note:${n.id}`)].sort());
+  });
+
+  it('a page with more body chunks than one rate-limit window still finishes, and no chunk is embedded twice', async () => {
+    // About 5 chunks of 2,000 tokens.
+    const body = Array.from({ length: 5 }, (_, i) => `Section ${i}. ` + 'word '.repeat(1_900)).join('\n\n');
+    await plain.upsertPage({ scope: 'org:busy', path: 'long', name: 'Long', body });
+    const [long] = await pageIds('org:busy');
+
+    let cursor: string | undefined;
+    let calls = 0;
+    const results = [];
+    const before = state.succeeded ?? 0;
+    do {
+      state.rateLimitAfter = state.calls + 3;
+      const result = await knowledge.reembed({ scope: 'org:busy', cursor });
+      results.push(result);
+      cursor = result.nextCursor;
+    } while (cursor && ++calls < 10);
+
+    expect(cursor).toBeUndefined();
+    const chunks = vector.ids().filter(id => id.startsWith(`page:${long!.id}`));
+    expect(chunks.length).toBeGreaterThan(3);
+    expect(results.reduce((sum, r) => sum + r.embedded.pages, 0)).toBe(1);
+    expect(results[0]).toMatchObject({ rateLimited: true, embedded: { pages: 0 } });
+    // No chunk is embedded twice across the calls.
+    expect((state.succeeded ?? 0) - before).toBe(chunks.length);
   });
 
   it('a scope page with more notes than one rate-limit window still finishes', async () => {
