@@ -72,7 +72,6 @@ function briefItem(item: Card) {
     url:
       factoryWorkItemUrl({
         factoryProjectId: item.factoryProjectId,
-        board: boardForWorkItem(item),
         workItemId: item.id,
       }) ?? null,
   };
@@ -166,7 +165,6 @@ export function createFactoryWorkItemTools(
       url =
         factoryWorkItemUrl({
           factoryProjectId: item.factoryProjectId,
-          board: boardForWorkItem(item),
           workItemId: item.id,
         }) ?? null;
       await follow(item, 'started');
@@ -287,7 +285,6 @@ export function createFactoryWorkItemTools(
         const url =
           factoryWorkItemUrl({
             factoryProjectId: item.factoryProjectId,
-            board: boardForWorkItem(item),
             workItemId: item.id,
           }) ?? null;
         const sameStage = item.stages.length === 1 && item.stages[0] === stage;

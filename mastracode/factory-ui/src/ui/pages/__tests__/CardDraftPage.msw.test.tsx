@@ -63,6 +63,35 @@ function renderAt(path: string) {
   return { router, ...renderWithProviders(<RouterProvider router={router} />, createQueryClient()) };
 }
 
+describe('a card with sessions', () => {
+  it("opens the thread of the session its current phase runs in, as a chat's link to the card does", async () => {
+    stubDraftRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...linearCard,
+              stages: ['execute'],
+              sessions: {
+                triage: { sessionId: 'session-triage', threadId: 'thread-triage' },
+                work: { sessionId: 'session-work', threadId: 'thread-work' },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const { router } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/session-work/threads/thread-work`,
+      ),
+    );
+  });
+});
+
 describe('a card without a session', () => {
   it('opens on a draft titled after the card that creates nothing until the first prompt', async () => {
     const route = stubDraftRoute();
