@@ -14,8 +14,6 @@ const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
 
-const NO_SESSIONS: readonly SourceControlSession[] = Object.freeze([]);
-
 /**
  * The user already holds this branch in a session of the same factory on
  * another repository link, so the insert hit the factory-wide unique index.
@@ -1189,7 +1187,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
         factory_project_id: factoryProjectId,
         integration_id: integrationId,
       });
-      if (connections.length === 0) return NO_SESSIONS;
       const linkIds = new Set<string>();
       for (const connection of connections) {
         for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
