@@ -627,7 +627,7 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls).toContain('git -C /workspace/repo fetch --unshallow --filter=blob:none origin main');
     expect(sandbox.calls).toContain('git -C /workspace/repo fetch --filter=blob:none origin refs/pull/42/head');
     expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/pr-42 FETCH_HEAD');
-    expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
+    expect(sandbox.calls).toContain('git -C /workspace/repo config --replace-all credential.helper !gh auth git-credential');
   });
 
   it('starts a GitLab merge-request session on the MR head using transient OAuth credentials', async () => {
@@ -689,7 +689,7 @@ describe('checkoutSessionBranch', () => {
       pullRequestNumber: 42,
     });
 
-    expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
+    expect(sandbox.calls).toContain('git -C /workspace/repo config --replace-all credential.helper !gh auth git-credential');
     expect(sandbox.calls.join('\n')).not.toContain('fetch');
   });
 
@@ -702,7 +702,7 @@ describe('checkoutSessionBranch', () => {
 
     await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
 
-    expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
+    expect(sandbox.calls).toContain('git -C /workspace/repo config --replace-all credential.helper !gh auth git-credential');
   });
 
   it('installs the credential helper on a non-PR session already on its branch', async () => {
@@ -713,7 +713,7 @@ describe('checkoutSessionBranch', () => {
 
     await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
 
-    expect(sandbox.calls).toContain('git -C /workspace/repo config credential.helper !gh auth git-credential');
+    expect(sandbox.calls).toContain('git -C /workspace/repo config --replace-all credential.helper !gh auth git-credential');
     expect(sandbox.calls.join('\n')).not.toContain('fetch');
   });
 
@@ -747,14 +747,14 @@ describe('syncEnvironmentRepository', () => {
     await syncEnvironmentRepository(sandbox, '/workspace/docs', { ...opts, tokenEnvName: 'GH_TOKEN_2' });
 
     expect(sandbox.calls).toContain(
-      'git -C /workspace/docs config credential.helper !f() { GH_TOKEN="${GH_TOKEN_2:-$GH_TOKEN}" gh auth git-credential "$@"; }; f',
+      'git -C /workspace/docs config --replace-all credential.helper !f() { GH_TOKEN="${GH_TOKEN_2:-$GH_TOKEN}" gh auth git-credential "$@"; }; f',
     );
   });
 
   it('installs the plain gh credential helper for repositories GH_TOKEN covers, and none for non-GitHub hosts', async () => {
     const github = new FakeSandbox(() => OK);
     await syncEnvironmentRepository(github, '/workspace/docs', opts);
-    expect(github.calls).toContain('git -C /workspace/docs config credential.helper !gh auth git-credential');
+    expect(github.calls).toContain('git -C /workspace/docs config --replace-all credential.helper !gh auth git-credential');
 
     const gitlab = new FakeSandbox(() => OK);
     await syncEnvironmentRepository(gitlab, '/workspace/docs', {

@@ -232,6 +232,32 @@ describe('environment branch selection with real Git', () => {
     expect(git(checkout, 'rev-parse', 'HEAD')).toBe(initial);
   });
 
+  describe.each(['primary', 'secondary'] as const)('%s checkout credential helper', role => {
+    it('heals a duplicate credential.helper instead of failing a later start (#30685)', async () => {
+      // An agent whose `gh` was unavailable can add its own helper with
+      // `git config --add`. Sandboxes keep their files across stops, so the
+      // second value persists and a plain single-value write refuses it (exit
+      // 5), failing every later start at checkout. `--replace-all` heals it.
+      git(checkout, 'checkout', '-b', 'session/task');
+      git(checkout, 'config', '--add', 'credential.helper', '!f() { echo password=agent; }; f');
+      git(checkout, 'config', '--add', 'credential.helper', '!gh auth git-credential');
+      expect(git(checkout, 'config', '--get-all', 'credential.helper').split('\n')).toHaveLength(2);
+
+      if (role === 'primary') {
+        await checkoutSessionBranch(sandbox, checkout, {
+          branch: 'session/task',
+          baseBranch: 'main',
+          token: 'test-token',
+          repoFullName: 'test/repo',
+        });
+      } else {
+        await sync();
+      }
+
+      expect(git(checkout, 'config', '--get-all', 'credential.helper')).toBe('!gh auth git-credential');
+    });
+  });
+
   it('keeps an unrelated branch unchanged', async () => {
     git(checkout, 'checkout', '-b', 'other-work');
     expect(await sync()).toEqual({ outcome: 'kept', branch: 'other-work' });

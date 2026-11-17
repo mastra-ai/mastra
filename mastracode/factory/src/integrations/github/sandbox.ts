@@ -637,11 +637,13 @@ export async function syncEnvironmentRepository(
 
   // Raw git in this checkout (push, fetch) authenticates through gh with the
   // token that covers this repository, like the session repository does.
+  // `--replace-all` heals a config an agent gave a second `credential.helper`.
   if (!authUsername) {
     const configured = await execute(sandbox, 'git', [
       '-C',
       workdir,
       'config',
+      '--replace-all',
       'credential.helper',
       githubCredentialHelper(options.tokenEnvName),
     ]);
@@ -830,7 +832,18 @@ async function checkoutSessionBranchImpl(
   if (authUsername) {
     await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', credentialKey]);
   } else {
-    const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
+    // `--replace-all` keeps exactly one helper and heals a checkout whose config
+    // an agent already gave a second `credential.helper` with `git config --add`.
+    // A plain single-value write refuses that recoverable state and fails the
+    // start before the agent runs, wedging the sandbox for every later session.
+    const configured = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'config',
+      '--replace-all',
+      credentialKey,
+      GH_CREDENTIAL_HELPER,
+    ]);
     if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
   }
 
