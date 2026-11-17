@@ -161,3 +161,5 @@ export function isAppendOnlySince(storedObservations: string, snapshotObservatio
   const snapshot = snapshotObservations ?? '';
   return stored === snapshot || stored.startsWith(snapshot);
 }
+
+export { deepMergeWorkingMemory } from './working-memory';

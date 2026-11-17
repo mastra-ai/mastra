@@ -5639,12 +5639,53 @@ export const API_ROUTE_METADATA = {
       "externalId",
       "groundTruth",
       "input",
+      "memorySeed",
       "metadata",
       "requestContext",
       "scorerIds",
       "source",
+      "toolMockMatchMode",
       "toolMocks",
       "unmockedToolPolicy"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /datasets/:datasetId/items/from-thread": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/items/from-thread",
+    "pathParams": [
+      "datasetId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agentId",
+      "historyLimit",
+      "mode",
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "itemIds"
+    }
+  },
+  "POST /datasets/replay/preview": {
+    "method": "POST",
+    "path": "/datasets/replay/preview",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "agentId",
+      "historyLimit",
+      "mode",
+      "resourceId",
+      "threadId"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -5712,10 +5753,12 @@ export const API_ROUTE_METADATA = {
       "expectedTrajectory",
       "groundTruth",
       "input",
+      "memorySeed",
       "metadata",
       "requestContext",
       "scorerIds",
       "source",
+      "toolMockMatchMode",
       "toolMocks",
       "unmockedToolPolicy"
     ],
@@ -5928,6 +5971,8 @@ export const API_ROUTE_METADATA = {
       "start",
       "targetId",
       "targetType",
+      "toolMockMatchMode",
+      "unmockedToolPolicy",
       "version",
       "versions"
     ],

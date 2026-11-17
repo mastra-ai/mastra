@@ -1,8 +1,9 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { noMcpServers } from '../../__tests__/fixtures/replay';
 import { CompareMetricsMenu } from '../compare-metrics-menu';
 import { ExperimentsComparison } from '../experiments-comparison';
 import {
@@ -17,6 +18,8 @@ import {
   challengerResults,
   challengerScoreRows,
   comparisonResponse,
+  conversationComparison,
+  playbackComparison,
   contenderResults,
   contenderScoreRows,
   contenderTraceSpans,
@@ -65,6 +68,7 @@ const experimentsBase = `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments
 
 beforeEach(() => {
   server.use(
+    http.get('*/api/mcp/v0/servers', () => HttpResponse.json(noMcpServers)),
     http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(comparisonResponse)),
     http.get(`${experimentsBase}/${BASELINE_ID}`, () => HttpResponse.json(makeExperiment(BASELINE_ID, 1))),
     http.get(`${experimentsBase}/${CONTENDER_ID}`, () => HttpResponse.json(makeExperiment(CONTENDER_ID, 2))),
@@ -142,6 +146,284 @@ const isClipped = (section: HTMLElement) =>
 const makePayloadsOverflow = () => vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
 
 describe('experiments comparison table', () => {
+  describe('when comparing conversation replays', () => {
+    it('aligns both columns to the same source turn when either selector changes', async () => {
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () =>
+          HttpResponse.json(conversationComparison),
+        ),
+      );
+      renderComparison();
+      await findItemRow('conversation-item');
+      const baseline = within(sideOf('conversation-item', 'Baseline'));
+      const contender = within(sideOf('conversation-item', 'Contender 1'));
+      fireEvent.click(baseline.getByRole('button', { name: /Turn 2/ }));
+      expect(baseline.getByRole('button', { name: /Turn 2/ }).getAttribute('aria-pressed')).toBe('true');
+      expect(contender.getByRole('button', { name: /Turn 2/ }).getAttribute('aria-pressed')).toBe('true');
+      expect(contender.getByText('Similarity: Judge unavailable')).toBeTruthy();
+      expect(contender.getByText('Provider disconnected')).toBeTruthy();
+    });
+  });
+
+  describe('when reading comparisons as threads', () => {
+    const openThreads = async (response = playbackComparison, contenderIds = [CONTENDER_ID]) => {
+      server.use(http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(response)));
+      renderComparison(contenderIds);
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+      return within(await screen.findByRole('tabpanel', { name: 'Threads' }));
+    };
+
+    it('shows every saved turn in the main comparison without starting playback', async () => {
+      const threads = await openThreads();
+      const secondTurn = within(threads.getByRole('region', { name: 'Turn 2' }));
+      expect(within(secondTurn.getByRole('group', { name: 'Baseline' })).getByText('Your name is Ada.')).toBeTruthy();
+      expect(
+        within(secondTurn.getByRole('group', { name: 'Contender 1' })).getByText('Your name is Grace.'),
+      ).toBeTruthy();
+      expect(threads.getAllByText('I will remember your name, Ada.')).toHaveLength(2);
+      expect(threads.getByText('Order 42 is ready.')).toBeTruthy();
+      expect(threads.queryByRole('button', { name: 'Play' })).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('keeps interruptions and unexecuted turns visible beside completed replies', async () => {
+      const threads = await openThreads();
+      expect(threads.getByText('Interrupted: Provider disconnected')).toBeTruthy();
+      const finalTurn = within(threads.getByRole('region', { name: 'Turn 3' }));
+      expect(finalTurn.getByText('This turn was not executed.')).toBeTruthy();
+      expect(finalTurn.getByText('Order 42 is ready.')).toBeTruthy();
+    });
+
+    it('expands recorded tool details without offering live chat controls', async () => {
+      const threads = await openThreads(conversationComparison);
+      fireEvent.click(threads.getAllByRole('button', { name: /lookupOrder/i })[0]);
+      expect(threads.getByText(/No recorded result/)).toBeTruthy();
+      expect(threads.queryByRole('textbox')).toBeNull();
+      expect(threads.queryByRole('button', { name: /send|approve|retry/i })).toBeNull();
+    });
+
+    it('switches back to the existing scores and diagnostics', async () => {
+      await openThreads();
+      fireEvent.click(screen.getByRole('tab', { name: 'Table' }));
+      expect(await findItemRow('conversation-item')).toBeTruthy();
+      expect(
+        within(sideOf('conversation-item', 'Baseline')).getByRole('link', { name: 'Open similarity' }),
+      ).toBeTruthy();
+    });
+
+    it('renders ordinary items and missing results without hiding them', async () => {
+      const threads = await openThreads(comparisonResponse);
+      const first = within(threads.getByRole('region', { name: 'Item item-a' }));
+      expect(first.getAllByText(/What is the capital of France/)).toHaveLength(2);
+      expect(first.getByText(/"Paris, France"/)).toBeTruthy();
+      expect(threads.getByText('Not present in this experiment')).toBeTruthy();
+      expect(threads.getByText('Interrupted: Agent run failed: rate limited')).toBeTruthy();
+    });
+
+    it('keeps all selected candidates in separate columns', async () => {
+      useThreeWayComparison();
+      const threads = await openThreads(threeWayComparisonResponse, [CONTENDER_ID, CHALLENGER_ID]);
+      const first = within(threads.getByRole('region', { name: 'Item item-a' }));
+      expect(first.getByRole('group', { name: 'Baseline' })).toBeTruthy();
+      expect(first.getByRole('group', { name: 'Contender 1' })).toBeTruthy();
+      expect(first.getByRole('group', { name: 'Contender 2' })).toBeTruthy();
+    });
+  });
+
+  describe('when playing saved conversations side by side', () => {
+    const openPlayback = async (response = playbackComparison, contenderIds = [CONTENDER_ID]) => {
+      server.use(http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(response)));
+      renderComparison(contenderIds);
+      fireEvent.click(await screen.findByRole('button', { name: 'Replay conversation' }));
+      return within(await screen.findByRole('dialog', { name: 'Conversation playback' }));
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('shows recorded tool details through the read-only chat renderer', async () => {
+      const playback = await openPlayback(conversationComparison);
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      fireEvent.click(playback.getAllByRole('button', { name: /lookupOrder/i })[0]);
+      expect(playback.getByText(/No recorded result/)).toBeTruthy();
+      expect(playback.queryByRole('textbox')).toBeNull();
+      expect(playback.queryByRole('button', { name: /send|approve|retry/i })).toBeNull();
+    });
+
+    it('opens paused without revealing saved assistant responses or opening the dataset drawer', async () => {
+      const playback = await openPlayback();
+      expect(playback.getAllByText('Remember my name is Ada.')).toHaveLength(2);
+      expect(playback.queryByText('I will remember your name, Ada.')).toBeNull();
+      expect(playback.getByRole('button', { name: 'Play' })).toBeTruthy();
+      expect(screen.queryByRole('dialog', { name: 'Dataset item conversation-item' })).toBeNull();
+    });
+
+    it('reveals both saved replies on the same clock and stops when paused', async () => {
+      const playback = await openPlayback();
+      vi.useFakeTimers();
+      fireEvent.click(playback.getByRole('button', { name: 'Play' }));
+      act(() => vi.advanceTimersByTime(3000));
+      expect(playback.getAllByText('I will remember your name, Ada.')).toHaveLength(2);
+      fireEvent.click(playback.getByRole('button', { name: 'Pause' }));
+      act(() => vi.advanceTimersByTime(8000));
+      expect(playback.queryByText('What is my name?')).toBeNull();
+    });
+
+    it('seeks both threads together and labels changed and partial responses', async () => {
+      const playback = await openPlayback();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      expect(playback.getByText('Your name is Ada.')).toBeTruthy();
+      expect(playback.getByText('Your name is Grace.')).toBeTruthy();
+      expect(playback.getByText('Response differs')).toBeTruthy();
+      expect(playback.getByText('Interrupted: Provider disconnected')).toBeTruthy();
+      expect(playback.queryByText('Order 42 is ready.')).toBeNull();
+    });
+
+    it('preserves unexecuted turns without inventing a response', async () => {
+      const playback = await openPlayback();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 3' }));
+      expect(playback.getByText('Order 42 is ready.')).toBeTruthy();
+      expect(playback.getByText('This turn was not executed.')).toBeTruthy();
+      expect(playback.getAllByText('Can you check order 42?')).toHaveLength(2);
+    });
+
+    it('restarts and steps backward without leaking later turns', async () => {
+      const playback = await openPlayback();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 3' }));
+      fireEvent.click(playback.getByRole('button', { name: 'Previous turn' }));
+      expect(playback.queryByText('Order 42 is ready.')).toBeNull();
+      fireEvent.click(playback.getByRole('button', { name: 'Restart' }));
+      expect(playback.queryByText('Your name is Ada.')).toBeNull();
+      expect(playback.queryByText('I will remember your name, Ada.')).toBeNull();
+    });
+
+    it('finishes automatically at the selected speed and can replay from the beginning', async () => {
+      const playback = await openPlayback();
+      vi.useFakeTimers();
+      fireEvent.click(playback.getByRole('button', { name: 'Playback speed: 1×' }));
+      fireEvent.click(playback.getByRole('button', { name: 'Play' }));
+      act(() => vi.advanceTimersByTime(6000));
+      expect(playback.getByText(/Playback complete/)).toBeTruthy();
+      fireEvent.click(playback.getByRole('button', { name: 'Play again' }));
+      expect(playback.queryByText('Order 42 is ready.')).toBeNull();
+    });
+
+    it('starts fresh when reopened after closing during playback', async () => {
+      const playback = await openPlayback();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      fireEvent.click(playback.getByRole('button', { name: 'Play' }));
+      fireEvent.click(playback.getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation playback' })).toBeNull());
+      fireEvent.click(screen.getByRole('button', { name: 'Replay conversation' }));
+      const reopened = within(await screen.findByRole('dialog', { name: 'Conversation playback' }));
+      expect(reopened.queryByText('Your name is Ada.')).toBeNull();
+      expect(reopened.getByRole('button', { name: 'Play' })).toBeTruthy();
+    });
+
+    it('returns to the evidence view at the turn being inspected', async () => {
+      const playback = await openPlayback();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      fireEvent.click(playback.getByRole('button', { name: 'Inspect turn' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation playback' })).toBeNull());
+      expect(
+        within(sideOf('conversation-item', 'Baseline'))
+          .getByRole('button', { name: /Turn 2/ })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
+      expect(
+        within(sideOf('conversation-item', 'Contender 1'))
+          .getByRole('button', { name: /Turn 2/ })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
+    });
+
+    it('resets playback when choosing another contender', async () => {
+      useThreeWayComparison();
+      const item = playbackComparison.items[0];
+      const playback = await openPlayback(
+        {
+          ...playbackComparison,
+          items: [
+            {
+              ...item,
+              results: {
+                ...item.results,
+                [CHALLENGER_ID]: item.results[BASELINE_ID],
+              },
+            },
+          ],
+        },
+        [CONTENDER_ID, CHALLENGER_ID],
+      );
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      fireEvent.click(playback.getByRole('combobox', { name: 'Playback contender' }));
+      const option = await screen.findByRole('option', { name: CHALLENGER_ID });
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+      await waitFor(() => expect(playback.queryByText('Your name is Grace.')).toBeNull());
+      expect(playback.getByRole('button', { name: 'Play' })).toBeTruthy();
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      expect(playback.getAllByText('Your name is Ada.')).toHaveLength(2);
+    });
+
+    it('still shows the contender when the baseline has no saved conversation', async () => {
+      const item = playbackComparison.items[0];
+      const playback = await openPlayback({
+        ...playbackComparison,
+        items: [
+          {
+            ...item,
+            results: {
+              ...item.results,
+              [BASELINE_ID]: null,
+            },
+          },
+        ],
+      });
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 1' }));
+      expect(playback.getByText('I will remember your name, Ada.')).toBeTruthy();
+      expect(playback.getByText('This turn was not executed.')).toBeTruthy();
+    });
+
+    it('does not submit an experiment while playing or seeking saved results', async () => {
+      const execute = vi.fn();
+      server.use(
+        http.post(experimentsBase, () => {
+          execute();
+          return HttpResponse.error();
+        }),
+      );
+      const playback = await openPlayback();
+      vi.useFakeTimers();
+      fireEvent.click(playback.getByRole('button', { name: 'Play' }));
+      act(() => vi.advanceTimersByTime(12000));
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 1' }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('reveals complete replies without word animation when reduced motion is preferred', async () => {
+      const matchMedia = window.matchMedia.bind(window);
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        ...matchMedia(query),
+        matches: query === '(prefers-reduced-motion: reduce)',
+      }));
+      const playback = await openPlayback();
+      vi.useFakeTimers();
+      fireEvent.click(playback.getByRole('button', { name: 'Play' }));
+      act(() => vi.advanceTimersByTime(600));
+      expect(playback.getAllByText('I will remember your name, Ada.')).toHaveLength(2);
+      expect(playback.queryByText('What is my name?')).toBeNull();
+    });
+
+    it('does not offer conversation playback for ordinary experiment items', async () => {
+      renderComparison();
+      await findItemRow('item-a');
+      expect(screen.queryByRole('button', { name: 'Replay conversation' })).toBeNull();
+    });
+  });
+
   describe('when the comparison loads', () => {
     it('renders the Items, Baseline and Contender 1 column headers', async () => {
       renderComparison();
@@ -262,6 +544,7 @@ describe('experiments comparison table', () => {
   describe('when the trace button of a cell is clicked', () => {
     beforeEach(() => {
       server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(contenderTraceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/light`, () =>
           HttpResponse.json(contenderTraceSpans),
         ),

@@ -1,5 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
@@ -13,6 +14,7 @@ import {
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
+import { compareReplayOutputs, replayLabel, replayUserMessage } from '../../utils/replay';
 import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPanel } from './comparison-item-panel';
@@ -22,8 +24,10 @@ import { sectionStackClass } from './comparison-section';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
+import { ComparisonThreads } from './comparison-threads';
 import { ComparisonTracePanel } from './comparison-trace-panel';
 import { columnLabel } from './constants';
+import { ConversationPlaybackDialog } from './conversation-playback-dialog';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 interface ExperimentsComparisonProps {
@@ -138,10 +142,18 @@ export function ExperimentsComparison({
     supportsMetrics,
   });
 
-  const rows = useMemo(
+  const unsortedRows = useMemo(
     () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById, usageById }),
     [comparison, experimentIds, resultsById, scoresById, usageById],
   );
+  const rows = unsortedRows
+    .slice()
+    .sort((a, b) =>
+      compareReplayOutputs(
+        a.sides.find(side => replayLabel(side.output))?.output,
+        b.sides.find(side => replayLabel(side.output))?.output,
+      ),
+    );
 
   /** Per-scorer averages for each column; contenders also carry their delta against the baseline. */
   const summaries = useMemo((): ScorerSummary[][] => {
@@ -201,68 +213,89 @@ export function ExperimentsComparison({
 
   return (
     <>
-      <div
-        role="table"
-        aria-label="Experiments comparison"
-        // The column minimums set the width: max-content would stretch columns to the unwrapped text.
-        className="grid min-w-[calc(22rem_+_var(--compare-cols)_*_32rem)]"
-        style={{ '--compare-cols': experimentIds.length } as CSSProperties}
+      <Tabs<'table' | 'threads'>
+        defaultTab="table"
+        className="relative grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden"
       >
-        {/* Titles stay pinned while scrolling down, so every column still says which experiment it is. */}
-        <div role="row" className={cn(gridRow, 'sticky top-0 z-20 bg-background')}>
-          <div role="columnheader" aria-label="Items" className={cell} />
-          {experimentIds.map((experimentId, index) => (
-            <div
-              key={experimentId}
-              role="columnheader"
-              aria-label={columnLabel(index)}
-              className={cn(cell, 'border-b')}
-            >
-              <ComparisonSideTitle
-                role={index === 0 ? 'baseline' : 'contender'}
-                label={columnLabel(index)}
-                experiment={experimentsById[experimentId] ?? undefined}
-                onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
-              />
+        <div className="flex items-center gap-3 px-4 py-3">
+          <TabList size="sm">
+            <Tab value="table">Table</Tab>
+            <Tab value="threads">Threads</Tab>
+          </TabList>
+        </div>
+        <TabContent value="table" flush className="relative content-start overflow-auto">
+          <div
+            role="table"
+            aria-label="Experiments comparison"
+            // The column minimums set the width: max-content would stretch columns to the unwrapped text.
+            className="grid min-w-[calc(22rem_+_var(--compare-cols)_*_32rem)]"
+            style={{ '--compare-cols': experimentIds.length } as CSSProperties}
+          >
+            {/* Titles stay pinned while scrolling down, so every column still says which experiment it is. */}
+            <div role="row" className={cn(gridRow, 'sticky top-0 z-20 bg-background')}>
+              <div role="columnheader" aria-label="Items" className={cell} />
+              {experimentIds.map((experimentId, index) => (
+                <div
+                  key={experimentId}
+                  role="columnheader"
+                  aria-label={columnLabel(index)}
+                  className={cn(cell, 'border-b')}
+                >
+                  <ComparisonSideTitle
+                    role={index === 0 ? 'baseline' : 'contender'}
+                    label={columnLabel(index)}
+                    experiment={experimentsById[experimentId] ?? undefined}
+                    onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div role="row" aria-label="Summary" className={cn(gridRow, 'border-b')}>
-          <div role="cell" aria-label="Items" className={cell} />
-          {experimentIds.map((experimentId, index) => {
-            const experiment = experimentsById[experimentId] ?? undefined;
-            return (
-              <div key={experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
-                <ComparisonSideSummary
-                  role={index === 0 ? 'baseline' : 'contender'}
-                  experiment={experiment}
-                  summary={summaries[index]}
-                  metrics={isResultsLoading ? undefined : metrics[index]}
-                  baselineMetrics={isResultsLoading ? undefined : metrics[0]}
-                  versionMismatch={
-                    index > 0 && Boolean(experiment) && Boolean(baselineExperiment)
-                      ? experiment?.datasetVersion !== baselineExperiment?.datasetVersion
-                      : undefined
-                  }
-                  showUsage={supportsMetrics}
-                />
-              </div>
-            );
-          })}
-        </div>
+            <div role="row" aria-label="Summary" className={cn(gridRow, 'border-b')}>
+              <div role="cell" aria-label="Items" className={cell} />
+              {experimentIds.map((experimentId, index) => {
+                const experiment = experimentsById[experimentId] ?? undefined;
+                return (
+                  <div key={experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
+                    <ComparisonSideSummary
+                      role={index === 0 ? 'baseline' : 'contender'}
+                      experiment={experiment}
+                      summary={summaries[index]}
+                      metrics={isResultsLoading ? undefined : metrics[index]}
+                      baselineMetrics={isResultsLoading ? undefined : metrics[0]}
+                      versionMismatch={
+                        index > 0 && Boolean(experiment) && Boolean(baselineExperiment)
+                          ? experiment?.datasetVersion !== baselineExperiment?.datasetVersion
+                          : undefined
+                      }
+                      showUsage={supportsMetrics}
+                    />
+                  </div>
+                );
+              })}
+            </div>
 
-        {rows.map(row => (
-          <ComparisonRowView
-            key={row.itemId}
-            row={row}
-            isLoading={isResultsLoading}
-            showUsage={supportsMetrics}
-            onOpen={() => openItem(row.itemId)}
-            onShowTrace={showTrace}
+            {rows.map(row => (
+              <ComparisonRowView
+                key={`${row.itemId}:${experimentIds.join(':')}`}
+                row={row}
+                experimentNames={Object.fromEntries(experimentIds.map(id => [id, experimentsById[id]?.name ?? id]))}
+                isLoading={isResultsLoading}
+                showUsage={supportsMetrics}
+                onOpen={() => openItem(row.itemId)}
+                onShowTrace={showTrace}
+              />
+            ))}
+          </div>
+        </TabContent>
+        <TabContent value="threads" flush className="relative content-start overflow-auto">
+          <ComparisonThreads
+            rows={rows}
+            columns={experimentIds.map(id => ({ id, experiment: experimentsById[id] ?? undefined }))}
+            onSetBaseline={onSetBaseline}
           />
-        ))}
-      </div>
+        </TabContent>
+      </Tabs>
       <ComparisonItemPanel datasetId={datasetId} itemId={selectedItemId} onClose={() => setSelectedItemId(undefined)} />
       {/* Stays mounted so the drawer animates in and out, like on the traces page. */}
       <ComparisonTracePanel
@@ -279,6 +312,7 @@ type ExpandableSection = 'input' | 'groundTruth' | 'output';
 
 interface ComparisonRowViewProps {
   row: ComparisonRow;
+  experimentNames: Record<string, string>;
   isLoading: boolean;
   showUsage: boolean;
   onOpen: () => void;
@@ -286,7 +320,15 @@ interface ComparisonRowViewProps {
 }
 
 /** One item of the comparison. Expanding a section expands the same section in every column of the row. */
-function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: ComparisonRowViewProps) {
+function ComparisonRowView({
+  row,
+  experimentNames,
+  isLoading,
+  showUsage,
+  onOpen,
+  onShowTrace,
+}: ComparisonRowViewProps) {
+  const [selectedTurn, setSelectedTurn] = useState(0);
   const [expanded, setExpanded] = useState<Record<ExpandableSection, boolean>>({
     input: false,
     groundTruth: false,
@@ -319,7 +361,15 @@ function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: C
       )}
     >
       <div role="cell" className={cn(cell, sectionStackClass)}>
-        <ComparisonItemPayload label="Input" value={row.input} {...expandedProps('input')} />
+        {row.sides.some(side => replayLabel(side.output)) && (
+          <Txt variant="heading">{replayLabel(row.sides.find(side => replayLabel(side.output))?.output)}</Txt>
+        )}
+        <ConversationPlaybackDialog row={row} names={experimentNames} onInspect={setSelectedTurn} />
+        <ComparisonItemPayload
+          label="Input"
+          value={row.sides.some(side => replayLabel(side.output)) ? replayUserMessage(row.input) : row.input}
+          {...expandedProps('input')}
+        />
         <ComparisonItemPayload label="Ground truth" value={row.groundTruth} {...expandedProps('groundTruth')} />
       </div>
 
@@ -332,6 +382,8 @@ function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: C
             outputExpanded={output.expanded}
             onOutputExpandedChange={output.onExpandedChange}
             onShowTrace={onShowTrace}
+            selectedTurn={selectedTurn}
+            onSelectTurn={setSelectedTurn}
           />
         </div>
       ))}

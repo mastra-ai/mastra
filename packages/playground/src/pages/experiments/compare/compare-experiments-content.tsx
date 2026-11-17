@@ -103,20 +103,18 @@ export function CompareExperimentsContent({
     );
   }
 
-  // The single scroller of the comparison, on both axes, so the table's sticky titles pin to it.
+  // Each comparison view owns its scroller so its column titles stay pinned.
   return (
-    <div className="h-full overflow-auto">
-      <div className="grid w-full content-start">
-        <Txt as="h1" variant="heading" className="sr-only">
-          Experiments comparison
-        </Txt>
-        <ExperimentsComparison
-          datasetId={datasetId}
-          baselineId={baselineId}
-          contenderIds={contenderIds}
-          onSetBaseline={setBaseline}
-        />
-      </div>
+    <div className="h-full min-h-0 overflow-hidden">
+      <Txt as="h1" variant="heading" className="sr-only">
+        Experiments comparison
+      </Txt>
+      <ExperimentsComparison
+        datasetId={datasetId}
+        baselineId={baselineId}
+        contenderIds={contenderIds}
+        onSetBaseline={setBaseline}
+      />
     </div>
   );
 }

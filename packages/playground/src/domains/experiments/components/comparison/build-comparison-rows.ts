@@ -1,5 +1,6 @@
 import type { ClientScoreRowData, CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentItemUsage, ExperimentUsage } from '@mastra/react/hooks/experiments';
+import { replayContext, replayUsage } from '../../utils/replay';
 import { totalTokens } from './comparison-metric-format';
 
 export interface ComparisonScore {
@@ -119,7 +120,12 @@ const buildSide = (
       .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
     traceId: detail?.traceId ?? undefined,
-    usage: detail?.traceId ? usageByTraceId?.[detail.traceId] : undefined,
+    usage:
+      replayContext(comparisonResult.output)?.mode === 'conversation'
+        ? replayUsage(comparisonResult.output)
+        : detail?.traceId
+          ? usageByTraceId?.[detail.traceId]
+          : undefined,
   };
 };
 

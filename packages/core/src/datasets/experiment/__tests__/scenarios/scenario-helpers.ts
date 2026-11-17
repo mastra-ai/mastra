@@ -121,6 +121,8 @@ export interface RunToolMockScenarioOptions {
   tools: Record<string, ReturnType<typeof createTool>>;
   /** Item-level static tool mocks under test. */
   toolMocks?: ItemToolMock[];
+  toolMockMatchMode?: 'ordered' | 'lookup';
+  unmockedToolPolicy?: 'allow' | 'deny';
   /** Prompt for the dataset item input. */
   prompt?: string;
   /** Max retries for the experiment run (default 0). Used by retry-skip scenarios. */
@@ -172,6 +174,8 @@ export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Pro
     datasetId: dataset.id,
     input: opts.prompt ?? 'run the scenario',
     toolMocks: opts.toolMocks,
+    toolMockMatchMode: opts.toolMockMatchMode,
+    unmockedToolPolicy: opts.unmockedToolPolicy,
   });
 
   const summary = await runExperiment(mastra, {

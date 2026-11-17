@@ -85,7 +85,7 @@ describe('executeTarget agent tool mocks', () => {
     expect(result.error).toBeNull();
     expect(liveExecutions).toEqual([]); // mock short-circuited the live tool
     expect(result.toolMockReport?.served).toEqual([
-      { mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } },
+      { mockIndex: 0, callIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } },
     ]);
     expect(result.toolMockReport?.failure).toBeUndefined();
   });

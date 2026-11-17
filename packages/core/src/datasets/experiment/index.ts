@@ -11,10 +11,9 @@ import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
-  flushForTrajectoryScorers,
   resolveScorers,
   resolveStepScorers,
-  runScorersForItem,
+  runScorersForExecution,
   runStepScorersForItem,
 } from './scorer';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
@@ -44,6 +43,8 @@ type ExperimentItem = {
   toolMocks?: ItemToolMock[];
   /** Item-level override for undeclared agent tool calls. */
   unmockedToolPolicy?: UnmockedToolPolicy;
+  toolMockMatchMode?: 'ordered' | 'lookup';
+  memorySeed?: { workingMemory?: string };
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */
   scorerIds?: string[];
 };
@@ -51,6 +52,7 @@ type ExperimentItem = {
 // Re-export types and helpers
 export type {
   AgentExperimentOutput,
+  ConversationTurnResult,
   DataItem,
   ExperimentConfig,
   ExperimentResultOutput,
@@ -83,6 +85,8 @@ export {
   TOOL_MOCK_NOT_DECLARED,
   type ItemToolMock,
   type ToolMockMatchArgs,
+  type ToolMockMatchMode,
+  type ToolMockMiss,
   type ToolMockReport,
   type ToolMockResolution,
   type ToolMockFailureCode,
@@ -250,6 +254,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           resumeData: dataItem.resumeData,
           toolMocks: dataItem.toolMocks,
           unmockedToolPolicy: dataItem.unmockedToolPolicy,
+          toolMockMatchMode: dataItem.toolMockMatchMode,
+          memorySeed: dataItem.memorySeed,
           scorerIds: dataItem.scorerIds,
         };
       });
@@ -295,6 +301,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         metadata: v.metadata ?? undefined,
         toolMocks: v.toolMocks ?? undefined,
         unmockedToolPolicy: v.unmockedToolPolicy ?? undefined,
+        toolMockMatchMode: v.toolMockMatchMode ?? undefined,
+        memorySeed: v.memorySeed ?? undefined,
         scorerIds: v.scorerIds ?? undefined,
       }));
     } else {
@@ -354,6 +362,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
+          toolMockMatchMode: targetType === 'agent' ? (item.toolMockMatchMode ?? config.toolMockMatchMode) : undefined,
         });
       };
     } else {
@@ -573,7 +582,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           while (execResult.error && !preflightError && retryCount < maxRetries) {
             // Don't retry abort errors
-            if (execResult.error.message.toLowerCase().includes('abort')) break;
+            if (itemSignal?.aborted || execResult.error.message.toLowerCase().includes('abort')) break;
 
             // Don't retry deterministic tool-mock failures — the matcher state cannot
             // change between attempts, so retrying would always fail identically.
@@ -621,7 +630,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           // Run scorers (inline, after target completes). A preflight failure
           // (unresolvable scorer configuration, or a failed `beforeEach`) skips
           // scoring because the target never ran under valid conditions.
-          let itemScores: Awaited<ReturnType<typeof runScorersForItem>> = [];
+          let itemScores: Awaited<ReturnType<typeof runScorersForExecution>> = [];
           if (!preflightError) {
             const workflowData =
               execResult.stepResults || execResult.stepExecutionPath
@@ -632,20 +641,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   }
                 : undefined;
 
-            await flushForTrajectoryScorers(mastra, itemScorers, execResult.traceId);
-            const flatScores = await runScorersForItem(
+            const flatScores = await runScorersForExecution(
               itemScorers,
               itemWithMetadataSnapshot(),
-              execResult.output,
+              execResult,
+              mastra,
               storage ?? null,
               experimentId,
               targetType ?? 'agent',
               targetId ?? 'inline',
-              item.id,
-              execResult.scorerInput,
-              execResult.scorerOutput,
-              execResult.traceId ?? undefined,
-              workflowData,
               persistScores,
             );
 

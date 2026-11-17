@@ -27,6 +27,7 @@ import {
 } from './fixtures/experiment-item-route';
 import { StudioFrame } from '@/components/layout';
 import { experimentTotalsBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
+import { conversationResult } from '@/domains/experiments/components/__tests__/fixtures/replay';
 import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
@@ -194,6 +195,21 @@ describe('experiment item sub-route', () => {
       }
       expect(breakdownRequests.length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it('uses the whole item duration for a conversation, not the average generation duration', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, () =>
+        HttpResponse.json({
+          ...resultsResponse,
+          results: [{ ...resultsResponse.results[0], ...conversationResult }],
+          pagination: { ...resultsResponse.pagination, total: 1, hasMore: false },
+        }),
+      ),
+    );
+    renderExperimentRoute();
+    expect(await screen.findByText('10s avg per item')).toBeDefined();
+    expect(screen.queryByText('1.85s avg per item')).toBeNull();
   });
 
   describe('when the user clicks a dataset item in the results list', () => {

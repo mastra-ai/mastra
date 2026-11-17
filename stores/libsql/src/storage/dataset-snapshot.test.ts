@@ -42,6 +42,8 @@ async function capture(storage: DatasetsStorage, datasetId: string) {
           'expectedTrajectory',
           'toolMocks',
           'unmockedToolPolicy',
+          'memorySeed',
+          'toolMockMatchMode',
           'scorerIds',
           'requestContext',
           'metadata',
@@ -109,6 +111,8 @@ describe.each(['in-memory', 'libsql'] as const)('snapshot representation compati
       expectedTrajectory: { custom: [null, false, 0, ''] },
       toolMocks: [{ toolName: 'lookup', args: {}, output: null, matchArgs: 'ignore' as const }],
       unmockedToolPolicy: 'deny' as const,
+      toolMockMatchMode: 'lookup' as const,
+      memorySeed: { workingMemory: 'Ada' },
       scorerIds: [],
       requestContext: {},
       metadata: {},
@@ -145,6 +149,41 @@ describe.each(['in-memory', 'libsql'] as const)('snapshot representation compati
       expect(parseDatasetSnapshot(JSON.stringify(snapshot))).toEqual(snapshot);
     },
   );
+
+  it('round trips a conversation with per-turn references and tools using the existing input payload', async () => {
+    const dataset = await storage.createDataset({ name: 'conversation' });
+    const input = {
+      type: 'conversation',
+      turns: [
+        {
+          input: [
+            {
+              role: 'user',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              content: { format: 2, parts: [{ type: 'text', text: 'Find order 42' }] },
+            },
+          ],
+          groundTruth: 'Ready',
+          expectedTrajectory: { steps: [{ stepType: 'tool_call', name: 'lookup' }] },
+          toolMocks: [{ toolName: 'lookup', args: { id: 42 }, output: { status: 'ready' } }],
+        },
+      ],
+    };
+    await storage.addItem({
+      datasetId: dataset.id,
+      input,
+      memorySeed: { workingMemory: 'Ada' },
+      toolMockMatchMode: 'lookup',
+      unmockedToolPolicy: 'deny',
+      source: { type: 'thread', referenceId: 'production' },
+    });
+    const snapshot = parseDatasetSnapshot(JSON.stringify(await capture(storage, dataset.id)));
+    expect(snapshot.items[0]!.payload.input).toEqual(input);
+    const copy = await storage.createDataset({ name: 'restored' });
+    await storage.addItem({ datasetId: copy.id, ...snapshot.items[0]!.payload });
+    const restored = await capture(storage, copy.id);
+    expect(restored.items[0]!.payload).toEqual(snapshot.items[0]!.payload);
+  });
 
   it('captures current null normalization without claiming lossless CRUD import', async () => {
     const dataset = await storage.createDataset({ name: 'nulls', inputSchema: {} });

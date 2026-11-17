@@ -8,6 +8,7 @@ import type {
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
+import { conversationResult } from '../../../__tests__/fixtures/replay';
 import type { ScoresByItemId } from '../../build-comparison-rows';
 
 export const DATASET_ID = 'dataset-1';
@@ -299,4 +300,67 @@ export const contenderTraceSpans: GetTraceResponse = {
 export const contenderTraceFeedback: RouteResponse<'GET /observability/feedback'> = {
   feedback: [],
   pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+};
+
+export const conversationComparison: CompareExperimentsResponse = {
+  baselineId: BASELINE_ID,
+  items: [
+    {
+      itemId: 'conversation-item',
+      input: conversationResult.input,
+      groundTruth: null,
+      results: {
+        [BASELINE_ID]: { output: conversationResult.output, scores: { similarity: 0 } },
+        [CONTENDER_ID]: { output: conversationResult.output, scores: { similarity: 0 } },
+      },
+    },
+  ],
+};
+
+/** Saved runs with a response regression, a partial failure, and an unexecuted turn. */
+export const playbackComparison: CompareExperimentsResponse = {
+  baselineId: BASELINE_ID,
+  items: [
+    {
+      itemId: 'conversation-item',
+      input: {
+        type: 'conversation',
+        turns: [
+          { input: 'Remember my name is Ada.' },
+          { input: 'What is my name?' },
+          { input: 'Can you check order 42?' },
+        ],
+      },
+      groundTruth: null,
+      results: {
+        [BASELINE_ID]: {
+          scores: { similarity: 1 },
+          output: {
+            replay: { mode: 'conversation', sourceThreadId: 'golden', turnCount: 3 },
+            turns: [
+              { turnIndex: 0, input: 'Remember my name is Ada.', output: { text: 'I will remember your name, Ada.' } },
+              { turnIndex: 1, input: 'What is my name?', output: { text: 'Your name is Ada.' } },
+              { turnIndex: 2, input: 'Can you check order 42?', output: { text: 'Order 42 is ready.' } },
+            ],
+          },
+        },
+        [CONTENDER_ID]: {
+          scores: { similarity: 0 },
+          output: {
+            replay: { mode: 'conversation', sourceThreadId: 'golden', turnCount: 3 },
+            turns: [
+              { turnIndex: 0, input: 'Remember my name is Ada.', output: { text: 'I will remember your name, Ada.' } },
+              {
+                turnIndex: 1,
+                input: 'What is my name?',
+                output: { text: 'Your name is Grace.' },
+                error: { message: 'Provider disconnected' },
+              },
+            ],
+            error: { message: 'Provider disconnected' },
+          },
+        },
+      },
+    },
+  ],
 };

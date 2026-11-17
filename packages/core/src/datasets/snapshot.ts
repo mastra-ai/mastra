@@ -101,12 +101,14 @@ const payloadSchema = z.strictObject({
     .nullable()
     .optional(),
   unmockedToolPolicy: z.enum(['allow', 'deny']).nullable().optional(),
+  toolMockMatchMode: z.enum(['ordered', 'lookup']).nullable().optional(),
+  memorySeed: z.object({ workingMemory: z.string().optional() }).nullable().optional(),
   scorerIds: z.array(referenceSchema).nullable().optional(),
   requestContext: jsonObjectSchema.nullable().optional(),
   metadata: jsonObjectSchema.nullable().optional(),
   source: z
     .strictObject({
-      type: z.enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener']),
+      type: z.enum(['csv', 'json', 'thread', 'trace', 'llm', 'experiment-result', 'candidate-screener']),
       referenceId: z.string().optional(),
     })
     .nullable()

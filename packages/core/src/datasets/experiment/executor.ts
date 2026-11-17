@@ -6,16 +6,18 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { VersionOverrides } from '../../mastra/types';
+import { isWorkingMemoryToolName } from '../../memory/working-memory-utils';
 import { EntityType, getOrCreateSpan, resolveObservabilityContext, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import { loadStepResults } from '../../workflows/run-journal';
+import { conversationItemSchema, isConversationInput } from '../replay/conversation';
 import { agentModelLabel } from './agent-model';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
-import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
+import type { AgentExperimentOutput, ConversationTurnResult, ScorerExperimentOutput } from './types';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -29,6 +31,7 @@ interface AgentGenerateResult {
   sources?: Record<string, unknown>[];
   files?: Record<string, unknown>[];
   usage?: Record<string, unknown>;
+  totalUsage?: Record<string, unknown>;
   reasoningText?: string;
   traceId?: string;
   error?: Error;
@@ -45,6 +48,8 @@ export type Target = Agent | Workflow | MastraScorer<any, any, any, any>;
  * Result from executing a target against a dataset item.
  */
 export interface ExecutionResult {
+  /** Transient scorer data for completed conversation turns; never stored as a separate entity. */
+  turns?: ExecutionResult[];
   /** Output from the target (null if failed) */
   output: unknown;
   /** Structured error if execution failed */
@@ -123,9 +128,14 @@ export async function executeTarget(
     id?: string;
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     metadata?: Record<string, unknown>;
     resumeSteps?: Record<string, unknown>;
     resumeData?: unknown;
+    memorySeed?: { workingMemory?: string };
+    toolMocks?: ItemToolMock[];
+    toolMockMatchMode?: 'ordered' | 'lookup';
+    unmockedToolPolicy?: UnmockedToolPolicy;
   },
   options?: {
     signal?: AbortSignal;
@@ -138,9 +148,39 @@ export async function executeTarget(
     toolMocks?: ItemToolMock[];
     /** Handling for agent tool calls not declared in `toolMocks`. */
     unmockedToolPolicy?: UnmockedToolPolicy;
+    toolMockMatchMode?: 'ordered' | 'lookup';
   },
 ): Promise<ExecutionResult> {
   let traceId: string | null = null;
+  const withReplayContext = (result: ExecutionResult): ExecutionResult => {
+    if (targetType === 'agent' && isConversationInput(item.input)) return result;
+    const replay = item.metadata?.replay;
+    if (
+      targetType !== 'agent' ||
+      !replay ||
+      typeof replay !== 'object' ||
+      !('sourceThreadId' in replay) ||
+      typeof replay.sourceThreadId !== 'string' ||
+      !('turnIndex' in replay) ||
+      typeof replay.turnIndex !== 'number' ||
+      !('turnCount' in replay) ||
+      typeof replay.turnCount !== 'number'
+    )
+      return result;
+    return {
+      ...result,
+      output: {
+        ...(result.output && typeof result.output === 'object' ? result.output : {}),
+        replay: {
+          sourceThreadId: replay.sourceThreadId,
+          turnIndex: replay.turnIndex,
+          turnCount: replay.turnCount,
+          expectedTrajectory: item.expectedTrajectory,
+          memorySeed: item.memorySeed,
+        },
+      },
+    };
+  };
 
   try {
     const signal = options?.signal;
@@ -166,6 +206,7 @@ export async function executeTarget(
             traceId = assignedTraceId;
           },
           options?.agentModel,
+          options?.toolMockMatchMode,
         );
         break;
       case 'workflow':
@@ -182,20 +223,20 @@ export async function executeTarget(
     }
 
     // Race execution against signal abort (ensures timeout works even if target ignores signal)
-    if (signal) {
-      return await raceWithSignal(executionPromise, signal);
+    if (signal && !(targetType === 'agent' && isConversationInput(item.input))) {
+      return withReplayContext(await raceWithSignal(executionPromise, signal));
     }
 
-    return await executionPromise;
+    return withReplayContext(await executionPromise);
   } catch (error) {
-    return {
+    return withReplayContext({
       output: null,
       error: {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
       traceId,
-    };
+    });
   }
 }
 
@@ -233,7 +274,17 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { id?: string; input: unknown; groundTruth?: unknown },
+  item: {
+    id?: string;
+    input: unknown;
+    groundTruth?: unknown;
+    memorySeed?: { workingMemory?: string };
+    metadata?: Record<string, unknown>;
+    expectedTrajectory?: unknown;
+    toolMocks?: ItemToolMock[];
+    toolMockMatchMode?: 'ordered' | 'lookup';
+    unmockedToolPolicy?: UnmockedToolPolicy;
+  },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
@@ -242,16 +293,35 @@ async function executeAgent(
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
   agentModel?: MastraModelConfig,
+  toolMockMatchMode?: 'ordered' | 'lookup',
 ): Promise<ExecutionResult> {
+  const conversation = isConversationInput(item.input) ? conversationItemSchema.parse(item).input : undefined;
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
   // generateLegacy() has no per-call model, so an override always runs through generate().
-  const useLegacy = !agentModel && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
+  const configuredModel = agentModel ? undefined : await agent.getModel({ requestContext: reqCtx });
+  const useLegacy = configuredModel !== undefined && !isSupportedLanguageModel(configuredModel);
+  // Leave the default model to normal version resolution. Only explicit model
+  // overrides take precedence over a stored agent version on every turn.
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
-  const input = item.input as MessageListInput;
+  const hasSeed = item.memorySeed?.workingMemory !== undefined;
+  const isReplay = !!conversation || hasSeed || toolMockMatchMode === 'lookup';
+  // Message ingestion assigns IDs and thread IDs in place. Keep the stored
+  // recording reusable across runs and concurrent repetitions.
+  const input = (isReplay ? structuredClone(item.input) : item.input) as MessageListInput;
+  // A caller-owned resource is just as dangerous as a caller-owned thread:
+  // resource-scoped memory tools would otherwise overwrite production memory.
+  if (
+    isReplay &&
+    (requestContext?.[MASTRA_THREAD_ID_KEY] !== undefined || requestContext?.[MASTRA_RESOURCE_ID_KEY] !== undefined)
+  ) {
+    throw new Error(
+      'Replay memory requires an isolated experiment thread and resource. Remove explicit thread and resource IDs from requestContext.',
+    );
+  }
 
   // Memory-enabled experiment runs need a thread even when the caller provides no
   // memory identifiers. Use the caller's resource when present; otherwise isolate
@@ -294,112 +364,311 @@ async function executeAgent(
       }
     : undefined;
 
-  // Build a fresh matcher per item run so ordered consumption is deterministic and
-  // not leaked across retries. Compose with the agent's configured hooks.
-  const matcher = new ToolMockMatcher(toolMocks, unmockedToolPolicy);
-  const shouldInterceptTools = matcher.hasMocks || matcher.unmockedToolPolicy === 'deny';
+  const memory = isReplay ? await agent.getMemory({ requestContext: reqCtx }) : undefined;
+  if (conversation && (!memory || !memoryOption)) {
+    throw new Error('Conversation replay requires an agent with configured memory.');
+  }
+  if (hasSeed && !memory) {
+    console.warn('Ignoring experiment memorySeed because the agent has no memory.');
+  }
+  if (hasSeed && memory && memoryOption) {
+    const { thread, resource } = memoryOption.memory;
+    await memory.createThread({ threadId: thread.id, resourceId: resource, metadata: thread.metadata });
+    await memory.updateWorkingMemory({
+      threadId: thread.id,
+      resourceId: resource,
+      workingMemory: item.memorySeed!.workingMemory!,
+    });
+  }
 
-  // When tool calls are intercepted, abort the whole run the instant a tool is
-  // mis-called so the model cannot go on to invoke later (possibly side-effecting,
-  // unmocked) tools live. The mock-abort signal is combined with the outer signal.
-  const mockAbort = shouldInterceptTools ? new AbortController() : undefined;
-  const mockHooks = shouldInterceptTools ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
-  const generateSignal =
-    mockAbort && signal ? AbortSignal.any([signal, mockAbort.signal]) : (mockAbort?.signal ?? signal);
+  const executeTurn = async (turnInput: MessageListInput, turnMocks?: ItemToolMock[]): Promise<ExecutionResult> => {
+    // Build a fresh matcher per item run so ordered consumption is deterministic and
+    // not leaked across retries. Compose with the agent's configured hooks.
+    const matcher = new ToolMockMatcher(
+      turnMocks,
+      conversation ? 'deny' : unmockedToolPolicy,
+      conversation ? 'lookup' : toolMockMatchMode,
+    );
+    const shouldInterceptTools =
+      matcher.hasMocks || matcher.unmockedToolPolicy === 'deny' || toolMockMatchMode === 'lookup';
 
-  // Force sequential tool execution when mocks exist so the provider's tool-call
-  // order equals the execution (and consumption) order — deterministic ordered
-  // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
-  const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
+    // When tool calls are intercepted, abort the whole run the instant a tool is
+    // mis-called so the model cannot go on to invoke later (possibly side-effecting,
+    // unmocked) tools live. The mock-abort signal is combined with the outer signal.
+    const mockAbort = shouldInterceptTools ? new AbortController() : undefined;
+    const mockHooks = shouldInterceptTools
+      ? buildToolMockHooks(agent, matcher, mockAbort!, isReplay && !!memoryOption)
+      : undefined;
+    const generateSignal =
+      mockAbort && signal ? AbortSignal.any([signal, mockAbort.signal]) : (mockAbort?.signal ?? signal);
 
-  const assignedTraceId = globalThis.crypto.randomUUID().replaceAll('-', '');
-  onTraceIdAssigned?.(assignedTraceId);
-  const tracingOptions = {
-    traceId: assignedTraceId,
-    ...(experimentId || agentModel
+    // Force sequential tool execution when mocks exist so the provider's tool-call
+    // order equals the execution (and consumption) order — deterministic ordered
+    // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
+    const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
+
+    const assignedTraceId = globalThis.crypto.randomUUID().replaceAll('-', '');
+    onTraceIdAssigned?.(assignedTraceId);
+    const tracingOptions = {
+      traceId: assignedTraceId,
+      ...(experimentId || agentModel
+        ? {
+            metadata: {
+              ...(experimentId ? { experimentId } : {}),
+              ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    let rawResult: unknown;
+    try {
+      const generation: Promise<unknown> = !useLegacy
+        ? agent.generate(turnInput, {
+            scorers: {},
+            returnScorerData: true,
+            abortSignal: generateSignal,
+            ...memoryOption,
+            ...(reqCtx ? { requestContext: reqCtx } : {}),
+            tracingOptions,
+            ...(versions ? { versions } : {}),
+            ...(agentModel ? { model: agentModel } : {}),
+            ...(mockHooks ? { hooks: mockHooks } : {}),
+            ...(mockConcurrency ?? {}),
+          })
+        : agent.generateLegacy(turnInput, {
+            scorers: {},
+            returnScorerData: true,
+            abortSignal: generateSignal,
+            ...memoryOption,
+            ...(reqCtx ? { requestContext: reqCtx } : {}),
+            tracingOptions,
+            ...(mockHooks ? { hooks: mockHooks } : {}),
+            ...(mockConcurrency ?? {}),
+          });
+      rawResult = signal ? await raceWithSignal(generation, signal) : await generation;
+    } catch (error) {
+      // A mock failure aborts the run mid-flight: surface the deterministic coded
+      // error instead of the raw abort. Any other error rethrows unchanged.
+      const mockReport = shouldInterceptTools ? matcher.report() : undefined;
+      if (mockReport?.failure) {
+        return toolMockFailureResult(mockReport, assignedTraceId);
+      }
+      if (!conversation) throw error;
+      return {
+        output: null,
+        error: { message: error instanceof Error ? error.message : String(error) },
+        traceId: assignedTraceId,
+        toolMockReport: mockReport,
+      };
+    }
+
+    // Narrow to the common fields we need — both v1 and v2 results share these
+    const result = rawResult as AgentGenerateResult;
+
+    const traceId = result.traceId ?? null;
+    const scoringData = result.scoringData;
+
+    const toolMockReport = shouldInterceptTools ? matcher.report() : undefined;
+
+    // Fallback for the race where the model finishes a step before the abort
+    // propagates: the matcher still recorded the first failure, so fail the item
+    // deterministically with the coded error. The mis-called tool never ran live.
+    if (toolMockReport?.failure) {
+      return toolMockFailureResult(toolMockReport, traceId ?? assignedTraceId);
+    }
+
+    // Only persist fields relevant to experiment evaluation — drop provider metadata,
+    // duplicate messages, steps trace, and other debugging internals
+    const trimmedOutput: AgentExperimentOutput = {
+      text: result.text,
+      object: result.object,
+      toolCalls: result.toolCalls,
+      toolResults: result.toolResults,
+      sources: result.sources,
+      files: result.files,
+      usage: conversation ? (result.totalUsage ?? result.usage) : result.usage,
+      reasoningText: result.reasoningText,
+      traceId,
+      // Error instances serialize to {} — persist the readable parts explicitly
+      error: result.error ? { message: result.error.message, stack: result.error.stack } : null,
+      ...(memory && memoryOption
+        ? {
+            workingMemory: await memory.getWorkingMemory({
+              threadId: memoryOption.memory.thread.id,
+              resourceId: memoryOption.memory.resource,
+            }),
+          }
+        : {}),
+    };
+
+    return {
+      output: trimmedOutput,
+      error: conversation && result.error ? { message: result.error.message, stack: result.error.stack } : null,
+      traceId,
+      scorerInput: scoringData?.input,
+      scorerOutput: scoringData?.output,
+      ...(toolMockReport ? { toolMockReport } : {}),
+    };
+  };
+
+  if (!conversation) return executeTurn(input, toolMocks);
+
+  const startedAt = Date.now();
+  const turns: ConversationTurnResult[] = [];
+  const executions: ExecutionResult[] = [];
+  let error: ExecutionResult['error'] = null;
+  let lastOutput: AgentExperimentOutput = {};
+  let lastTraceId: string | null = null;
+  const report: ToolMockReport = { matchMode: 'lookup', served: [], unconsumed: [], misses: [], liveCalls: [] };
+  let mockOffset = 0;
+  let callOffset = 0;
+  for (const [turnIndex, turn] of conversation.turns.entries()) {
+    if (signal?.aborted) {
+      error = { message: String(signal.reason ?? 'Conversation replay aborted') };
+      break;
+    }
+    const turnStartedAt = Date.now();
+    let workingMemoryBefore: string | null | undefined;
+    let execution: ExecutionResult;
+    try {
+      workingMemoryBefore = await memory!.getWorkingMemory({
+        threadId: memoryOption!.memory.thread.id,
+        resourceId: memoryOption!.memory.resource,
+      });
+      // Only the recorded user input enters the agent. Normal memory processors
+      // recall and persist candidate history on the attempt's shared thread.
+      signal?.throwIfAborted();
+      execution = await executeTurn(
+        turn.input.map(message => ({
+          ...structuredClone(message),
+          id: globalThis.crypto.randomUUID(),
+          createdAt: new Date(),
+        })),
+        turn.toolMocks,
+      );
+    } catch (cause) {
+      execution = {
+        output: null,
+        traceId: null,
+        error: {
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      };
+    }
+    executions.push(execution);
+    const output = execution.output as AgentExperimentOutput | null;
+    turns.push({
+      ...conversationTurnProvenance(item.metadata, turnIndex),
+      turnIndex,
+      input: turn.input,
+      groundTruth: turn.groundTruth,
+      expectedTrajectory: turn.expectedTrajectory,
+      workingMemoryBefore,
+      output,
+      scores: [],
+      error: execution.error,
+      traceId: execution.traceId,
+      toolMockReport: execution.toolMockReport,
+      durationMs: Date.now() - turnStartedAt,
+    });
+    if (output && !execution.error) lastOutput = output;
+    lastTraceId = execution.traceId;
+    if (execution.toolMockReport) {
+      const receipt = execution.toolMockReport;
+      report.served.push(
+        ...receipt.served.map(entry => ({
+          ...entry,
+          mockIndex: entry.mockIndex + mockOffset,
+          ...(entry.callIndex !== undefined ? { callIndex: entry.callIndex + callOffset } : {}),
+        })),
+      );
+      report.unconsumed.push(
+        ...receipt.unconsumed.map(entry => ({ ...entry, mockIndex: entry.mockIndex + mockOffset })),
+      );
+      report.misses!.push(...(receipt.misses ?? []));
+      report.liveCalls.push(...receipt.liveCalls);
+      callOffset += receipt.served.length + (receipt.misses?.length ?? 0) + receipt.liveCalls.length;
+    }
+    mockOffset += turn.toolMocks?.length ?? 0;
+    if (execution.error || signal?.aborted) {
+      error = execution.error ?? { message: String(signal?.reason ?? 'Conversation replay aborted') };
+      break;
+    }
+  }
+  // A failed turn may still have updated working memory before failing.
+  try {
+    lastOutput = {
+      ...lastOutput,
+      workingMemory: await memory!.getWorkingMemory({
+        threadId: memoryOption!.memory.thread.id,
+        resourceId: memoryOption!.memory.resource,
+      }),
+    };
+  } catch (cause) {
+    error ??= { message: cause instanceof Error ? cause.message : String(cause) };
+  }
+  const replay = item.metadata?.replay;
+  const sourceThreadId =
+    replay && typeof replay === 'object' && 'sourceThreadId' in replay && typeof replay.sourceThreadId === 'string'
+      ? replay.sourceThreadId
+      : undefined;
+  return {
+    output: {
+      ...lastOutput,
+      turns,
+      usage: sumConversationUsage(turns.map(turn => turn.output?.usage)),
+      durationMs: Date.now() - startedAt,
+      replay: {
+        mode: 'conversation',
+        sourceThreadId,
+        turnCount: conversation.turns.length,
+        memorySeed: item.memorySeed,
+      },
+      error,
+    } satisfies AgentExperimentOutput,
+    error,
+    traceId: lastTraceId,
+    turns: executions,
+    toolMockReport: report,
+  };
+}
+
+function conversationTurnProvenance(metadata: Record<string, unknown> | undefined, index: number) {
+  const replay = metadata?.replay;
+  if (!replay || typeof replay !== 'object' || !('turns' in replay) || !Array.isArray(replay.turns)) return {};
+  const turn: unknown = replay.turns[index];
+  if (!turn || typeof turn !== 'object') return {};
+  return {
+    ...('sourceMessageId' in turn && typeof turn.sourceMessageId === 'string'
+      ? { sourceMessageId: turn.sourceMessageId }
+      : {}),
+    ...('unresolvedToolCalls' in turn && Array.isArray(turn.unresolvedToolCalls)
       ? {
-          metadata: {
-            ...(experimentId ? { experimentId } : {}),
-            ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
-          },
+          unresolvedToolCalls: turn.unresolvedToolCalls.filter((value): value is string => typeof value === 'string'),
         }
       : {}),
   };
+}
 
-  let rawResult: unknown;
-  try {
-    rawResult = !useLegacy
-      ? await agent.generate(input, {
-          scorers: {},
-          returnScorerData: true,
-          abortSignal: generateSignal,
-          ...memoryOption,
-          ...(reqCtx ? { requestContext: reqCtx } : {}),
-          tracingOptions,
-          ...(versions ? { versions } : {}),
-          ...(agentModel ? { model: agentModel } : {}),
-          ...(mockHooks ? { hooks: mockHooks } : {}),
-          ...(mockConcurrency ?? {}),
-        })
-      : await agent.generateLegacy(input, {
-          scorers: {},
-          returnScorerData: true,
-          abortSignal: generateSignal,
-          ...memoryOption,
-          ...(reqCtx ? { requestContext: reqCtx } : {}),
-          tracingOptions,
-          ...(mockHooks ? { hooks: mockHooks } : {}),
-          ...(mockConcurrency ?? {}),
-        });
-  } catch (error) {
-    // A mock failure aborts the run mid-flight: surface the deterministic coded
-    // error instead of the raw abort. Any other error rethrows unchanged.
-    const mockReport = shouldInterceptTools ? matcher.report() : undefined;
-    if (mockReport?.failure) {
-      return toolMockFailureResult(mockReport, assignedTraceId);
+/** A missing metric stays unavailable, rather than silently undercounting the conversation. */
+function sumConversationUsage(usages: (Record<string, unknown> | undefined)[]): Record<string, unknown> | undefined {
+  if (!usages.length || usages.some(usage => !usage)) return undefined;
+  const total: Record<string, unknown> = {};
+  for (const key of Object.keys(usages[0]!)) {
+    const values = usages.map(usage => usage![key]);
+    if (values.every((value): value is number => typeof value === 'number' && Number.isFinite(value))) {
+      total[key] = values.reduce((sum, value) => sum + value, 0);
+    } else if (
+      values.every(
+        (value): value is Record<string, unknown> =>
+          typeof value === 'object' && value !== null && !Array.isArray(value),
+      )
+    ) {
+      total[key] = sumConversationUsage(values);
     }
-    throw error;
   }
-
-  // Narrow to the common fields we need — both v1 and v2 results share these
-  const result = rawResult as AgentGenerateResult;
-
-  const traceId = result.traceId ?? null;
-  const scoringData = result.scoringData;
-
-  const toolMockReport = shouldInterceptTools ? matcher.report() : undefined;
-
-  // Fallback for the race where the model finishes a step before the abort
-  // propagates: the matcher still recorded the first failure, so fail the item
-  // deterministically with the coded error. The mis-called tool never ran live.
-  if (toolMockReport?.failure) {
-    return toolMockFailureResult(toolMockReport, traceId ?? assignedTraceId);
-  }
-
-  // Only persist fields relevant to experiment evaluation — drop provider metadata,
-  // duplicate messages, steps trace, and other debugging internals
-  const trimmedOutput: AgentExperimentOutput = {
-    text: result.text,
-    object: result.object,
-    toolCalls: result.toolCalls,
-    toolResults: result.toolResults,
-    sources: result.sources,
-    files: result.files,
-    usage: result.usage,
-    reasoningText: result.reasoningText,
-    traceId,
-    // Error instances serialize to {} — persist the readable parts explicitly
-    error: result.error ? { message: result.error.message, stack: result.error.stack } : null,
-  };
-
-  return {
-    output: trimmedOutput,
-    error: null,
-    traceId,
-    scorerInput: scoringData?.input,
-    scorerOutput: scoringData?.output,
-    ...(toolMockReport ? { toolMockReport } : {}),
-  };
+  return Object.keys(total).length ? total : undefined;
 }
 
 /** Build the deterministic, non-retryable failure result for a mis-called mock. */
@@ -437,7 +706,12 @@ function toolMockFailureResult(report: ToolMockReport, traceId: string | null): 
  * the caller forces `toolCallConcurrency: 1` when mocks exist, so tool calls arrive
  * (and consume) in the provider's call order — no mutex needed.
  */
-function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: AbortController): ToolHooks {
+function buildToolMockHooks(
+  agent: Agent,
+  matcher: ToolMockMatcher,
+  mockAbort: AbortController,
+  liveMemoryTools = false,
+): ToolHooks {
   const userHooks = agent.getConfiguredToolHooks();
 
   return {
@@ -449,7 +723,13 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
       }
 
       // 2. Mock matcher.
+      if (liveMemoryTools && isWorkingMemoryToolName(context.toolName)) return undefined;
       const resolution = matcher.resolve(context.toolName, context.input);
+      if (resolution.kind === 'miss') {
+        recordMockedToolCallSpan(context, resolution.output, false);
+        await userHooks?.afterToolCall?.({ ...context, output: resolution.output });
+        return { proceed: false, output: resolution.output };
+      }
       if (resolution.kind === 'serve') {
         recordMockedToolCallSpan(context, resolution.output, true);
         await userHooks?.afterToolCall?.({ ...context, output: resolution.output });

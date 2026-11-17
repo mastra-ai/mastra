@@ -47,7 +47,9 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     groundTruth: row.groundTruth,
     expectedTrajectory: row.expectedTrajectory,
     toolMocks: row.toolMocks,
+    memorySeed: row.memorySeed ?? undefined,
     unmockedToolPolicy: row.unmockedToolPolicy,
+    toolMockMatchMode: row.toolMockMatchMode ?? undefined,
     scorerIds: row.scorerIds,
     requestContext: row.requestContext,
     metadata: row.metadata,
@@ -267,7 +269,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       groundTruth: args.groundTruth,
       expectedTrajectory: args.expectedTrajectory,
       toolMocks: args.toolMocks,
+      memorySeed: args.memorySeed,
       unmockedToolPolicy: args.unmockedToolPolicy,
+      toolMockMatchMode: args.toolMockMatchMode,
       scorerIds: args.scorerIds,
       requestContext: args.requestContext,
       metadata: args.metadata,
@@ -330,8 +334,10 @@ export class DatasetsInMemory extends DatasetsStorage {
       expectedTrajectory:
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : currentRow.expectedTrajectory,
       toolMocks: args.toolMocks !== undefined ? args.toolMocks : currentRow.toolMocks,
+      memorySeed: args.memorySeed !== undefined ? args.memorySeed : currentRow.memorySeed,
       unmockedToolPolicy:
         args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : currentRow.unmockedToolPolicy,
+      toolMockMatchMode: args.toolMockMatchMode !== undefined ? args.toolMockMatchMode : currentRow.toolMockMatchMode,
       scorerIds: args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : currentRow.scorerIds,
       requestContext: args.requestContext !== undefined ? args.requestContext : currentRow.requestContext,
       metadata: args.metadata !== undefined ? args.metadata : currentRow.metadata,
@@ -395,7 +401,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       groundTruth: currentRow.groundTruth,
       expectedTrajectory: currentRow.expectedTrajectory,
       toolMocks: currentRow.toolMocks,
+      memorySeed: currentRow.memorySeed,
       unmockedToolPolicy: currentRow.unmockedToolPolicy,
+      toolMockMatchMode: currentRow.toolMockMatchMode,
       scorerIds: currentRow.scorerIds,
       requestContext: currentRow.requestContext,
       metadata: currentRow.metadata,
@@ -418,6 +426,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       row.groundTruth = null;
       row.expectedTrajectory = null;
       row.toolMocks = null;
+      row.memorySeed = null;
+      row.toolMockMatchMode = null;
       row.unmockedToolPolicy = null;
       row.scorerIds = null;
       row.requestContext = null;
@@ -706,7 +716,9 @@ export class DatasetsInMemory extends DatasetsStorage {
         groundTruth: item.groundTruth,
         expectedTrajectory: item.expectedTrajectory,
         toolMocks: item.toolMocks,
+        memorySeed: item.memorySeed,
         unmockedToolPolicy: item.unmockedToolPolicy,
+        toolMockMatchMode: item.toolMockMatchMode,
         scorerIds: item.scorerIds,
         requestContext: item.requestContext,
         metadata: item.metadata,
@@ -766,7 +778,9 @@ export class DatasetsInMemory extends DatasetsStorage {
         groundTruth: currentRow.groundTruth,
         expectedTrajectory: currentRow.expectedTrajectory,
         toolMocks: currentRow.toolMocks,
+        memorySeed: currentRow.memorySeed,
         unmockedToolPolicy: currentRow.unmockedToolPolicy,
+        toolMockMatchMode: currentRow.toolMockMatchMode,
         scorerIds: currentRow.scorerIds,
         requestContext: currentRow.requestContext,
         metadata: currentRow.metadata,

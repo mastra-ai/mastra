@@ -214,6 +214,8 @@ export class DatasetsMySQL extends DatasetsStorage {
         'expectedTrajectory',
         'toolMocks',
         'unmockedToolPolicy',
+        'toolMockMatchMode',
+        'memorySeed',
         'scorerIds',
         'externalId',
       ],
@@ -277,7 +279,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
       expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
       toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
+      memorySeed: parseOptionalJSON<DatasetItem['memorySeed']>(row.memorySeed, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      toolMockMatchMode: row.toolMockMatchMode ?? emptyValue,
       scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
       requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
       metadata,
@@ -303,7 +307,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
       expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
       toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
+      memorySeed: parseOptionalJSON<DatasetItem['memorySeed']>(row.memorySeed, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      toolMockMatchMode: row.toolMockMatchMode ?? emptyValue,
       scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
       requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
       metadata,
@@ -693,7 +699,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert item (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`unmockedToolPolicy\`,\`scorerIds\`,\`metadata\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,NULL,0,?,?,?,?,?,?,?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`unmockedToolPolicy\`,\`toolMockMatchMode\`,\`memorySeed\`,\`scorerIds\`,\`metadata\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           args.datasetId,
@@ -703,6 +709,8 @@ export class DatasetsMySQL extends DatasetsStorage {
           jsonDataArg(args.input),
           jsonDataArg(args.groundTruth),
           args.unmockedToolPolicy ?? null,
+          args.toolMockMatchMode ?? null,
+          jsonArg(args.memorySeed),
           jsonArg(args.scorerIds),
           jsonArg(args.metadata),
           transformToSqlValue(now),
@@ -727,6 +735,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         input: args.input,
         groundTruth: args.groundTruth,
         unmockedToolPolicy: args.unmockedToolPolicy,
+        toolMockMatchMode: args.toolMockMatchMode,
         scorerIds: args.scorerIds,
         metadata: args.metadata,
         createdAt: now,
@@ -798,7 +807,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
+      // `null` clears these; only an omitted (undefined) value keeps the stored one.
+      const mergedMemorySeed = args.memorySeed !== undefined ? args.memorySeed : existing.memorySeed;
       const mergedUnmockedToolPolicy = args.unmockedToolPolicy ?? existing.unmockedToolPolicy;
+      const mergedToolMockMatchMode =
+        args.toolMockMatchMode !== undefined ? args.toolMockMatchMode : existing.toolMockMatchMode;
       const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
       const mergedRequestContext = args.requestContext ?? existing.requestContext;
       const mergedMetadata = args.metadata ?? existing.metadata;
@@ -826,7 +839,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert new row (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`toolMockMatchMode\`,\`memorySeed\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           args.id,
           args.datasetId,
@@ -839,6 +852,8 @@ export class DatasetsMySQL extends DatasetsStorage {
           jsonDataArg(mergedExpectedTrajectory),
           jsonArg(mergedToolMocks),
           mergedUnmockedToolPolicy ?? null,
+          mergedToolMockMatchMode ?? null,
+          jsonArg(mergedMemorySeed),
           jsonArg(mergedScorerIds),
           jsonArg(mergedRequestContext),
           jsonArg(mergedMetadata),
@@ -865,7 +880,9 @@ export class DatasetsMySQL extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        memorySeed: mergedMemorySeed,
         unmockedToolPolicy: mergedUnmockedToolPolicy,
+        toolMockMatchMode: mergedToolMockMatchMode,
         scorerIds: mergedScorerIds,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
@@ -941,7 +958,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert tombstone (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,1,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`toolMockMatchMode\`,\`memorySeed\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,1,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id,
           datasetId,
@@ -954,6 +971,8 @@ export class DatasetsMySQL extends DatasetsStorage {
           jsonDataArg(existing.expectedTrajectory),
           jsonArg(existing.toolMocks),
           existing.unmockedToolPolicy ?? null,
+          existing.toolMockMatchMode ?? null,
+          jsonArg(existing.memorySeed),
           jsonArg(existing.scorerIds),
           jsonArg(existing.requestContext),
           jsonArg(existing.metadata),
@@ -1008,7 +1027,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const purgedAt = new Date().toISOString();
       const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
       await connection.execute(
-        `UPDATE ${itemsTable} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('expectedTrajectory', 'column name')} = NULL, ${quoteIdentifier('toolMocks', 'column name')} = NULL, ${quoteIdentifier('unmockedToolPolicy', 'column name')} = NULL, ${quoteIdentifier('scorerIds', 'column name')} = NULL, ${quoteIdentifier('requestContext', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('source', 'column name')} = NULL WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        `UPDATE ${itemsTable} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('expectedTrajectory', 'column name')} = NULL, ${quoteIdentifier('toolMocks', 'column name')} = NULL, ${quoteIdentifier('unmockedToolPolicy', 'column name')} = NULL, ${quoteIdentifier('toolMockMatchMode', 'column name')} = NULL, ${quoteIdentifier('memorySeed', 'column name')} = NULL, ${quoteIdentifier('scorerIds', 'column name')} = NULL, ${quoteIdentifier('requestContext', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('source', 'column name')} = NULL WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
         ['null', purgedMetadata, id, datasetId],
       );
 
@@ -1336,7 +1355,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const inserted = new Map<string, DatasetItem>();
       for (const { id, item } of plan.inserts) {
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`toolMockMatchMode\`,\`memorySeed\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             id,
             input.datasetId,
@@ -1349,6 +1368,8 @@ export class DatasetsMySQL extends DatasetsStorage {
             jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
+            item.toolMockMatchMode ?? null,
+            jsonArg(item.memorySeed),
             jsonArg(item.scorerIds),
             jsonArg(item.requestContext),
             jsonArg(item.metadata),
@@ -1453,7 +1474,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
         // Insert tombstone (tenancy inherited from parent dataset)
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,1,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`,\`datasetId\`,\`datasetVersion\`,\`externalId\`,\`organizationId\`,\`projectId\`,\`validTo\`,\`isDeleted\`,\`input\`,\`groundTruth\`,\`expectedTrajectory\`,\`toolMocks\`,\`unmockedToolPolicy\`,\`toolMockMatchMode\`,\`memorySeed\`,\`scorerIds\`,\`requestContext\`,\`metadata\`,\`source\`,\`createdAt\`,\`updatedAt\`) VALUES (?,?,?,?,?,?,NULL,1,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             item.id,
             input.datasetId,
@@ -1466,6 +1487,8 @@ export class DatasetsMySQL extends DatasetsStorage {
             jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
+            item.toolMockMatchMode ?? null,
+            jsonArg(item.memorySeed),
             jsonArg(item.scorerIds),
             jsonArg(item.requestContext),
             jsonArg(item.metadata),

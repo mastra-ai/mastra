@@ -26,6 +26,8 @@ import { useTraceFeedback } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
+import { savedConversation } from '../utils/conversation-playback';
+import { replayContext, replayUsage } from '../utils/replay';
 import {
   getMissingTextNotice,
   getResultErrorMessage,
@@ -38,7 +40,9 @@ import type { ComparisonMetric } from './comparison/comparison-metric-list';
 import { ComparisonPayload } from './comparison/comparison-payload';
 import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
 import { itemMetrics } from './comparison/item-metrics';
+import { ExperimentConversation } from './experiment-conversation';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
+import { ReplayResult } from './replay-result';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
@@ -72,7 +76,7 @@ export type ExperimentResultPanelProps = {
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;
-  onShowTrace?: () => void;
+  onShowTrace?: (traceId?: string) => void;
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
   onFlagForReview?: (resultId: string) => void;
@@ -108,7 +112,7 @@ export function ExperimentResultPanel({
 }: ExperimentResultPanelProps) {
   const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Experiment result ${result?.id ?? ''}`);
   const content = result ? (
-    <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+    <ExperimentResultPanelBody key={result.id} result={result} onClose={onClose} {...bodyProps} />
   ) : itemId ? (
     <>
       <DataPanel.Header>
@@ -134,7 +138,13 @@ export function ExperimentResultPanel({
   }
 
   return (
-    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1}>
+    <DataPanel
+      open={!!(result ?? itemId)}
+      onClose={onClose}
+      title={dialogTitle}
+      depth={1}
+      size={replayContext(result?.output) ? 'full' : 'md'}
+    >
       {content}
     </DataPanel>
   );
@@ -177,7 +187,12 @@ function ExperimentResultPanelBody({
     traceId: feedbackTraceId,
     queryOptions: { enabled: !!feedbackTraceId },
   });
-  const { usage, isLoading: isUsageLoading } = useExperimentResultUsage(result.traceId);
+  const conversation = savedConversation(result.output);
+  const isConversation = replayContext(result.output)?.mode === 'conversation';
+  const { usage: traceUsage, isLoading: isUsageLoading } = useExperimentResultUsage(
+    isConversation ? undefined : result.traceId,
+  );
+  const usage = isConversation ? replayUsage(result.output) : traceUsage;
   // Only agent runs report usage: reserve its rows while loading so the panel doesn't shift once it lands.
   const isUsagePending = isUsageLoading && (result.targetType == null || result.targetType === 'agent');
   const usageMetrics = itemMetrics({
@@ -271,45 +286,53 @@ function ExperimentResultPanelBody({
     <DataPanel.Content>
       <div className={sectionStackClass}>
         <ComparisonMetricList metrics={metrics} />
-
-        <ComparisonSection title="Input" framed actions={<CopyButton content={inputStr} />}>
-          <ComparisonPayload value={result.input} />
-        </ComparisonSection>
-
-        {result.groundTruth != null && (
-          <ComparisonSection
-            title="Ground Truth"
-            framed
-            actions={<CopyButton content={formatValue(result.groundTruth)} />}
-          >
-            <ComparisonPayload value={result.groundTruth} />
-          </ComparisonSection>
-        )}
-
-        {errorMessage ? (
-          <ComparisonSection title="Error" tone="negative" framed actions={<CopyButton content={errorMessage} />}>
-            <Txt tone="muted" className="p-3 break-words">
-              {errorMessage}
-            </Txt>
-          </ComparisonSection>
+        {replayContext(result.output) ? (
+          <ReplayResult result={result} onShowTrace={onShowTrace} />
         ) : (
-          <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
-            {missingTextNotice ? (
-              <Txt tone="muted" className="p-3 break-words">
-                {missingTextNotice}
-              </Txt>
-            ) : (
-              <ComparisonPayload value={outputText ?? result.output} />
+          <>
+            <ComparisonSection title="Input" framed actions={<CopyButton content={inputStr} />}>
+              <ComparisonPayload value={result.input} />
+            </ComparisonSection>
+
+            {result.groundTruth != null && (
+              <ComparisonSection
+                title="Ground Truth"
+                framed
+                actions={<CopyButton content={formatValue(result.groundTruth)} />}
+              >
+                <ComparisonPayload value={result.groundTruth} />
+              </ComparisonSection>
             )}
+
+            {errorMessage ? (
+              <ComparisonSection title="Error" tone="negative" framed actions={<CopyButton content={errorMessage} />}>
+                <Txt tone="muted" className="p-3 break-words">
+                  {errorMessage}
+                </Txt>
+              </ComparisonSection>
+            ) : (
+              <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
+                {missingTextNotice ? (
+                  <Txt tone="muted" className="p-3 break-words">
+                    {missingTextNotice}
+                  </Txt>
+                ) : (
+                  <ComparisonPayload value={outputText ?? result.output} />
+                )}
+              </ComparisonSection>
+            )}
+          </>
+        )}
+        {replayContext(result.output) && errorMessage && (
+          <ComparisonSection title="Error" tone="negative" framed>
+            <Txt>{errorMessage}</Txt>
           </ComparisonSection>
         )}
-
-        {toolCalls.length > 0 && (
+        {!replayContext(result.output) && toolCalls.length > 0 && (
           <ComparisonSection title={`Tool calls (${toolCalls.length})`}>
             <SpanPayloadToolCalls toolCalls={toolCalls} />
           </ComparisonSection>
         )}
-
         {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
       </div>
     </DataPanel.Content>
@@ -341,7 +364,13 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => onShowTrace?.()}
+              tooltip="See trace"
+              aria-label="See trace"
+            >
               <TraceIcon />
             </Button>
           )}
@@ -355,22 +384,37 @@ function ExperimentResultPanelBody({
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
-      {feedbackTraceId ? (
-        <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+      {conversation || feedbackTraceId ? (
+        <Tabs<'conversation' | 'details' | 'feedback'>
+          defaultTab={conversation ? 'conversation' : 'details'}
+          className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+        >
           <DataPanel.Header>
             <TabList variant="pill-ghost" size="sm">
+              {conversation && <Tab value="conversation">Conversation</Tab>}
               <Tab value="details">Details</Tab>
-              <Tab value="feedback">
-                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
-              </Tab>
+              {feedbackTraceId && (
+                <Tab value="feedback">
+                  Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
+                </Tab>
+              )}
             </TabList>
           </DataPanel.Header>
+          {conversation && (
+            <TabContent value="conversation" flush>
+              <DataPanel.Content>
+                <ExperimentConversation conversation={conversation} input={result.input} onShowTrace={onShowTrace} />
+              </DataPanel.Content>
+            </TabContent>
+          )}
           <TabContent value="details" flush>
             {details}
           </TabContent>
-          <TabContent value="feedback" flush>
-            <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
-          </TabContent>
+          {feedbackTraceId && feedbackTabSlot && (
+            <TabContent value="feedback" flush>
+              <DataPanel.Content>{feedbackTabSlot({ traceId: feedbackTraceId })}</DataPanel.Content>
+            </TabContent>
+          )}
         </Tabs>
       ) : (
         details
