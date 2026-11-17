@@ -123,6 +123,74 @@ describe('parseError', () => {
   describe('Mastra Gateway refusals', () => {
     const gatewayBaseUrl = 'https://gateway.example.test';
 
+    // The provider SDKs set `data` to the body as their own error schema parsed it, which keeps only
+    // the fields that schema declares, and `responseBody` to the raw text.
+    it('keeps the gateway code that a provider error schema dropped from the parsed data', () => {
+      const responseBody = JSON.stringify({
+        type: 'error',
+        error: {
+          type: 'gateway_error',
+          code: 'organization_budget_insufficient',
+          message: 'The budget cannot cover this request.',
+        },
+      });
+      const error = Object.assign(new Error('The budget cannot cover this request.'), {
+        statusCode: 402,
+        url: `${gatewayBaseUrl}/v1/messages`,
+        data: { type: 'error', error: { type: 'gateway_error', message: 'The budget cannot cover this request.' } },
+        responseBody,
+      });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBe('gateway');
+      expect(parsed.detail).toBe('The budget cannot cover this request. (organization_budget_insufficient)');
+    });
+
+    it('recognises a gateway refusal whose parsed data lost the gateway marker', () => {
+      const error = Object.assign(new Error('no_eligible_route'), {
+        statusCode: 403,
+        url: `${gatewayBaseUrl}/v1/chat/completions`,
+        data: { error: { message: 'no_eligible_route' } },
+        responseBody: JSON.stringify({
+          error: { type: 'gateway_error', code: 'no_eligible_route', message: 'no_eligible_route' },
+        }),
+      });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBe('gateway');
+      expect(parsed.detail).toBe('no_eligible_route');
+    });
+
+    it('reads the gateway marker from parsed data when no raw body is kept', () => {
+      const error = Object.assign(new Error('no_eligible_route'), {
+        statusCode: 403,
+        url: `${gatewayBaseUrl}/v1/chat/completions`,
+        data: { error: { type: 'gateway_error', code: 'no_eligible_route', message: 'no_eligible_route' } },
+      });
+
+      expect(parseError(error, { gatewayBaseUrl }).source).toBe('gateway');
+    });
+
+    it('keeps provider wording when both the parsed data and the raw body carry a provider type', () => {
+      const body = {
+        error: {
+          type: 'request_forbidden',
+          code: 'unsupported_country_region_territory',
+          message: 'Country not supported',
+        },
+      };
+      const error = Object.assign(new Error('Country not supported'), {
+        statusCode: 403,
+        url: `${gatewayBaseUrl}/v1/responses`,
+        data: body,
+        responseBody: JSON.stringify(body),
+      });
+
+      expect(parseError(error, { gatewayBaseUrl }).source).toBeUndefined();
+    });
+
     function gatewayError(status: number, code: string, message = code, url = `${gatewayBaseUrl}/v1/chat/completions`) {
       return Object.assign(new Error(message), {
         statusCode: status,

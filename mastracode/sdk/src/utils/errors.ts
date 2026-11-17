@@ -120,25 +120,30 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function parseJsonBody(text: unknown): unknown {
+  if (typeof text !== 'string') return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The code and message from a Mastra Gateway error body, `{ "error": { "type": "gateway_error", "code", "message" } }`.
  * The message may only repeat the code, so both are kept. Errors the gateway forwards from a provider
  * carry the provider's own `type`, so only `gateway_error` bodies count as the gateway's refusal.
+ * The raw response body is read before the provider's parsed `data`, because a provider's error schema
+ * can drop fields it does not declare, such as the code on the Anthropic messages shape.
  */
 function gatewayErrorOf(error: unknown): { code?: string; message?: string } | undefined {
   for (const candidate of [error, isRecord(error) ? error['cause'] : undefined]) {
     if (!isRecord(candidate)) continue;
-    let body = candidate['data'];
-    if (!isRecord(body) && typeof candidate['responseBody'] === 'string') {
-      try {
-        body = JSON.parse(candidate['responseBody']);
-      } catch {
-        body = undefined;
+    for (const body of [parseJsonBody(candidate['responseBody']), candidate['data']]) {
+      const inner = isRecord(body) ? body['error'] : undefined;
+      if (isRecord(inner) && inner['type'] === 'gateway_error') {
+        return { code: nonEmptyString(inner['code']), message: nonEmptyString(inner['message']) };
       }
-    }
-    const inner = isRecord(body) ? body['error'] : undefined;
-    if (isRecord(inner) && inner['type'] === 'gateway_error') {
-      return { code: nonEmptyString(inner['code']), message: nonEmptyString(inner['message']) };
     }
   }
   return undefined;
