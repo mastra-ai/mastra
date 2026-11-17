@@ -20,6 +20,8 @@ import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 import type {
   TraceRecord,
+  GetTracePageArgs,
+  TracePageResponse,
   GetTraceLightResponse,
   GetSpanResponse,
   ListTracesArgs,
@@ -231,6 +233,19 @@ export class Observability extends BaseResource {
    */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/observability/traces/${traceId}`);
+  }
+
+  /**
+   * Retrieves a bounded trace page from Platform. OSS servers do not serve this endpoint.
+   * Check `capabilities.tracePage` before calling.
+   */
+  getTracePage(request: GetTracePageArgs): Promise<TracePageResponse> {
+    const { traceId, ...body } = request;
+    return this.request(`/observability/traces/${encodeURIComponent(traceId)}/page`, {
+      method: 'POST',
+      body,
+      retries: this.readRetries(),
+    });
   }
 
   /**

@@ -45,6 +45,8 @@ import type {
 } from './resources/observability';
 import type {
   TraceRecord,
+  GetTracePageArgs,
+  TracePageResponse,
   GetTraceLightResponse,
   GetSpanResponse,
   ListTracesArgs,
@@ -1281,6 +1283,14 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /**
+   * Retrieves a bounded trace page from Platform. OSS servers do not serve this endpoint.
+   * Check `capabilities.tracePage` before calling.
+   */
+  getTracePage(request: GetTracePageArgs): Promise<TracePageResponse> {
+    return this.observability.getTracePage(request);
   }
 
   /** Retrieves a lightweight trace by ID (timeline fields only, excludes heavy fields). */
