@@ -9261,7 +9261,7 @@ describe('review status comment lifecycle', () => {
     });
 
     const body = comments()[0]!.body;
-    expect(body).toContain('`Agent run ended in error (the model provider rate-limited the run)`');
+    expect(body).toContain('`Agent run ended in error (the model provider rate-limited the run, HTTP 429)`');
     expect(body).not.toContain('org-secret-42');
     expect(body).not.toContain('sk-live');
     expect(body).not.toContain('internal-gateway');

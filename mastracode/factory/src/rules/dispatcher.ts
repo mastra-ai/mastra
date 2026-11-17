@@ -77,7 +77,12 @@ import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { withWorkItemDescription } from '../work-items/description-context.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
-import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import {
+  FactoryDispatchError,
+  factoryDispatchFailureCode,
+  factoryDispatchFailureMetadata,
+  FactoryRuleRejectedError,
+} from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
@@ -2175,7 +2180,7 @@ export class FactoryDecisionDispatcher {
       if (initial.status === 'rejected') {
         if (result.created)
           await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
-        throw new Error(`${initial.code}: ${initial.reason}`);
+        throw new FactoryRuleRejectedError(initial.code, initial.reason);
       }
       expectedRevision = initial.revision;
     }
@@ -2194,7 +2199,7 @@ export class FactoryDecisionDispatcher {
       cause: materializedByDecision ? 'linked_item_materialized' : 'linked_item_reconciled',
       causalChain,
     });
-    if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+    if (moved.status === 'rejected') throw new FactoryRuleRejectedError(moved.code, moved.reason);
   }
 
   /**
@@ -2559,7 +2564,7 @@ export class FactoryDecisionDispatcher {
       causalChain: nextChain,
       ...(decision.reenter ? { reenter: true } : {}),
     });
-    if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+    if (result.status === 'rejected') throw new FactoryRuleRejectedError(result.code, result.reason);
     const transitionMessage = decision.message;
     if (!transitionMessage) return;
     // The message may wake an idle session and hold it for a whole agent
@@ -2671,7 +2676,8 @@ export class FactoryDecisionDispatcher {
       eventRoute: { routeId: route.routeId },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
-    if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+    if (result.status === 'rejected' && result.code === 'stale')
+      throw new FactoryRuleRejectedError(result.code, result.reason);
     // Work the old board proposed for the card is not the new board's to run; what the move queued
     // for the new board stays, even once another worker has parked it as a proposal.
     if (result.status === 'accepted' && crossesBoards) {
