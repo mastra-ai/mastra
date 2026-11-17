@@ -24,9 +24,13 @@ interface LiveState {
   running?: readonly { threadId: string; resourceId?: string }[];
   parked?: ReadonlySet<string>;
   authEnabled?: boolean;
+  sessionOnThread?: ReadonlyMap<string, string>;
 }
 
-function buildApp(viewer: string, { running = [], parked = new Set(), authEnabled = true }: LiveState = {}) {
+function buildApp(
+  viewer: string,
+  { running = [], parked = new Set(), authEnabled = true, sessionOnThread = new Map() }: LiveState = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser' as never, { workosId: c.req.header('x-viewer') ?? viewer, organizationId: ORG } as never);
@@ -45,6 +49,7 @@ function buildApp(viewer: string, { running = [], parked = new Set(), authEnable
       liveSessions: {
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+        sessionOnThread: threadId => sessionOnThread.get(threadId),
       },
       projectSessions,
       activeRuns: () => running,
@@ -281,6 +286,19 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
 
     expect(rowOf(body, 'mine')?.status).toBe('idle');
     expect(rowOf(body, 'also-mine')?.status).toBe('working');
+  });
+
+  it("marks a person's session working while it runs on a thread it opened after its first", async () => {
+    await createSession('mine');
+
+    const body = await readRows(
+      buildApp('u1', {
+        running: [{ threadId: 'second-thread', resourceId: 'u1' }],
+        sessionOnThread: new Map([['second-thread', 'mine']]),
+      }),
+    );
+
+    expect(rowOf(body, 'mine')?.status).toBe('working');
   });
 
   it('marks a parked run and a card waiting on a proposal as waiting', async () => {

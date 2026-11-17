@@ -24,7 +24,7 @@ interface SessionRowRouteDependencies {
   resolveProject(context: unknown): Promise<ViewerScope | { response: Response }>;
   workItems: Pick<WorkItemsStorage, 'ensureReady' | 'listDeferredDecisionPage'>;
   boards: ProjectBoardSource;
-  liveSessions: Pick<LiveSessions, 'parked'>;
+  liveSessions: Pick<LiveSessions, 'parked' | 'sessionOnThread'>;
   sessionCards(scope: ProjectScope): Promise<readonly Card[]>;
   projectSessions: ProjectSessionsReader;
   activeRuns: () => readonly { threadId: string; resourceId?: string }[];
@@ -65,6 +65,7 @@ async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScop
         viewerUserId: scope.userId,
         factoryProjectId: scope.factoryProjectId,
         visibleSessionIds: seen,
+        sessionOnThread: threadId => deps.liveSessions.sessionOnThread(threadId),
       }),
       parkedSessionIds: new Set([
         ...sessionIdsWhere(cards, isParked),

@@ -425,7 +425,12 @@ describe('runningSessionIds', () => {
     { threadId: 'private', resourceId: 'user-2' },
     { threadId: 'loose' },
   ];
-  const reach = { viewerUserId: VIEWER, factoryProjectId: PROJECT, visibleSessionIds: new Set(['shared']) };
+  const reach = {
+    viewerUserId: VIEWER,
+    factoryProjectId: PROJECT,
+    visibleSessionIds: new Set(['shared']),
+    sessionOnThread: (threadId: string) => (threadId === 'private' ? 'their-session' : undefined),
+  };
 
   it("leaves out another person's run while auth is on", () => {
     expect([...runningSessionIds(runs, { ...reach, authEnabled: true })].toSorted()).toEqual(

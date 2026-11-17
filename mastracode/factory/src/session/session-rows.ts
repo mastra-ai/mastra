@@ -47,6 +47,7 @@ export interface RunReach {
   viewerUserId: string;
   factoryProjectId: string;
   visibleSessionIds: Pick<ReadonlySet<string>, 'has'>;
+  sessionOnThread(threadId: string): string | undefined;
 }
 
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
@@ -439,8 +440,8 @@ export function runningSessionIds(
     reach.visibleSessionIds.has(resourceId);
   return new Set(
     runs.flatMap(run => {
-      if (run.resourceId === undefined) return [run.threadId];
-      return reachable(run.resourceId) ? [run.threadId, run.resourceId] : [];
+      if (run.resourceId !== undefined && !reachable(run.resourceId)) return [];
+      return [run.threadId, run.resourceId, reach.sessionOnThread(run.threadId)].filter(id => id !== undefined);
     }),
   );
 }
