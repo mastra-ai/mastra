@@ -145,6 +145,7 @@ import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
   hasFailedSetupCommand,
+  peekSessionSandbox,
   recordFailedSetupCommand,
 } from './sandbox/session-sandbox.js';
 import {
@@ -2291,6 +2292,35 @@ describe('GitHub session workspace preparation', () => {
     );
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an unloaded session workspace and its caches without stopping or destroying its sandbox', async () => {
+    // Unloading a session invalidates its workspaces before deleting the controller session:
+    // the Factory caches must let go so the Workspace can be collected, while the VM keeps
+    // running for the session's next load to reattach to.
+    const registry = new FactoryWorkspaceRegistry();
+    const { workspace } = await createLocalFactory('mastracode-web-local-unloaded-', registry);
+    addProject();
+    addSession({ id: 'session-a' });
+    const removeWorkspace = vi.fn(async (_id: string, _options?: { destroy?: boolean }) => true);
+    const mastra = { getWorkspaceById: vi.fn(() => undefined), addWorkspace: vi.fn(), removeWorkspace } as any;
+
+    const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra });
+    await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+    const first = await mocks.createSandbox.mock.results[0]!.value;
+    expect(peekSessionSandbox('session-a')).toBeDefined();
+
+    await registry.invalidateSession('session-a');
+
+    expect(peekSessionSandbox('session-a')).toBeUndefined();
+    expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
+    expect(removeWorkspace.mock.calls.some(([, options]) => options?.destroy)).toBe(false);
+    expect(first.stop).not.toHaveBeenCalled();
+    expect(first.status).toBe('running');
+
+    const reloaded = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra });
+    expect(reloaded).not.toBe(resolved);
+    await (reloaded as any).sandbox.executeCommand('echo', ['again']);
   });
 
   it('surfaces a transport error whose command may have started instead of replaying it', async () => {

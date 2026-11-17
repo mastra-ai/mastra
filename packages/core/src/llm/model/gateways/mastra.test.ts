@@ -85,6 +85,31 @@ describe('MastraGateway', () => {
     expect(providers.mastra?.models).toEqual(['openai/chat-model']);
   });
 
+  it.each([
+    ['https://gateway.example', 'https://gateway.example/v1/models'],
+    ['https://gateway.example///', 'https://gateway.example/v1/models'],
+    ['https://gateway.example/v1///', 'https://gateway.example/v1/models'],
+    ['https://gateway.example/api/', 'https://gateway.example/api/v1/models'],
+  ])('normalizes the base URL %s', async (baseUrl, expected) => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gatewayFetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', gatewayFetch);
+    await new MastraGateway({ apiKey: 'deployment-key', baseUrl }).fetchProviders();
+    expect(gatewayFetch).toHaveBeenCalledWith(expected, expect.anything());
+  });
+
+  it('normalizes a base URL with a pathological run of slashes in linear time', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gatewayFetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', gatewayFetch);
+    const slashes = '/'.repeat(100_000);
+    const baseUrl = `https://gateway.example${slashes}api${slashes}`;
+    const started = performance.now();
+    await new MastraGateway({ apiKey: 'deployment-key', baseUrl }).fetchProviders();
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(gatewayFetch).toHaveBeenCalledWith(`https://gateway.example${slashes}api/v1/models`, expect.anything());
+  });
+
   it('sends the v2 catalog request with the key in Authorization, not through a custom fetch', async () => {
     process.env.MASTRA_GATEWAY_VERSION = 'v2';
     const customFetch = vi.fn(async () => new Response('{}', { status: 200 }));

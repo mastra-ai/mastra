@@ -536,6 +536,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
+    "contractKey": "workItemSessionRepository",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/:workItemId/session-repository",
+    "description": "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    "pathParams": [
+      "id",
+      "workItemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/work-items/activity": {
     "contractKey": "workItemActivity",
     "method": "GET",
@@ -5558,6 +5575,71 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "workItems"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/:workItemId/session-repository": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "workItemId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "workItemId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "resolved"
+            },
+            "projectRepositoryId": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "projectRepositoryId",
+            "slug"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unlinked"
+            },
+            "hint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "hint"
+          ]
+        }
       ]
     }
   },
@@ -13247,6 +13329,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "sessionActivity": "GET /web/factory/projects/:id/session-activity",
   "sessionRows": "GET /web/factory/projects/:id/session-rows",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "workItemSessionRepository": "GET /web/factory/projects/:id/work-items/:workItemId/session-repository",
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemFilterOptions": "GET /web/factory/projects/:id/work-items/filter-options",
   "workItemStarters": "GET /web/factory/projects/:id/work-items/starters",

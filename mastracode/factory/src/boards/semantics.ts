@@ -487,7 +487,14 @@ export function boundChangeRequestNumber(boards: Pick<BoardRegistry, 'get'>, ite
   const number = reviewedChangeRequest({ ...item, source })?.number;
   if (number !== undefined) return String(number);
   // A GitHub key ends in its number (`github-pr:34`); a GitLab key is encoded, so its digits mean nothing.
-  return source === 'github-pr' ? /(\d+)$/.exec(item.externalSource?.externalId ?? '')?.[1] : undefined;
+  return source === 'github-pr' ? trailingDigits(item.externalSource?.externalId ?? '') : undefined;
+}
+
+/** The run of digits ending `value`, scanned from the end so it stays linear (unlike an unanchored `/(\d+)$/`). */
+function trailingDigits(value: string): string | undefined {
+  let start = value.length;
+  while (start > 0 && value.charCodeAt(start - 1) >= 48 && value.charCodeAt(start - 1) <= 57) start--;
+  return start < value.length ? value.slice(start) : undefined;
 }
 
 export { sourceExternalId } from '../work-items/source-external-id.js';

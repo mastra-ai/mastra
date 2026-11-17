@@ -42,7 +42,7 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { repositoryChosenByRun, resolveRunRepository } from '../session/work-item-repository.js';
+import { repositoryChosenByRun, resolveRunRepositoryFromIntake } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -458,17 +458,15 @@ export async function prepareFactoryRuleBinding(
     // PR review on each pull request's), so its session is reused only on the branch it holds.
     const boundSession =
       reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
-    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     // A card that names no repository keeps a retry in its role session's
     // repository, else starts in the environment's first one; its agent
     // determines which repository the card belongs to. An explicit signal is
     // never overridden.
-    const repository = await resolveRunRepository({
+    const repository = await resolveRunRepositoryFromIntake(intake, {
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
       ...(boundSession ? { boundProjectRepositoryId: boundSession.projectRepositoryId } : {}),
     });
     if (repository.status !== 'resolved') {
@@ -1039,6 +1037,22 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          ...(sourceControlRegistrations.length > 0
+            ? {
+                sessionRepository: async ({ orgId, factoryProjectId, item }) => {
+                  const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+                  if (!sourceControl) {
+                    return { status: 'unlinked', hint: 'Factory project has no linked source-control repository.' };
+                  }
+                  return resolveRunRepositoryFromIntake(deps.domains.intake, {
+                    sourceControl,
+                    orgId,
+                    factoryProjectId,
+                    item,
+                  });
+                },
+              }
+            : {}),
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
           projectSessions,
