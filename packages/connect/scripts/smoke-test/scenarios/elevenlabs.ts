@@ -1,0 +1,283 @@
+import type { Scenario, ScenarioStep } from '../scenario.js';
+import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '../scenario.js';
+
+/**
+ * ElevenLabs scenario. Nothing here generates audio or spends credits: the
+ * toolset has no text-to-speech, dubbing-create, or call tools.
+ *
+ * - Conversational AI agents get a real create → get → update → delete
+ *   lifecycle (an agent costs nothing until it takes a call).
+ * - History items, dubbing projects, conversations, and knowledge-base
+ *   documents have no create tool, so their getters run against the first
+ *   listed record when one exists, and their deletes are probed with a
+ *   synthetic id — the scenario never deletes a customer's record.
+ * - Voice settings are read and written back unchanged on a voice the account
+ *   owns; with no owned voice the edit is probed.
+ * - Pronunciation dictionaries have no create tool and every rule change adds
+ *   a version to the dictionary. Set `MASTRA_SMOKE_ELEVENLABS_DICTIONARY_ID`
+ *   to a test dictionary to add and then remove a `<runId>` rule for real;
+ *   otherwise the rule tools are probed.
+ */
+
+const SYNTHETIC_ID = 'mastra-smoke-nonexistent';
+
+export const elevenlabsScenario: Scenario = {
+  integrationId: 'elevenlabs',
+  summary: 'agent CRUD, voice settings round-trip, account/library reads, record getters + probed deletes',
+  async run({ tools, runId, call, log }) {
+    const steps: ScenarioStep[] = [];
+    const missing = requireTools(tools, ['elevenlabs_create_agent', 'elevenlabs_delete_agent']);
+    if (missing) {
+      steps.push({ name: 'preflight', status: 'skip', detail: missing });
+      return steps;
+    }
+
+    /** Runs one tool call as a step; returns the output, or undefined on failure/skip. */
+    async function step<T>(name: string, toolId: string, input: unknown, detail?: (out: T) => string | undefined) {
+      if (!tools[toolId]) {
+        steps.push(makeStep(name, toolId, 'skip', 'tool not in project toolset'));
+        return undefined;
+      }
+      try {
+        const out = await call<T>(toolId, input);
+        steps.push(makeStep(name, toolId, 'pass', detail?.(out)));
+        return out;
+      } catch (error) {
+        steps.push(makeStep(name, toolId, 'fail', errorMessage(error)));
+        return undefined;
+      }
+    }
+
+    /** Gets the first listed record for real, or probes the getter with a synthetic id. */
+    async function getFirstOrProbe(name: string, toolId: string, idKey: string, id: string | undefined) {
+      if (id) await step(name, toolId, { [idKey]: id });
+      else steps.push(await probeTool(call, tools, `${name} (probe)`, toolId, { [idKey]: SYNTHETIC_ID }));
+    }
+
+    steps.push(
+      ...(await runReadBatch(
+        call,
+        [
+          ['elevenlabs_get_user', {}],
+          ['elevenlabs_get_user_subscription', {}],
+          ['elevenlabs_list_models', {}],
+          ['elevenlabs_get_default_voice_settings', {}],
+        ],
+        tools,
+      )),
+    );
+
+    // Voices: read, then write the owned voice's settings back unchanged.
+    const voices = await step<{ voices: Array<{ voice_id: string; is_owner?: boolean }> }>(
+      'list voices',
+      'elevenlabs_list_voices',
+      {},
+      out => `${out.voices.length} voices`,
+    );
+    const firstVoice = voices?.voices[0]?.voice_id;
+    await getFirstOrProbe('get voice', 'elevenlabs_get_voice', 'voice_id', firstVoice);
+    await getFirstOrProbe('get voice settings', 'elevenlabs_get_voice_settings', 'voice_id', firstVoice);
+    const ownedVoice = voices?.voices.find(v => v.is_owner)?.voice_id;
+    if (ownedVoice && tools['elevenlabs_get_voice_settings']) {
+      try {
+        const settings = await call<Record<string, unknown>>('elevenlabs_get_voice_settings', { voice_id: ownedVoice });
+        await step('edit voice settings (unchanged)', 'elevenlabs_edit_voice_settings', {
+          voice_id: ownedVoice,
+          ...settings,
+        });
+      } catch (error) {
+        steps.push(makeStep('edit voice settings', 'elevenlabs_edit_voice_settings', 'fail', errorMessage(error)));
+      }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'edit voice settings (probe)', 'elevenlabs_edit_voice_settings', {
+          voice_id: SYNTHETIC_ID,
+          stability: 0.5,
+        }),
+      );
+    }
+
+    // Records with no create tool: list, get the first, probe the delete.
+    const history = await step<{ items: Array<{ history_item_id: string }> }>(
+      'list history',
+      'elevenlabs_list_history',
+      {
+        page_size: 5,
+      },
+    );
+    await getFirstOrProbe(
+      'get history item',
+      'elevenlabs_get_history_item',
+      'history_item_id',
+      history?.items[0]?.history_item_id,
+    );
+    steps.push(
+      await probeTool(call, tools, 'delete history item (probe)', 'elevenlabs_delete_history_item', {
+        history_item_id: SYNTHETIC_ID,
+      }),
+    );
+
+    const dubs = await step<{ dubs: Array<{ dubbing_id?: string }> }>(
+      'list dubbing projects',
+      'elevenlabs_list_dubbing_projects',
+      { page_size: 5 },
+    );
+    await getFirstOrProbe(
+      'get dubbing project',
+      'elevenlabs_get_dubbing_project',
+      'dubbing_id',
+      dubs?.dubs[0]?.dubbing_id,
+    );
+    steps.push(
+      await probeTool(call, tools, 'delete dubbing project (probe)', 'elevenlabs_delete_dubbing_project', {
+        dubbing_id: SYNTHETIC_ID,
+      }),
+    );
+
+    const docs = await step<{ items: Array<{ id: string }> }>('list knowledge base', 'elevenlabs_list_knowledge_base', {
+      page_size: 5,
+    });
+    await getFirstOrProbe(
+      'get knowledge base document',
+      'elevenlabs_get_knowledge_base_document',
+      'documentation_id',
+      docs?.items[0]?.id,
+    );
+    steps.push(
+      await probeTool(
+        call,
+        tools,
+        'delete knowledge base document (probe)',
+        'elevenlabs_delete_knowledge_base_document',
+        {
+          documentation_id: SYNTHETIC_ID,
+        },
+      ),
+    );
+
+    const conversations = await step<{ items: Array<{ conversation_id: string }> }>(
+      'list conversations',
+      'elevenlabs_list_conversations',
+      { page_size: 5 },
+    );
+    await getFirstOrProbe(
+      'get conversation',
+      'elevenlabs_get_conversation',
+      'conversation_id',
+      conversations?.items[0]?.conversation_id,
+    );
+    steps.push(
+      await probeTool(call, tools, 'delete conversation (probe)', 'elevenlabs_delete_conversation', {
+        conversation_id: SYNTHETIC_ID,
+      }),
+    );
+
+    await runDictionary();
+
+    // Conversational AI agent lifecycle.
+    const agent = await step<{ agent_id: string }>(
+      'create agent',
+      'elevenlabs_create_agent',
+      {
+        name: runId,
+        tags: [runId],
+        conversation_config: { agent: { first_message: 'Automated @mastra/connect smoke test. Safe to delete.' } },
+      },
+      out => out.agent_id,
+    );
+    if (!agent) return steps;
+    try {
+      await step('get agent', 'elevenlabs_get_agent', { agent_id: agent.agent_id });
+      await step('update agent', 'elevenlabs_update_agent', { agent_id: agent.agent_id, name: `${runId} (renamed)` });
+      await step<{ items: Array<{ agent_id: string }> }>(
+        'list agents',
+        'elevenlabs_list_agents',
+        { search: runId, page_size: 5 },
+        out =>
+          out.items.some(a => a.agent_id === agent.agent_id) ? 'found smoke agent' : 'smoke agent not listed yet',
+      );
+    } finally {
+      try {
+        await call('elevenlabs_delete_agent', { agent_id: agent.agent_id });
+        steps.push(makeStep('delete agent', 'elevenlabs_delete_agent', 'pass'));
+      } catch (error) {
+        log.error(`elevenlabs: leaked agent ${agent.agent_id} (${runId}); delete it manually`, errorMessage(error));
+        steps.push(makeStep('delete agent', 'elevenlabs_delete_agent', 'fail', errorMessage(error)));
+      }
+    }
+    return steps;
+
+    async function runDictionary() {
+      const listed = await step<{ pronunciation_dictionaries: Array<{ id: string }> }>(
+        'list pronunciation dictionaries',
+        'elevenlabs_list_pronunciation_dictionaries',
+        {},
+      );
+      const testDictionary = process.env.MASTRA_SMOKE_ELEVENLABS_DICTIONARY_ID?.trim();
+      await getFirstOrProbe(
+        'get pronunciation dictionary',
+        'elevenlabs_get_pronunciation_dictionary',
+        'pronunciation_dictionary_id',
+        testDictionary || listed?.pronunciation_dictionaries[0]?.id,
+      );
+
+      if (!testDictionary) {
+        steps.push(
+          await probeTool(
+            call,
+            tools,
+            'add dictionary rules (probe)',
+            'elevenlabs_add_pronunciation_dictionary_rules',
+            {
+              pronunciation_dictionary_id: SYNTHETIC_ID,
+              rules: [{ type: 'alias', string_to_replace: runId, alias: 'smoke' }],
+            },
+          ),
+        );
+        steps.push(
+          await probeTool(
+            call,
+            tools,
+            'remove dictionary rules (probe)',
+            'elevenlabs_remove_pronunciation_dictionary_rules',
+            { pronunciation_dictionary_id: SYNTHETIC_ID, rule_strings: [runId] },
+          ),
+        );
+        return;
+      }
+
+      const added = await step('add dictionary rule', 'elevenlabs_add_pronunciation_dictionary_rules', {
+        pronunciation_dictionary_id: testDictionary,
+        rules: [{ type: 'alias', string_to_replace: runId, alias: 'smoke' }],
+      });
+      if (!added) {
+        steps.push(
+          makeStep(
+            'remove dictionary rule',
+            'elevenlabs_remove_pronunciation_dictionary_rules',
+            'skip',
+            'rule was not added',
+          ),
+        );
+        return;
+      }
+      try {
+        await call('elevenlabs_remove_pronunciation_dictionary_rules', {
+          pronunciation_dictionary_id: testDictionary,
+          rule_strings: [runId],
+        });
+        steps.push(makeStep('remove dictionary rule', 'elevenlabs_remove_pronunciation_dictionary_rules', 'pass'));
+      } catch (error) {
+        log.error(`elevenlabs: leaked rule "${runId}" in dictionary ${testDictionary}`, errorMessage(error));
+        steps.push(
+          makeStep(
+            'remove dictionary rule',
+            'elevenlabs_remove_pronunciation_dictionary_rules',
+            'fail',
+            errorMessage(error),
+          ),
+        );
+      }
+    }
+  },
+};
