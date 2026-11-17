@@ -11,6 +11,7 @@ import type {
   WireDisplayState,
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
@@ -706,6 +707,51 @@ function toWireDisplayEvent(
   return frame;
 }
 
+/**
+ * A stream whose client is this far behind is closed. The client reconnects
+ * and starts again from current state, instead of the server holding an
+ * ever-growing backlog for it.
+ */
+const SSE_MAX_PENDING_FRAMES = 5_000;
+const SSE_MAX_PENDING_AGE_MS = 60_000;
+
+/** Stands in for a snapshot that a newer one replaced while both were waiting. */
+const DROPPED = Symbol('dropped');
+
+type PendingFrame = { frame: unknown; queuedAt: number; turn?: number };
+
+/**
+ * Counts event-loop turns, advancing only while snapshots are being queued. A
+ * client that keeps up takes everything one synchronous dispatch queued before
+ * the event loop moves on, so only a snapshot still waiting in a later turn
+ * means the client is behind. Its bytes stay exactly what they were.
+ */
+let loopTurn = 0;
+let loopTurnScheduled = false;
+function currentLoopTurn(): number {
+  if (!loopTurnScheduled) {
+    loopTurnScheduled = true;
+    const next = () => {
+      loopTurnScheduled = false;
+      loopTurn++;
+    };
+    if (typeof setImmediate === 'function') setImmediate(next);
+    else setTimeout(next, 0);
+  }
+  return loopTurn;
+}
+
+function isDisplayStateFrame(frame: unknown): boolean {
+  return typeof frame === 'object' && frame !== null && (frame as { type?: unknown }).type === 'display_state_changed';
+}
+
+/** Metrics are best-effort: a failing sink must never break a client's stream. */
+function emitStreamMetric(mastra: Mastra, name: string, value: number, labels: Record<string, string>): void {
+  try {
+    mastra.metrics?.emit(name, value, labels);
+  } catch {}
+}
+
 function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
   return 'error' in event && event.error instanceof Error;
 }
@@ -753,85 +799,163 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: (() => void) | undefined;
+      let stream!: ReadableStreamDefaultController;
+      // Frames wait here, not in the ReadableStream, so the backlog of a client
+      // that reads slower than the session emits can be bounded.
+      const pending: PendingFrame[] = [];
+      // Waiting snapshots, oldest first, all from the turn of the newest one.
+      let snapshots: PendingFrame[] = [];
+      let pendingCount = 0;
+      let droppedSnapshots = 0;
+      // The adapter asked for a frame and none was waiting.
+      let wanted = false;
       const clearHeartbeat = () => {
         if (heartbeat) {
           clearTimeout(heartbeat);
           heartbeat = undefined;
         }
       };
-      const cleanup = (controller?: ReadableStreamDefaultController) => {
+      const cleanup = (closeStream = false) => {
         if (cleanedUp) return;
         cleanedUp = true;
         clearHeartbeat();
         unsubscribe?.();
-        if (controller) {
+        pending.length = 0;
+        snapshots = [];
+        pendingCount = 0;
+        if (droppedSnapshots > 0) {
+          emitStreamMetric(mastra, 'mastra_agent_controller_sse_snapshots_dropped_total', droppedSnapshots, {
+            controllerId,
+          });
+        }
+        if (closeStream) {
           try {
-            controller.close();
+            stream.close();
           } catch {}
         }
+      };
+      const closeBehind = (reason: 'max_pending' | 'max_wait') => {
+        mastra.getLogger()?.warn('Closing agent controller stream: the client is too far behind', {
+          controllerId,
+          sessionId,
+          reason,
+          pendingFrames: pendingCount,
+          oldestPendingMs: Date.now() - pending[0]!.queuedAt,
+          droppedSnapshots,
+        });
+        emitStreamMetric(mastra, 'mastra_agent_controller_sse_slow_client_closes_total', 1, { controllerId, reason });
+        cleanup(true);
+      };
+      const checkBacklog = () => {
+        if (pendingCount > SSE_MAX_PENDING_FRAMES) closeBehind('max_pending');
+        else if (pending.length > 0 && Date.now() - pending[0]!.queuedAt > SSE_MAX_PENDING_AGE_MS) {
+          closeBehind('max_wait');
+        }
+      };
+      const push = (frame: unknown) => {
+        if (cleanedUp) return;
+        if (wanted) {
+          wanted = false;
+          try {
+            stream.enqueue(frame);
+          } catch {
+            cleanup();
+          }
+          return;
+        }
+        const entry: PendingFrame = { frame, queuedAt: Date.now() };
+        if (isDisplayStateFrame(frame)) {
+          // A newer snapshot carries everything an older one does, so a
+          // snapshot still waiting from an earlier turn is dropped. Other
+          // events are never dropped and keep their order.
+          const turn = currentLoopTurn();
+          snapshots = snapshots.filter(older => {
+            if (older.turn === turn) return true;
+            older.frame = DROPPED;
+            pendingCount--;
+            droppedSnapshots++;
+            return false;
+          });
+          while (pending[0]?.frame === DROPPED) pending.shift();
+          entry.turn = turn;
+          snapshots.push(entry);
+        }
+        pending.push(entry);
+        pendingCount++;
+        checkBacklog();
+      };
+      const takeNext = (): PendingFrame | undefined => {
+        for (let entry = pending.shift(); entry; entry = pending.shift()) {
+          if (entry.frame === DROPPED) continue;
+          if (snapshots[0] === entry) snapshots.shift();
+          pendingCount--;
+          return entry;
+        }
+        return undefined;
       };
 
       // The stream yields raw event objects plus `:`-prefixed SSE comments
       // (heartbeats); the server adapter frames events and passes comments
-      // through verbatim.
-      return new ReadableStream<unknown>({
-        start(controller) {
-          const scheduleHeartbeat = () => {
-            if (cleanedUp) return;
-            clearHeartbeat();
-            heartbeat = setTimeout(() => {
-              heartbeat = undefined;
+      // through verbatim. With no internal buffer, the adapter gets a frame
+      // only once it has written the previous one.
+      return new ReadableStream<unknown>(
+        {
+          start(controller) {
+            stream = controller;
+            const scheduleHeartbeat = () => {
               if (cleanedUp) return;
+              clearHeartbeat();
+              heartbeat = setTimeout(() => {
+                heartbeat = undefined;
+                if (cleanedUp) return;
+                // A waiting frame keeps the connection busy already; a client
+                // that stopped reading is closed once its oldest frame is too old.
+                if (pendingCount > 0) checkBacklog();
+                else push(': heartbeat\n\n');
+                scheduleHeartbeat();
+              }, 25_000);
+            };
+
+            // Live events are not replayed, so seed a late subscriber with the
+            // current display state (including the message in flight). This runs
+            // before subscribe() so it precedes the buffered workspace events
+            // subscribe() replays; both are synchronous, so no event slips between.
+            if (displayState !== false) {
+              push(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
+            }
+
+            unsubscribe = session.subscribe(event => {
+              if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
               try {
-                controller.enqueue(': heartbeat\n\n');
+                // Queue the raw event object. The server adapter is responsible
+                // for SSE framing (`data: <json>\n\n`); queuing a pre-framed
+                // string here would double-encode it.
+                push(toWireEvent(event));
+                scheduleHeartbeat();
               } catch {
                 cleanup();
-                return;
               }
-              scheduleHeartbeat();
-            }, 25_000);
-          };
+            });
 
-          // Live events are not replayed, so seed a late subscriber with the
-          // current display state (including the message in flight). This runs
-          // before subscribe() so it precedes the buffered workspace events
-          // subscribe() replays; both are synchronous, so no event slips between.
-          if (displayState !== false) {
-            try {
-              controller.enqueue(
-                toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
-              );
-            } catch {
-              cleanup(controller);
+            const abortCleanup = () => cleanup(true);
+            if (abortSignal?.aborted) {
+              abortCleanup();
               return;
             }
-          }
-
-          unsubscribe = session.subscribe(event => {
-            if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
-            try {
-              // Enqueue the raw event object. The server adapter is responsible
-              // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
-              // string here would double-encode it.
-              controller.enqueue(toWireEvent(event));
-              scheduleHeartbeat();
-            } catch {
-              cleanup();
-            }
-          });
-
-          const abortCleanup = () => cleanup(controller);
-          if (abortSignal?.aborted) {
-            abortCleanup();
-            return;
-          }
-          abortSignal?.addEventListener('abort', abortCleanup, { once: true });
-          scheduleHeartbeat();
+            abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+            scheduleHeartbeat();
+          },
+          pull(controller) {
+            const next = takeNext();
+            if (next) controller.enqueue(next.frame);
+            else wanted = !cleanedUp;
+          },
+          cancel() {
+            cleanup();
+          },
         },
-        cancel() {
-          cleanup();
-        },
-      });
+        { highWaterMark: 0 },
+      );
     } catch (error) {
       return handleError(error, 'error streaming controller session');
     }
