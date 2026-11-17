@@ -20,7 +20,7 @@ describe('trace content filters', () => {
       'spans.',
     );
     expect(fields.map(field => field.label)).toEqual([
-      'Span any content',
+      'Any span content',
       'Span input',
       'Span output',
       'Span error',

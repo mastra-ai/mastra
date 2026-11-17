@@ -520,12 +520,12 @@ describe('TracesExplorer.Histogram', () => {
         expect(chart()).not.toBeNull();
         const input = screen.getByRole('combobox', { name: 'Add filter' });
         fireEvent.focus(input);
-        fireEvent.change(input, { target: { value: 'Span any content' } });
-        expect(screen.queryByRole('option', { name: 'Span any content' })).toBeNull();
+        fireEvent.change(input, { target: { value: 'Any span content' } });
+        expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
       },
     );
     it.each([
-      ['all', 'Span any content'],
+      ['all', 'Any span content'],
       ['input', 'Span input'],
       ['output', 'Span output'],
       ['error', 'Span error'],
@@ -581,8 +581,8 @@ describe('TracesExplorer.Histogram', () => {
       const result = await renderExplorer();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
-      fireEvent.change(input, { target: { value: 'Span any content' } });
-      fireEvent.click(await screen.findByRole('option', { name: 'Span any content' }));
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Any span content' }));
       onAggregate.mockClear();
       fireEvent.change(input, { target: { value: 'ok' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -591,11 +591,11 @@ describe('TracesExplorer.Histogram', () => {
       await settle(result.queryClient);
       await waitFor(() => expect(chart()).not.toBeNull());
       expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
-      fireEvent.click(screen.getByRole('button', { name: 'Remove Span any content filter' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Any span content filter' }));
       await waitFor(() => expect(chart()).not.toBeNull());
     });
     it.each([
-      ['all', 'Span any content'],
+      ['all', 'Any span content'],
       ['input', 'Span input'],
       ['output', 'Span output'],
       ['error', 'Span error'],
@@ -619,8 +619,8 @@ describe('TracesExplorer.Histogram', () => {
       expect(chart()).not.toBeNull();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
-      fireEvent.change(input, { target: { value: 'Span any content' } });
-      expect(screen.queryByRole('option', { name: 'Span any content' })).toBeNull();
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
     });
   });
 });

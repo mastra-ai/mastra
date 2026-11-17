@@ -37,7 +37,7 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
     return {
       ...existing,
       id: prefix + path,
-      label: prefix === 'spans.' ? `Span ${label.toLowerCase()}` : label,
+      label: prefix === 'spans.' ? (path === 'all' ? 'Any span content' : `Span ${label.toLowerCase()}`) : label,
       icon:
         path === 'error' || path === 'errorPreview' ? IconExclamationTriangle : (existing?.icon ?? IconMagnifyingGlass),
       operators: ['hasAllTokens', ...(existing?.operators ?? [])],
