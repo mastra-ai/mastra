@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { ProviderStatus } from '../../lifecycle';
 import { MastraSandbox } from '../mastra-sandbox';
@@ -113,5 +113,54 @@ describe('SandboxProcessManager.get', () => {
     expect(await processes.get(handle.pid)).toBe(handle);
     expect(await processes.get(handle.pid, { release: false })).toBe(handle);
     expect(await processes.get(handle.pid)).toBe(handle);
+  });
+});
+
+describe('SandboxProcessManager.spawn abortSignal', () => {
+  it('kills the process when the run signal aborts while it is running', async () => {
+    const processes = new TrackingProcessManager();
+    new TestSandbox(processes);
+    const controller = new AbortController();
+    const handle = (await processes.spawn('sleep 10', { abortSignal: controller.signal })) as ExitingHandle;
+    const kill = vi.spyOn(handle, 'kill');
+
+    controller.abort();
+
+    expect(kill).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(handle.exitCode).toBe(137));
+  });
+
+  it('keeps the abort wiring while the handle still runs after wait() settles', async () => {
+    const processes = new TrackingProcessManager();
+    new TestSandbox(processes);
+    const controller = new AbortController();
+    const handle = (await processes.spawn('sleep 10', { abortSignal: controller.signal })) as ExitingHandle;
+    const kill = vi.spyOn(handle, 'kill');
+
+    // The manager's own wait() observation settles without an exit, so the
+    // process still counts as running and can still be killed.
+    await handle.wait();
+    expect(handle.exitCode).toBeUndefined();
+
+    controller.abort();
+
+    expect(kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the abort wiring once the process has exited', async () => {
+    const processes = new TrackingProcessManager();
+    new TestSandbox(processes);
+    const controller = new AbortController();
+    const handle = (await processes.spawn('sleep 10', { abortSignal: controller.signal })) as ExitingHandle;
+    const kill = vi.spyOn(handle, 'kill');
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+    handle.finish('done\n');
+    await handle.wait();
+    await vi.waitFor(() => expect(removeListener).toHaveBeenCalledTimes(1));
+
+    controller.abort();
+
+    expect(kill).not.toHaveBeenCalled();
   });
 });
