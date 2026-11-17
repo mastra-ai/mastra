@@ -195,7 +195,6 @@ describe('Factory work item relationships', () => {
       expect(workItemReference(item, 'acme/other')).toBe(outside);
       expect(workItemReference(item)).toBe(outside);
       expect(workItemShortReference(item)).toBe(short);
-      expect(workItemShortReference(item, repository)).toBe(inside.split(' ')[1]);
     },
   );
 

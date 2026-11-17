@@ -25,7 +25,7 @@ export function boardLayoutParams(current: URLSearchParams, layout: BoardLayout)
 export const BOARD_CARD_LAYOUT_CLASS =
   'relative flex min-h-36 flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2';
 
-// The icon track fits a source icon plus an attached PR icon (2 × 1rem + gap-1.5) so keys line up across rows.
+// The icon track fits a source icon plus an attached PR icon (2 × 1rem + gap-1.5) so titles line up across rows.
 // The last track fits the widest timestamp, "just now".
 export const BOARD_LIST_ROW_LAYOUT_CLASS =
   'grid min-h-10 grid-cols-[2.375rem_minmax(0,1fr)_var(--spacing-avatar-sm)_2.625rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[2.375rem_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2';

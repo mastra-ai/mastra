@@ -120,13 +120,12 @@ export function workItemReference(item: IdentifiableItem, contextRepository?: st
 }
 
 /** A work item's key without the repository owner, for links whose source icon already tells an issue from a PR: `app#42`, `ENG-123`. */
-export function workItemShortReference(item: IdentifiableItem, contextRepository?: string): string | undefined {
+export function workItemShortReference(item: IdentifiableItem): string | undefined {
   const identifier = workItemIdentifier(item);
   if (identifier === undefined) return undefined;
   const reference = codeHostReference(item, identifier);
-  if (!reference) return workItemReference(item, contextRepository);
-  const elsewhere = repositoryElsewhere(reference.repository, contextRepository);
-  return `${elsewhere === undefined ? '' : repositoryName(elsewhere)}${reference.sigil}${reference.number}`;
+  if (!reference) return workItemReference(item);
+  return `${reference.repository === undefined ? '' : repositoryName(reference.repository)}${reference.sigil}${reference.number}`;
 }
 
 export function workItemMeta(item: WorkItem, contextRepository?: string): readonly string[] {

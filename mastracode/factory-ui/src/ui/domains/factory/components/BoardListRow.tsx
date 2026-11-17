@@ -86,7 +86,7 @@ export function BoardListRow({
           </Link>
           <span
             onClick={stopRowClick}
-            className="flex max-w-[min(14rem,30cqi)] min-w-0 shrink-[100] items-center gap-2 empty:hidden max-sm:hidden @max-[28rem]:hidden [&>*]:min-w-0"
+            className="flex max-w-[min(14rem,30cqi)] min-w-0 shrink-0 items-center gap-2 empty:hidden max-sm:hidden [&>*]:min-w-0"
           >
             {cells.links}
           </span>
