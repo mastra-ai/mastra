@@ -74,7 +74,7 @@ export function BoardListRow({
       <DataList.Cell className="empty:before:content-none max-sm:col-start-1 max-sm:row-start-1">
         {cells.icon}
       </DataList.Cell>
-      <DataList.Cell className="text-placeholder tabular-nums empty:before:content-none max-sm:hidden">
+      <DataList.Cell className="text-placeholder truncate tabular-nums empty:before:content-none max-sm:hidden">
         {cells.key}
       </DataList.Cell>
       <DataList.Cell className="text-foreground @container flex gap-3 overflow-visible empty:before:content-none max-sm:contents">
