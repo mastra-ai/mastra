@@ -1222,9 +1222,9 @@ function holdNextCall<T extends object, K extends keyof T & string>(
 
 // A background task can write after its run settled: `verifyNotSuperseded` is the check for those
 // writes. With ownership in storage it only refuses once another execution claimed the run, released
-// or lapsed or not, and never waits for a release in flight. A lease can't tell a release from a lapse
-// that another execution claimed and released since, so a lease-backed claim is `verify` until a
-// release of it starts here (#30182).
+// or lapsed or not, and never waits for a release in flight. A lease keeps nothing once released, so it
+// can't tell this claim's release from another execution that claimed and released the run since: a
+// lease-backed claim always gets `verify`'s rule, as before this check existed (#30182).
 describe.each([
   {
     backend: 'storage',
@@ -1299,17 +1299,22 @@ describe.each([
       await claimSuccessor();
       await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     } else {
-      // Without a release here, a missing lease may be one another execution claimed and released: verify's rule.
+      // A missing lease may be one another execution claimed and released: verify's rule.
       await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
     }
   });
 
-  it('after settlement released the claim, passes while no other execution claimed the run', async () => {
-    const { fence } = await setup();
+  it('after settlement released the claim, passes only when storage holds the claim', async () => {
+    const { fence, storageBacked } = await setup();
     expect(await fence.settle(async () => {})).toBe('owned');
 
     await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
-    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+    if (storageBacked) {
+      await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+    } else {
+      // The released lease looks like one another execution claimed and released since: verify's rule.
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    }
   });
 
   it('after settlement released the claim, refuses once another execution claimed the run', async () => {
@@ -1334,16 +1339,22 @@ describe.each([
     expect(fence.isLost()).toBe(true);
   });
 
-  it("while settlement is releasing the claim, passes without waiting for the release's reply while no other execution claimed the run", async () => {
-    const { fence, holdNextRelease } = await setup();
+  it("while settlement is releasing the claim, answers without waiting for the release's reply", async () => {
+    const { fence, holdNextRelease, storageBacked } = await setup();
     const release = holdNextRelease();
     const settled = fence.settle(async () => {});
     await release.applied;
 
     // The backend already shows the claim released and its reply is still held, as on a stalled
-    // connection: the check neither marks the execution lost nor waits for the reply.
-    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
-    expect(fence.isLost()).toBe(false);
+    // connection: the check doesn't wait for the reply.
+    if (storageBacked) {
+      // No other execution claimed the run, so storage would still accept the write.
+      await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+      expect(fence.isLost()).toBe(false);
+    } else {
+      // The empty lease can't show whose release emptied it: verify's rule.
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    }
     release.finish();
     expect(await settled).toBe('owned');
   });
@@ -1367,18 +1378,21 @@ describe.each([
     const release = holdNextRelease({ fail: true });
     const settled = fence.settle(async () => {});
     await release.applied;
-    // While the release is in flight, it counts.
-    await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
-    release.finish();
-    await settled;
-
     if (storageBacked) {
       // Storage still holds this claim's generation, released: no other execution took the run.
       await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
     } else {
-      // The release failed, so a missing lease may be one another execution claimed and released: verify's rule.
+      // A missing lease may be one another execution claimed and released: verify's rule.
       await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
       expect(fence.isLost()).toBe(true);
+    }
+    release.finish();
+    await settled;
+
+    if (storageBacked) {
+      await expect(fence.verifyNotSuperseded()).resolves.toBeUndefined();
+    } else {
+      await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     }
   });
 
@@ -1391,8 +1405,8 @@ describe.each([
   });
 });
 
-// A lease can't show a release, so a worker's participant fence learns of the shared release it is
-// making only from `releaseSharedClaim` itself (#30182).
+// A worker's participant fence on a lease gets `verify`'s rule too: its own shared release leaves the
+// same empty lease another execution's claim and release would (#30182).
 describe('ExecutionFence.verifyNotSuperseded on a lease-backed participant', () => {
   async function setup() {
     const pubsub = new EventEmitterPubSub();
@@ -1405,15 +1419,14 @@ describe('ExecutionFence.verifyNotSuperseded on a lease-backed participant', () 
     return { pubsub, mastra, coordinator, participant };
   }
 
-  it("counts this worker's shared release in flight without waiting for its reply, and passes while nobody claimed the run", async () => {
+  it("refuses while this worker's shared release is in flight, without waiting for its reply", async () => {
     const { pubsub, mastra, coordinator, participant } = await setup();
     const release = holdNextCall(pubsub, 'releaseLease', { apply: true, fail: false });
     const releasing = ExecutionFence.releaseSharedClaim(mastra, 'run-1', coordinator.claim);
     await release.applied;
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
 
-    await expect(participant.verifyNotSuperseded()).resolves.toBeUndefined();
-    expect(participant.isLost()).toBe(false);
+    await expect(participant.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     release.finish();
     await releasing;
   });
@@ -1427,10 +1440,10 @@ describe('ExecutionFence.verifyNotSuperseded on a lease-backed participant', () 
   });
 });
 
-// A lease has no generation and no storage fence behind the check: once a lapsed lease was claimed and
-// released by another execution, the lease looks exactly as it would after this execution's own release.
-// Only a release this process started lets a late write through (#30182).
-describe('ExecutionFence.verifyNotSuperseded on a lapsed lease', () => {
+// A lease has no generation and no storage fence behind the check: once another execution claimed and
+// released the run, the lease looks exactly as it would after this execution's own release. A late write
+// that passed would land on the other execution's finished run unfenced (#30182).
+describe('ExecutionFence.verifyNotSuperseded on a lease another execution claimed and released', () => {
   it('refuses a late write after a recovery claimed the lapsed lease and released it', async () => {
     vi.useFakeTimers();
     const pubsub = new EventEmitterPubSub();
@@ -1447,6 +1460,24 @@ describe('ExecutionFence.verifyNotSuperseded on a lapsed lease', () => {
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
 
     await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+  });
+
+  it("refuses a late write after a recovery claimed and released the run while this execution's release reply was held", async () => {
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    // This execution's release reaches the provider, but its reply stalls, as on a slow connection.
+    const release = holdNextCall(pubsub, 'releaseLease', { apply: true, fail: false });
+    const settled = fence.settle(async () => {});
+    await release.applied;
+
+    // Meanwhile another process recovers the run, finishes it and releases the lease.
+    expect((await pubsub.acquireLease(key('run-1'), 'recovery', EXECUTION_LEASE_TTL_MS)).acquired).toBe(true);
+    await pubsub.releaseLease(key('run-1'), 'recovery');
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
+
+    await expect(fence.verifyNotSuperseded()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    release.finish();
+    await settled;
   });
 });
 

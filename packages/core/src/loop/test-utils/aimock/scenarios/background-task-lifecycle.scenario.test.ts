@@ -18,6 +18,7 @@ import {
   describeForAllEngines,
   isDurableEngineVariant,
 } from '../aimock-scenario';
+import { ExecutionFence, executionLeaseKey, resolveLeaseProvider } from '../../../../agent/durable/execution-fence';
 import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 import type { PubSub } from '../../../../events/pubsub';
 import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
@@ -965,6 +966,79 @@ describeForAllEngines(
           generation: successor.record.generation,
           live: true,
         });
+      },
+      30_000,
+    );
+
+    // Technical: with ownership only in a pubsub lease (storage without run fencing), a released
+    // lease keeps no record, so it can't show whether another execution claimed and finished the
+    // run since, and no storage fence stands behind the write. The late suspend keeps the strict
+    // check: the task fails as before rather than write over a run a recovery finished. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after its run finished when ownership is only a lease (#30182)",
+      async () => {
+        vi.spyOn(WorkflowsInMemory.prototype, 'supportsRunFencing').mockReturnValue(false);
+        onTestFinished(() => vi.restoreAllMocks());
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-lease-only-thread', resourceId: 'bg-suspend-lease-only-user' };
+        const { chunks, mastra, agent, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research near',
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate) },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, 'Research near', {
+              dispatch: {
+                toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'The analyst answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+        const taskId = started.payload.taskId as string;
+        const agentPubsub = (mastra.getAgentById(agent.id) as { pubsub?: PubSub }).pubsub ?? mastra.pubsub;
+        const leases = resolveLeaseProvider(agentPubsub);
+        const key = executionLeaseKey(agent.id, started.runId);
+        // The run finished: its fence is gone and its lease released.
+        await waitFor(
+          async () => ({ fence: ExecutionFence.getLocalActive(started.runId), owner: await leases.getLeaseOwner(key) }),
+          ({ fence, owner }) => fence === undefined && owner === undefined,
+        );
+
+        // Another process recovers the run, finishes it and releases the lease.
+        expect((await leases.acquireLease(key, 'recovery-execution', 60_000)).acquired).toBe(true);
+        await leases.releaseLease(key, 'recovery-execution');
+        release();
+
+        const settled = (await waitFor(
+          () => manager.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        const unverified = `Durable run ${started.runId}: could not verify that this execution still owns the run`;
+        expect({ status: settled.status, error: settled.error?.message }).toEqual({
+          status: 'failed',
+          // DURABLE_AGENT_EXECUTION_UNVERIFIED
+          error: expect.stringContaining(unverified),
+        });
+        expect(settled.suspendPayload).toBeUndefined();
+        // Memory records the tool call as failed. The refused suspension's `suspendedTools` entry
+        // still reaches memory next to that error, as it does on main (not yet investigated).
+        const stored = await waitFor(
+          () => storedToolCall(memory, thread),
+          s => s.invocation?.state === 'output-error',
+        );
+        expect(stored.invocation.errorText).toContain(unverified);
       },
       30_000,
     );

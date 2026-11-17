@@ -570,12 +570,6 @@ export class ExecutionFence implements RunFenceScope {
   #renewalInFlight = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
-  /**
-   * A release of this claim started here (settlement, or this worker's shared
-   * release) and has not failed. Only lease-backed claims need it: see
-   * {@link verifyNotSuperseded}.
-   */
-  #released = false;
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
   readonly whenSettled: Promise<void>;
@@ -696,12 +690,7 @@ export class ExecutionFence implements RunFenceScope {
   static async releaseSharedClaim(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<void> {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
-    if (!backend) return;
-    // This worker's participant fence stays registered until its cleanup stops it. Late writes
-    // checked against it meanwhile count this release (see {@link verifyNotSuperseded}).
-    const participant = mastra.__getRunScope(runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId);
-    const release = () => backend.release(claim);
-    await (participant ? participant.#countRelease(release) : release());
+    await backend?.release(claim);
   }
 
   /** Join an existing claim without acquiring ownership or advancing its generation. */
@@ -944,14 +933,14 @@ export class ExecutionFence implements RunFenceScope {
    * own fence ({@link runFencedToClaim}) rejects it once a successor raised
    * memory. Never waits for a release in flight.
    *
-   * A lease has no generation and no storage fence behind this check, and a
-   * lapsed lease that another execution claimed and released since looks like
-   * a released one. A lease-backed claim gets this rule only after a release
-   * started here; otherwise it is {@link verify}. A successor that claimed and
-   * released the lease after that release still goes unnoticed.
+   * Only storage-backed claims get this rule: their generation tells a
+   * released claim from one a successor claimed, released or not. A lease
+   * keeps no record once released, so an empty lease can't tell this claim's
+   * release from a successor that claimed and released it since, and nothing
+   * fences the write behind it. A lease-backed claim always gets {@link verify}.
    */
   async verifyNotSuperseded(): Promise<void> {
-    if (this.generation === undefined && !this.#released) return this.verify();
+    if (this.generation === undefined) return this.verify();
     const details = this.#details();
     const superseded = this.#takenOver || (await retryOnce(() => this.#backend.isSuperseded(this.claim), details));
     // A takeover the heartbeat saw while the read was on its way also refuses.
@@ -1082,23 +1071,12 @@ export class ExecutionFence implements RunFenceScope {
 
   async #release(): Promise<void> {
     try {
-      await this.#countRelease(() => this.#backend.release(this.claim));
+      await this.#backend.release(this.claim);
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
     if (this.generation !== undefined) {
       await this.#retireMemoryFence({ runId: this.runId, generation: this.generation, ownerId: this.executionId });
-    }
-  }
-
-  /** Run a release of this claim, counted as {@link #released} from its start unless it fails. */
-  async #countRelease(release: () => Promise<void>): Promise<void> {
-    this.#released = true;
-    try {
-      await release();
-    } catch (error) {
-      this.#released = false;
-      throw error;
     }
   }
 
@@ -1372,6 +1350,22 @@ export async function assertExecutionNotSuperseded(args: {
   if (await retryOnce(() => backend.isSuperseded(claim), details)) {
     throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
   }
+}
+
+/**
+ * {@link assertExecutionNotSuperseded} for a claim with a storage generation,
+ * {@link assertExecutionOwned} for one without. For writes that refused a
+ * released claim before late writes were accepted, such as a background
+ * task's suspension: only a generation tells this claim's release from
+ * another execution that claimed and released the run since, and a
+ * lease-backed write has no storage fence behind it (#30182).
+ */
+export async function assertExecutionNotSupersededInStorage(
+  args: Parameters<typeof assertExecutionNotSuperseded>[0],
+): Promise<void> {
+  const claim = getExecutionClaim(args.requestContext, args.runId);
+  if (claim?.generation === undefined) return assertExecutionOwned(args);
+  return assertExecutionNotSuperseded(args);
 }
 
 /**

@@ -67,6 +67,7 @@ import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transpor
 import { DurableStepIds } from '../../constants';
 import {
   assertExecutionNotSuperseded,
+  assertExecutionNotSupersededInStorage,
   assertExecutionOwned,
   getExecutionOwnershipGuard,
   isExecutionFenceError,
@@ -876,6 +877,15 @@ export function createDurableToolCallStep() {
       // claimed the run.
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
+      // A late suspension gets that rule only with ownership in storage: a released lease can't show
+      // whether another execution claimed and finished the run since, so a lease keeps the strict check.
+      const assertSuspensionNotSuperseded = () =>
+        assertExecutionNotSupersededInStorage({
+          runId,
+          agentId: initData.agentId,
+          requestContext,
+          mastra: mastra as Mastra,
+        });
       // Those writes carry the run's claim, so storage rejects one that lands after a successor
       // raised the memory fence, even though it passed the check above (#30182).
       const claimFenceArgs = {
@@ -1595,8 +1605,9 @@ export function createDurableToolCallStep() {
           suspendToolCall(suspendPayload, suspendOptions, assertOwned),
       };
       // `beforePersist` guards the suspension's memory writes. A background
-      // task can suspend after the run settled and released its claim, so it
-      // passes the post-settlement check instead of the strict one (#30182).
+      // task can suspend after the run settled and released its claim, so with
+      // ownership in storage it passes the post-settlement check instead of the
+      // strict one (#30182).
       const suspendToolCall = async (
         suspendPayload: any,
         suspendOptions: SuspendOptions | undefined,
@@ -1863,7 +1874,9 @@ export function createDurableToolCallStep() {
                       // The run may have settled and stopped fencing its writes. The suspension's
                       // memory save carries the run's claim, so storage rejects it once a successor
                       // raised the memory fence, even when it lands after the ownership check (#30182).
-                      await runFencedToClaim(claimFenceArgs, () => suspendToolCall(data, options, assertNotSuperseded));
+                      await runFencedToClaim(claimFenceArgs, () =>
+                        suspendToolCall(data, options, assertSuspensionNotSuperseded),
+                      );
                       return taskContext?.suspend?.(data, options);
                     },
                     outputWriter: async (chunk: any) => {
