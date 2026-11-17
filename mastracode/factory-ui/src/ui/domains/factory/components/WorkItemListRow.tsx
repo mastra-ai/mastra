@@ -8,14 +8,12 @@ import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
   CardActions,
-  CardKey,
   CardStatus,
   MetadataLabels,
   SessionBadge,
@@ -68,7 +66,6 @@ export function WorkItemListRow({
   rework?: ReworkReason;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
-  const repository = useBoardRepository(item.githubProjectId);
   const verdict = columnReviewVerdict(item, columnStage, board);
   return (
     <BoardListRow
@@ -84,7 +81,6 @@ export function WorkItemListRow({
       createdAt={sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt}
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
-        key: <CardKey item={item} contextRepository={repository} />,
         title: (
           <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
             <SourceTitle source={item.source} title={item.title} />

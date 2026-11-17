@@ -119,7 +119,7 @@ export function workItemReference(item: IdentifiableItem, contextRepository?: st
   return reference ? referenceLabel(reference, contextRepository) : codeHost.kind;
 }
 
-/** The key a list row shows next to its source icon, which already tells an issue from a PR: `#42`, `app#42`, `ENG-123`. */
+/** A work item's key without the repository owner, for links whose source icon already tells an issue from a PR: `app#42`, `ENG-123`. */
 export function workItemShortReference(item: IdentifiableItem, contextRepository?: string): string | undefined {
   const identifier = workItemIdentifier(item);
   if (identifier === undefined) return undefined;

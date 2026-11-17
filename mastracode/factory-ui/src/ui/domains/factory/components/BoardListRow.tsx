@@ -34,7 +34,6 @@ const SWAP_FOR_ACTION_ON_HOVER =
 
 type BoardListRowCells = {
   icon?: ReactNode;
-  key?: ReactNode;
   title?: ReactNode;
   links?: ReactNode;
   labels?: ReactNode;
@@ -73,9 +72,6 @@ export function BoardListRow({
     <>
       <DataList.Cell className="empty:before:content-none max-sm:col-start-1 max-sm:row-start-1">
         {cells.icon}
-      </DataList.Cell>
-      <DataList.Cell className="text-placeholder truncate tabular-nums empty:before:content-none max-sm:hidden">
-        {cells.key}
       </DataList.Cell>
       <DataList.Cell className="text-foreground @container flex gap-3 overflow-visible empty:before:content-none max-sm:contents">
         <span className="flex min-w-0 shrink items-center gap-3 max-sm:col-start-2 max-sm:row-start-1">

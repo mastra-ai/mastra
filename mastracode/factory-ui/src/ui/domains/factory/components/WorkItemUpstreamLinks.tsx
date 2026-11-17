@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { externalLinkLabel } from '../boardItems';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
 import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
-import { workItemIdentifier } from '../services/relationships';
+import { workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
@@ -23,7 +23,7 @@ function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[]): Upstr
   const origin = item.url;
   const own: UpstreamLink[] = [];
   if (origin !== null) {
-    const label = workItemIdentifier(item) ?? externalLinkLabel(item.source);
+    const label = workItemShortReference(item) ?? externalLinkLabel(item.source);
     own.push({
       url: origin,
       label,

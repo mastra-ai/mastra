@@ -14,7 +14,6 @@ import { SOURCE_LABELS, cardLabels, metadataLabelColors } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import { changeRequestStatus } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { workItemShortReference } from '../services/relationships';
 import { isPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
@@ -31,17 +30,6 @@ export function SourceTitle({ source, title }: { source: WorkItemSource; title: 
       {title}
     </>
   );
-}
-
-export function CardKey({
-  item,
-  contextRepository,
-}: {
-  item: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
-  contextRepository?: string;
-}) {
-  // SourceTitle's sr-only prefix already announces the source.
-  return workItemShortReference(item, contextRepository) ?? <span aria-hidden>{SOURCE_LABELS[item.source]}</span>;
 }
 
 export function WorkItemSourceIcon({
