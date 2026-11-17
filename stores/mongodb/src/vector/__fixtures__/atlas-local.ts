@@ -4,7 +4,9 @@ import type { CommandStartedEvent, Db, Document, ListSearchIndexesOptions } from
 import type { MongoDBVector } from '../';
 import { isLiveRow } from '../provisioning';
 
+/** `OWNERSHIP_TEST_URI` points the suites at an Atlas cluster instead (design §7 cluster runs). */
 export const ATLAS_LOCAL_URI =
+  process.env.OWNERSHIP_TEST_URI ??
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 export const DB_NAME = 'vector_db';
 export const REGISTRY = '__mastra_vector_indexes__';

@@ -1,7 +1,7 @@
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MongoClient, MongoNetworkError, MongoServerError, ObjectId } from 'mongodb';
 import type { CommandStartedEvent, Db, Document, MongoClientOptions } from 'mongodb';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it as anyBackendIt, vi } from 'vitest';
 import {
   ATLAS_LOCAL_URI,
   DB_NAME,
@@ -31,6 +31,17 @@ import {
 import { MongoDBVector } from './';
 
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
+
+/** Set by a cluster run: the fixture then connects to the Atlas cluster at this URI instead of Atlas Local. */
+const NATIVE_CLUSTER = process.env.OWNERSHIP_TEST_URI !== undefined;
+/**
+ * `it` runs on Atlas Local only. A cluster run covers design §7's native set (P-ID, P-SAME, P-DIFF,
+ * P-X8, P-LOST-a, P-DEL-ID, P-VRENAME, declared with `anyBackendIt`); the rest stub listings,
+ * emulate the cluster or depend on Atlas Local behaviour, so they say nothing more on a cluster.
+ */
+const it = anyBackendIt.skipIf(NATIVE_CLUSTER);
+/** Cluster mode is emulated on Atlas Local by `clusterCreateMode`; a real cluster answers an identical create with the existing id. */
+const emulateCluster = (cluster: boolean) => cluster && !NATIVE_CLUSTER;
 
 type Checker = ReturnType<typeof installInvariantChecker>;
 type CleanOpts = Parameters<Checker['assertClean']>[1];
@@ -588,44 +599,50 @@ describe('provisioning protocol', () => {
       ['local', false],
       ['cluster', true],
     ])('P-ID (%s)', (_label, cluster) => {
-      it('identical concurrent calls released in any order all succeed and record the listed id', async () => {
-        const coll = await byoColl('pid');
-        const gates = Array.from({ length: 5 }, () => deferred());
-        const all = deferred();
-        let arrived = 0;
-        const beforeAtlasCreate = async () => {
-          const gate = gates[arrived]!;
-          if (++arrived === 5) all.resolve();
-          await gate.promise;
-        };
-        const hooks = { beforeAtlasCreate, ...(cluster ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}) };
-        await withHooks([a, b], hooks, async () => {
-          const calls = [a, b, a, b, a].map(s => createByo(s, coll));
-          try {
-            // Bounded: fails after 15 s if a call never reaches the create.
-            await reached({ reached: all });
-            // A different release order on each run.
-            for (const i of [0, 1, 2, 3, 4].sort(() => Math.random() - 0.5)) {
-              gates[i]!.resolve();
-              await new Promise(r => setTimeout(r, Math.floor(Math.random() * 5)));
+      anyBackendIt.skipIf(NATIVE_CLUSTER && !cluster)(
+        'identical concurrent calls released in any order all succeed and record the listed id',
+        async () => {
+          const coll = await byoColl('pid');
+          const gates = Array.from({ length: 5 }, () => deferred());
+          const all = deferred();
+          let arrived = 0;
+          const beforeAtlasCreate = async () => {
+            const gate = gates[arrived]!;
+            if (++arrived === 5) all.resolve();
+            await gate.promise;
+          };
+          const hooks = {
+            beforeAtlasCreate,
+            ...(emulateCluster(cluster) ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}),
+          };
+          await withHooks([a, b], hooks, async () => {
+            const calls = [a, b, a, b, a].map(s => createByo(s, coll));
+            try {
+              // Bounded: fails after 15 s if a call never reaches the create.
+              await reached({ reached: all });
+              // A different release order on each run.
+              for (const i of [0, 1, 2, 3, 4].sort(() => Math.random() - 0.5)) {
+                gates[i]!.resolve();
+                await new Promise(r => setTimeout(r, Math.floor(Math.random() * 5)));
+              }
+            } finally {
+              for (const g of gates) g.resolve();
+              // Settle every call even when the barrier failed, so none rejects unhandled.
+              const settled = await Promise.allSettled(calls);
+              for (const r of settled) if (r.status === 'rejected') throw r.reason;
             }
-          } finally {
-            for (const g of gates) g.resolve();
-            // Settle every call even when the barrier failed, so none rejects unhandled.
-            const settled = await Promise.allSettled(calls);
-            for (const r of settled) if (r.status === 'rejected') throw r.reason;
-          }
-        });
-        const docs = await db
-          .collection(REGISTRY)
-          .find({ _id: coll as any })
-          .toArray();
-        expect(docs).toHaveLength(1);
-        expect(typeof docs[0]?.generation).toBe('string');
-        expect(docs[0]?.ownsVectorIndex).toBe(true);
-        const vec = `${coll}_vector_index`;
-        expect(docs[0]?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
-      });
+          });
+          const docs = await db
+            .collection(REGISTRY)
+            .find({ _id: coll as any })
+            .toArray();
+          expect(docs).toHaveLength(1);
+          expect(typeof docs[0]?.generation).toBe('string');
+          expect(docs[0]?.ownsVectorIndex).toBe(true);
+          const vec = `${coll}_vector_index`;
+          expect(docs[0]?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+        },
+      );
     });
 
     it('P-NOROW: a successful create the P5 listing does not show is proven and recorded', async () => {
@@ -641,21 +658,24 @@ describe('provisioning protocol', () => {
       expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
     });
 
-    it('P-X8: an external identical create between P3a and P4 on the cluster is recorded as ours', async () => {
-      const coll = await byoColl('px8');
-      const vec = `${coll}_vector_index`;
-      await withHooks(
-        [a],
-        {
-          createSearchIndexesCommand: clusterCreateMode(db),
-          beforeAtlasCreate: () => createRawSearchIndex(db, coll, vec, vectorDefinition),
-        },
-        () => createByo(a, coll),
-      );
-      const e = await entry(coll);
-      expect(e?.ownsVectorIndex).toBe(true);
-      expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
-    });
+    anyBackendIt(
+      'P-X8: an external identical create between P3a and P4 on the cluster is recorded as ours',
+      async () => {
+        const coll = await byoColl('px8');
+        const vec = `${coll}_vector_index`;
+        await withHooks(
+          [a],
+          {
+            ...(emulateCluster(true) ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}),
+            beforeAtlasCreate: () => createRawSearchIndex(db, coll, vec, vectorDefinition),
+          },
+          () => createByo(a, coll),
+        );
+        const e = await entry(coll);
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(e?.indexIds?.[0]?.id).toBe(await listedId(db, coll, vec));
+      },
+    );
 
     it('P-X8-OLD: an existing identical index answering with its old id is foreign by timestamp', async () => {
       const coll = await byoColl('px8old');
@@ -756,7 +776,7 @@ describe('provisioning protocol', () => {
     });
 
     describe('vector rename (§3.3)', () => {
-      it('P-VRENAME: a replaced vector index stays retired and is dropped by deleteIndex', async () => {
+      anyBackendIt('P-VRENAME: a replaced vector index stays retired and is dropped by deleteIndex', async () => {
         const coll = await byoColl('pvrename');
         await createByo(a, coll, { searchIndexName: 'V0' });
         const v0 = await listedId(db, coll, 'V0');
@@ -963,32 +983,39 @@ describe('provisioning protocol', () => {
         checker.violations.length = 0;
       });
 
-      it('P-DEL-ID: a delete drops the incarnation it recorded, never a stranger recreated under the name', async () => {
-        const coll = await byoColl('pdelid');
-        await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
-        const r = await listedId(db, coll, 'N');
-        await seedUser(coll, 'a', { textSearchIndexName: 'N', ownsTextIndex: true, indexIds: [{ name: 'N', id: r }] });
-        const { drops } = recordDrops(a);
-        const p = pause();
-        hooks(a, { beforeDeleteDrop: p.hook });
-        const del = a.deleteIndex({ indexName: `${coll}_a` }).catch(e => e);
-        try {
-          await reached(p);
-          // An external drop of R, then an external create of X under the same name.
-          await db.command({ dropSearchIndex: coll, id: r }, { readPreference: 'primary' });
-          await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+      anyBackendIt(
+        'P-DEL-ID: a delete drops the incarnation it recorded, never a stranger recreated under the name',
+        async () => {
+          const coll = await byoColl('pdelid');
           await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
-        } finally {
-          p.release.resolve();
-        }
-        expect(await del).toBeUndefined();
-        const x = await listedId(db, coll, 'N');
-        expect(x).toBeDefined();
-        expect(x).not.toBe(r);
-        expect(drops).toEqual([{ collectionName: coll, name: 'N', id: r }]);
-        expect(await entry(`${coll}_a`)).toBeNull();
-        clean.opts = { userIndexes: ['N'] };
-      });
+          const r = await listedId(db, coll, 'N');
+          await seedUser(coll, 'a', {
+            textSearchIndexName: 'N',
+            ownsTextIndex: true,
+            indexIds: [{ name: 'N', id: r }],
+          });
+          const { drops } = recordDrops(a);
+          const p = pause();
+          hooks(a, { beforeDeleteDrop: p.hook });
+          const del = a.deleteIndex({ indexName: `${coll}_a` }).catch(e => e);
+          try {
+            await reached(p);
+            // An external drop of R, then an external create of X under the same name.
+            await db.command({ dropSearchIndex: coll, id: r }, { readPreference: 'primary' });
+            await waitFor(async () => (await listedId(db, coll, 'N')) === undefined);
+            await createRawSearchIndex(db, coll, 'N', textDefinition, 'search');
+          } finally {
+            p.release.resolve();
+          }
+          expect(await del).toBeUndefined();
+          const x = await listedId(db, coll, 'N');
+          expect(x).toBeDefined();
+          expect(x).not.toBe(r);
+          expect(drops).toEqual([{ collectionName: coll, name: 'N', id: r }]);
+          expect(await entry(`${coll}_a`)).toBeNull();
+          clean.opts = { userIndexes: ['N'] };
+        },
+      );
 
       it('P-DEL-RESUME-VRETIRED: a resumed delete drops a retired vector name by its recorded id', async () => {
         const coll = await byoColl('pdelrv');
@@ -1176,26 +1203,29 @@ describe('provisioning protocol', () => {
       await c.disconnect();
     }
 
-    it('P-LOST-a: a lost response with the index listed records it uncertain; deleteIndex keeps it and removes the record', async () => {
-      const coll = await byoColl('plosta');
-      const vec = `${coll}_vector_index`;
-      const logs = captureLogs(a);
-      hooks(a, { createSearchIndexesCommand: unknownCreateMode({ perform: true }) });
-      await createByo(a, coll);
-      checker.restoreHooks();
-      const id = await listedId(db, coll, vec);
-      expect(id).toBeDefined();
-      const [doc] = await docsOn(coll);
-      expect(doc).toMatchObject({ state: 'uncertain', candidateId: id, name: vec });
-      expect(logs.warn).toContain(uncertainText(vec, coll, id!));
-      expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
-      logs.warn.length = 0;
-      await a.deleteIndex({ indexName: coll });
-      expect(await searchIndexNames(db, coll)).toEqual([vec]);
-      expect(await docsOn(coll)).toEqual([]);
-      expect(logs.warn).toContain(uncertainText(vec, coll, id!));
-      clean.opts = { expectedLeaks: [vec] };
-    });
+    anyBackendIt(
+      'P-LOST-a: a lost response with the index listed records it uncertain; deleteIndex keeps it and removes the record',
+      async () => {
+        const coll = await byoColl('plosta');
+        const vec = `${coll}_vector_index`;
+        const logs = captureLogs(a);
+        hooks(a, { createSearchIndexesCommand: unknownCreateMode({ perform: true }) });
+        await createByo(a, coll);
+        checker.restoreHooks();
+        const id = await listedId(db, coll, vec);
+        expect(id).toBeDefined();
+        const [doc] = await docsOn(coll);
+        expect(doc).toMatchObject({ state: 'uncertain', candidateId: id, name: vec });
+        expect(logs.warn).toContain(uncertainText(vec, coll, id!));
+        expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+        logs.warn.length = 0;
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([vec]);
+        expect(await docsOn(coll)).toEqual([]);
+        expect(logs.warn).toContain(uncertainText(vec, coll, id!));
+        clean.opts = { expectedLeaks: [vec] };
+      },
+    );
 
     it('P-LOST-b: a lost response with nothing listed fails, stays creating, and the reconciler removes it', async () => {
       const coll = await byoColl('plostb');
@@ -1547,63 +1577,70 @@ describe('provisioning protocol', () => {
         ['local', false],
         ['cluster', true],
       ])('P-SAME (%s)', (_label, cluster) => {
-        it('a delete and identical recreate during provisioning ends owned with R', async () => {
-          const coll = await byoColl('psame');
-          const vec = `${coll}_vector_index`;
-          if (cluster)
-            hooks(b, {
-              createSearchIndexesCommand: clusterCreateMode(db),
-              // b's pre-lists ran before a's create landed, so b creates too and gets R back.
-              listSearchIndexesStub: (_n: string, phase: string) =>
-                phase === 'P1' || phase === 'P3a' ? [] : undefined,
-            });
-          const err: any = await parkedAt(
-            'beforeRecordOwnership',
-            () => create(a, coll),
-            async () => {
-              await b.deleteIndex({ indexName: coll });
-              await create(b, coll);
-            },
-          );
-          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
-          expect(err?.message).toBe(P7C);
-          const e = await entry(coll);
-          expect(e?.ownsVectorIndex).toBe(true);
-          expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
-          expect(await docsOn(coll)).toEqual([]);
-        });
+        anyBackendIt.skipIf(NATIVE_CLUSTER && !cluster)(
+          'a delete and identical recreate during provisioning ends owned with R',
+          async () => {
+            const coll = await byoColl('psame');
+            const vec = `${coll}_vector_index`;
+            if (cluster)
+              hooks(b, {
+                ...(emulateCluster(cluster) ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}),
+                // b's pre-lists ran before a's create landed, so b creates too and gets R back.
+                listSearchIndexesStub: (_n: string, phase: string) =>
+                  phase === 'P1' || phase === 'P3a' ? [] : undefined,
+              });
+            const err: any = await parkedAt(
+              'beforeRecordOwnership',
+              () => create(a, coll),
+              async () => {
+                await b.deleteIndex({ indexName: coll });
+                await create(b, coll);
+              },
+            );
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err?.message).toBe(P7C);
+            const e = await entry(coll);
+            expect(e?.ownsVectorIndex).toBe(true);
+            expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+            expect(await docsOn(coll)).toEqual([]);
+          },
+        );
       });
 
       describe.each<[string, boolean]>([
         ['local', false],
         ['cluster', true],
       ])('P-DIFF (%s)', (_label, cluster) => {
-        it('a delete and recreate on another collection during provisioning drops R by id', async () => {
-          const x = await byoColl('pdiffx');
-          const y = await byoColl('pdiffy');
-          const name = uniqueName('pdiff');
-          const vec = `${name}_vector_index`;
-          if (cluster) for (const s of [a, b]) hooks(s, { createSearchIndexesCommand: clusterCreateMode(db) });
-          const { drops } = recordDrops(a);
-          let r: string | undefined;
-          const err: any = await parkedAt(
-            'beforeRecordOwnership',
-            () => create(a, x, { indexName: name }),
-            async () => {
-              r = await listedId(db, x, vec);
-              await b.deleteIndex({ indexName: name });
-              await create(b, y, { indexName: name });
-            },
-          );
-          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
-          expect(err?.message).toBe(P7C);
-          expect(r).toBeDefined();
-          expect(drops).toEqual([{ collectionName: x, name: vec, id: r }]);
-          await waitFor(async () => (await searchIndexNames(db, x)).length === 0);
-          expect((await entry(name))?.collectionName).toBe(y);
-          expect(await docsOn(x)).toEqual([]);
-          await b.deleteIndex({ indexName: name });
-        });
+        anyBackendIt.skipIf(NATIVE_CLUSTER && !cluster)(
+          'a delete and recreate on another collection during provisioning drops R by id',
+          async () => {
+            const x = await byoColl('pdiffx');
+            const y = await byoColl('pdiffy');
+            const name = uniqueName('pdiff');
+            const vec = `${name}_vector_index`;
+            if (emulateCluster(cluster))
+              for (const s of [a, b]) hooks(s, { createSearchIndexesCommand: clusterCreateMode(db) });
+            const { drops } = recordDrops(a);
+            let r: string | undefined;
+            const err: any = await parkedAt(
+              'beforeRecordOwnership',
+              () => create(a, x, { indexName: name }),
+              async () => {
+                r = await listedId(db, x, vec);
+                await b.deleteIndex({ indexName: name });
+                await create(b, y, { indexName: name });
+              },
+            );
+            expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+            expect(err?.message).toBe(P7C);
+            expect(r).toBeDefined();
+            expect(drops).toEqual([{ collectionName: x, name: vec, id: r }]);
+            await waitFor(async () => (await searchIndexNames(db, x)).length === 0);
+            expect((await entry(name))?.collectionName).toBe(y);
+            expect(await docsOn(x)).toEqual([]);
+            await b.deleteIndex({ indexName: name });
+          },
+        );
       });
 
       it('P-ABA-inflight: A -> B in flight, then back to A: A owned, B retired with its id', async () => {
