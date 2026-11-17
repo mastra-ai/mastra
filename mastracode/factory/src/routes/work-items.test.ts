@@ -1178,6 +1178,20 @@ describe('POST transition moving a card to another board', () => {
     expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
   });
 
+  it('queues the destination runner even when the move names run_start as its cause', async () => {
+    // A run-start cause marks the card's own agent landing it where its run already is; crossing
+    // boards is never that, so the destination phase's runner still queues.
+    const item = await createItem();
+    const res = await move(item, { board: 'preview', stage: 'triage', cause: 'run_start' });
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result.status).toBe('accepted');
+    expect(result.decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+  });
+
   it('holds a busy card whatever cause the request names', async () => {
     const item = await createItem();
     const triaged = await move(item, { board: 'work', stage: 'triage' });
