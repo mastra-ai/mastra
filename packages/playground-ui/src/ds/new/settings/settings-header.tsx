@@ -4,6 +4,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
+// Section titles and descriptions sit 10px inside the card's edge, like a settings page's title. In a form (or a
+// field) outside a settings page, a title heads a group of fields, so it lines up with their labels and takes
+// their color. The defaults are custom properties, so a caller's `ps-*` or `text-*` class still wins.
+// Written out in full (not composed) so Tailwind finds the classes.
+const settingsInset =
+  '[--settings-inset:--spacing(2.5)] [&:is(form_*,[data-slot=field]_*):not([data-slot=settings-layout]_*)]:[--settings-inset:0px] ps-(--settings-inset)';
+const settingsTitleColor =
+  '[--settings-title-color:var(--muted-foreground)] [&:is(form_*,[data-slot=field]_*):not([data-slot=settings-layout]_*)]:[--settings-title-color:var(--foreground)] text-(color:--settings-title-color)';
+
 const SettingsTitleIdContext = createContext<string | undefined>(undefined);
 
 /** One section of a settings page: a `SettingsTitle` (or `SettingsHeader`) above its `SettingsContainer`. */
@@ -53,20 +62,8 @@ export function SettingsTitle({
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
-    // Inset by 10px, so the title sits a little inside the card's edge below it. In a form outside a settings
-    // page it heads a group of fields, so it lines up with their labels and takes their color.
-    <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5 [:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:ps-0">
-      <Txt
-        as="h2"
-        id={titleId}
-        variant="subheading"
-        tone="muted"
-        className={cn(
-          '[:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:text-foreground',
-          className,
-        )}
-        {...props}
-      >
+    <div className={cn('flex min-w-0 flex-wrap items-center gap-2', settingsInset)}>
+      <Txt as="h2" id={titleId} variant="subheading" className={cn(settingsTitleColor, className)} {...props}>
         {info == null ? children : <SettingsTitleInfo info={info}>{children}</SettingsTitleInfo>}
       </Txt>
       {accessory}
@@ -99,13 +96,5 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return (
-    <Txt
-      as="p"
-      variant="caption"
-      tone="muted"
-      className={cn('ps-2.5 [:where(form,[data-slot=field]):not([data-slot=settings-layout]_*)_&]:ps-0', className)}
-      {...props}
-    />
-  );
+  return <Txt as="p" variant="caption" tone="muted" className={cn(settingsInset, className)} {...props} />;
 }
