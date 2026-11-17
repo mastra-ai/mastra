@@ -78,6 +78,11 @@ import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptanc
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
+  SEED_GITHUB_ISSUE_SOURCES_MIGRATION,
+  linkedGithubProjectRepositoryIds,
+  linkedGithubSlugsByOrg,
+} from './integrations/github/issue-intake.js';
+import {
   recordFactoryPullRequestProvenance,
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
@@ -104,6 +109,7 @@ import {
 } from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -1249,6 +1255,37 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    const sourceControlReady = storage.isDomainReady('source-control');
+    // Issues only become cards from repositories selected in Work Intake; every linked repository brought them in
+    // before, so select those once to keep that.
+    if (storage.isDomainReady('intake') && sourceControlReady) {
+      await intakeStorage
+        .addSourcesOnce({
+          migration: SEED_GITHUB_ISSUE_SOURCES_MIGRATION,
+          integrationId: 'github',
+          sourcesByOrg: () => linkedGithubSlugsByOrg(sourceControlStorage.forIntegration('github')),
+        })
+        .catch(error => {
+          console.error(
+            '[factory] Failed to select linked GitHub repositories for issue intake; retrying next boot:',
+            error,
+          );
+        });
+    }
+    if (storage.isDomainReady('intake')) {
+      await intakeStorage
+        .addSourcesOnce({
+          migration: SELECT_VANTA_VULNERABILITIES_MIGRATION,
+          integrationId: 'vanta',
+          sourcesByOrg: async () => vantaOrgsSyncingWithoutSource(await intakeStorage.listConfigs()),
+        })
+        .catch(error => {
+          console.error(
+            '[factory] Failed to select Vanta vulnerabilities for orgs syncing them; retrying next boot:',
+            error,
+          );
+        });
+    }
     // Sessions from before shared resources ran under their own id. Move them
     // onto their Factory or owner in the background: it can take minutes on a
     // remote database, and an unmoved session keeps working under its own id
@@ -2283,6 +2320,25 @@ export class MastraFactory {
             domains,
             integrations: integrationRegistrations,
             intakeReady,
+            ...(githubIntegration && sourceControlReady
+              ? {
+                  onIntakeSourcesSelected: ({ orgId, integrationId, sourceIds }) => {
+                    if (integrationId !== 'github') return;
+                    void (async () => {
+                      const projectRepositoryIds = await linkedGithubProjectRepositoryIds(
+                        sourceControlStorage.forIntegration('github'),
+                        orgId,
+                        sourceIds,
+                      );
+                      for (const projectRepositoryId of projectRepositoryIds) {
+                        await githubIntegration.ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId });
+                      }
+                    })().catch(error => {
+                      console.warn('[factory] Failed to bring in issues from newly selected repositories:', error);
+                    });
+                  },
+                }
+              : {}),
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,

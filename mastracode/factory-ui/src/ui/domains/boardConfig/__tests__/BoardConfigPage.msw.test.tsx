@@ -304,7 +304,19 @@ describe('Board configuration', () => {
       configNav()
         .getAllByRole('link')
         .map(link => link.textContent),
-    ).toEqual(['Skills', 'General', 'Rules', 'Intake', 'Triage', 'Plan', 'Review', 'Building', 'Done', 'Canceled']);
+    ).toEqual([
+      'Skills',
+      'Routing',
+      'General',
+      'Rules',
+      'Intake',
+      'Triage',
+      'Plan',
+      'Review',
+      'Building',
+      'Done',
+      'Canceled',
+    ]);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));

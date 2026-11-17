@@ -92,9 +92,9 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
  *
  * Frozen: its unique index allows one binding per source, and indexes cannot be
  * narrowed, so bindings moved to {@link INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA}. Rows
- * are copied once at boot and never written again. Registered, with
- * {@link INTAKE_DATA_MIGRATIONS_SCHEMA}, only on a database an earlier release
- * already created it in, so a build rolled back to still finds the rows there.
+ * are copied once at boot and never written again. Registered only on a database
+ * an earlier release already created it in, so a build rolled back to still
+ * finds the rows there.
  */
 export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
   name: 'intake_source_bindings',
@@ -146,10 +146,7 @@ export const INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/**
- * One-time data migrations that have run, so none re-runs over rows users have changed since. Its one
- * migration copies {@link INTAKE_SOURCE_BINDINGS_SCHEMA}, so it exists only alongside that collection.
- */
+/** One-time data migrations that have run, so none re-runs over rows users have changed since. */
 export const INTAKE_DATA_MIGRATIONS_SCHEMA: CollectionSchema = {
   name: 'intake_data_migrations',
   columns: {
@@ -303,13 +300,14 @@ export class IntakeStorage extends FactoryStorageDomain {
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([INTAKE_ORG_SETTINGS_SCHEMA, INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA]);
+    await this.ensureCollections([
+      INTAKE_ORG_SETTINGS_SCHEMA,
+      INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
+      INTAKE_DATA_MIGRATIONS_SCHEMA,
+    ]);
     this.#legacy = {
       userSettings: await ensureLegacyCollections(this.storage, [LEGACY_INTAKE_USER_SETTINGS_SCHEMA]),
-      bindings: await ensureLegacyCollections(this.storage, [
-        INTAKE_SOURCE_BINDINGS_SCHEMA,
-        INTAKE_DATA_MIGRATIONS_SCHEMA,
-      ]),
+      bindings: await ensureLegacyCollections(this.storage, [INTAKE_SOURCE_BINDINGS_SCHEMA]),
     };
     if (this.#legacy.userSettings) await this.#foldLegacyUserSelections();
     if (this.#legacy.bindings) await this.#copyLegacyBindings();
@@ -375,10 +373,8 @@ export class IntakeStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('intake_org_settings', {});
     if (this.#legacy.userSettings) await this.ops.deleteMany('intake_settings', {});
-    if (this.#legacy.bindings) {
-      await this.ops.deleteMany('intake_source_bindings', {});
-      await this.ops.deleteMany('intake_data_migrations', {});
-    }
+    if (this.#legacy.bindings) await this.ops.deleteMany('intake_source_bindings', {});
+    await this.ops.deleteMany('intake_data_migrations', {});
     await this.ops.deleteMany('intake_source_subscriptions', {});
   }
 
@@ -419,6 +415,53 @@ export class IntakeStorage extends FactoryStorageDomain {
     const merged: IntakeConfig = Object.assign(Object.create(null), await this.getConfig({ orgId }), config);
     await this.saveConfig({ orgId, config: merged });
     return merged;
+  }
+
+  /** Every org's stored selections. */
+  async listConfigs(): Promise<Array<{ orgId: string; config: IntakeConfig }>> {
+    const rows = await this.#db.findMany<{ org_id: string; config: IntakeConfig }>('intake_org_settings', {});
+    return rows.map(row => ({ orgId: row.org_id, config: row.config }));
+  }
+
+  /** Select `sourceIds` for `integrationId` on top of what the org already selected. */
+  async addSources({
+    orgId,
+    integrationId,
+    sourceIds,
+  }: {
+    orgId: string;
+    integrationId: string;
+    sourceIds: readonly string[];
+  }): Promise<void> {
+    const config = await this.getConfig({ orgId });
+    const current = config[integrationId];
+    const selected = current?.enabled ? (current.sourceIds ?? []) : [];
+    const merged = [...new Set([...selected, ...sourceIds])];
+    await this.saveConfig({
+      orgId,
+      config: { ...config, [integrationId]: { enabled: merged.length > 0, sourceIds: merged.length ? merged : null } },
+    });
+  }
+
+  /** Run {@link addSources} for every org once per `migration`, so a later removal by a user sticks. */
+  async addSourcesOnce({
+    migration,
+    integrationId,
+    sourcesByOrg,
+  }: {
+    migration: string;
+    integrationId: string;
+    sourcesByOrg: () => Promise<ReadonlyMap<string, readonly string[]>>;
+  }): Promise<void> {
+    if (await this.#db.findOne('intake_data_migrations', { name: migration })) return;
+    for (const [orgId, sourceIds] of await sourcesByOrg()) {
+      await this.addSources({ orgId, integrationId, sourceIds });
+    }
+    try {
+      await this.#db.insertOne('intake_data_migrations', { name: migration, completed_at: new Date() });
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+    }
   }
 
   async #insertConfigIfAbsent(orgId: string, config: IntakeConfig): Promise<boolean> {

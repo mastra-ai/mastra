@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
+import { githubIssueIntakeSelected } from './issue-intake.js';
 import {
   githubItemSources,
   githubRulesOptions,
@@ -111,7 +112,10 @@ export function createGithubIssueReconciler(
         // ingress leaves no card for the sweeps above to repair. Only issues
         // filed after the repository was linked are replayed, so linking a
         // repository never backfills its existing backlog.
-        if (listOpenIssues) {
+        const intakeSelected = await Promise.all(
+          projects.map(project => githubIssueIntakeSelected(options.intake, project.orgId, repository.fullName)),
+        );
+        if (listOpenIssues && intakeSelected.includes(true)) {
           const linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
           const openIssues = await listOpenIssues({
             installationId: repository.installationId,

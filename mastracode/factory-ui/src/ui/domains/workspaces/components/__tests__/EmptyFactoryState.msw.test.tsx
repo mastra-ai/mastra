@@ -345,7 +345,7 @@ describe('Draft Factory onboarding', () => {
   });
 
   it('never starts syncing a repository the Work step switch left off', async () => {
-    registerSetup();
+    const writes = registerSetup();
     // Nothing is selected before onboarding, so "off" must not select the repository either, which
     // leaves the intake config untouched.
     const intake = registerIntake();
@@ -360,6 +360,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.find(item => item.path === 'repository')?.body).toMatchObject({ selectIntake: false });
     expect(intake.saved).toEqual([]);
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
   });

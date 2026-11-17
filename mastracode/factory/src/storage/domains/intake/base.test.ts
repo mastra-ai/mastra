@@ -91,6 +91,35 @@ describe('IntakeStorage', () => {
     expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
   });
 
+  it('adds sources on top of the selection, and a paused selection starts from nothing', async () => {
+    const storage = await makeStorage();
+    await storage.saveConfig({
+      orgId: 'org1',
+      config: { github: { enabled: true, sourceIds: ['a'] }, linear: { enabled: false, sourceIds: ['team'] } },
+    });
+
+    await storage.addSources({ orgId: 'org1', integrationId: 'github', sourceIds: ['b', 'a'] });
+    await storage.addSources({ orgId: 'org1', integrationId: 'linear', sourceIds: ['other'] });
+    await storage.addSources({ orgId: 'org2', integrationId: 'github', sourceIds: ['c'] });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+      github: { enabled: true, sourceIds: ['a', 'b'] },
+      linear: { enabled: true, sourceIds: ['other'] },
+    });
+    expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: true, sourceIds: ['c'] } });
+  });
+
+  it('adds sources once per migration, so a source removed afterwards stays removed', async () => {
+    const storage = await makeStorage();
+    const sourcesByOrg = async () => new Map([['org1', ['acme/repo']]]);
+    await storage.addSourcesOnce({ migration: 'seed', integrationId: 'github', sourcesByOrg });
+    await storage.saveConfig({ orgId: 'org1', config: { github: { enabled: false, sourceIds: null } } });
+
+    await storage.addSourcesOnce({ migration: 'seed', integrationId: 'github', sourcesByOrg });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({ github: { enabled: false, sourceIds: null } });
+  });
+
   describe('legacy per-member selections', () => {
     // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
     function tempDatabaseUrl(): string {
@@ -554,10 +583,11 @@ describe('IntakeStorage', () => {
 
       const backend = new LibSQLFactoryStorage({ id: 'intake-test-fresh-read', url });
       try {
-        for (const table of ['intake_settings', 'intake_source_bindings', 'intake_data_migrations']) {
+        for (const table of ['intake_settings', 'intake_source_bindings']) {
           expect(await backend.collectionExists(table), table).toBe(false);
         }
         expect(await backend.collectionExists('intake_source_subscriptions')).toBe(true);
+        expect(await backend.collectionExists('intake_data_migrations')).toBe(true);
       } finally {
         await backend.close();
       }

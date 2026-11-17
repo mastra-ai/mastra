@@ -11,8 +11,8 @@ import {
 import type { IntakeDecisionInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useNotRoutedQuery, useRouteAgain } from '../../../../hooks/useIntakeOrder';
+import { NOT_ROUTED_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { IntakeTesterDialog } from '../../intake/IntakeTesterDialog';
-import { NOT_ROUTED_ANCHOR } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /** Recent issues and pull requests no board's rules took. Route again files one after its rules or labels change. */
@@ -34,6 +34,7 @@ export function NotRoutedSection({ factoryId }: { factoryId: string }) {
   return (
     <SettingsSubsection
       id={NOT_ROUTED_ANCHOR}
+      scope="factory"
       title="Not routed"
       description="New issues and pull requests no board's rules took. Change a board's rules, then route the item again."
     >
