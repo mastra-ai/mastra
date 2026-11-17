@@ -862,6 +862,54 @@ describe('storage-backed ExecutionFence', () => {
       expect(await fence.settle(async () => {})).toBe('owned');
     });
 
+    it('does not trust a renewal that committed before the stall once another execution took over', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let deliver!: () => void;
+      const delivered = new Promise<void>(resolve => (deliver = resolve));
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        const result = await renew(args);
+        await delivered;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      const successor = await ExecutionFence.claim({
+        leaseProvider: NoopLeaseProvider,
+        workflowsStore,
+        agentId,
+        runId: 'run-1',
+        mode: 'recover',
+      });
+      deliver();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+      expect(await fence.settle(async () => {})).toBe('superseded');
+      await successor.settle(async () => {});
+    });
+
+    it('marks the fence lost when stalls keep recurring while a renewal hangs', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(() => new Promise(() => {}));
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(false);
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    });
+
     it('still loses the run to an execution that claimed it during the stall', async () => {
       vi.useFakeTimers();
       const { workflowsStore } = await stores();

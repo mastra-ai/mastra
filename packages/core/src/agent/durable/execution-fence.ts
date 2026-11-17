@@ -1142,6 +1142,8 @@ export class ExecutionFence implements RunFenceScope {
    */
   #startHeartbeat(): void {
     let lastTickAt = Date.now();
+    // A stalled tick defers judging an in-flight renewal once; repeated stalls must not hold it off forever.
+    let deferredForStall = false;
     this.#heartbeat = setInterval(() => {
       const now = Date.now();
       // A tick far behind schedule means this process was stalled: a response that arrived meanwhile has not been
@@ -1154,9 +1156,12 @@ export class ExecutionFence implements RunFenceScope {
         // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
         // makes it return false. Wait for its result, but only for a grace period past the deadline.
         const deadline = storage ? this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS : this.#leaseExpiresAt;
-        if (now >= deadline && !(storage && stalled)) {
-          this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
+        if (now < deadline) return;
+        if (storage && stalled && !deferredForStall) {
+          deferredForStall = true;
+          return;
         }
+        this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
       // A lease has no generation to tell a late renewal from one by a later holder, so it keeps the local deadline.
@@ -1164,23 +1169,9 @@ export class ExecutionFence implements RunFenceScope {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
+      deferredForStall = false;
       this.#renewalInFlight = true;
-      const startedAt = Date.now();
-      void this.#backend
-        .renew(this.claim)
-        .then(({ renewed, leaseExpiresAt }) => {
-          if (renewed) {
-            // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
-            // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
-            const reported = leaseExpiresAt
-              ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
-              : 0;
-            this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
-            return;
-          }
-          this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
-          return this.#noteTakeover();
-        })
+      void this.#renew()
         .catch(cause => {
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
@@ -1193,6 +1184,25 @@ export class ExecutionFence implements RunFenceScope {
         });
     }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
     this.#heartbeat.unref?.();
+  }
+
+  #renew(): Promise<void> {
+    const startedAt = Date.now();
+    return this.#backend.renew(this.claim).then(({ renewed, leaseExpiresAt }) => {
+      if (!renewed) {
+        this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
+        return this.#noteTakeover();
+      }
+      // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
+      // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+      const reported = leaseExpiresAt
+        ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
+        : 0;
+      this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
+      // A response read after a stall can report a lease that has since run out, and another execution may have
+      // claimed the run meanwhile. Ask the store again rather than carry on from a stale answer.
+      if (this.generation !== undefined && Date.now() >= this.#leaseExpiresAt) return this.#renew();
+    });
   }
 }
 
