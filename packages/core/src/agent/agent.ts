@@ -172,6 +172,7 @@ import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
 import { loadStepResults, residentStepResults } from '../workflows/run-journal';
 import type { Step } from '../workflows/step';
+import { markTransientAgentWorkflow } from '../workflows/transient-agent-workflows';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import {
   waitForSuspendedSnapshot,
@@ -2583,7 +2584,7 @@ export class Agent<
       workflow = workflow.then(step);
     }
 
-    const committedWorkflow = workflow.commit() as T;
+    const committedWorkflow = markTransientAgentWorkflow(workflow.commit()) as T;
     if (isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,

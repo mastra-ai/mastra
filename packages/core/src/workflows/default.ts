@@ -908,6 +908,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** @internal */
     inheritedState?: StateBase;
+    /** @internal */
+    unstored?: boolean;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
@@ -949,7 +951,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     // Time travel and a fresh start() both own the runId, so a stored `canceled` is where they begin.
     const startsFromStoredStatus = !!timeTravel || (!resume && !restart);
-    const replayingCanceled = startsFromStoredStatus && (await isWorkflowRunCanceled(this, workflowId, runId));
+    const replayingCanceled =
+      startsFromStoredStatus && !params.unstored && (await isWorkflowRunCanceled(this, workflowId, runId));
     const tracked = this.lastPersistedStatusByRun.get(runId);
     if (tracked || replayingCanceled) {
       this.lastPersistedStatusByRun.set(runId, { status: tracked?.status, replayingCanceled });
@@ -1236,9 +1239,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         // Checked before the next entry is dispatched, so a run canceled from another
         // process stops here. A step write the store rejected already recorded it.
+        const hasStoredRow = !params.unstored || this.getLastPersistedStatus(runId) !== undefined;
         if (
           this.honorsStoredCancellation(runId) &&
-          (this.getLastPersistedStatus(runId) === 'canceled' || (await isWorkflowRunCanceled(this, workflowId, runId)))
+          (this.getLastPersistedStatus(runId) === 'canceled' ||
+            (hasStoredRow && (await isWorkflowRunCanceled(this, workflowId, runId))))
         ) {
           lastOutput.result = { status: 'canceled' };
         }

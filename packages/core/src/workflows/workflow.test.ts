@@ -13,6 +13,7 @@ import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
 import { createWorkflow } from './create';
 import { createDefaultEngineTestSuite } from './test-utils/default-engine-suite';
+import { markTransientAgentWorkflow } from './transient-agent-workflows';
 import type { Workflow } from './types';
 import { createStep } from './workflow';
 
@@ -1664,6 +1665,89 @@ describe('createRun storage existence read (issue #19015)', () => {
 
     expect(readSpy).toHaveBeenCalled();
   });
+});
+
+describe('cancellation reads for user workflows without an initial snapshot', () => {
+  const noopStep = (id: string, execute: () => Promise<void> = async () => {}) =>
+    createStep({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        await execute();
+        return {};
+      },
+    });
+
+  it('keeps status reads even when the workflow policy never persists', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-status-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(noopStep('first'))
+      .then(noopStep('second'))
+      .then(noopStep('third'))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-status-wf': workflow } });
+    const workflowsStore = await storage.getStore('workflows');
+    const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: {} });
+
+    expect(result.status).toBe('success');
+    expect(statusSpy).toHaveBeenCalled();
+  });
+
+  it('runs a workflow whose persistence policy reads step results, keeping its status reads', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'step-results-policy-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: {
+        shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
+          workflowStatus === 'success' && stepResults.first!.status === 'success',
+      },
+    })
+      .then(noopStep('first'))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'step-results-policy-wf': workflow } });
+    const workflowsStore = await storage.getStore('workflows');
+    const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
+
+    const run = await workflow.createRun();
+
+    expect((await run.start({ inputData: {} })).status).toBe('success');
+    expect(statusSpy).toHaveBeenCalled();
+  });
+
+  it.each([1, 2] as const)(
+    'keeps framework-owned transient runs out of storage despite an override (v%s)',
+    async storageVersion => {
+      const storage = new MockStore();
+      const workflow = markTransientAgentWorkflow(
+        createWorkflow({
+          id: 'private-agent-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          options: { storageVersion, shouldPersistSnapshot: () => false },
+        })
+          .then(noopStep('first'))
+          .commit(),
+      );
+      new Mastra({ logger: false, storage, workflows: { 'private-agent-workflow': workflow } });
+
+      const run = await workflow.createRun({ shouldPersistSnapshot: () => true });
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+
+      const store = await storage.getStore('workflows');
+      expect(await store!.loadWorkflowRunStatus({ workflowName: workflow.id, runId: run.runId })).toBeNull();
+    },
+  );
 });
 
 describe('concurrent stream close', () => {

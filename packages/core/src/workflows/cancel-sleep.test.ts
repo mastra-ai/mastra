@@ -483,23 +483,16 @@ describe.each([1, 2] as const)('workflow sleep cancellation (storage v%s)', stor
     const store = await storage.getStore('workflows');
     if (!store) throw new Error('workflows store missing');
     const run = await workflow.createRun();
-    const loadStatus = store.loadWorkflowRunStatus.bind(store);
-    // Cancel after the first step's result is decided but before the engine's
-    // abort check. cancel()'s own storage write fails (and is swallowed), so the
-    // engine's abort branch is what records the cancellation.
-    const statusRead = vi.spyOn(store, 'loadWorkflowRunStatus').mockImplementationOnce(async args => {
-      const status = await loadStatus(args);
-      vi.spyOn(store, storageVersion === 2 ? 'updateWorkflowRunHeader' : 'updateWorkflowState').mockRejectedValueOnce(
-        new Error('unavailable'),
-      );
-      await run.cancel();
-      return status;
-    });
+    // cancel()'s own storage write fails (and is swallowed), so the engine's abort branch,
+    // before the first step, is what records the cancellation.
+    vi.spyOn(store, storageVersion === 2 ? 'updateWorkflowRunHeader' : 'updateWorkflowState').mockRejectedValueOnce(
+      new Error('unavailable'),
+    );
+    await run.cancel();
 
     expect((await run.start({ inputData: {} })).status).toBe('canceled');
     expect(afterFirstStep).not.toHaveBeenCalled();
     expect((await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId }))?.status).toBe('canceled');
-    statusRead.mockRestore();
     vi.restoreAllMocks();
 
     const replay = await workflow.createRun({ runId: run.runId });
