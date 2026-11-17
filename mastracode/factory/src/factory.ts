@@ -26,8 +26,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
-import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
@@ -140,13 +139,16 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
+import {
+  readFactorySessionScope,
+  resolveFactorySessionAddress,
+  restorePromptCheckoutTrust,
+} from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { createPhaseGoalEnder } from './rules/phase-goal.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
-import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -179,9 +181,11 @@ import { hydrateSessionMemorySettings } from './session/memory-settings-hydratio
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
-import { observeSessionRunEnd } from './session/run-audit.js';
+import { observeSessionRunEnd, waitForSessionRunAudit } from './session/run-audit.js';
 import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
+import { createSessionActivityMiddleware, SessionUnloader } from './session/session-unloader.js';
+import type { IdleSessionUnloadOptions } from './session/session-unloader.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
@@ -353,6 +357,15 @@ export interface MastraFactoryConfig {
    * (`'eager'`), so the boot overlaps the model's own latency.
    */
   sandboxStart?: FactorySandboxStart;
+  /**
+   * Unloads agent sessions from server memory once this process no longer needs them: when
+   * Factory stops or releases a session's sandbox, and after `idleMs` (default 30 minutes)
+   * without activity, checked every `sweepIntervalMs` (default 1 minute). Unloading keeps the
+   * thread, its messages, the session row and the sandbox; the session's next message, run or
+   * wake loads it again. A session running, waiting on an approval or answer, or open in a
+   * browser tab stays loaded. Pass `false` to keep every session loaded until it is deleted.
+   */
+  idleSessionUnload?: false | IdleSessionUnloadOptions;
   /**
    * Agent controller built-in tools (e.g. `submit_plan`) removed from every
    * Factory session, along with their prompt guidance. Use this when a custom
@@ -658,8 +671,8 @@ export class MastraFactory {
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #unsubscribeSessionListChanges: Promise<() => Promise<void>> | undefined;
-  #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #sessionUnloader: SessionUnloader | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
   #shutdownPromise: Promise<void> | undefined;
   readonly #metrics: FactoryMetrics;
@@ -1342,6 +1355,8 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            // Assigned once the controller exists; retirement only runs after boot.
+            unloadSession: sessionId => this.#sessionUnloader?.unloadReleased(sessionId),
             sandbox: sandboxConfig,
           })
         : undefined;
@@ -1563,8 +1578,6 @@ export class MastraFactory {
             }
           : {}),
       },
-      intake: intakeStorage,
-      startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
       liveSessions: () => liveSessions,
     };
@@ -1700,6 +1713,11 @@ export class MastraFactory {
             workItems: workItemsStorage,
             controller: {
               getSession: async (sessionId: string) => this.#prepared?.base.controller.getSession(sessionId),
+              setThreadModel: async (args: { resourceId: string; threadId: string; modelId: string }) => {
+                const controller = this.#prepared?.base.controller;
+                if (!controller) throw new Error('Factory controller is not ready.');
+                return controller.setThreadModel(args);
+              },
             },
           }
         : {}),
@@ -1969,44 +1987,13 @@ export class MastraFactory {
         disableSettingsOmSeed: true,
         // Factory plan approval is a plain approval; goals are only started by the local TUI.
         planApprovalStartsGoal: false,
+        // The SDK resolves this callback before it loads repository AGENTS.md/CLAUDE.md.
         hostInstructions: async ({ requestContext }) => {
-          const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
-          // The SDK resolves this callback before it loads repository
-          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
-          // only initialState, and a partially persisted one can keep
-          // `factoryProjectId` while `untrustedCheckout` is gone, so the
-          // presence of the project id alone proves nothing. Heal whenever any
-          // trust field the recovery writes is missing, now, not later when
-          // the agent's tools are assembled. Unbound sessions never gain these
-          // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.sessionId) {
-            const current = context.getState();
-            const trustStateComplete =
-              Boolean(current.factoryProjectId) &&
-              Boolean(current.factoryOrgId) &&
-              typeof current.untrustedCheckout === 'boolean';
-            if (!trustStateComplete) {
-              const recovered = await resolveFactorySessionAddress({
-                requestContext,
-                storage: workItemsStorage,
-                forceBindingLookup: true,
-                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-              });
-              if (recovered?.binding) {
-                const state = context.getState();
-                if (
-                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === REVIEW_CONTEXT && state.untrustedCheckout !== true)
-                ) {
-                  throw new Error(
-                    'Factory review session security state could not be restored before prompt creation.',
-                  );
-                }
-              }
-            }
-          }
+          await restorePromptCheckoutTrust({
+            requestContext,
+            storage: workItemsStorage,
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+          });
           return undefined;
         },
         // A factory reads the repository it works on and its skill, never the
@@ -2366,8 +2353,7 @@ export class MastraFactory {
               : {}),
             factoryTransitionService: transitionService,
             runSlots: () => this.#dispatcher?.runSlots(),
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
-              this.#startCoordinator = startCoordinator;
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
@@ -2480,12 +2466,14 @@ export class MastraFactory {
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
+          const sessionActivity = createSessionActivityMiddleware(() => this.#sessionUnloader);
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
                 ...timing,
+                sessionActivity,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
@@ -2524,6 +2512,7 @@ export class MastraFactory {
                 },
                 controller: () => this.#prepared?.base.controller,
               }),
+              sessionActivity,
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,
@@ -2605,6 +2594,16 @@ export class MastraFactory {
       session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
+
+    if (this.#config.idleSessionUnload !== false) {
+      this.#sessionUnloader = new SessionUnloader({
+        controller: prepared.base.controller,
+        invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+        settle: waitForSessionRunAudit,
+        idleMs: this.#config.idleSessionUnload?.idleMs,
+        sweepIntervalMs: this.#config.idleSessionUnload?.sweepIntervalMs,
+      });
+    }
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
@@ -2731,6 +2730,7 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
+    this.#sessionUnloader?.start();
     this.#startMetrics();
     // Outside the Mastra logger, which production runs at WARN. Under
     // `mastra factory dev` the CLI's ready banner reports boot time instead.
@@ -2787,6 +2787,9 @@ export class MastraFactory {
       await stopMetrics?.().catch(() => undefined);
       const backfill = this.#workItemSplitBackfill;
       backfill?.controller.abort();
+      const sessionUnloader = this.#sessionUnloader;
+      this.#sessionUnloader = undefined;
+      await sessionUnloader?.stop();
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
         // Stops between cards; failures are already logged.
