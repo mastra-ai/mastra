@@ -1033,23 +1033,24 @@ describe('intake routes placing linked cards', () => {
     const card = (await deliver(pullRequest))!;
     expect(placed(card)).toEqual({ board: 'shipyard', stages: ['backlog'] });
 
-    // A rule places only the card its decision files: a re-sync re-emitting "opened" backfills
-    // facts but moves nothing, even now that a filing rule may jump the board's edges.
+    // A rule places only the card its decision files: a re-sync whose evaluation re-resolves the
+    // retargeted route re-emits "opened" against the card's own board at PR review, but the card
+    // keeps its board's edges — Backlog declares no move there, so the move is refused, even now
+    // that a filing rule may jump the board's edges for the card it files.
     await boards.updateIntakeRoute(
       scope,
       routed.id,
       { target: { boardKey: 'shipyard', phaseKey: 'pr-review' } },
       { expectedRevision: routed.revision, actor: 'admin' },
     );
-    const again = await deliver(pullRequest, card.id);
+    const again = await deliver({ ...pullRequest, board: 'shipyard', stage: 'pr-review' }, card.id);
     expect(again?.id).toBe(card.id);
     expect(placed(again)).toEqual({ board: 'shipyard', stages: ['backlog'] });
     expect(again!.stageHistory.map(entry => entry.stage)).toEqual(['backlog']);
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions.map(decision => [decision.status, decision.lastError])).toEqual([
-      ['succeeded', null],
-      ['succeeded', null],
-    ]);
+    const byKey = (key: string) => decisions.find(decision => decision.idempotencyKey === key)!;
+    expect(byKey('linked-1')).toMatchObject({ status: 'succeeded', lastError: null });
+    expect(byKey('linked-2').lastError).toMatch(/invalid_transition/);
   });
 
   it('skips a route whose board was deleted and uses the next one', async () => {
