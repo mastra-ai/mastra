@@ -99,8 +99,9 @@ export async function loadGraph() {
     { createTool },
     { createDurableAgent },
     { createEventedAgent },
-    { globalRunRegistry },
+    { globalRunRegistry, takeRunScorerInstances },
     { __resetExecutionFencesForTests },
+    { releaseRunMessageRefs },
     workflows,
     eventedWorkflows,
   ] = await Promise.all([
@@ -112,6 +113,7 @@ export async function loadGraph() {
     import('../create-evented-agent'),
     import('../run-registry'),
     import('../execution-fence'),
+    import('../run-message-refs'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
   ]);
@@ -123,8 +125,10 @@ export async function loadGraph() {
     createDurableAgent,
     createEventedAgent,
     globalRunRegistry,
+    takeRunScorerInstances,
     /** Stops this graph's claim heartbeats and forgets its local executions. */
     resetExecutionFences: __resetExecutionFencesForTests,
+    releaseRunMessageRefs,
     createWorkflow: workflows.createWorkflow,
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
@@ -530,12 +534,20 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       return result;
     },
 
-    /** Call at the end of a test to stop the event workers every graph started. */
+    /** Call at the end of a test to stop the event workers every graph started and release its graphs. */
     async stop() {
       // Release holds first: a parked write blocks the execution `stopWorkers()`
       // awaits, so stopping before releasing would deadlock.
       for (const hold of holds.splice(0)) hold.release();
-      for (const graph of graphs) await graph.mastra?.stopWorkers?.();
+      for (const graph of graphs.splice(0)) {
+        await graph.mastra?.stopWorkers?.();
+        // Module-level caches and heartbeats arm timers that would keep each
+        // graph alive long after the test, so empty them.
+        graph.core.resetExecutionFences();
+        graph.core.releaseRunMessageRefs(options.runId);
+        graph.core.globalRunRegistry.clear();
+        graph.core.takeRunScorerInstances(options.runId, undefined);
+      }
     },
   };
 }
