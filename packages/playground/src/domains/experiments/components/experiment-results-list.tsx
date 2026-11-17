@@ -126,7 +126,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
       <DataList.TopCell key={col.name}>
         <LinkComponent
           href={paths.scorerLink(col.name)}
-          className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-icon-sm [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{col.label}</span>

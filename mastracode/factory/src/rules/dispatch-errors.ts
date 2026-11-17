@@ -2,6 +2,7 @@ import type {
   FactoryDispatchFailureCode,
   StoredFactoryDispatchFailureCode,
 } from '../storage/domains/work-items/base.js';
+import type { FactoryRuleRejectionCode } from './types.js';
 
 interface FactoryDispatchFailureMetadata {
   /** A person may retry the failed decision. */
@@ -57,6 +58,17 @@ export class FactoryDispatchError extends Error {
   ) {
     super(message, options);
     this.name = 'FactoryDispatchError';
+  }
+}
+
+/** A transition the board's rules rejected while a decision was being applied. */
+export class FactoryRuleRejectedError extends Error {
+  constructor(
+    readonly code: FactoryRuleRejectionCode,
+    reason: string,
+  ) {
+    super(`${code}: ${reason}`);
+    this.name = 'FactoryRuleRejectedError';
   }
 }
 

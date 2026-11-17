@@ -125,6 +125,7 @@ function predicateFields(
   if (!predicate) return fields;
   if (predicate.type === 'boolean') for (const arg of predicate.args) predicateFields(arg, fields);
   else if (predicate.type === 'not') predicateFields(predicate.arg, fields);
+  else if (predicate.type === 'tokens') return fields;
   else fields.add(predicate.field);
   return fields;
 }

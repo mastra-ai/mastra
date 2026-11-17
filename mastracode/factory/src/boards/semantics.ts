@@ -14,6 +14,7 @@ import {
   pullRequestSourceNumber,
   pullRequestSources,
   reviewedPullRequest,
+  trustedPullRequestSource,
 } from '../work-items/change-requests.js';
 import type { SourcedItem } from '../work-items/change-requests.js';
 import { DEFAULT_BOARD_ID } from './default-board.js';
@@ -201,14 +202,6 @@ export function hasPullRequest(item: SourcedItem & { readonly source?: string })
   );
 }
 
-/** The newest still-open pull request on a card other than `except`, for re-pointing `openPullRequestNumber`. */
-export function newestOpenPullRequestNumber(item: SourcedItem, except?: number): number | null {
-  const open = pullRequestSources(item).filter(
-    source => isOpenPullRequestSource(source) && pullRequestSourceNumber(source) !== except,
-  );
-  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
-}
-
 interface SessionedItem {
   readonly sessions: Readonly<Record<string, { readonly branch?: string | null } | undefined>>;
 }
@@ -230,15 +223,19 @@ export function cardOwnsBranch(item: SessionedItem & BranchedItem, headBranch: s
   return buildBranch === headBranch || Object.values(item.sessions).some(session => session?.branch === headBranch);
 }
 
-/** The newest open pull request the card's own sessions opened, other than `except`. */
+/**
+ * The newest open pull request the card's own sessions opened, other than `except`. A branch name
+ * is anyone's to pick, so an outsider's pull request on the card's branch name never counts.
+ */
 export function newestOwnedOpenPullRequestNumber(
-  item: SourcedItem & SessionedItem & BranchedItem,
+  item: SourcedItem & SessionedItem & BranchedItem & { readonly metadata?: Record<string, unknown> | null },
   except?: number,
 ): number | null {
   const open = pullRequestSources(item).filter(
     source =>
       isOpenPullRequestSource(source) &&
       pullRequestSourceNumber(source) !== except &&
+      trustedPullRequestSource(item, source) &&
       typeof source.metadata?.headBranch === 'string' &&
       cardOwnsBranch(item, source.metadata.headBranch),
   );
@@ -490,7 +487,14 @@ export function boundChangeRequestNumber(boards: Pick<BoardRegistry, 'get'>, ite
   const number = reviewedChangeRequest({ ...item, source })?.number;
   if (number !== undefined) return String(number);
   // A GitHub key ends in its number (`github-pr:34`); a GitLab key is encoded, so its digits mean nothing.
-  return source === 'github-pr' ? /(\d+)$/.exec(item.externalSource?.externalId ?? '')?.[1] : undefined;
+  return source === 'github-pr' ? trailingDigits(item.externalSource?.externalId ?? '') : undefined;
+}
+
+/** The run of digits ending `value`, scanned from the end so it stays linear (unlike an unanchored `/(\d+)$/`). */
+function trailingDigits(value: string): string | undefined {
+  let start = value.length;
+  while (start > 0 && value.charCodeAt(start - 1) >= 48 && value.charCodeAt(start - 1) <= 57) start--;
+  return start < value.length ? value.slice(start) : undefined;
 }
 
 export { sourceExternalId } from '../work-items/source-external-id.js';

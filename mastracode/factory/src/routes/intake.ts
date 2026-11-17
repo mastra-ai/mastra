@@ -32,6 +32,8 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   /** Factory project domain handle, used to validate binding targets. */
   projects?: { get(input: { orgId: string; id: string }): Promise<unknown | null> };
   integrations?: IntakeIntegration[];
+  /** Sources newly selected by a config save, so their existing items can be brought in. */
+  onSourcesSelected?: (args: { orgId: string; integrationId: string; sourceIds: string[] }) => void;
 }
 
 /** One integration that failed while the rest of the aggregation succeeded. */
@@ -43,6 +45,10 @@ export interface IntakeIntegrationFailure {
 type SettledIntegration<T> = { integrationId: string; value: T } | IntakeIntegrationFailure;
 
 const PROVIDER_READ_TIMEOUT_MS = 15_000;
+
+function syncedSourceIds(selection: { enabled: boolean; sourceIds: string[] | null } | undefined): string[] {
+  return selection?.enabled ? (selection.sourceIds ?? []) : [];
+}
 
 /** The Intake contract takes no abort signal, so a slow read is abandoned, not cancelled. */
 function withTimeout<T>(
@@ -282,7 +288,15 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
+          const before = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           await intake.mergeConfig({ orgId: tenant.orgId, config: registeredConfig });
+          const after = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
+          for (const integrationId of Object.keys(registeredConfig)) {
+            const synced = new Set(syncedSourceIds(before[integrationId]));
+            const added = syncedSourceIds(after[integrationId]).filter(sourceId => !synced.has(sourceId));
+            if (added.length > 0)
+              this.deps.onSourcesSelected?.({ orgId: tenant.orgId, integrationId, sourceIds: added });
+          }
           await audit.emit({
             context: loose(c),
             input: {

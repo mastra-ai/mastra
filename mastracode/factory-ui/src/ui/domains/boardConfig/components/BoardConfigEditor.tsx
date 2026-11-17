@@ -106,8 +106,14 @@ export function BoardConfigEditor({
   const blocker = useBlocker(({ nextLocation }) => {
     if (!changed || deleted.current) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
-    // The skills and card moves pages have no save bar, so leaving for them counts as leaving the board's settings.
-    return next?.factoryId !== factory.id || next.boardId !== boardId || next.skills === true || next.moves === true;
+    // The skills, rules and intake pages have no save bar, so leaving for them counts as leaving the board's settings.
+    return (
+      next?.factoryId !== factory.id ||
+      next.boardId !== boardId ||
+      next.skills === true ||
+      next.rules === true ||
+      next.intake === true
+    );
   });
 
   const generalPath = boardConfigPath(factory.id, boardId);

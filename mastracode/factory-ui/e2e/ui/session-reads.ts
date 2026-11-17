@@ -7,8 +7,8 @@ import {
   CARD_DECISION_STATUSES,
   cardsAwaitingPerson,
 } from '@mastra/factory/routes/work-item-starters';
-import { isSettling, sessionActivity, sessionRowsView } from '@mastra/factory/session/session-row-view';
-import { runningSessionIds, sessionRows } from '@mastra/factory/session/session-rows';
+import { sessionActivity, sessionRowsView } from '@mastra/factory/session/session-row-view';
+import { runningSessionIds, SessionRowIndex } from '@mastra/factory/session/session-rows';
 import type { RowSession } from '@mastra/factory/session/session-rows';
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
@@ -53,6 +53,7 @@ const wireSessionSchema = z
 const stubbedSessionsSchema = z.object({ sessions: z.array(wireSessionSchema) });
 const stubbedSessionCardsSchema = z.object({
   workItems: z.array(z.unknown()).default([]),
+  // A test states parked runs on its card listing; the server reads them from its live sessions.
   parkedSessionIds: z.array(z.string()).default([]),
 });
 const stubbedRunsSchema = z.object({
@@ -122,27 +123,34 @@ function cardDecisions(page: unknown) {
 }
 
 async function stubbedSessionFacts(reads: StubbedReads, factoryProjectId: string) {
-  const [listed, list, me, active] = await Promise.all([
+  const [listed, list, me, active, catalog, decisions] = await Promise.all([
     reads.project('sessions'),
     reads.project('work-items?scope=sessions'),
     reads.origin('auth/me'),
     reads.origin(`api/agent-controller/${AGENT_CONTROLLER_ID}/active-runs`),
+    reads.project('boards'),
+    reads.project(`decisions?statuses=${CARD_DECISION_STATUSES.join(',')}&limit=${CARD_DECISION_PAGE_SIZE}`),
   ]);
-  const failed = [listed, list, active].find(read => !read.ok);
+  const failed = [listed, list, active, catalog, decisions].find(read => !read.ok);
   if (failed) return failed;
   const { sessions } = stubbedSessionsSchema.parse(await listed.json());
   const { workItems, parkedSessionIds } = stubbedSessionCardsSchema.parse(await list.json());
   const viewerUserId = await stubbedUserId(me);
+  const cards = workItems.map(storedCard);
+  const boards = boardRegistryOf(stubbedCatalogSchema.parse(await catalog.json()).boards.flatMap(installedBoard));
   return {
-    viewerUserId,
-    facts: {
-      sessions,
-      cards: workItems.map(storedCard),
+    sessions,
+    cards,
+    index: new SessionRowIndex(sessions, cards, boards),
+    viewer: {
+      viewerUserId,
+      awaitingPerson: cardsAwaitingPerson(cardDecisions(await decisions.json())),
       runningSessionIds: runningSessionIds(stubbedRunsSchema.parse(await active.json()).runs, {
         authEnabled: me.status !== 404,
         viewerUserId,
         factoryProjectId,
         visibleSessionIds: new Set(sessions.map(session => session.sessionId)),
+        sessionOnThread: () => undefined,
       }),
       parkedSessionIds: new Set(parkedSessionIds),
     },
@@ -165,35 +173,25 @@ export const sessionReadHandlers = [
     });
     if (!query.success) return HttpResponse.json({ error: 'invalid_session_rows_query' }, { status: 400 });
     const factoryProjectId = String(params.id);
-    const reads = stubbedReads(request, factoryProjectId);
-    const [project, catalog, decisions] = await Promise.all([
-      stubbedSessionFacts(reads, factoryProjectId),
-      reads.project('boards'),
-      reads.project(`decisions?statuses=${CARD_DECISION_STATUSES.join(',')}&limit=${CARD_DECISION_PAGE_SIZE}`),
-    ]);
-    if (project instanceof Response) return project;
-    if (!catalog.ok) return catalog;
-    if (!decisions.ok) return decisions;
+    const facts = await stubbedSessionFacts(stubbedReads(request, factoryProjectId), factoryProjectId);
+    if (facts instanceof Response) return facts;
     const { pin, children, ...view } = query.data;
-    const rows = sessionRows({
-      ...project.facts,
-      boards: boardRegistryOf(stubbedCatalogSchema.parse(await catalog.json()).boards.flatMap(installedBoard)),
-      awaitingPerson: cardsAwaitingPerson(cardDecisions(await decisions.json())),
-      viewerUserId: project.viewerUserId,
-      pinnedSessionIds: pin,
-      revealChildSessions: children === 'true',
-    });
-    const now = Date.now();
-    return HttpResponse.json({
-      ...sessionRowsView(rows, view, project.viewerUserId, now),
-      settling: isSettling(project.facts.sessions, now),
-    });
+    const rows = facts.index.rows({ ...facts.viewer, pinnedSessionIds: pin, revealChildSessions: children === 'true' });
+    return HttpResponse.json(sessionRowsView(rows, view, facts.viewer.viewerUserId, Date.now()));
   }),
   http.get('*/web/factory/projects/:id/session-activity', async ({ request, params }) => {
     const factoryProjectId = String(params.id);
-    const project = await stubbedSessionFacts(stubbedReads(request, factoryProjectId), factoryProjectId);
-    return project instanceof Response
-      ? project
-      : HttpResponse.json(sessionActivity({ ...project.facts, now: Date.now() }));
+    const facts = await stubbedSessionFacts(stubbedReads(request, factoryProjectId), factoryProjectId);
+    if (facts instanceof Response) return facts;
+    const { sessions, cards, index, viewer } = facts;
+    return HttpResponse.json(
+      sessionActivity({
+        sessions,
+        cards,
+        runningSessionIds: viewer.runningSessionIds,
+        parkedSessionIds: viewer.parkedSessionIds,
+        cardStatuses: index.cardStatuses(viewer),
+      }),
+    );
   }),
 ];

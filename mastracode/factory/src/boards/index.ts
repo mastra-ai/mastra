@@ -37,7 +37,6 @@ export {
   hasPullRequest,
   isPullRequestReviewPhase,
   isTerminalWorkItem,
-  newestOpenPullRequestNumber,
   newestOwnedOpenPullRequestNumber,
   resolveBoardClosure,
   reviewedChangeRequest,
@@ -55,10 +54,15 @@ export {
 } from './semantics.js';
 export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
 export {
+  isOpenPullRequestSource,
   isPullRequestCard,
   pullRequestSourceNumber,
   pullRequestSources,
+  pullRequestTrustKey,
   reviewedPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+  workingPullRequest,
 } from '../work-items/change-requests.js';
 export type {
   BoardTransitionPolicy,

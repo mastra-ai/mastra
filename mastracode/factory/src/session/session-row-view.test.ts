@@ -4,10 +4,10 @@ import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { sessionRowsQuerySchema } from '../routes/contracts.js';
 import type { SessionRow } from '../routes/contracts.js';
 import { testCard } from '../routes/test-utils.js';
-import { isSettling, sessionActivity, sessionRowsView } from './session-row-view.js';
+import { sessionActivity, sessionRowsView } from './session-row-view.js';
 import type { SessionRowsView } from './session-row-view.js';
-import { sessionRows } from './session-rows.js';
-import type { RowSession } from './session-rows.js';
+import { SessionRowIndex } from './session-rows.js';
+import type { CardSessionStatus, RowSession } from './session-rows.js';
 
 const VIEWER = 'user-1';
 const NOW = Date.parse('2026-09-04T12:00:00.000Z');
@@ -84,12 +84,21 @@ describe('session order', () => {
 
   it('orders activity as live work, then idle, then done, across factory and user rows whatever their age', () => {
     const rows = [
-      row('done', { status: 'done' }, { createdAt: '2026-09-04T12:00:00.000Z' }),
-      row('idle', {}, { createdAt: '2026-09-04T11:00:00.000Z' }),
-      userRow('running', { status: 'working' }, { createdAt: '2026-09-04T08:00:00.000Z' }),
+      row('done', { status: 'done', updatedAt: '2026-09-04T12:00:00.000Z' }),
+      row('idle', { updatedAt: '2026-09-04T11:00:00.000Z' }),
+      userRow('running', { status: 'working', updatedAt: '2026-09-04T08:00:00.000Z' }),
     ];
 
     expect(sessionIds(rows, { sort: 'activity' })).toEqual(['running', 'idle', 'done']);
+  });
+
+  it('orders activity within a status by last update, so an old session updated since beats a new one left alone', () => {
+    const rows = [
+      userRow('new-untouched', { updatedAt: '2026-09-04T11:00:00.000Z' }, { createdAt: '2026-09-04T11:00:00.000Z' }),
+      userRow('old-updated', { updatedAt: '2026-09-04T11:30:00.000Z' }, { createdAt: '2026-09-01T08:00:00.000Z' }),
+    ];
+
+    expect(sessionIds(rows, { sort: 'activity' })).toEqual(['old-updated', 'new-untouched']);
   });
 
   it('orders by last update even when creation order disagrees', () => {
@@ -172,15 +181,16 @@ describe('a card with its sessions revealed', () => {
     createdAt: new Date(AT),
     updatedAt: new Date(AT),
   });
-  const revealed = sessionRows({
-    sessions: [session('triage'), session('work'), session('review')],
-    cards: [
+  const revealed = new SessionRowIndex(
+    [session('triage'), session('work'), session('review')],
+    [
       testCard('c1', {
         stages: ['execute'],
         sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
       }),
     ],
-    boards: createTriageWorkRegistry(),
+    createTriageWorkRegistry(),
+  ).rows({
     awaitingPerson: new Set(),
     runningSessionIds: new Set(['review']),
     parkedSessionIds: new Set(),
@@ -215,7 +225,7 @@ describe('a card with its sessions revealed', () => {
 
   it('sorts a card by what its sessions carry, so newer idle rows do not push it out of the window', () => {
     const newerIdle = Array.from({ length: 5 }, (_, index) =>
-      row(`idle-${index}`, {}, { createdAt: '2026-09-04T11:00:00.000Z' }),
+      row(`idle-${index}`, { updatedAt: '2026-09-04T11:00:00.000Z' }),
     );
 
     expect(sessionIds([...newerIdle, ...revealed], { sort: 'activity' })).toEqual([
@@ -284,7 +294,7 @@ describe('group window', () => {
 
   it('lists the first five rows of each group and counts the rest', () => {
     const otherBoard = Array.from({ length: 6 }, (_, index) => row(`release-${index}`, { board: 'release' }));
-    const answer = listed([...rows, ...otherBoard], { groupBy: 'board' });
+    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', sort: 'created' });
 
     expect(answer.groups.map(group => [group.key, group.rows.length, group.total])).toEqual([
       ['board:release', 5, 6],
@@ -294,7 +304,7 @@ describe('group window', () => {
 
   it('lists a group as deep as the reader asked, and other groups at five', () => {
     const otherBoard = Array.from({ length: 6 }, (_, index) => row(`release-${index}`, { board: 'release' }));
-    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', window: ['board:work:7'] });
+    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', sort: 'created', window: ['board:work:7'] });
 
     expect(answer.groups.map(group => [group.key, group.rows.length])).toEqual([
       ['board:release', 5],
@@ -389,16 +399,6 @@ describe('boards and owners', () => {
   });
 });
 
-describe('isSettling', () => {
-  const coming = (updatedAt: number) => ({ materializedAt: null, updatedAt: new Date(updatedAt) });
-
-  it('settles a session still coming up for ten minutes, then stops waiting on it', () => {
-    expect(isSettling([coming(NOW - 10 * 60_000 + 1)], NOW)).toBe(true);
-    expect(isSettling([coming(NOW - 10 * 60_000)], NOW)).toBe(false);
-    expect(isSettling([{ materializedAt: new Date(NOW), updatedAt: new Date(NOW) }], NOW)).toBe(false);
-  });
-});
-
 describe('sessionActivity', () => {
   const session = (sessionId: string, materializedAt: Date | null = new Date(AT)): RowSession => ({
     id: `row-${sessionId}`,
@@ -419,7 +419,7 @@ describe('sessionActivity', () => {
     startedBy: VIEWER,
   });
 
-  it("reports runs on the project's sessions only, and counts each card once by its most urgent session", () => {
+  it("reports runs on the project's sessions only, the statuses of the cards neither idle nor done, and the cards a session holds", () => {
     const activity = sessionActivity({
       sessions: [session('listed'), session('coming', null)],
       cards: [
@@ -429,15 +429,23 @@ describe('sessionActivity', () => {
       ],
       runningSessionIds: new Set(['listed', 'card-run', 'parked-and-running', 'elsewhere', VIEWER]),
       parkedSessionIds: new Set(['parked']),
-      now: NOW,
+      cardStatuses: new Map<string, CardSessionStatus>([
+        ['working', { status: 'working', held: true }],
+        ['waiting', { status: 'waiting', held: true }],
+        ['proposed', { status: 'waiting', held: false }],
+        ['quiet', { status: 'idle', held: false }],
+        ['shipped', { status: 'done', held: false }],
+        ['coming', { status: 'initializing', held: true }],
+      ]),
     });
 
     expect(activity).toEqual({
       runningSessionIds: ['card-run', 'listed', 'parked-and-running'],
       parkedSessionIds: ['parked'],
-      initializingSessionIds: ['coming'],
-      cards: { working: 1, waiting: 1 },
-      settling: false,
+      cardStatuses: { coming: 'initializing', proposed: 'waiting', waiting: 'waiting', working: 'working' },
+      sessionHeldCardIds: ['coming', 'waiting', 'working'],
+      cards: { working: 1, waiting: 2 },
     });
+    expect(Object.keys(activity.cardStatuses)).toEqual(['coming', 'proposed', 'waiting', 'working']);
   });
 });

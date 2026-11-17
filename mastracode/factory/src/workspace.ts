@@ -203,10 +203,14 @@ class CodeSkillSource implements SkillSource {
   }
 }
 
-/** A project's edited SKILL.md, served in place of the original's. */
+/**
+ * A project's SKILL.md for one skill: an edit served in place of the original's, or, with `created`, a skill
+ * the project added that is served even when the app has no skill of that name.
+ */
 export interface FactorySkillOverride {
   content: string;
   updatedAt: Date;
+  created?: boolean;
 }
 
 const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
@@ -265,13 +269,56 @@ export class FactorySkillSource implements SkillSource {
 
   /**
    * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
-   * edited; the skill's other files still come from its layer. `exists` and `readdir` never
-   * consult edits, so an edit whose skill was removed from the app is never discovered.
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` only
+   * consult created skills, so an edit whose skill was removed from the app is never discovered.
    */
   async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
     const [skillName, file, ...rest] = relativePath.split(path.sep);
     if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
     return (await this.skillOverrides()).get(skillName);
+  }
+
+  /**
+   * True when a code, folder, or bundled skill has this name, so a created skill of the name is its edit
+   * instead. Only a SKILL.md makes a skill, as for the catalog: a folder left without one serves nothing.
+   */
+  async #servedByLayer(skillName: string): Promise<boolean> {
+    const skillFile = path.join(skillName, 'SKILL.md');
+    if (this.#codeSource && (await this.#codeSource.exists(skillName))) return true;
+    if (this.#localSource && (await this.#localSource.exists(skillFile))) return true;
+    return this.#bundledSource.exists(skillFile);
+  }
+
+  /** Names of the skills the project created that no layer serves; each is a directory holding only its SKILL.md. */
+  async #createdSkillNames(): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, override] of await this.skillOverrides()) {
+      if (override.created && !(await this.#servedByLayer(name))) names.push(name);
+    }
+    return names;
+  }
+
+  /** The created skill this mount-relative path is in (its directory or its SKILL.md), when no layer serves it. */
+  async #createdSkillAt(relativePath: string): Promise<{ file: boolean; override: FactorySkillOverride } | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || rest.length > 0 || (file !== undefined && file !== 'SKILL.md')) return undefined;
+    const override = (await this.skillOverrides()).get(skillName);
+    if (!override?.created || (await this.#servedByLayer(skillName))) return undefined;
+    return { file: file !== undefined, override };
+  }
+
+  /** A created skill's folder: its SKILL.md, plus whatever an app skill left in a folder of the same name. */
+  async #createdSkillEntries(relativePath: string): Promise<SkillSourceEntry[]> {
+    const entries = new Map<string, SkillSourceEntry>();
+    for (const source of [this.#bundledSource, this.#localSource]) {
+      try {
+        for (const entry of (await source?.readdir(relativePath)) ?? []) entries.set(entry.name, entry);
+      } catch {
+        // Nothing under the name in this layer, or a file rather than a folder.
+      }
+    }
+    entries.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
+    return [...entries.values()];
   }
 
   async exists(skillPath: string): Promise<boolean> {
@@ -280,7 +327,8 @@ export class FactorySkillSource implements SkillSource {
     if (await this.#isHiddenReviewPath(relative)) return false;
     if (await this.#ownedByCode(relative)) return this.#codeSource!.exists(relative);
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
-    return this.#bundledSource.exists(relative);
+    if (await this.#bundledSource.exists(relative)) return true;
+    return (await this.#createdSkillAt(relative)) !== undefined;
   }
 
   async stat(skillPath: string): Promise<SkillSourceStat> {
@@ -295,6 +343,16 @@ export class FactorySkillSource implements SkillSource {
         size: Buffer.byteLength(override.content),
         createdAt: override.updatedAt,
         modifiedAt: override.updatedAt,
+      };
+    }
+    const created = await this.#createdSkillAt(relative);
+    if (created) {
+      return {
+        name: relative,
+        type: 'directory',
+        size: 0,
+        createdAt: created.override.updatedAt,
+        modifiedAt: created.override.updatedAt,
       };
     }
     return (await this.#layerFor(relative)).stat(relative);
@@ -314,6 +372,11 @@ export class FactorySkillSource implements SkillSource {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
       if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
+      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
+      if (created) {
+        if (created.file) throw skillSourceEnoent(skillPath);
+        return this.#createdSkillEntries(relative);
+      }
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
@@ -321,16 +384,21 @@ export class FactorySkillSource implements SkillSource {
       if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
         throw skillSourceEnoent(skillPath);
       }
-      const [bundledEntries, localEntries, codeEntries] = await Promise.all([
+      const [bundledEntries, localEntries, codeEntries, createdNames] = await Promise.all([
         bundledExists ? this.#bundledSource.readdir(relative) : [],
         localExists ? this.#localSource!.readdir(relative) : [],
         relative === '' && this.#codeSource ? this.#codeSource.readdir('') : [],
+        relative === '' ? this.#createdSkillNames() : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
       for (const entry of bundledEntries) merged.set(entry.name, entry);
       // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
       for (const entry of codeEntries) merged.set(entry.name, entry);
+      // Created skills only fill names no layer serves a skill under; a stray file of that name doesn't hide one.
+      for (const name of createdNames) {
+        if (merged.get(name)?.type !== 'directory') merged.set(name, { name, type: 'directory' });
+      }
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
@@ -344,13 +412,14 @@ export class FactorySkillSource implements SkillSource {
   }
 
   /**
-   * Names the Factory mount serves: bundled skills plus the app's code and local skills.
-   * Repository skills with these names are hidden so they cannot collide with
-   * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
+   * Names the Factory mount serves: bundled skills plus the app's code and local skills and the
+   * project's created skills. Repository skills with these names are hidden so they cannot collide
+   * with Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
    */
   async #reservedNames(): Promise<Set<string>> {
     const reserved = new Set(FACTORY_SKILL_NAMES);
     for (const entry of (await this.#codeSource?.readdir('')) ?? []) reserved.add(entry.name);
+    for (const name of await this.#createdSkillNames()) reserved.add(name);
     if (!this.#localSource) return reserved;
     try {
       for (const entry of await this.#localSource.readdir('')) {
@@ -1265,7 +1334,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return {
           revision: snapshot.revision,
           overrides: new Map(
-            snapshot.overrides.map(o => [o.skillName, { content: o.content, updatedAt: o.updatedAt }] as const),
+            snapshot.overrides.map(
+              o =>
+                [
+                  o.skillName,
+                  { content: o.content, updatedAt: o.updatedAt, ...(o.kind === 'created' ? { created: true } : {}) },
+                ] as const,
+            ),
           ),
         };
       })();

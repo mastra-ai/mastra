@@ -13,19 +13,21 @@ const CARD_FACT_PROPERTIES = {
       title: { type: 'string', title: 'Title' },
       author: { type: 'string', title: 'Author' },
       key: { type: 'string', title: 'Key' },
-      state: { type: 'string', title: 'State' },
       assignees: { type: 'string', title: 'Assignees' },
-      pullRequest: { type: 'number', title: 'Open pull request' },
+      pullRequest: { type: 'number', title: 'Has pull request' },
+      trusted: { type: 'boolean', title: 'Author trusted' },
     },
   },
-  author: { type: 'object', title: 'Author', properties: { trusted: { type: 'boolean', title: 'Trusted' } } },
+  pullRequest: {
+    type: 'object',
+    title: 'Pull request',
+    properties: { trusted: { type: 'boolean', title: 'Author trusted' } },
+  },
   source: {
     type: 'object',
     title: 'Source',
     properties: {
-      kind: { type: 'string', title: 'Kind' },
-      integration: { type: 'string', title: 'Integration' },
-      provider: { type: 'string', title: 'Provider' },
+      provider: { type: 'string', title: 'Source' },
       // A GitHub repository or GitLab project path, a Linear team key (ENG), a Jira project key (PLAT).
       repository: { type: 'string', title: 'Repository, team or project' },
     },
@@ -44,28 +46,71 @@ const ROUTE_FACT_PROPERTIES = {
   pullRequest: {
     type: 'object',
     title: 'Pull request',
-    properties: { closesIssue: { type: 'boolean', title: 'Closes an issue' } },
+    properties: {
+      ...CARD_FACT_PROPERTIES.pullRequest.properties,
+      closesIssue: { type: 'boolean', title: 'Closes an issue' },
+    },
   },
   closedIssue: {
     type: 'object',
     title: 'Closed issue',
     properties: {
       phase: { type: 'string', title: 'Phase' },
-      hasPullRequest: { type: 'boolean', title: 'Has a pull request' },
     },
   },
 } as const;
 
 /**
- * The facts an intake route handling `on` can test. As the route API requires, event facts
- * apply only to a route handling an event besides `work_item.created`, and `event.reason` only
- * to one handling `work_item.closed`, the one event that carries a reason.
+ * Facts the picker no longer offers but stored rules may still name, and which still evaluate: the
+ * events say what state or kind an item is in, `source.provider` is `source.integration`, and
+ * `item.pullRequest` covers a closed issue's pull request. Rules naming them still read and edit.
+ */
+const LEGACY_FACTS: Facts = {
+  type: 'object',
+  properties: {
+    item: { type: 'object', title: 'Card', properties: { state: { type: 'string', title: 'State' } } },
+    source: {
+      type: 'object',
+      title: 'Source',
+      properties: {
+        kind: { type: 'string', title: 'Kind' },
+        integration: { type: 'string', title: 'Integration' },
+      },
+    },
+    closedIssue: {
+      type: 'object',
+      title: 'Closed issue',
+      properties: { hasPullRequest: { type: 'boolean', title: 'Has a pull request' } },
+    },
+  },
+};
+
+/** The events that fire on a label or assignee change, and so carry what changed. */
+const UPDATE_EVENTS = new Set(['work_item.updated', 'pull_request.updated']);
+/** What changed, keyed by path below `event` so each reads as one fact: `event.labels.added`. */
+const CHANGE_FACTS = {
+  'labels.added': { type: 'string', title: 'Label added' },
+  'labels.removed': { type: 'string', title: 'Label removed' },
+  'assignees.added': { type: 'string', title: 'Assignee added' },
+  'assignees.removed': { type: 'string', title: 'Assignee removed' },
+};
+
+/** Events that only file a new issue, so they carry no event facts. */
+const ISSUE_ARRIVAL = new Set(['work_item.opened', 'work_item.created']);
+
+/**
+ * The facts an intake route handling `on` can test. As the route API requires, event facts apply only to a route
+ * handling an event besides an issue arriving (`work_item.opened`, or the legacy `work_item.created`);
+ * `pull_request.opened` also moves cards, so it keeps them. `event.reason` applies only to a route handling
+ * `work_item.closed`, the one event that carries a reason. What changed (`event.labels.added` and the like) applies only
+ * to one handling an update event.
  */
 export function intakeRouteFacts(on: readonly string[]): Facts {
-  if (on.every(type => type === 'work_item.created')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
+  if (on.every(type => ISSUE_ARRIVAL.has(type))) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
   const event = {
     type: { type: 'string', title: 'Type' },
     ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
+    ...(on.some(type => UPDATE_EVENTS.has(type)) ? CHANGE_FACTS : {}),
   };
   return {
     type: 'object',
@@ -131,12 +176,17 @@ type FieldShape = { label?: string; options?: FilterBarOption[]; strict?: boolea
 /** What a value typed for a fact looks like, shown until one is typed. */
 export const VALUE_PLACEHOLDERS: Record<string, string> = { 'source.repository': 'owner/repo, ENG, PLAT' };
 
-/** Facts only tested for being there, such as a card's open pull request. */
+/** Facts only tested for being there, such as a card's open pull request: picked as yes or no. */
 const PRESENCE_OPERATORS = ['exists', 'not_exists'];
-const PRESENCE_LABELS: Record<string, string> = { exists: 'exists', not_exists: 'does not exist' };
+const PRESENCE_LABELS: Record<string, string> = { exists: 'is yes', not_exists: 'is no' };
 const PRESENCE_TEXT: Record<string, readonly [yes: string, no: string]> = {
-  'item.pullRequest': ['card has an open pull request', 'card has no open pull request'],
+  'item.pullRequest': ['card has a pull request', 'card has no pull request'],
 };
+
+/** Whether a field is only tested for being there, so it reads as a yes or no. */
+export function isPresenceField(id: string): boolean {
+  return id in PRESENCE_TEXT;
+}
 
 /** How each fact reads in the condition editor, beyond its fact title. */
 const FIELD_SHAPES: Record<string, FieldShape> = {
@@ -146,8 +196,13 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   'item.key': { label: 'Key' },
   'item.state': { label: 'State' },
   'item.assignees': { label: 'Assignees', list: true },
-  'item.pullRequest': { label: 'Open pull request' },
-  'author.trusted': { label: 'Author trust', options: yesNo('Trusted', 'Outside author'), strict: true },
+  'item.pullRequest': { label: 'Has pull request' },
+  'item.trusted': { label: 'Author trust', options: yesNo('Trusted', 'Outside author'), strict: true },
+  'pullRequest.trusted': {
+    label: 'Pull request author trust',
+    options: yesNo('Trusted', 'Outside author'),
+    strict: true,
+  },
   'source.kind': {
     label: 'Source kind',
     options: [
@@ -156,21 +211,28 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     ],
   },
   'source.integration': { label: 'Integration', options: INTEGRATIONS },
-  'source.provider': { label: 'Provider', options: INTEGRATIONS },
+  'source.provider': { label: 'Source', options: INTEGRATIONS },
   // Suggested from the project's repositories, teams and projects, but any value can be typed: `strict: false`.
   'source.repository': { label: 'Repository, team or project', strict: false },
   'pullRequest.closesIssue': { label: 'Pull request closes an issue', options: yesNo(), strict: true },
   'closedIssue.phase': { label: 'Closed issue phase' },
   'closedIssue.hasPullRequest': { label: 'Closed issue has a pull request', options: yesNo(), strict: true },
+  'event.labels.added': { label: 'Label added', list: true },
+  'event.labels.removed': { label: 'Label removed', list: true },
+  'event.assignees.added': { label: 'Assignee added', list: true },
+  'event.assignees.removed': { label: 'Assignee removed', list: true },
   'event.type': {
     label: 'Event',
     strict: true,
     options: [
-      { value: 'work_item.created', label: 'New card' },
+      { value: 'work_item.opened', label: 'Work item opened' },
       { value: 'work_item.closed', label: 'Closed' },
       { value: 'work_item.reopened', label: 'Reopened' },
+      { value: 'work_item.updated', label: 'Labels or assignees changed' },
       { value: 'pull_request.opened', label: 'PR opened' },
-      { value: 'pull_request.synchronized', label: 'PR updated' },
+      { value: 'pull_request.reopened', label: 'PR reopened' },
+      { value: 'pull_request.updated', label: 'PR labels or assignees changed' },
+      { value: 'pull_request.synchronized', label: 'PR got new commits' },
       { value: 'pull_request.review_requested', label: 'Review requested' },
       { value: 'pull_request.merged', label: 'PR merged' },
       { value: 'pull_request.closed', label: 'PR closed' },
@@ -186,11 +248,25 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
   },
 };
 
+/** The name the rule builder gives a fact, such as `Pull request author trust` for `pullRequest.trusted`. */
+export function fieldLabel(field: string): string | undefined {
+  return FIELD_SHAPES[field]?.label;
+}
+
 /**
  * The facts a rule can test, as condition editor fields: one per leaf fact, with its values to
  * pick from when they are known. `options` adds values per field, such as a board's phases.
  */
 export function conditionFields(facts: Facts, options: Record<string, FilterBarOption[]> = {}): FilterBarField[] {
+  return leafFields(facts, options).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Fields stored rules may still name but the picker no longer offers, so those rules still read and edit. */
+export function legacyConditionFields(options: Record<string, FilterBarOption[]> = {}): FilterBarField[] {
+  return leafFields(LEGACY_FACTS, options);
+}
+
+function leafFields(facts: Facts, options: Record<string, FilterBarOption[]>): FilterBarField[] {
   return Object.entries(facts.properties ?? {}).flatMap(([group, groupFact]) =>
     Object.entries(groupFact.properties ?? {}).map(([property, fact]): FilterBarField => {
       const id = `${group}.${property}`;
@@ -218,7 +294,8 @@ export function conditionFields(facts: Facts, options: Record<string, FilterBarO
 
 /** Yes/no facts read as a phrase, since "Author trust is trusted" says less than "author is trusted". */
 const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
-  'author.trusted': ['author is trusted', 'author is not trusted'],
+  'item.trusted': ['author is trusted', 'author is not trusted'],
+  'pullRequest.trusted': ["pull request's author is trusted", "pull request's author is not trusted"],
   'pullRequest.closesIssue': ['pull request closes an issue', 'pull request closes no issue'],
   'closedIssue.hasPullRequest': ['closed issue has a pull request', 'closed issue has no pull request'],
 };
@@ -226,7 +303,9 @@ const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
 /** Values named after a product or a phase keep their capitals mid-sentence. */
 const PROPER_VALUES = new Set(['source.integration', 'source.provider', 'closedIssue.phase']);
 
-const EVERY_FACT = intakeRouteFacts(['work_item.created', 'work_item.closed']);
+const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed', 'work_item.updated']);
+const everyField = (options: Record<string, FilterBarOption[]>) =>
+  new Map([...conditionFields(EVERY_FACT, options), ...legacyConditionFields(options)].map(field => [field.id, field]));
 
 function describeMember(member: RuleCondition | RuleGroup, fields: ReadonlyMap<string, FilterBarField>): string {
   if ('conditions' in member) return `(${describeMembers(member, fields)})`;
@@ -272,7 +351,7 @@ export function describeConditions(
   options: Record<string, FilterBarOption[]> = {},
 ): { join: 'and' | 'or'; parts: string[] } | null {
   if (!rule || rule.conditions.length === 0) return null;
-  const fields = new Map(conditionFields(EVERY_FACT, options).map(field => [field.id, field]));
+  const fields = everyField(options);
   return {
     join: rule.operator === 'AND' ? 'and' : 'or',
     parts: rule.conditions.map(member => capitalize(describeMember(member, fields))),
@@ -288,7 +367,7 @@ export function describeRule(
   options: Record<string, FilterBarOption[]> = {},
 ): string {
   if (!rule || rule.conditions.length === 0) return 'Every card';
-  const fields = new Map(conditionFields(EVERY_FACT, options).map(field => [field.id, field]));
+  const fields = everyField(options);
   const text = describeMembers(rule, fields);
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

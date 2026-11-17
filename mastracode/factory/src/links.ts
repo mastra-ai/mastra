@@ -25,14 +25,12 @@ export function factoryBoardUrl(factoryProjectId: string, board: string): string
   return factoryUrl(factoryProjectId, boardSegment(board));
 }
 
-/** A card opened on its board. */
-export function factoryWorkItemUrl(input: {
-  factoryProjectId: string;
-  board: string;
-  workItemId: string;
-}): string | undefined {
-  const query = new URLSearchParams({ item: input.workItemId });
-  return factoryUrl(input.factoryProjectId, `${boardSegment(input.board)}?${query}`);
+/**
+ * A card, opened as the board opens it on a click: the UI sends the link on to the session the card
+ * shows (its current phase's, else its last visited one's), or to a draft that starts one.
+ */
+export function factoryWorkItemUrl(input: { factoryProjectId: string; workItemId: string }): string | undefined {
+  return factoryUrl(input.factoryProjectId, `/cards/${encodeURIComponent(input.workItemId)}`);
 }
 
 export function factorySessionUrl(input: {
