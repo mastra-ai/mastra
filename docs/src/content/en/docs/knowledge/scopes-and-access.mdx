@@ -11,7 +11,7 @@ Scopes control what an agent can see and change in Knowledge. You decide what ea
 
 :::alpha
 
-Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call, but the alpha doesn't guarantee isolation between scopes yet. Don't store anything in Knowledge that must never reach another customer or user.
+Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call and on every storage read those tools make, and a run only sees the scopes it holds, so runs for different users or tenants are kept apart. The remaining risk is a single run that holds more than one scope: its model can copy what it read in one scope into a page or note in another. Give each run only the scopes it needs, and don't mix tenants in one run.
 
 :::
 
