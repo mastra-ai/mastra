@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { act, useState } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AsideReveal, Sidebar, SidebarProvider } from '..';
 import { AppShell } from '@/ds/new/layout/app-shell';
@@ -23,8 +23,12 @@ beforeAll(() => {
 
 afterEach(() => cleanup());
 
+// Opens the panel from outside, the way a route or a command would, bypassing the page that navigation makes inert.
+let openPanel: () => void = () => {};
+
 function SessionPage() {
   const [open, setOpen] = useState(false);
+  openPanel = () => setOpen(true);
   return (
     <>
       <p>Session transcript</p>
@@ -183,6 +187,18 @@ describe('AsideReveal', () => {
 
       expect(navigation()).toBeNull();
       expect(sessionPanel()).toBeNull();
+    });
+
+    it('closes navigation when the panel is opened from outside, so only the panel is out', async () => {
+      renderApp();
+      await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+      expect(navigation()).not.toBeNull();
+
+      act(() => openPanel());
+
+      expect(navigation()).toBeNull();
+      expect(sessionPanel()).not.toBeNull();
+      expect(transcript().closest('[inert]')).not.toBeNull();
     });
   });
 

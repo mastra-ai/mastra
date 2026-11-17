@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { RevealDrawer } from './reveal-drawer';
-import { useMaybeSidebarState } from './sidebar-context';
+import { useMaybeSidebar } from './sidebar-context';
 import { useRevealGesture } from './use-reveal-gesture';
 import { cn } from '@/lib/utils';
 
@@ -27,12 +27,19 @@ export type AsideRevealProps = {
  * Render it inside `SidebarProvider` and `AppShell`; it portals beside the shell, not inside the page that moves.
  */
 export function AsideReveal({ open, onOpenChange, label, triggerRef, children, className }: AsideRevealProps) {
-  const sidebar = useMaybeSidebarState();
+  const sidebar = useMaybeSidebar();
   if (!sidebar) throw new Error('AsideReveal must be used within a SidebarProvider.');
-  const { scopeRef, scope } = sidebar;
-  // Held out past `open` while a drag or the closing slide is still on screen.
+  const { scopeRef, scope, openMobile, setOpenMobile } = sidebar;
+  // Waits for navigation to go first, so the two drawers never overlap and its inert marks are gone.
+  const out = open && !openMobile;
+  // Held out past `out` while a drag or the closing slide is still on screen.
   const [held, setHeld] = useState(false);
-  const present = open || held;
+  const present = out || held;
+
+  // An `open` set from outside while navigation is out sends navigation back; `out` follows once it has.
+  useEffect(() => {
+    if (open) setOpenMobile(false);
+  }, [open, setOpenMobile]);
 
   const close = () => {
     setHeld(true);
@@ -43,11 +50,11 @@ export function AsideReveal({ open, onOpenChange, label, triggerRef, children, c
     scopeRef,
     name: 'aside',
     side: 'right',
-    open,
+    open: out,
     onGrab: () => flushSync(() => setHeld(true)),
     onRelease: onOpenChange,
     onSettled: () => {
-      if (!open) setHeld(false);
+      if (!out) setHeld(false);
     },
   });
 
@@ -56,7 +63,7 @@ export function AsideReveal({ open, onOpenChange, label, triggerRef, children, c
   return createPortal(
     <RevealDrawer
       name="aside"
-      open={open}
+      open={out}
       present={present}
       label={label}
       closeLabel={`Close ${label.toLowerCase()}`}
