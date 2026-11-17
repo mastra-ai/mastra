@@ -101,19 +101,12 @@ export function withOwnerProfile(session: SourceControlSession, owners: Map<stri
   return owner ? { ...session, owner } : session;
 }
 
-/** What one viewer may see of a project's sessions. */
 export interface SeenSessions {
   /** In listing order. */
   readonly sessions: readonly ListedSession[];
-  /** Whether the session is listed and the viewer may see it. */
   has(sessionId: string): boolean;
 }
 
-/**
- * Every listed session of a project, private ones included, shared by every viewer until a
- * session, link, follow or owner profile changes. {@link seenBy} and {@link rowIndex} are the
- * only ways out, and both filter per viewer.
- */
 export class ProjectSessions {
   readonly #sessions: readonly ListedSession[];
   readonly #byId: ReadonlyMap<string, ListedSession>;
@@ -135,7 +128,6 @@ export class ProjectSessions {
     };
   }
 
-  /** The sidebar rows of these sessions, built once per change of the cards or boards. */
   rowIndex(cards: readonly Card[], boards: BoardRegistry): SessionRowIndex {
     if (this.#rows?.cards !== cards || this.#rows.boards !== boards) {
       this.#rows = { cards, boards, index: new SessionRowIndex(this.#sessions, cards, boards) };

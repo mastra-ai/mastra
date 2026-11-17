@@ -29,7 +29,6 @@ export interface RowSession {
   readonly followedWorkItemIds?: readonly string[];
 }
 
-/** What one viewer's rows read beside the project's sessions, cards and boards. */
 export interface SessionRowViewer {
   viewerUserId: string;
   /** Card ids. */
@@ -61,7 +60,6 @@ interface CardContext {
   sessions: readonly CardContextSession[];
 }
 
-/** A session's row as far as it reads the project alone. */
 interface IndexedSession {
   readonly session: RowSession;
   readonly person: boolean;
@@ -71,7 +69,6 @@ interface IndexedSession {
   readonly settled: boolean;
   readonly updatedAt: string;
   readonly cardFields: Pick<SessionRowFields, 'card' | 'pullRequest' | 'itemId' | 'threadId'>;
-  /** Where the session sorts among its card's sessions. */
   readonly cardRank: number;
   readonly phaseLabel: string | undefined;
   readonly followedWorkItemIds: readonly string[];
@@ -350,10 +347,6 @@ function linkFollowedCards(
   });
 }
 
-/**
- * The sidebar rows of a project's sessions, private ones included: what a row reads from the
- * project alone is built once here, and {@link rows} adds what one viewer sees.
- */
 export class SessionRowIndex {
   readonly #sessions: readonly IndexedSession[];
 
@@ -370,7 +363,6 @@ export class SessionRowIndex {
     );
   }
 
-  /** The rows of the sessions the viewer may see, one per card. Dates as ISO strings. */
   rows(viewer: SessionRowViewer): SessionRow[] {
     const factoryRows: BuiltRow[] = [];
     const userRows: BuiltRow[] = [];

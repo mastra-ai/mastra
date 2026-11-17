@@ -551,11 +551,7 @@ export interface SourceControlStorageHandle {
       factoryProjectId: string;
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
-    /**
-     * System-level {@link listByProject}: every visibility, for the project session index only,
-     * which filters it per viewer; never expose it to a viewer. Frozen and shared by every caller
-     * until a session of the project or a link of this integration changes.
-     */
+    /** Every visibility, frozen and shared: filter per viewer before any of it reaches one. */
     listSharedByProject(args: { orgId: string; factoryProjectId: string }): Promise<readonly SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /**
