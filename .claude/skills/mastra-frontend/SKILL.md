@@ -49,7 +49,7 @@ Settings cards (`@mastra/playground-ui/new/settings`) hold two kinds of rows. Pi
 - **`SettingsRow`** (or `SettingsFieldsetRow` for a group of controls): a setting the person changes. Label, optional one-line description, and the control that changes it (input, select, switch, segmented control). It is a form field: the label names the control. A setting someone may not change keeps `SettingsRow` with `viewOnly`.
 - **`SettingsItem`**: one thing in a list (an account, member, session, API key, connection, repository, a package version). Title, optional media and one-line description, and its status or per-item actions (Remove, Revoke, Copy) on the right. Lists usually come from a `.map` and start with a `SettingsListHeader`; an empty list is one `SettingsEmptyRow`.
 
-A row in a `.map` over records, or one that only shows a value, status or per-item action, is a `SettingsItem`.
+A row that only shows a value, status or per-item actions is a `SettingsItem`, and so is each record of a list (accounts, keys, versions) even when it comes from a `.map`. A `.map` over settings (one switch per tool) still renders `SettingsRow`s: what matters is whether the row's control changes a setting.
 
 ## Review smells
 
