@@ -80,7 +80,8 @@ export interface FactoryTransitionRequest {
   /**
    * Internal: intake filing moves a fresh card from the board's first phase to the phase its
    * route names. Like `eventRoute` the target is admin-authored, so the first phase's next
-   * phases don't restrict it; every other check (phase, card shape, consent) still applies.
+   * phases don't restrict it — but only while the card still sits in that first phase; every
+   * other check (phase, card shape, consent) still applies.
    */
   routeFiling?: boolean;
   /**
@@ -525,9 +526,12 @@ export class FactoryTransitionService {
     if (cardShapeRejection) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', cardShapeRejection);
     }
+    // Filing jumps the first phase's declared edges only from that phase: a card another actor
+    // moved in between follows the board's graph again.
+    const filesPastEdges = request.routeFiling === true && fromStage === fromBoard.initialPhase;
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
-      (!request.eventRoute && !request.routeFiling && !board.allowsTransition(fromStage, request.stage))
+      (!request.eventRoute && !filesPastEdges && !board.allowsTransition(fromStage, request.stage))
     ) {
       if (board !== fromBoard) {
         return this.#commitRejection(

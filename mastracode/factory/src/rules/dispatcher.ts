@@ -7,6 +7,7 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import { isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
+import { cardRuleFacts } from '../boards/card-facts.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -29,10 +30,10 @@ import {
   arrivalRuleFacts,
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
-  landingPhase,
   placedByIntakeRoute,
   planEventMove,
   resolveIntake,
+  resumeLandingPhase,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
   untrustedPullRequestEvent,
@@ -2265,8 +2266,9 @@ export class FactoryDecisionDispatcher {
       cause: materializedByDecision ? 'linked_item_materialized' : 'linked_item_reconciled',
       causalChain,
       // The stage is what intake resolved — a route or the project's default — so, as with a
-      // route's status-event move, the first phase's next phases don't restrict it.
-      routeFiling: true,
+      // route's status-event move, the first phase's next phases don't restrict it. Only for the
+      // card this decision files, though: a reconciled card keeps its board's edges.
+      ...(materializedByDecision ? { routeFiling: true } : {}),
     });
     if (moved.status === 'rejected') throw new FactoryRuleRejectedError(moved.code, moved.reason);
   }
@@ -2564,12 +2566,6 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * A card an intake route placed stays on the route's board when its source is filed again
-   * (a reconcile replaying "opened"): the decision lands
-   * on the card's board at its first phase, so it only backfills facts and moves nothing.
-   * An explicit placement (`skipRules`) still wins.
-   */
-  /**
    * A retry of the decision that filed `existing` finishes the filing where it started: on the
    * card's board, at the phase its route names now, or the board's first phase when the route was
    * deleted, disabled or re-pointed since. Routes are not re-run, so an edit cannot send the card
@@ -2592,11 +2588,16 @@ export class FactoryDecisionDispatcher {
     return {
       ...decision,
       board: board.id,
-      stage: landingPhase(board, route?.target.phaseKey),
+      stage: resumeLandingPhase(board, route?.target.phaseKey, cardRuleFacts(existing), hasPullRequest(existing)),
       metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: routeId },
     };
   }
 
+  /**
+   * A card an intake route placed stays on the route's board when its source is filed again
+   * (a reconcile replaying "opened"): the decision lands on the card's board at its first phase,
+   * so it only backfills facts and moves nothing. An explicit placement (`skipRules`) still wins.
+   */
   #keepRoutedCard(
     existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,

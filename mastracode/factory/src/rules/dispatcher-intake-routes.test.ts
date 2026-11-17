@@ -936,6 +936,120 @@ describe('intake routes placing linked cards', () => {
       });
       expect(repointed.target.boardKey).toBe('work');
     });
+
+    it("falls back to the board's first phase when the route now names a phase the card can't work in", async () => {
+      // A Shipyard-style code board whose first move into Doing fails once, leaving the filing to retry.
+      function yardRegistry() {
+        let refused = false;
+        const yard = defineBoard({
+          id: 'yard',
+          name: 'Yard',
+          initialPhase: 'backlog',
+          transitionPolicy: context => {
+            if (context.toStage !== 'doing' || refused) return undefined;
+            refused = true;
+            return { type: 'reject', code: 'invalid_transition', reason: 'Not yet.' };
+          },
+          phases: {
+            backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['doing'] },
+            doing: { name: 'Doing', kind: 'working', runner: { context: 'work' }, nextPhases: ['pr-review', 'done'] },
+            'pr-review': {
+              name: 'PR review',
+              kind: 'working',
+              runner: { skill: 'factory-review', context: 'review' },
+              tools: ['factory_record_review_verdict', 'factory_review_source'],
+              nextPhases: ['doing', 'done'],
+            },
+            done: { name: 'Done', kind: 'terminal' },
+          },
+        });
+        return createBoardRegistry({ boards: [yard] });
+      }
+      const harness = await setup({ codeRegistry: yardRegistry() });
+      const routed = await harness.route({
+        name: 'All to Doing',
+        when: null,
+        target: { boardKey: 'yard', phaseKey: 'doing' },
+      });
+      const card = (await harness.deliver({ sourceKey: 'github-issue:1' }))!;
+      expect(placed(card)).toEqual({ board: 'yard', stages: ['backlog'] });
+
+      // The admin retargets the route at PR review before the retry lands. An issue without a
+      // pull request can't work there, so the filing finishes in the board's first phase — the
+      // same answer filing gives such a card today — instead of retrying a refused move forever.
+      await harness.boards.updateIntakeRoute(
+        harness.scope,
+        routed.id,
+        { target: { boardKey: 'yard', phaseKey: 'pr-review' } },
+        { expectedRevision: routed.revision, actor: 'admin' },
+      );
+      await harness.retry();
+      const [decision] = await harness.workItems.listDeferredDecisions('org-1', harness.project.id);
+      expect([decision?.status, decision?.lastError]).toEqual(['succeeded', null]);
+      const settledCard = await harness.workItems.get({ orgId: 'org-1', id: card.id });
+      expect(placed(settledCard ?? undefined)).toEqual({ board: 'yard', stages: ['backlog'] });
+    });
+  });
+
+  it("never moves an already-filed card past its board's edges when its source is re-emitted", async () => {
+    const { boards, scope, route, deliver, workItems, project } = await setup();
+    await boards.create(
+      scope,
+      {
+        key: 'shipyard',
+        name: 'Shipyard',
+        phases: [
+          { key: 'backlog', name: 'Backlog', kind: 'resting' as const, nextPhases: ['doing'] },
+          {
+            key: 'doing',
+            name: 'Doing',
+            kind: 'working' as const,
+            runner: { context: 'work' },
+            nextPhases: ['pr-review', 'done'],
+          },
+          {
+            key: 'pr-review',
+            name: 'PR review',
+            kind: 'working' as const,
+            runner: { skill: 'factory-review', context: 'review' },
+            tools: ['factory_record_review_verdict', 'factory_review_source'],
+            nextPhases: ['doing', 'done'],
+          },
+          { key: 'done', name: 'Done', kind: 'terminal' as const },
+        ],
+      },
+      'admin',
+    );
+    const routed = await route({
+      name: 'Pull requests to Backlog',
+      on: ['pull_request.opened'],
+      target: { boardKey: 'shipyard', phaseKey: 'backlog' },
+    });
+    const pullRequest = {
+      sourceKey: 'github-pr:1',
+      source: 'github-pr',
+      metadata: { authorTrusted: true, state: 'open' },
+    };
+    const card = (await deliver(pullRequest))!;
+    expect(placed(card)).toEqual({ board: 'shipyard', stages: ['backlog'] });
+
+    // A rule places only the card its decision files: a re-sync re-emitting "opened" backfills
+    // facts but moves nothing, even now that a filing rule may jump the board's edges.
+    await boards.updateIntakeRoute(
+      scope,
+      routed.id,
+      { target: { boardKey: 'shipyard', phaseKey: 'pr-review' } },
+      { expectedRevision: routed.revision, actor: 'admin' },
+    );
+    const again = await deliver(pullRequest, card.id);
+    expect(again?.id).toBe(card.id);
+    expect(placed(again)).toEqual({ board: 'shipyard', stages: ['backlog'] });
+    expect(again!.stageHistory.map(entry => entry.stage)).toEqual(['backlog']);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(decision => [decision.status, decision.lastError])).toEqual([
+      ['succeeded', null],
+      ['succeeded', null],
+    ]);
   });
 
   it('skips a route whose board was deleted and uses the next one', async () => {

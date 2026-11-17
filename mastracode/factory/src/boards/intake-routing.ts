@@ -436,6 +436,21 @@ export function landingPhase(board: InstalledBoard, phase: string | null | undef
   return usable ? phase : board.initialPhase;
 }
 
+/**
+ * The phase a retry of a filing decision resumes its card into: the route's phase while the card
+ * can work there, else the board's first phase. The route may have been retargeted since filing,
+ * and an issue card can't be forced into a review phase a filing would never have sent it to.
+ */
+export function resumeLandingPhase(
+  board: InstalledBoard,
+  phase: string | null | undefined,
+  facts: RuleFacts,
+  carriesPullRequest = false,
+): string {
+  const landing = landingPhase(board, phase);
+  return placementTakesCard(board, landing, facts, carriesPullRequest) ? landing : board.initialPhase;
+}
+
 /** Whether any route on the board, enabled or not, handles the event: then the routes own it. */
 export function routesHandleEvent(
   routes: readonly Pick<IntakeRoute, 'on' | 'target'>[],
