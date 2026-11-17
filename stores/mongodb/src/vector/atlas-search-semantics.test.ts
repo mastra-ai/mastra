@@ -39,8 +39,10 @@ describe('Atlas search-index semantics (§0)', () => {
   afterEach(async () => {
     for (const c of colls.splice(0)) {
       await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
-      // Tolerant: a collection a test never created (or already removed) must not fail cleanup.
-      await dropCollectionWithSearchIndexes(db, c).catch(() => {});
+      // Tolerate only a collection a test never created (26); any other failure must surface.
+      await dropCollectionWithSearchIndexes(db, c).catch((err: { code?: number }) => {
+        if (err?.code !== 26) throw err;
+      });
     }
   });
 
