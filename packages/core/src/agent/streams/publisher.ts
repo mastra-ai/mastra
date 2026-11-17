@@ -396,8 +396,6 @@ function createOwnerHandle(
 
   const cleanup = async () => {
     await publications.flush().catch(() => {});
-    if (runningRetryTimer) clearTimeout(runningRetryTimer);
-    runningRetryTimer = undefined;
     if (!(await canCleanup())) return;
     const draining = drainProducers();
     if (draining) {
@@ -405,6 +403,8 @@ function createOwnerHandle(
       // A resumed execution may take over while the old transport is draining.
       if (!(await canCleanup())) return;
     }
+    if (runningRetryTimer) clearTimeout(runningRetryTimer);
+    runningRetryTimer = undefined;
     for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
       void pubsub.clearTopic(topic).catch(() => {});
     }
