@@ -832,7 +832,7 @@ Mastra also logs these messages:
 
 - `warn`: `search index "<name>" on "<collection>" (id <id>) may have been created by Mastra; kept; drop it manually if unused`. Mastra couldn't confirm whether its create reached Atlas, for example after a lost response or a crash, and an index with that name now exists. Mastra doesn't record it as its own, so `deleteIndex()` keeps it. The message can repeat when Mastra removes its internal record. If no logical index uses the search index, drop it by ID.
 - `warn`: `search index "<name>" on "<collection>" (id <id>) is not recorded as created by Mastra: its id time <time> is more than 30 s before the pre-list at <time>`. The index Atlas returned is older than Mastra's create, so Mastra treats it as created by someone else and keeps it.
-- `error`: `could not drop search index "<name>" (id <id>) on "<collection>"; cleanup record <_id> keeps blocking the name: <error>`. Mastra retries the drop, and logs this again if it fails, on each later `createIndex()` or `createSearchIndex()` on that collection. Until the drop succeeds, calls that use that name throw `INDEX_DELETING`.
+- `error`: `could not drop search index "<name>" (id <id>) on "<collection>"; cleanup record <_id> keeps blocking the name: <error>`. Mastra retries the drop, and logs this again if it fails, on each later `createIndex()`, `createSearchIndex()`, `deleteIndex()` or `claimLegacyIndex()` on that collection. Until the drop succeeds, calls that use that name throw `INDEX_DELETING`.
 
 To drop a search index by ID in `mongosh`, list the collection's search indexes and pass the `id` of the one to drop:
 
