@@ -22,6 +22,10 @@ export type MCPPrimitiveKind = keyof ServerMCPPrimitiveFilter;
 export interface ResolvedBuiltinMCPConfig {
   toolsets: ReadonlySet<MastraMCPToolset>;
   readOnly: boolean;
+  /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
+  apps: boolean;
+  /** Studio's base URL, sent to MCP Apps for "Open in Studio" links. */
+  studioUrl?: string;
   enumLimit: number;
   featured: { agents: string[]; workflows: string[] };
   /**
@@ -143,6 +147,8 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
   return {
     toolsets,
     readOnly,
+    apps: config.apps ?? true,
+    studioUrl: resolveStudioUrl(mastra, config),
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },
     isSelected: (kind, names) => {
@@ -154,6 +160,33 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     },
     serverInfo: config.serverInfo ?? {},
   };
+}
+
+/** Studio's base URL for app links: `server.mcp.studioUrl`, else the local Studio under `mastra dev`. */
+function resolveStudioUrl(mastra: Mastra, config: ServerMCPConfig): string | undefined {
+  if (config.studioUrl === false) return undefined;
+  if (config.studioUrl) return config.studioUrl.replace(/\/+$/, '');
+  if (!isDev()) return undefined;
+  // Resolved the way the dev server binds and logs Studio (`deployer/src/server/index.ts`), which `mastra dev`
+  // drives through `PORT` / `MASTRA_HOST` when it picks a free port.
+  const server = mastra.getServer();
+  const bindHost = server?.host ?? process.env.MASTRA_HOST;
+  const bound = bindHost && bindHost !== '0.0.0.0' && bindHost !== '::' ? bindHost : undefined;
+  const name = server?.studioHost ?? bound ?? 'localhost';
+  // An IPv6 address goes in brackets in a URL.
+  const host = name.includes(':') && !name.startsWith('[') ? `[${name}]` : name;
+  const port = server?.studioPort ?? server?.port ?? (Number(process.env.PORT) || 4111);
+  const base = normalizeStudioBase(server?.studioBase ?? '/');
+  // Like the dev server: HTTPS when `server.https` or `mastra dev --https` (which passes the cert in env) is set.
+  const https =
+    (server?.https?.key && server.https.cert) || (process.env.MASTRA_HTTPS_KEY && process.env.MASTRA_HTTPS_CERT);
+  return `${server?.studioProtocol ?? (https ? 'https' : 'http')}://${host}:${port}${base}`;
+}
+
+/** Same result as the deployer's `normalizeStudioBase`, which this package can't import: `''` or `/path`. */
+function normalizeStudioBase(studioBase: string): string {
+  const base = studioBase.trim().replace(/\/+/g, '/').replace(/\/$/, '');
+  return !base || base === '/' ? '' : base.startsWith('/') ? base : `/${base}`;
 }
 
 /** DNS-rebinding protection for `mastra dev` only; production hosts sit behind proxies and custom domains. */
