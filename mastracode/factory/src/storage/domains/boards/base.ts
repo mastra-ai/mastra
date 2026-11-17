@@ -378,7 +378,7 @@ interface IntakeRouteRow extends Record<string, unknown> {
   join_closed_issue: boolean | null;
   /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
   opened_files_pull_requests?: boolean | null;
-  /** Null on rows written before rules decided outsiders' pull requests: their card moves skip them. False since. */
+  /** Null on rows written before rules decided outsiders' pull requests: their card moves skip them. Written since: true restores that gate, false (every new route) lets them match. */
   outsider_pull_requests_gated?: boolean | null;
   move_to_board_key: string | null;
   revision: number;
@@ -1708,7 +1708,7 @@ async function insertIntakeRoute(
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
     opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
-    outsider_pull_requests_gated: route.input.outsiderPullRequestsGated === true ? null : false,
+    outsider_pull_requests_gated: route.input.outsiderPullRequestsGated === true,
     move_to_board_key: route.input.target.moveToBoardKey ?? null,
     revision: 1,
     created_by: route.actor,
