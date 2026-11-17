@@ -126,8 +126,6 @@ export function AutosaveInput({
         readOnly={saving}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        // The settings column sets the width, not the input's 20-character default.
-        className="w-0"
         onChange={event => {
           setDraft(event.target.value);
           setError(null);
@@ -136,18 +134,21 @@ export function AutosaveInput({
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
       />
-      {saving ? (
-        <InputGroupAddon align="inline-end">
-          {/* The ring fills 17/24 of the spinner's box but the alert's circle about 20/24, so the spinner gets a 20px
-              box, held to the 18px slot by the negative margin, to draw at the same size. */}
-          <Spinner className="-m-px size-5 shrink-0" aria-label={`Saving ${label}`} />
-        </InputGroupAddon>
-      ) : error ? (
-        // The addon colours its glyphs through --control-icon.
-        <InputGroupAddon align="inline-end" className="[--control-icon:var(--color-destructive-foreground)]">
-          {/* A span, not the button, is the addon's child: the addon tightens its end padding around a direct button,
-              which would move the alert off the spinner and check's spot. */}
-          <span className="flex">
+      {/* Always there, empty while idle, so the spinner, check or alert never change the field's width. */}
+      <InputGroupAddon
+        align="inline-end"
+        className={cn(
+          // The addon colours its glyphs through --control-icon.
+          error && '[--control-icon:var(--color-destructive-foreground)]',
+          !error && justSaved && '[--control-icon:var(--color-success-indicator)]',
+        )}
+      >
+        <span className="flex size-icon-md items-center justify-center">
+          {saving ? (
+            // The ring fills 17/24 of the spinner's box but the alert's circle about 20/24, so the spinner gets a
+            // 20px box, held to the 18px slot by the negative margin, to draw at the same size.
+            <Spinner className="-m-px size-5 shrink-0" aria-label={`Saving ${label}`} />
+          ) : error ? (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -166,13 +167,11 @@ export function AutosaveInput({
                 {error}
               </TooltipContent>
             </Tooltip>
-          </span>
-        </InputGroupAddon>
-      ) : justSaved ? (
-        <InputGroupAddon align="inline-end" className="[--control-icon:var(--color-success-indicator)]">
-          <IconCheckmark2Medium className={cn('autosave-input-glyph', glyphClassName)} aria-hidden />
-        </InputGroupAddon>
-      ) : null}
+          ) : justSaved ? (
+            <IconCheckmark2Medium className={cn('autosave-input-glyph', glyphClassName)} aria-hidden />
+          ) : null}
+        </span>
+      </InputGroupAddon>
       <span className="sr-only" role="status">
         {justSaved ? `${label} saved` : ''}
       </span>
