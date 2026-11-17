@@ -4,6 +4,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
+// On a settings page (`SettingsLayout`), section titles and descriptions sit 10px inside the card's edge, in line with
+// the inset page title. Anywhere else (forms, other pages) they line up with the page's left edge and field labels.
+// The inset is a custom property, so a caller's `ps-*` class still wins. Written out in full so Tailwind finds it.
+const settingsInset =
+  '[--settings-inset:0px] in-data-[slot=settings-layout]:[--settings-inset:--spacing(2.5)] ps-(--settings-inset)';
+
 const SettingsTitleIdContext = createContext<string | undefined>(undefined);
 
 /** One section of a settings page: a `SettingsTitle` (or `SettingsHeader`) above its `SettingsContainer`. */
@@ -53,9 +59,8 @@ export function SettingsTitle({
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
-    // Inset by 10px, so the title sits a little inside the card's edge below it.
-    <div className="flex min-w-0 flex-wrap items-center gap-2 ps-2.5">
-      <Txt as="h2" id={titleId} variant="subheading" tone="muted" className={className} {...props}>
+    <div className={cn('flex min-w-0 flex-wrap items-center gap-2', settingsInset)}>
+      <Txt as="h2" id={titleId} variant="subheading" tone="ink" className={className} {...props}>
         {info == null ? children : <SettingsTitleInfo info={info}>{children}</SettingsTitleInfo>}
       </Txt>
       {accessory}
@@ -88,5 +93,5 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="caption" tone="muted" className={cn('ps-2.5', className)} {...props} />;
+  return <Txt as="p" variant="caption" tone="muted" className={cn(settingsInset, className)} {...props} />;
 }

@@ -102,10 +102,10 @@ describe('KnowledgePageTree', () => {
 });
 
 describe('KnowledgePageTree scope rows and pins', () => {
-  it('shows a scope named by its address once', () => {
+  it('names a scope that only has its address by its kind', () => {
     const named = page('org', null, 'a0', { name: 'org:acme', address: 'org:acme' });
     renderWithProviders(<KnowledgePageTree pages={[named]} onSelect={() => {}} />);
-    expect(screen.getAllByText('org:acme')).toHaveLength(1);
+    expect(screen.getByRole('treeitem', { name: /Organization/ })).toBeTruthy();
   });
 
   it('shows the address beside a scope with its own name', () => {

@@ -7,4 +7,4 @@ export interface DraftSessionStart {
   start: (draft: { prompt: string; files: PendingImage[] }) => void | Promise<void>;
 }
 
-export const DraftSessionStartContext = createContext<DraftSessionStart | null>(null);
+export const DraftSessionStartContext = createContext<DraftSessionStart | undefined>(undefined);
