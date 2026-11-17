@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import {
@@ -279,8 +280,13 @@ export class PlatformKnowledge extends Knowledge {
         knowledge: new RemoteKnowledgeStorage(
           resolveEndpoint,
           token,
-          // Until resolved, only this store is known to share its backend with itself.
-          instanceId ? instanceEndpoint(instanceId) : undefined,
+          // Stores keyed alike share a backend, so a host rejects registering both. A discovered instance is
+          // keyed by its lookup (the project, or the credential that names it; hashed, never the raw token).
+          // An explicit `instanceId` and a lookup that resolves to that same instance can't be matched
+          // without a network call at registration, so that mixed pair is not detected.
+          instanceId
+            ? instanceEndpoint(instanceId)
+            : `${base}?${projectId ? `projectId=${encodeURIComponent(projectId)}` : `token=${createHash('sha256').update(token).digest('hex')}`}`,
         ),
       },
     });

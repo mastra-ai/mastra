@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { Mastra } from '@mastra/core/mastra';
 import {
   InMemoryStore,
   KnowledgeConflictError,
@@ -401,4 +402,20 @@ it('keeps a non-JSON lookup failure body out of the error beyond a short snippet
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   }
+});
+
+it.each([
+  ['explicit instances', { instanceId: 'kn_1' }, { instanceId: 'kn_1' }, true],
+  ['discovered instances of one project', { projectId: 'project-1' }, { projectId: 'project-1' }, true],
+  ['discovered instances of one project token', {}, {}, true],
+  ['discovered instances of different projects', { projectId: 'project-1' }, { projectId: 'project-2' }, false],
+  ['discovered instances of different project tokens', {}, { accessToken: 'other-token' }, false],
+])('a host rejects two PlatformKnowledge that share a backend: %s', (_name, first, second, rejected) => {
+  const mastra = new Mastra({ logger: false });
+  const make = (id: string, options: object) =>
+    new PlatformKnowledge({ id, apiUrl: 'http://localhost', accessToken: 'token', ...options });
+  mastra.addKnowledge(make('first', first));
+  const register = () => mastra.addKnowledge(make('second', second));
+  if (rejected) expect(register).toThrow(/cannot share a storage backend/);
+  else expect(register).not.toThrow();
 });
