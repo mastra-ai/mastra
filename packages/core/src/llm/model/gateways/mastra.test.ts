@@ -229,6 +229,76 @@ describe('MastraGateway', () => {
       await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
     });
 
+    it.each([401, 403])('drops the cached catalog when the key is rejected with %i', async status => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+      await gateway.fetchProviders();
+
+      customFetch.mockImplementation(async () => new Response('rejected', { status }));
+      now.mockReturnValue(1_000_000 + 61_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow(`Gateway model catalog unavailable (${status})`);
+
+      customFetch.mockImplementation(async () => catalog(['openai/other-model']));
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/other-model']);
+    });
+
+    it('serves the last good catalog after a network error', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+      await gateway.fetchProviders();
+
+      customFetch.mockRejectedValue(new TypeError('fetch failed'));
+      now.mockReturnValue(1_000_000 + 61_000);
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+    });
+
+    it('waits before retrying after a failed refresh', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
+      await gateway.fetchProviders();
+
+      customFetch.mockImplementation(async () => new Response('unavailable', { status: 503 }));
+      now.mockReturnValue(1_000_000 + 61_000);
+      await gateway.fetchProviders();
+      expect(customFetch).toHaveBeenCalledTimes(2);
+
+      now.mockReturnValue(1_000_000 + 61_000 + 14_000);
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+      expect(customFetch).toHaveBeenCalledTimes(2);
+
+      now.mockReturnValue(1_000_000 + 61_000 + 16_000);
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+      expect(customFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps catalogs fetched through different fetch functions apart', async () => {
+      const firstFetch = vi.fn(async () => catalog(['openai/model-a']));
+      const secondFetch = vi.fn(async () => catalog(['openai/model-b']));
+
+      const a = await new MastraGateway({ apiKey: 'same-key', customFetch: firstFetch }).fetchProviders();
+      const b = await new MastraGateway({ apiKey: 'same-key', customFetch: secondFetch }).fetchProviders();
+
+      expect(a.mastra?.models).toEqual(['openai/model-a']);
+      expect(b.mastra?.models).toEqual(['openai/model-b']);
+      expect(secondFetch).toHaveBeenCalledOnce();
+    });
+
+    it('keeps at most 100 catalogs, dropping the oldest', async () => {
+      const customFetch = vi.fn(async () => catalog(['openai/chat-model']));
+      for (let i = 0; i <= 100; i++) {
+        await new MastraGateway({ apiKey: `key-${i}`, customFetch }).fetchProviders();
+      }
+      expect(customFetch).toHaveBeenCalledTimes(101);
+
+      await new MastraGateway({ apiKey: 'key-100', customFetch }).fetchProviders();
+      expect(customFetch).toHaveBeenCalledTimes(101);
+      await new MastraGateway({ apiKey: 'key-0', customFetch }).fetchProviders();
+      expect(customFetch).toHaveBeenCalledTimes(102);
+    });
+
     it('fetches again after a failure with no previous catalog', async () => {
       const customFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
       const gateway = new MastraGateway({ apiKey: 'deployment-key', customFetch });
@@ -275,6 +345,30 @@ describe('MastraGateway', () => {
       expect(bodies[0]).toMatchObject({ stream: true, stream_options: { include_usage: true } });
       expect(bodies[1]).not.toHaveProperty('stream_options');
       expect(bodies[1]).not.toHaveProperty('usage');
+    });
+
+    it('reports usage sent in a separate final chunk', async () => {
+      const frames = [
+        { id: 'c1', choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' } }] },
+        { id: 'c1', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+        { id: 'c1', choices: [], usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 } },
+      ];
+      const body = frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n';
+      const customFetch = vi.fn(
+        async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+      );
+      const model: any = new MastraGateway({
+        apiKey: 'gateway-key',
+        customFetch: customFetch as any,
+      }).resolveLanguageModel({ modelId: 'gpt-4o', providerId: 'openai', apiKey: 'gateway-key' });
+
+      const { stream } = await model.doStream({ prompt });
+      const parts: any[] = [];
+      for await (const part of stream) parts.push(part);
+
+      const finish = parts.find(part => part.type === 'finish');
+      expect(finish?.usage?.inputTokens?.total ?? finish?.usage?.inputTokens).toBe(7);
+      expect(finish?.usage?.outputTokens?.total ?? finish?.usage?.outputTokens).toBe(3);
     });
 
     it('asks for usage on streaming requests only with a custom fetch', async () => {

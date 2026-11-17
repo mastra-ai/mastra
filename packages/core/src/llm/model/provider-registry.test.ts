@@ -933,12 +933,24 @@ describe('GatewayRegistry Auto-Refresh', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('does not sync the Mastra gateway into the shared cache in v2 mode', async () => {
-    const previousVersion = process.env.MASTRA_GATEWAY_VERSION;
-    const previousKey = process.env.MASTRA_GATEWAY_API_KEY;
-    process.env.MASTRA_GATEWAY_VERSION = 'v2';
-    process.env.MASTRA_GATEWAY_API_KEY = 'deployment-key';
-    try {
+  describe('Mastra gateway in the shared cache', () => {
+    const envKeys = ['MASTRA_GATEWAY_VERSION', 'MASTRA_GATEWAY_API_KEY'] as const;
+    let savedEnv: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      savedEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+      for (const key of envKeys) delete process.env[key];
+    });
+
+    afterEach(() => {
+      for (const key of envKeys) {
+        if (savedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = savedEnv[key];
+      }
+      GatewayRegistry.getInstance({ useDynamicLoading: true }).registerCustomGateways([]);
+    });
+
+    async function sync(mastraCatalog: () => Promise<Record<string, ProviderConfig>>) {
       const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
       const writtenFiles: string[] = [];
       vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any, data: any) => {
@@ -958,23 +970,56 @@ describe('GatewayRegistry Auto-Refresh', () => {
       vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
       const mastraFetchProvidersSpy = vi
         .spyOn(MastraGateway.prototype, 'fetchProviders')
-        .mockRejectedValue(new Error('Gateway model catalog unavailable (401)'));
+        .mockImplementation(mastraCatalog);
 
       await registry.syncGateways(true);
 
-      expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
       const registryWrites = writtenFiles.filter(entry => entry.includes('provider-registry.json'));
       expect(registryWrites.length).toBeGreaterThan(0);
-      for (const entry of registryWrites) {
-        expect(entry).toContain('test-provider');
-        expect(entry).not.toContain('"mastra"');
-      }
-    } finally {
-      if (previousVersion === undefined) delete process.env.MASTRA_GATEWAY_VERSION;
-      else process.env.MASTRA_GATEWAY_VERSION = previousVersion;
-      if (previousKey === undefined) delete process.env.MASTRA_GATEWAY_API_KEY;
-      else process.env.MASTRA_GATEWAY_API_KEY = previousKey;
+      for (const entry of registryWrites) expect(entry).toContain('test-provider');
+      return { mastraFetchProvidersSpy, registryWrites };
     }
+
+    const failingCatalog = async () => {
+      throw new Error('Gateway model catalog unavailable (401)');
+    };
+
+    it('does not sync the default Mastra gateway in v2 mode', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+      process.env.MASTRA_GATEWAY_API_KEY = 'deployment-key';
+
+      const { mastraFetchProvidersSpy, registryWrites } = await sync(failingCatalog);
+
+      expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
+      for (const entry of registryWrites) expect(entry).not.toContain('"mastra"');
+    });
+
+    it('does not sync a registered Mastra gateway that holds an organization key', async () => {
+      GatewayRegistry.getInstance({ useDynamicLoading: true }).registerCustomGateways([
+        new MastraGateway({ apiKey: 'mskv2_org-key' }),
+      ]);
+
+      const { mastraFetchProvidersSpy, registryWrites } = await sync(failingCatalog);
+
+      expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
+      for (const entry of registryWrites) expect(entry).not.toContain('"mastra"');
+    });
+
+    it('still syncs the Mastra gateway with a v1 project key', async () => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'msk_0123456789abcdef0123456789abcdef';
+
+      const { mastraFetchProvidersSpy, registryWrites } = await sync(async () => ({
+        mastra: {
+          name: 'Gateway',
+          models: ['openai/chat-model'],
+          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+        } as ProviderConfig,
+      }));
+
+      expect(mastraFetchProvidersSpy).toHaveBeenCalled();
+      for (const entry of registryWrites) expect(entry).toContain('"mastra"');
+    });
   });
 
   it('should skip syncGateways when MASTRA_OFFLINE is set to true', async () => {

@@ -860,17 +860,19 @@ export class GatewayRegistry {
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
       // Initialize default gateways. Mastra Gateway is dynamic-only and should not be written into checked-in static artifacts.
-      // In v2 mode its catalog is specific to one organization's key, so it is not written to the
-      // machine-wide cache either, and its failures cannot stop the rest of the refresh.
-      const mastraGateway = new MastraGateway();
       const defaultGateways = [
         new ModelsDevGateway({}),
         new NetlifyGateway(),
-        ...(writeToSrc || mastraGateway.isV2() ? [] : [mastraGateway]),
+        ...(writeToSrc ? [] : [new MastraGateway()]),
       ];
 
-      // Combine default and custom gateways
-      const gateways = [...defaultGateways, ...this.customGateways];
+      // Combine default and custom gateways. A Mastra gateway in v2 mode, default or registered,
+      // lists models for one organization's key, so it is not written to the machine-wide cache,
+      // and its failures cannot stop the rest of the refresh.
+      const gateways = [...defaultGateways, ...this.customGateways].filter(gateway => {
+        const candidate = gateway as { id?: string; isV2?: () => boolean };
+        return !(candidate.id === 'mastra' && typeof candidate.isV2 === 'function' && candidate.isV2());
+      });
 
       // Fetch provider data
       const {

@@ -466,10 +466,9 @@ describe('getProvidersHandler', () => {
       expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
     });
 
-    // Each v2 case uses its own key because the gateway caches the live catalog per key.
     it('uses only the live Mastra catalog in v2 mode', async () => {
       process.env.MASTRA_GATEWAY_VERSION = 'v2';
-      process.env.MASTRA_GATEWAY_API_KEY = 'live-catalog-key';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
       Object.assign(globalThis, {
         __MOCK_PROVIDER_REGISTRY__: {
           mastra: {
@@ -529,7 +528,7 @@ describe('getProvidersHandler', () => {
 
     it('keeps the Mastra gateway listed with no models when the v2 catalog fails', async () => {
       process.env.MASTRA_GATEWAY_VERSION = 'v2';
-      process.env.MASTRA_GATEWAY_API_KEY = 'failing-catalog-key';
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
       Object.assign(globalThis, {
         __MOCK_PROVIDER_REGISTRY__: {
           mastra: {
