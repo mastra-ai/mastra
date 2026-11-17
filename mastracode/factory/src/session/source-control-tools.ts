@@ -7,12 +7,15 @@ import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
 import type { CommitCheck, CommitCheckStatus, VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { getBranchHeadOrNull } from '../integrations/github/commits.js';
 import {
   ensureLocalBranch,
   isCheckoutOf,
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
 } from '../integrations/github/sandbox.js';
+import { publishBranchSigned } from '../integrations/github/signed-publication.js';
+import type { SignedPublishFallbackReason } from '../integrations/github/signed-publication.js';
 import { normalizedVerdictLine } from '../review-verdict.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
@@ -337,7 +340,51 @@ export async function createSourceControlTools({
         // Materialize the session branch at the active HEAD without discarding
         // session-only commits, so the push includes the agent's current work.
         await ensureLocalBranch(sandbox, workdir, branch);
-        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        const unsignedPush = () => pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        // Sign first where the provider can (GitHub), and fall back to the
+        // ordinary push only while nothing was published: a repository with
+        // "require signed commits" then gets the same commits signed by the App,
+        // and every other provider keeps pushing exactly as it does today.
+        const createSignedCommit = target.provider.versionControl.createSignedCommit;
+        let signed = false;
+        let headSha: string | undefined;
+        let signedFallback: SignedPublishFallbackReason | undefined;
+        if (createSignedCommit) {
+          const { connection, sourceId } = await target.provider.versionControl.getRepositoryTarget({
+            orgId: target.orgId,
+            repositoryId: target.repository.id,
+          });
+          const publication = await publishBranchSigned({
+            sandbox,
+            workdir,
+            branch,
+            access,
+            repoFullName: target.repository.slug,
+            createSignedCommit: plan =>
+              createSignedCommit({
+                connection,
+                sourceId,
+                branch,
+                expectedHeadSha: plan.expectedHeadSha,
+                message: { headline: plan.headline, ...(plan.body ? { body: plan.body } : {}) },
+                additions: plan.additions,
+                deletions: plan.deletions,
+              }),
+            readRemoteHead: () =>
+              getBranchHeadOrNull(
+                { versionControl: target.provider.versionControl },
+                { orgId: target.orgId, repository: target.repository, branch },
+              ),
+            unsignedFallback: async () => {
+              await unsignedPush();
+            },
+          });
+          signed = publication.signed;
+          if (publication.signed) headSha = publication.headSha;
+          else signedFallback = publication.reason;
+        } else {
+          await unsignedPush();
+        }
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
@@ -348,9 +395,16 @@ export async function createSourceControlTools({
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.push',
           targets: [{ type: 'repository', id: target.repository.slug }],
-          metadata: { branch, provider: target.provider.id, repository: target.repository.slug },
+          metadata: { branch, provider: target.provider.id, repository: target.repository.slug, signed },
         });
-        return { pushed: true, branch, repository: target.repository.slug };
+        return {
+          pushed: true,
+          branch,
+          repository: target.repository.slug,
+          signed,
+          ...(headSha ? { headSha } : {}),
+          ...(signedFallback ? { signedFallback } : {}),
+        };
       },
     }),
     source_control_get_change_request: createTool({

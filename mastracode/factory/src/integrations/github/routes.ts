@@ -32,6 +32,7 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 
+import { getBranchHeadOrNull } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -47,6 +48,7 @@ import {
   SetupCommandError,
 } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
+import { publishBranchSigned } from './signed-publication.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 
@@ -1006,7 +1008,45 @@ function buildProjectGitRoutes({
               repositoryId: project.repository.id,
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
-            await pushBranch(sessionSandbox, workdir, branch, access.authorization.token, project.repository.slug);
+            const token = access.authorization.token;
+            const unsignedPush = () => pushBranch(sessionSandbox, workdir, branch, token, project.repository.slug);
+            // Sign first, and fall back to the ordinary push only while nothing
+            // was published, so a protected repository gets the same commits
+            // signed by the App and every other repository behaves as before.
+            const createSignedCommit = github.versionControl.createSignedCommit;
+            let signed = false;
+            let headSha: string | undefined;
+            if (createSignedCommit) {
+              const target = await github.versionControl.getRepositoryTarget({
+                orgId,
+                repositoryId: project.repository.id,
+              });
+              const publication = await publishBranchSigned({
+                sandbox: sessionSandbox,
+                workdir,
+                branch,
+                access,
+                repoFullName: project.repository.slug,
+                createSignedCommit: plan => {
+                  const { connection, sourceId } = target;
+                  return createSignedCommit({
+                    connection,
+                    sourceId,
+                    branch,
+                    expectedHeadSha: plan.expectedHeadSha,
+                    message: { headline: plan.headline, ...(plan.body ? { body: plan.body } : {}) },
+                    additions: plan.additions,
+                    deletions: plan.deletions,
+                  });
+                },
+                readRemoteHead: () => getBranchHeadOrNull(github, { orgId, repository: project.repository, branch }),
+                unsignedFallback: unsignedPush,
+              });
+              signed = publication.signed;
+              if (publication.signed) headSha = publication.headSha;
+            } else {
+              await unsignedPush();
+            }
             await emitAudit?.({
               context: loose(c),
               input: {
@@ -1014,10 +1054,10 @@ function buildProjectGitRoutes({
                 factoryProjectId: project.factoryProjectId,
                 projectRepositoryId: project.id,
                 targets: [{ type: 'branch', id: branch }],
-                metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
+                metadata: { branch, sessionId: sessionWorkspace.session.sessionId, signed },
               },
             });
-            return c.json({ pushed: true, branch });
+            return c.json({ pushed: true, branch, signed, ...(headSha ? { headSha } : {}) });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);

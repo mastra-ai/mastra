@@ -53,14 +53,14 @@ export const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
 /** Branch checkout only fetches one ref — a much tighter budget applies. */
 export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 
-interface ShOptions {
+export interface ShOptions {
   /** Override the hang-guard budget for this command. */
   timeoutMs?: number;
   /** Human-readable phase name included in the timeout error. */
   phase?: string;
 }
 
-interface CommandOptions extends ShOptions {
+export interface CommandOptions extends ShOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
 }
@@ -99,8 +99,12 @@ export async function sh(
  * Execute one program with an argv array, bounded by a hang guard. Transient
  * sandbox transport failures are retried without ever interpolating arguments
  * into a shell command.
+ *
+ * Exported for {@link publishBranchSigned}, which runs its own git commands
+ * against the same checkout: the credential handling below stays in one place
+ * rather than being reimplemented.
  */
-async function execute(
+export async function execute(
   sandbox: ExecutableSandbox,
   command: string,
   args: string[],
@@ -312,8 +316,11 @@ function credentialScope(
  * Provide HTTP Basic credentials to one Git process without putting a secret
  * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
  * extra header from its process environment and discards it on exit.
+ *
+ * Exported for {@link publishBranchSigned} so signed publication fetches with
+ * exactly the credentials an ordinary push uses.
  */
-function gitAuthenticationEnvironment(
+export function gitAuthenticationEnvironment(
   cloneUrl: string,
   token: string,
   username: string,

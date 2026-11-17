@@ -46,9 +46,11 @@ import type {
   PullRequestComment,
   Review,
   ReviewComment,
+  SignedCommit,
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { createCommitOnBranch } from './commits.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
 import { githubIntakeLookup } from './intake-lookup.js';
@@ -409,6 +411,7 @@ export class GithubIntegration implements FactoryIntegration {
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
     publishCommitCheck: input => this.#publishCommitCheck(input),
+    createSignedCommit: input => this.#createSignedCommit(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -1194,6 +1197,33 @@ export class GithubIntegration implements FactoryIntegration {
         throw error;
       });
     return { id: String(data.id), name: data.name, headSha: data.head_sha, status: input.status, url: data.html_url };
+  }
+
+  /**
+   * Publish one commit through GitHub's server-side signing flow. GitHub creates
+   * the commit with the App's installation credentials, so it carries GitHub's
+   * own signature and a branch protected by "require signed commits" accepts
+   * it. The commit is attributed to the App; the original authorship survives in
+   * the commit message trailers the caller preserves.
+   */
+  async #createSignedCommit(input: InputOf<'createSignedCommit'>): Promise<SignedCommit> {
+    const installationId = getGithubInstallationId(input.connection);
+    if (!splitRepoFullName(input.sourceId)) {
+      throw new Error('GitHub signed commits require an owner/repository source.');
+    }
+    const token = await this.mintInstallationToken(installationId);
+    return createCommitOnBranch(
+      { token },
+      {
+        repository: input.sourceId,
+        branch: input.branch,
+        expectedHeadSha: input.expectedHeadSha,
+        headline: input.message.headline,
+        ...(input.message.body ? { body: input.message.body } : {}),
+        ...(input.additions?.length ? { additions: input.additions } : {}),
+        ...(input.deletions?.length ? { deletions: input.deletions } : {}),
+      },
+    );
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */

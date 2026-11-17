@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import { createBoardRegistry } from '../boards/registry.js';
 import { selfReviewWorkBoard } from '../boards/test-utils.js';
-import type { VersionControl } from '../capabilities/version-control.js';
+import type { CreateSignedCommitInput, SignedCommit, VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -649,7 +649,7 @@ describe('createSourceControlTools', () => {
 
       const result = await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo' });
+      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo', signed: false });
       expect(pushes()).toHaveLength(1);
       expect(pushes()[0]!.args).toEqual(['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1']);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
@@ -676,7 +676,7 @@ describe('createSourceControlTools', () => {
         { workspace: { sandbox } },
       );
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
+      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other', signed: false });
       expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
@@ -1066,6 +1066,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
   };
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
@@ -1096,7 +1097,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
     templates.set(repository, { root, base });
   }
 
-  async function checkoutFixture(repository: string) {
+  async function checkoutFixture(repository: string, options: { signed?: boolean } = {}) {
     const setup = await fixture(provider);
     const template = templates.get(repository)!;
     const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
@@ -1114,24 +1115,36 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       cloneUrl,
       authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
     });
+    if (options.signed) {
+      setup.versionControl.createSignedCommit = emulateCreateCommitOnBranch(origin);
+    }
     const built = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: provider, storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
     const hooks: { afterCommand?: (args: string[]) => void } = {};
+    const mirrorFetch = options.signed === true;
     const sandbox = {
       id: 'real-git',
       provider: 'custom',
       workingDirectory: root,
       async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
-        const result = spawnSync(command === 'git' ? gitBinary : command, args, {
+        // The template points origin's push URL at the hermetic remote and
+        // leaves its fetch URL at the provider, which is what checkout
+        // validation reads. Signed publication also fetches, so resolve that one
+        // remote to the same local mirror; every other Git call is untouched.
+        const resolved =
+          mirrorFetch && command === 'git' && args[2] === 'fetch' && args[4] === 'origin'
+            ? args.map((arg, index) => (index === 4 ? origin : arg))
+            : args;
+        const result = spawnSync(command === 'git' ? gitBinary : command, resolved, {
           encoding: 'utf8',
           env: { ...env, ...options?.env },
           timeout: 10_000,
         });
         if (result.error) throw result.error;
-        hooks.afterCommand?.(args);
+        hooks.afterCommand?.(resolved);
         return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
       },
     };
@@ -1140,7 +1153,74 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
         workspace: { sandbox },
       });
     const remote = (...args: string[]) => git('--git-dir', origin, ...args);
+    // The module reads the remote head over the GitHub REST API. Answer it from
+    // the hermetic repository, so the only thing faked is the HTTP transport.
+    if (options.signed) {
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const match = /\/repos\/([^/]+\/[^/]+)\/commits\/(.+)$/.exec(url);
+        if (!match) return new Response('{}', { status: 404 });
+        const head = spawnSync(
+          gitBinary,
+          ['--git-dir', origin, 'rev-parse', `refs/heads/${decodeURIComponent(match[2]!)}`],
+          {
+            encoding: 'utf8',
+            env,
+          },
+        );
+        if (head.status !== 0) return new Response('Not Found', { status: 404 });
+        return new Response(head.stdout.trim(), { status: 200 });
+      });
+    }
     return { ...setup, root, checkout, git, commit, base, push, remote, hooks };
+  }
+
+  /**
+   * GitHub's `createCommitOnBranch` writes the commit server-side: it takes the
+   * branch at the head the caller claimed, applies the file changes to that
+   * tree, and moves the ref only if it still points there. Emulate exactly that
+   * with plumbing against the bare remote, so the module is exercised against
+   * real Git objects and a real ref compare-and-swap.
+   */
+  function emulateCreateCommitOnBranch(origin: string) {
+    return async (input: CreateSignedCommitInput): Promise<SignedCommit> => {
+      let index = 0;
+      const indexFile = path.join(origin, `..`, `signed-index-${process.hrtime.bigint()}-${index++}`);
+      const plumbing = (args: string[], extraEnv: Record<string, string> = {}, stdin?: Buffer) => {
+        const result = spawnSync(gitBinary, ['--git-dir', origin, ...args], {
+          encoding: 'utf8',
+          env: {
+            ...env,
+            GIT_AUTHOR_NAME: 'Exact',
+            GIT_AUTHOR_EMAIL: 'exact@example.com',
+            GIT_COMMITTER_NAME: 'Exact',
+            GIT_COMMITTER_EMAIL: 'exact@example.com',
+            ...extraEnv,
+          },
+          input: stdin,
+        });
+        if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
+        return result.stdout.trim();
+      };
+      const withIndex = { GIT_INDEX_FILE: indexFile };
+      const head = plumbing(['rev-parse', `refs/heads/${input.branch}`]);
+      if (head !== input.expectedHeadSha) {
+        throw new Error(`createCommitOnBranch expected ${input.expectedHeadSha}, found ${head}`);
+      }
+      plumbing(['read-tree', input.expectedHeadSha], withIndex);
+      for (const addition of input.additions ?? []) {
+        const blob = plumbing(['hash-object', '-w', '--stdin'], {}, Buffer.from(addition.contents, 'base64'));
+        plumbing(['update-index', '--add', '--cacheinfo', `100644,${blob},${addition.path}`], withIndex);
+      }
+      for (const deletion of input.deletions ?? []) {
+        plumbing(['update-index', '--force-remove', deletion.path], withIndex);
+      }
+      const tree = plumbing(['write-tree'], withIndex);
+      const message = ['-m', input.message.headline, ...(input.message.body ? ['-m', input.message.body] : [])];
+      const sha = plumbing(['commit-tree', tree, '-p', input.expectedHeadSha, ...message]);
+      plumbing(['update-ref', `refs/heads/${input.branch}`, sha, input.expectedHeadSha]);
+      return { sha };
+    };
   }
 
   describe.each(['acme/repo', 'acme/other'])('%s', repository => {
@@ -1191,7 +1271,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
       const dirty = git('status', '--porcelain');
 
-      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, signed: false });
 
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
       expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');
@@ -1218,6 +1298,71 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
       expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
     });
+
+    // Signing is a GitHub capability. The GitLab half of this suite proves the
+    // tool still pushes plainly when the provider cannot sign at all.
+    it.skipIf(provider !== 'github')(
+      'publishes the session commits signed and moves the local branch onto the signed head',
+      async () => {
+        const { checkout, git, commit, push, remote } = await checkoutFixture(repository, { signed: true });
+        git('switch', '-c', branch);
+        commit('session one');
+        // `createCommitOnBranch` advances a branch that already exists, so the
+        // first push of a brand-new branch is the ordinary one.
+        await expect(push()).resolves.toMatchObject({ signed: false, signedFallback: 'remote-branch-missing' });
+        const unsignedHead = git('rev-parse', 'HEAD');
+
+        const first = commit('signed one');
+        const second = commit('signed two');
+        // Uncommitted work must survive the local ref moving to the signed sha.
+        writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted work');
+        const dirty = git('status', '--porcelain');
+
+        const result = await push();
+
+        expect(result).toMatchObject({ pushed: true, branch, repository, signed: true });
+        expect(result.headSha).toMatch(/^[0-9a-f]{40}$/);
+        // GitHub rewrote both commits, so the head is new while the trees match.
+        expect(result.headSha).not.toBe(first);
+        expect(result.headSha).not.toBe(second);
+        expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(result.headSha);
+        expect(remote('log', '--format=%s', `${unsignedHead}..${branch}`)).toBe('signed two\nsigned one');
+        expect(remote('show', `${branch}:tracked.txt`)).toBe('signed two');
+        expect(remote('show', `${branch}~1:tracked.txt`)).toBe('signed one');
+        // The unsigned commits already on the remote are left exactly as they are.
+        expect(remote('rev-parse', `refs/heads/${branch}~2`)).toBe(unsignedHead);
+        // The local branch follows the signed head, so the next push fast-forwards.
+        expect(git('rev-parse', 'HEAD')).toBe(result.headSha);
+        expect(git('status', '--porcelain')).toBe(dirty);
+        expect(git('diff')).toContain('+uncommitted work');
+      },
+    );
+
+    it.skipIf(provider !== 'github')(
+      'falls back to the ordinary push when a commit is not expressible, publishing nothing signed',
+      async () => {
+        const { checkout, git, commit, push, remote } = await checkoutFixture(repository, { signed: true });
+        git('switch', '-c', branch);
+        commit('session one');
+        await push();
+
+        // The mutation can only add and delete plain files, so a commit that
+        // sets an executable bit has no signed expression.
+        writeFileSync(path.join(checkout, 'run.sh'), '#!/bin/sh\n');
+        git('update-index', '--add', '--chmod=+x', 'run.sh');
+        git('commit', '-m', 'add script');
+        const head = git('rev-parse', 'HEAD');
+
+        const result = await push();
+
+        expect(result).toMatchObject({ signed: false, signedFallback: 'inexpressible-commit' });
+        // Nothing was published signed, so the ordinary push ran and the branch
+        // is at the local commit.
+        expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
+        expect(git('rev-parse', branch)).toBe(head);
+        expect(remote('ls-tree', branch, 'run.sh')).toContain('100755');
+      },
+    );
 
     it.each(['--is-ancestor', '--porcelain'])(
       'preserves concurrent session commits and refuses to publish after %s',

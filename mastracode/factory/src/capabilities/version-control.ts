@@ -269,6 +269,52 @@ export interface CommitCheck {
   url: string | null;
 }
 
+/**
+ * One file to add or overwrite in a signed commit. `contents` is base64, the
+ * encoding GitHub's `createCommitOnBranch` mutation expects.
+ */
+export interface SignedCommitAddition {
+  /** Repository-relative path with `/` separators. */
+  path: string;
+  /** The file's new contents, base64-encoded. */
+  contents: string;
+}
+
+/** One file to remove in a signed commit. */
+export interface SignedCommitDeletion {
+  /** Repository-relative path with `/` separators. */
+  path: string;
+}
+
+/**
+ * A single commit published through the provider's server-side signing flow.
+ *
+ * The file interface is deliberately additions-and-deletions only: GitHub's
+ * mutation cannot set an executable bit, write a symlink, add a submodule, or
+ * change a path's type. Callers must express every other change an ordinary
+ * commit would carry (mode, symlink, gitlink, rename) through additions and
+ * deletions, or refuse to publish rather than silently altering the tree.
+ */
+export interface CreateSignedCommitInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  /** Branch to advance; it must already exist on the remote. */
+  branch: string;
+  /** Full sha the branch must point at before the commit lands (compare-and-swap). */
+  expectedHeadSha: string;
+  /** Commit message, kept split so the subject line stays intact. */
+  message: { headline: string; body?: string };
+  /** Files to add or overwrite; omitted when the commit only deletes. */
+  additions?: SignedCommitAddition[];
+  /** Files to remove; omitted when the commit only adds. */
+  deletions?: SignedCommitDeletion[];
+}
+
+export interface SignedCommit {
+  /** Full sha of the newly created, server-signed commit. */
+  sha: string;
+}
+
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;
@@ -321,4 +367,11 @@ export interface VersionControl {
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   /** Optional because not every provider (or connection type) can publish commit checks. */
   publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
+  /**
+   * Create one commit through the provider's server-side signing flow, so the
+   * commit carries the provider's own signature instead of the machine's key.
+   * Optional because only providers that support signed publication implement
+   * it; callers fall back to an ordinary push when it is absent.
+   */
+  createSignedCommit?(input: CreateSignedCommitInput): Promise<SignedCommit>;
 }
