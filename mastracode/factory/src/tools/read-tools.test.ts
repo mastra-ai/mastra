@@ -469,6 +469,7 @@ describe('factory_list_attention', () => {
     const pendingSuspensions = new Map<string, { toolName: string }>();
     created({
       identity: { getId: () => 'session-builder' },
+      thread: { getId: () => 'session-builder' },
       run: { isRunning: () => true },
       state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
       displayState: { get: () => ({ pendingSuspensions }) },
