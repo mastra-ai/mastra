@@ -1,4 +1,11 @@
-import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
+import {
+  Activity,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  NotificationActivity,
+} from '@mastra/playground-ui/components/ai/activity';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -162,8 +169,47 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
   );
 }
 
+const NOTIFICATION_SOURCE_NAMES: Record<string, string> = {
+  'factory-session': 'Factory session',
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  linear: 'Linear',
+  jira: 'Jira',
+  slack: 'Slack',
+};
+
+/** A readable name for a notification source; unknown sources fall back to their id in sentence case. */
+export function notificationSourceName(source: string): string {
+  const known = NOTIFICATION_SOURCE_NAMES[source];
+  if (known) return known;
+  const words = source.replace(/[-_]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : source;
+}
+
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return <NotificationActivity state="summary" label="Notification summary" message={entry.message} />;
+  const sources = Object.entries(entry.bySource).filter(([, count]) => count > 0);
+  const counted = entry.pending > 0 && sources.length > 0;
+  const urgent = (entry.byPriority.urgent ?? 0) > 0 || (entry.byPriority.high ?? 0) > 0;
+
+  return (
+    <Activity foldable={false} appearance="inline" data-notification-state="summary" aria-label="Notification summary">
+      <ActivityHeader>
+        <ActivityIcon className="[&_svg]:size-icon-md">
+          <IconBell2 className={cn(urgent && 'text-warning-foreground')} aria-hidden />
+        </ActivityIcon>
+        <ActivityLabel className="text-subheading">Notifications</ActivityLabel>
+        <ActivityLabel wrap className="text-body">
+          {counted ? `${entry.pending} new` : entry.message}
+        </ActivityLabel>
+        {counted &&
+          sources.map(([source, count]) => (
+            <Badge key={source} size="xs">
+              {sources.length > 1 ? `${notificationSourceName(source)} ${count}` : notificationSourceName(source)}
+            </Badge>
+          ))}
+      </ActivityHeader>
+    </Activity>
+  );
 }
 
 export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
