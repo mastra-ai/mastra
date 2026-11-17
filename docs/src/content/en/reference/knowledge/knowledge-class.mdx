@@ -337,7 +337,7 @@ Embeds pages and notes that already exist, without changing them. Use it for con
 - `rateLimited`: `true` when the embedder kept rate limiting, so the call stopped early. Wait before you resume from `nextCursor`, or the next call is rate limited too.
 - `nextCursor`: pass it as `cursor` to the next call. It's absent when everything has been handled.
 
-`scope` limits the run to one scope's pages and the notes on them, such as `org:acme`. Without it, the run covers every page, then the notes on scope pages. Embedding a page again overwrites its vectors, so you can stop a run and resume it from the last cursor, or rerun it. The cursor isn't a snapshot. Pages added or removed during a run can be missed or handled twice, and a page read before a concurrent edit can overwrite the vectors that edit wrote. Run `reembed()` again after concurrent writes finish. Throws without `vector` and `embedder`.
+`scope` limits the run to one scope's pages and the notes on them, such as `org:acme`. Without it, the run covers every page, then the notes on scope pages, where each scope counts toward `limit` like a page. Embedding a page again overwrites its vectors, so you can stop a run and resume it from the last cursor, or rerun it. The cursor isn't a snapshot. Pages added or removed during a run can be missed or handled twice, and a page read before a concurrent edit can overwrite the vectors that edit wrote. Run `reembed()` again after concurrent writes finish. Throws without `vector` and `embedder`.
 
 ```typescript
 let cursor: string | undefined

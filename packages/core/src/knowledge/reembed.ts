@@ -10,7 +10,7 @@ const NOTE_PAGE = 100;
 export interface KnowledgeReembedOptions {
   /** Only this scope's pages and the notes on them, e.g. `org:acme`. Default: the whole store. */
   scope?: string;
-  /** Pages handled in this call, 1 to 500. A page's notes go with it. Default 50. */
+  /** Pages handled in this call, 1 to 500. A page's notes go with it; in a whole-store run, each scope whose page notes are embedded also counts as one. Default 50. */
   limit?: number;
   /** `nextCursor` from the previous call. Omit to start. */
   cursor?: string;
@@ -32,16 +32,19 @@ export interface KnowledgeReembedResult {
 
 /**
  * Where a run is: `pages` lists ordinary pages from cursor `c`, `skip` of them already handled;
- * `scopes` walks the scope tree for notes on scope pages: `stack` holds parents still to list
- * (the top one is listed from `c`), `found` the children of the top one seen so far.
+ * `scopes` walks the scope tree depth first for notes on scope pages, one child per listing:
+ * `path` holds, for each scope on the way down, its parent `p` and the listing cursor `c` to its
+ * next child. The cursor grows with the depth of the tree, not the number of scopes.
  */
+type ScopePath = Array<{ p: string | null; c?: string }>;
+
 type Position =
   | { scope?: string; phase: 'scope-notes' }
   | { scope?: string; phase: 'pages'; c?: string; skip: number }
-  | { scope?: undefined; phase: 'scopes'; stack: Array<string | null>; found: string[]; c?: string; skip: number };
+  | { scope?: undefined; phase: 'scopes'; path: ScopePath };
 
 function encode(position: Position): string {
-  return Buffer.from(JSON.stringify({ v: 1, ...position })).toString('base64url');
+  return Buffer.from(JSON.stringify({ v: 2, ...position })).toString('base64url');
 }
 
 function decode(cursor: string, scope: string | undefined): Position {
@@ -51,7 +54,7 @@ function decode(cursor: string, scope: string | undefined): Position {
   } catch {
     position = undefined;
   }
-  if (!position || position.v !== 1 || !['scope-notes', 'pages', 'scopes'].includes(position.phase)) {
+  if (!position || position.v !== 2 || !['scope-notes', 'pages', 'scopes'].includes(position.phase)) {
     throw new Error('Knowledge reembed: the cursor is not one reembed() returned.');
   }
   if (position.scope !== scope) {
@@ -176,31 +179,25 @@ export async function reembedKnowledge(
             ? { ...position, c: listing.nextCursor, skip: 0 }
             : options.scope
               ? undefined
-              : { phase: 'scopes', stack: [null], found: [], skip: 0 };
+              : { phase: 'scopes', path: [{ p: null }] };
         }
         continue;
       }
-      // Scope phase: whole-store runs only.
-      const parentId = position.stack[position.stack.length - 1]!;
-      const listing = await storage.listChildScopes({
-        parentId,
-        cursor: position.c,
-        limit: position.skip + (limit - handled),
-      });
-      for (const scope of listing.pages.slice(position.skip)) {
-        if (handled >= limit) break;
-        await handleScope(scope.id);
-        handled++;
-        position = { ...position, skip: position.skip + 1, found: [...position.found, scope.id] };
+      // Scope phase, whole-store runs only. Every listing counts toward the limit: one that finds a
+      // child counts as that scope, an empty one counts on its own.
+      const path: ScopePath = position.path;
+      const { p, c } = path[path.length - 1]!;
+      const listing = await storage.listChildScopes({ parentId: p, cursor: c, limit: 1 });
+      const child = listing.pages[0];
+      const rest: ScopePath = path.slice(0, -1);
+      if (child) {
+        await handleScope(child.id);
+        const next: ScopePath = listing.nextCursor ? [{ p, c: listing.nextCursor }] : [];
+        position = { phase: 'scopes', path: [...rest, ...next, { p: child.id }] };
+      } else {
+        position = rest.length ? { phase: 'scopes', path: rest } : undefined;
       }
-      if (position.skip >= listing.pages.length) {
-        if (listing.nextCursor) {
-          position = { ...position, c: listing.nextCursor, skip: 0 };
-        } else {
-          const stack: Array<string | null> = [...position.stack.slice(0, -1), ...position.found];
-          position = stack.length ? { phase: 'scopes', stack, found: [], skip: 0 } : undefined;
-        }
-      }
+      handled++;
     }
   } catch (error) {
     if (!(error instanceof RateLimited)) throw error;

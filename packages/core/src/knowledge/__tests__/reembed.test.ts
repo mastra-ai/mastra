@@ -1,5 +1,5 @@
 import { APICallError } from '@internal/ai-sdk-v5';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryStore } from '../../storage/mock';
 import { MastraVector } from '../../vector';
 import type {
@@ -65,6 +65,8 @@ type EmbedderState = {
   reject?: string;
   /** How many calls answer 429 before calls succeed again; Infinity keeps rate limiting. */
   rateLimited?: number;
+  /** Calls after this many answer 429 until it's cleared. */
+  rateLimitAfter?: number;
   dimension?: number;
 };
 
@@ -77,7 +79,10 @@ function embedder(state: EmbedderState): MastraEmbeddingModel<string> {
     supportsParallelCalls: true,
     doEmbed: async ({ values }: { values: string[] }) => {
       state.calls++;
-      if (state.rateLimited && state.rateLimited-- > 0) {
+      if (
+        (state.rateLimited && state.rateLimited-- > 0) ||
+        (state.rateLimitAfter !== undefined && state.calls > state.rateLimitAfter)
+      ) {
         throw new APICallError({
           message: 'Too many requests',
           url: 'https://api.voyageai.com/v1/embeddings',
@@ -239,6 +244,106 @@ describe('Knowledge reembed()', () => {
     }
     expect(pages).toBe(3);
     expect(vector.ids().filter(id => id.startsWith('page:'))).toHaveLength(5);
+  });
+
+  it('resumes inside a window after a 429: the pages left are embedded once each, none is dropped or redone', async () => {
+    for (const n of [1, 2, 3, 4, 5]) {
+      await plain.upsertPage({ scope: 'org:wide', path: `w${n}`, name: `Wide ${n}`, body: `Wide body ${n}` });
+    }
+    const wide = await pageIds('org:wide');
+    state.rateLimitAfter = 1;
+    const limited = await knowledge.reembed({ scope: 'org:wide', limit: 5 });
+    expect(limited.rateLimited).toBe(true);
+    expect(limited.embedded.pages).toBe(1);
+    const first = vector.ids();
+    expect(first).toHaveLength(1);
+
+    state.rateLimitAfter = undefined;
+    state.calls = 0;
+    // A resume position past the window's end would list forever; fail instead of hanging.
+    const store = (await storage.getStore('knowledge'))!;
+    const listPages = store.listPages.bind(store);
+    let listings = 0;
+    vi.spyOn(store, 'listPages').mockImplementation(async input => {
+      if (++listings > 10) throw new Error('reembed listed pages more than 10 times in one call');
+      return listPages(input);
+    });
+    const resumed = await knowledge.reembed({ scope: 'org:wide', limit: 5, cursor: limited.nextCursor });
+
+    // One window of five: the 429 hit the second page, so the cursor sits one page in.
+    expect(resumed.embedded.pages).toBe(4);
+    expect(state.calls).toBe(4);
+    expect(vector.ids()).toEqual(wide.map(p => `page:${p.id}`).sort());
+    expect(resumed.nextCursor).toBeUndefined();
+  });
+
+  it('lists a note whose embed fails and carries on', async () => {
+    state.reject = 'A note on acme 1';
+    const result = await knowledge.reembed({ scope: 'org:acme' });
+    const store = (await storage.getStore('knowledge'))!;
+    const p1 = (await pageIds('org:acme')).find(p => p.name === 'Acme 1')!;
+    const { notes } = await store.listNotes({ pageId: p1.id, read: 'all' });
+
+    expect(result.failed).toEqual([
+      { kind: 'note', id: notes[0]!.id, error: expect.stringContaining('input refused') },
+    ]);
+    expect(result.embedded).toEqual({ pages: 5, notes: 0 });
+    expect(result.nextCursor).toBeUndefined();
+  });
+
+  it('a whole-store run embeds the notes on every scope page', async () => {
+    const store = (await storage.getStore('knowledge'))!;
+    const scopes = await store.getScopesByAddress(['org:acme', 'org:globex']);
+    const noteIds: string[] = [];
+    for (const scope of scopes) {
+      const note = await store.addNote({
+        pageId: scope.id,
+        text: `A note on the ${scope.name} scope page`,
+        stampScopeIds: [scope.id],
+        mentions: [],
+        provenance: { author: 'host' },
+      });
+      noteIds.push(note.id);
+    }
+
+    const result = await knowledge.reembed();
+
+    expect(result.embedded).toEqual({ pages: 6, notes: 3 });
+    expect(vector.ids()).toEqual(expect.arrayContaining(noteIds.map(id => `note:${id}`)));
+  });
+
+  it('bounds the scope walk per call: listings stay within the limit and the cursor does not grow with the number of scopes', async () => {
+    const store = (await storage.getStore('knowledge'))!;
+    for (let n = 0; n < 40; n++) {
+      await plain.upsertPage({ scope: `org:tenant-${n}`, path: 'home', name: `Tenant ${n}`, body: `Tenant body ${n}` });
+    }
+    const tenants = await store.getScopesByAddress(Array.from({ length: 40 }, (_, n) => `org:tenant-${n}`));
+    for (const scope of tenants) {
+      await store.addNote({
+        pageId: scope.id,
+        text: `Scope note ${scope.name}`,
+        stampScopeIds: [scope.id],
+        mentions: [],
+        provenance: { author: 'host' },
+      });
+    }
+    const listings = vi.spyOn(store, 'listChildScopes');
+
+    let cursor: string | undefined;
+    let notes = 0;
+    const cursorSizes: number[] = [];
+    do {
+      listings.mockClear();
+      const result = await knowledge.reembed({ limit: 3, cursor });
+      expect(listings.mock.calls.length).toBeLessThanOrEqual(3);
+      notes += result.embedded.notes;
+      cursor = result.nextCursor;
+      if (cursor) cursorSizes.push(cursor.length);
+    } while (cursor);
+
+    // 40 tenant scope notes plus the note on acme's page 1.
+    expect(notes).toBe(41);
+    expect(Math.max(...cursorSizes)).toBeLessThan(200);
   });
 
   it('retries a passing 429 and carries on', async () => {
