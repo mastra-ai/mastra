@@ -109,9 +109,19 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       const reader = readFullStream(stream.output.fullStream);
       await stream.ready;
       try {
-        await pubsub.publish(`agent.stream.${runId}`, { type, runId, data: finishData });
+        const data =
+          type === 'error'
+            ? { error: { message: 'Superseded execution failed', name: 'Error' } }
+            : type === 'abort'
+              ? { steps: [] }
+              : finishData;
+        await pubsub.publish(`agent.stream.${runId}`, { type, runId, data });
         await stream.waitForEventDelivery();
         expect(await settleWithin(reader.done, IDLE * 10)).toBe('done');
+        expect(reader.getThrown()).toBeUndefined();
+        const errors = reader.chunks.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0].payload.error.message).toContain(`idle for ${IDLE}ms`);
         expect(reader.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
       } finally {
         stream.detach();
