@@ -12,7 +12,6 @@ export {
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
   migratePersistedModelSelection,
-  USER_STOP_ABORT_REASON,
 } from './session';
 export {
   SessionNotStartedError,

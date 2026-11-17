@@ -220,23 +220,13 @@ const runId = session.getCurrentRunId()
 
 Returns: `string | null`
 
-#### `abort({ reason? })`
+#### `abort()`
 
 Abort the active run and clear pending suspension display state.
 
 ```typescript
 session.abort()
 ```
-
-Pass `reason` to say why the run stopped. The run's `agent_end` event reports it as `abortReason`, so a subscriber can tell a deliberate stop from other aborts, such as a server restart. Use `USER_STOP_ABORT_REASON` from `@mastra/core/agent-controller` when a person pressed Stop. The AgentController abort route sends this reason.
-
-```typescript
-import { USER_STOP_ABORT_REASON } from '@mastra/core/agent-controller'
-
-session.abort({ reason: USER_STOP_ABORT_REASON })
-```
-
-An abort without a reason reports no `abortReason`. A reason applies only to the run it stopped, never to a later run.
 
 ### Workspace
 

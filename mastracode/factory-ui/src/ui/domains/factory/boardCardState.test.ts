@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { boardCardState, canMoveTo } from './boardCardState';
 import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
-import { cardActions } from './cardPrimaryAction';
+import { cardActions, retryButton } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
@@ -53,6 +53,13 @@ describe('status row', () => {
       detail: 'ENOENT: no such file',
       retryDecisionId: 'decision-1',
     });
+  });
+
+  it('reads a stopped run as stopped, not as a failure, and offers to start it again', () => {
+    const state = boardCardState({ decision: decision({ status: 'failed', failureCode: 'run_stopped' }) });
+
+    expect(state.status).toEqual({ kind: 'stopped', label: 'Stopped', retryDecisionId: 'decision-1' });
+    expect(retryButton(state.status, () => {})?.label).toBe('Start again');
   });
 
   it('does not offer Retry for a deterministic failure', () => {

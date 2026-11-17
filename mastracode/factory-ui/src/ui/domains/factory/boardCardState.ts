@@ -11,6 +11,8 @@ export type BoardCardStatus =
   /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
   | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
+  /** Someone stopped the card's run, so it stays put until they start it again. */
+  | { kind: 'stopped'; label: string; retryDecisionId?: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
 export type BoardCardOwner =
@@ -117,6 +119,12 @@ function automationOnCard(
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
   const detail = decision.lastError ?? undefined;
+  if (decision.status === 'failed' && decision.failureCode === 'run_stopped') {
+    return {
+      status: { kind: 'stopped', label: 'Stopped', ...(decision.canRetry ? { retryDecisionId: decision.id } : {}) },
+      owner: FREE,
+    };
+  }
   if (decision.status === 'failed') {
     return {
       status: {

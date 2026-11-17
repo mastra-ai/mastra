@@ -1,5 +1,4 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import { USER_STOP_ABORT_REASON } from '@mastra/core/agent-controller';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
@@ -262,6 +261,7 @@ function watchRun(
     onAgentEnd,
     label,
     runStillActive,
+    stopRequested,
   }: {
     timeoutMs: number;
     /** The tool this run answers itself when it pauses on it; any other pause waits for a person. */
@@ -274,15 +274,12 @@ function watchRun(
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
     runStillActive: () => boolean;
+    stopRequested?: () => Promise<boolean>;
   },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
-  // Why the run ended when the stream said so: a person's Stop states
-  // `USER_STOP_ABORT_REASON`, while an incidental abort (process restart, lost
-  // thread lease) carries nothing.
-  let stopReason: string | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
   let approvals = 0;
@@ -298,7 +295,6 @@ function watchRun(
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
-    stopReason = undefined;
     supersededAtEnd = undefined;
     omFailure = undefined;
     runError = undefined;
@@ -310,7 +306,6 @@ function watchRun(
   const unsubscribe = session.subscribe(event => {
     if (event.type === 'agent_end') {
       endReason = event.reason;
-      stopReason = event.abortReason;
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
       return;
@@ -391,14 +386,7 @@ function watchRun(
       }
       if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
-        // A person pressing Stop states why in the abort, and that reason is the
-        // most specific true answer for what happened. Settle it terminally:
-        // retrying would undo the stop they asked for, and re-send the kickoff
-        // and the stage-move notice they already saw. `autoRetry: false` still
-        // leaves the stage startable again on purpose.
-        if (stopReason === USER_STOP_ABORT_REASON) {
-          throw new FactoryDispatchError('run_stopped', `${label} was stopped by a person.`);
-        }
+        if (await stopRequested?.()) throw new FactoryDispatchError('run_stopped', `${label} was stopped.`);
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
         // the run because observation/reflection failed. Surface that real
@@ -415,12 +403,10 @@ function watchRun(
           }
           throw new Error(`${label} was aborted after an observational-memory failure: ${omFailure}`);
         }
-        // Retryable, though an abort reads as deliberate. An abort that states
-        // no reason was not a person pressing Stop — the dominant cause is the
-        // process going away underneath the run, an operator restarting the
-        // server. Treating that as terminal dead-ends the card at attempt 1 with
-        // nothing on the board to press. A spurious retry is bounded by
-        // MAX_ATTEMPTS; a dead card costs a human a manual nudge.
+        // Nobody marked this run stopped, so the abort is the process going
+        // away underneath it — an operator restarting the server. Treating
+        // that as terminal dead-ends the card at attempt 1 with nothing on the
+        // board to press. A spurious retry is bounded by MAX_ATTEMPTS.
         throw new Error(`${label} was aborted before it finished.`);
       }
     },
@@ -1786,6 +1772,8 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
+            stopRequested: () =>
+              this.#storage.runBindingStoppedSince({ orgId: record.orgId, bindingId: binding.id, since }),
           });
 
           const sendKickoff = async () => {
@@ -3389,6 +3377,8 @@ export class FactoryDecisionDispatcher {
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+            stopRequested: () =>
+              this.#storage.runBindingStoppedSince({ orgId: record.orgId, bindingId: binding.id, since }),
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(

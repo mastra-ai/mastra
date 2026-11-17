@@ -1147,6 +1147,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       status: { type: 'text' },
       created_at: { type: 'timestamp' },
       revoked_at: { type: 'timestamp', nullable: true },
+      stop_requested_at: { type: 'timestamp', nullable: true },
     },
     indexes: [
       // Exact-address lookups run on every processor message; status filter is
@@ -3624,6 +3625,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
       { status: 'revoked', revoked_at: input.revokedAt },
     );
+  }
+
+  /**
+   * Mark that a client stopped the session's run on purpose, so the dispatcher settles it instead of
+   * retrying. Keyed by session alone: the abort request was already authorized for this session.
+   */
+  async requestRunBindingStop(input: { sessionId: string; at: Date }): Promise<number> {
+    return this.#db.updateMany(
+      'factory_run_bindings',
+      { session_id: input.sessionId, status: 'active' },
+      { stop_requested_at: input.at },
+    );
+  }
+
+  async runBindingStoppedSince(input: { orgId: string; bindingId: string; since: Date }): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.bindingId,
+      org_id: input.orgId,
+    });
+    const stoppedAt = row?.stop_requested_at as Date | null | undefined;
+    return stoppedAt != null && stoppedAt.getTime() >= input.since.getTime();
   }
 
   /**

@@ -91,10 +91,7 @@ export function cardControls({
   // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     state,
-    retry: retryButton({
-      decisionId: status.kind === 'error' ? status.retryDecisionId : undefined,
-      onRetry: onRetryDecision,
-    }),
+    retry: retryButton(status, onRetryDecision),
     run,
   });
   return { moves, proposedRunLabel: proposedRun?.label, state, actions };
