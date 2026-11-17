@@ -536,7 +536,7 @@ The manager that runs the recovered task needs an executor for it. See the known
 
 ### Stop work after losing a lease
 
-When a lease renewal fails because the task is now owned by another manager or was cancelled, the previous owner aborts the `abortSignal` passed to the tool. The abort is best effort. If the manager can't read the task at that point, it doesn't retry the abort. The previous owner notices at its next renewal, up to `leaseDurationMs / 3` later. A tool that ignores `abortSignal` keeps running until it returns, but its result is rejected.
+When a lease renewal fails because the task is now owned by another manager or was cancelled, the previous owner aborts the `abortSignal` passed to the tool. The abort is best effort. If the manager can't read the task at that point, it doesn't retry the abort. The previous owner normally notices at its next renewal. A stalled event loop or slow storage can delay that renewal. A tool that ignores `abortSignal` keeps running until it returns, but its result is rejected.
 
 ### What the lease guarantees
 
