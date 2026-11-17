@@ -219,11 +219,11 @@ Use `explainAccess()` only in server code. It shows whether a page is missing or
 
 ## Keep scopes apart
 
-Give each run only the scopes its task needs, and never put two tenants or customers in the same run.
+Give each agent only the scopes its task needs, and never give one agent two tenants or customers at once.
 
-Knowledge keeps each scope's data separate. Every time a tool reads or writes, Knowledge checks the run's scopes. A run never sees pages or notes in scopes it can't reach. Runs for different customers can't see each other's data.
+Knowledge keeps each scope's data separate. Every time an agent calls a Knowledge tool, Knowledge checks which scopes the agent has access to. An agent never sees pages or notes in scopes it can't reach. Agents working for different customers can't see each other's data.
 
-What Knowledge can't stop is a run moving content between scopes it does hold. Suppose a run holds `team:acme:support` and `resource:dana`. Its model can read a page in Dana's private scope and quote it in a team page, because the run is allowed to do both. Knowledge sees two allowed actions, not a leak.
+What Knowledge can't stop is an agent with access to more than one scope leaking content between them. Suppose an agent has access to `team:acme:support` and `resource:dana`. It can read a page in Dana's private scope and quote it in a team page. Each step is allowed on its own, and Knowledge can't tell that together they leak Dana's page.
 
 ## Next steps
 
