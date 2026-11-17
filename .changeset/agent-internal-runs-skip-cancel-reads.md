@@ -2,8 +2,8 @@
 '@mastra/core': patch
 ---
 
-Agents make fewer storage reads per message.
+Agents with input or output processors make fewer storage reads per call.
 
-Framework-created workflows for stream preparation and input/output processors skip cancellation-status reads for fresh runs. These workflows never save snapshots and are canceled within their owning process.
+Each `generate()` or `stream()` call runs short internal workflows to prepare the call and to run processors. These workflows are never stored, but they still read a cancellation status from storage before and between their steps. Those reads always came back empty. With two input processors and one output processor on PostgreSQL, a call made 25 status reads, and 14 of them were these empty reads. These workflows no longer read the status. Canceling the call still stops them.
 
-User workflows, including workflows supplied as processors, keep their existing cancellation checks regardless of snapshot settings or per-run overrides.
+Your own workflows keep their checks, including workflows you pass as processors. They still stop when another server cancels the run.

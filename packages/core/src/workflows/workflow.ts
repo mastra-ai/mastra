@@ -118,7 +118,6 @@ import type {
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
 import { collectPredicateStepRefs, predicateReadsState, resolveStepOutputs } from './step-refs';
-import { getTransientAgentWorkflowPolicy } from './transient-agent-workflows';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -2149,6 +2148,7 @@ export class Workflow<
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       persistResumeClaim: options.persistResumeClaim,
+      localCancellationOnly: options.localCancellationOnly,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       watchExecutionLoss: options.watchExecutionLoss,
@@ -3323,9 +3323,7 @@ export class Workflow<
       globalThis.crypto.randomUUID();
 
     const cachedRun = this.#runs.get(runIdToUse);
-    const transientPolicy = getTransientAgentWorkflowPolicy(this);
-    const persistencePolicy = transientPolicy ?? options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot;
-    const shouldPersistSnapshot = persistencePolicy({
+    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
       workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
       stepResults: {},
     });
@@ -3377,19 +3375,14 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    if (transientPolicy || options?.shouldPersistSnapshot) {
-      // Framework-owned workflows are always transient, including when a processor phase
-      // supplies a run override. Their local-only cancellation must not acquire stored state.
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, persistencePolicy);
+    if (options?.shouldPersistSnapshot) {
+      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
     }
 
     if (stored) {
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
-    // Only private agent workflows can skip stored cancellation. A user policy, even one
-    // returning false today, cannot rule out another instance storing the same run ID.
-    run.unstored = !!transientPolicy && !lookUpStoredRun;
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
@@ -4268,9 +4261,6 @@ export class Run<
    */
   readonly storageVersion: 1 | 2;
 
-  /** @internal */
-  unstored = false;
-
   /**
    * For the next start or time travel of a storage v2 nested run: the stored version of its parent's
    * state it starts from and stores only its changes to. Set by `createRun`, taken by `_start` and
@@ -4664,8 +4654,6 @@ export class Run<
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
-    let unstored = this.unstored;
-    this.unstored = false;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -4756,7 +4744,6 @@ export class Run<
             workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
             throw error;
           }
-          unstored = false;
         }
         this.workflowRunStatus = 'running';
         onDispatched();
@@ -4790,7 +4777,6 @@ export class Run<
           perStep,
           storageVersion: this.storageVersion,
           inheritedState,
-          unstored,
         }),
       held,
     );

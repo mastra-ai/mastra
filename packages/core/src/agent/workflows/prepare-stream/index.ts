@@ -15,7 +15,6 @@ import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createWorkflow } from '../../../workflows/create';
-import { markTransientAgentWorkflow } from '../../../workflows/transient-agent-workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -237,7 +236,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runScope,
   });
 
-  const workflow = createWorkflow({
+  return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
@@ -250,6 +249,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       // It must never write snapshot rows to the user's storage. Registering Mastra (done by
       // the agent) lets it read storage to suppress noise, while this keeps writes off.
       shouldPersistSnapshot: () => false,
+      // Never stored, so only the agent call that owns it can cancel it.
+      localCancellationOnly: true,
       validateInputs: false,
     },
   })
@@ -257,6 +258,4 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     .map(mapResultsStep)
     .then(streamStep)
     .commit();
-
-  return markTransientAgentWorkflow(workflow);
 }

@@ -172,7 +172,6 @@ import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
 import { loadStepResults, residentStepResults } from '../workflows/run-journal';
 import type { Step } from '../workflows/step';
-import { markTransientAgentWorkflow } from '../workflows/transient-agent-workflows';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import {
   waitForSuspendedSnapshot,
@@ -2544,6 +2543,8 @@ export class Agent<
         // Internal processor workflows are transient and non-resumable, so they must never
         // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
         shouldPersistSnapshot: () => false,
+        // Never stored, so only the agent call that owns it can cancel it.
+        localCancellationOnly: true,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
@@ -2584,7 +2585,7 @@ export class Agent<
       workflow = workflow.then(step);
     }
 
-    const committedWorkflow = markTransientAgentWorkflow(workflow.commit()) as T;
+    const committedWorkflow = workflow.commit() as T;
     if (isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
