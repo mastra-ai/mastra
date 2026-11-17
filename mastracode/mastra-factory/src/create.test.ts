@@ -336,6 +336,187 @@ describe('create template selection', () => {
   });
 });
 
+describe('create --tag', () => {
+  const distTags: Record<string, Record<string, string>> = {
+    mastra: { latest: '1.5.0', alpha: '1.6.0-alpha.2', beta: '1.6.0-beta.1' },
+    '@mastra/core': { latest: '1.5.1', alpha: '1.6.0-alpha.3' },
+    '@mastra/factory': { latest: '0.4.3', alpha: '0.4.4-alpha.3' },
+    // No alpha release published for this package.
+    '@mastra/pg': { latest: '1.2.0' },
+  };
+
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(templateDir, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'template-factory',
+          dependencies: {
+            '@mastra/core': 'latest',
+            '@mastra/factory': 'latest',
+            '@mastra/pg': 'latest',
+            zod: '^4.4.3',
+          },
+          devDependencies: { '@types/node': 'latest', mastra: 'latest', typescript: '^6.0.3' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+      if (command === 'npx' && args[0] === 'degit') {
+        fs.cpSync(templateDir, args[2]!, { recursive: true });
+      }
+      if (command === 'npm' && args[0] === 'view') {
+        const tags = distTags[args[1]!];
+        if (!tags) throw new Error('404 Not Found');
+        return { stdout: JSON.stringify(tags), stderr: '', exitCode: 0, killed: false };
+      }
+      return { stdout: '', stderr: '', exitCode: 0, killed: false };
+    });
+  });
+
+  const readPkg = () => JSON.parse(fs.readFileSync(path.join(workDir, 'my-factory', 'package.json'), 'utf8'));
+
+  it('pins Mastra packages to their alpha versions before installing, keeping the rest of package.json', async () => {
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics });
+
+    const pkg = readPkg();
+    expect(pkg.name).toBe('my-factory');
+    expect(pkg.dependencies).toEqual({
+      '@mastra/core': '1.6.0-alpha.3',
+      '@mastra/factory': '0.4.4-alpha.3',
+      '@mastra/pg': 'latest',
+      zod: '^4.4.3',
+    });
+    expect(pkg.devDependencies).toEqual({ '@types/node': 'latest', mastra: '1.6.0-alpha.2', typescript: '^6.0.3' });
+    expect(clack.log.warn).toHaveBeenCalledWith(expect.stringContaining('@mastra/pg'));
+
+    // Only Mastra packages are looked up, and pinning happens before install.
+    const viewedPackages = tinyexec.x.mock.calls
+      .filter(([command, args]) => command === 'npm' && args[0] === 'view')
+      .map(([, args]) => args[1]);
+    expect(viewedPackages.sort()).toEqual(['@mastra/core', '@mastra/factory', '@mastra/pg', 'mastra']);
+    const packageManager = detectPackageManager();
+    const installIndex = tinyexec.x.mock.calls.findIndex(
+      ([command, args]) => command === packageManager && args[0] === 'install',
+    );
+    const lastViewIndex = tinyexec.x.mock.calls.findLastIndex(
+      ([command, args]) => command === 'npm' && args[0] === 'view',
+    );
+    expect(lastViewIndex).toBeLessThan(installIndex);
+  });
+
+  it('pins Mastra packages to their latest stable versions', async () => {
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'latest', analytics });
+
+    const pkg = readPkg();
+    expect(pkg.dependencies['@mastra/core']).toBe('1.5.1');
+    expect(pkg.dependencies['@mastra/pg']).toBe('1.2.0');
+    expect(pkg.devDependencies.mastra).toBe('1.5.0');
+    expect(clack.log.warn).not.toHaveBeenCalled();
+  });
+
+  it('lets npm install prereleases whose peer ranges exclude newer prereleases', async () => {
+    vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
+    try {
+      await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
+  });
+
+  it('pins optional dependencies, keeps unrelated entries, and looks tags up from the project', async () => {
+    fs.writeFileSync(
+      path.join(templateDir, 'package.json'),
+      JSON.stringify({
+        name: 'mastra-factory',
+        dependencies: { constructor: 'npm:zod@4.4.3' },
+        optionalDependencies: { '@mastra/core': 'latest' },
+      }),
+    );
+
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics });
+
+    const pkg = readPkg();
+    expect(pkg.dependencies).toEqual({ constructor: 'npm:zod@4.4.3' });
+    expect(pkg.optionalDependencies).toEqual({ '@mastra/core': '1.6.0-alpha.3' });
+    expect(tinyexec.x).toHaveBeenCalledWith(
+      'npm',
+      ['view', '@mastra/core', 'dist-tags', '--json'],
+      expect.objectContaining({ nodeOptions: { cwd: path.join(workDir, 'my-factory') } }),
+    );
+  });
+
+  it.each([
+    ['alpha', 'alpha'],
+    ['my-private-tag', 'custom'],
+  ])('reports the %s tag to analytics as %s', async (versionTag, reported) => {
+    const trackEvent = vi.fn();
+    const trackingAnalytics = { trackEvent, shutdown: async () => {} } as unknown as PosthogAnalytics;
+
+    await create({ projectName: 'my-factory', noPlatform: true, versionTag, analytics: trackingAnalytics }).catch(
+      () => {},
+    );
+
+    expect(trackEvent).toHaveBeenCalledWith('sf_create_started', expect.objectContaining({ version_tag: reported }));
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('my-private-tag');
+  });
+
+  it('pins any dist-tag, not just latest and alpha', async () => {
+    vi.stubEnv('npm_config_user_agent', 'npm/11.0.0 node/v22.0.0');
+    try {
+      await create({ projectName: 'my-factory', noPlatform: true, versionTag: 'beta', analytics });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    const pkg = readPkg();
+    expect(pkg.devDependencies.mastra).toBe('1.6.0-beta.1');
+    expect(pkg.dependencies['@mastra/core']).toBe('latest');
+    expect(clack.log.warn).toHaveBeenCalledWith(expect.stringContaining('No "beta" release found for @mastra/core'));
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
+  });
+
+  it.each([
+    ['latest on npm', 'npm/11.0.0 node/v22.0.0', 'latest'],
+    ['alpha on pnpm', 'pnpm/10.0.0 npm/? node/v22.0.0', 'alpha'],
+  ] as const)('keeps strict peer resolution for %s', async (_name, userAgent, versionTag) => {
+    vi.stubEnv('npm_config_user_agent', userAgent);
+    try {
+      await create({ projectName: 'my-factory', noPlatform: true, versionTag, analytics });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(fs.existsSync(path.join(workDir, 'my-factory', '.npmrc'))).toBe(false);
+  });
+
+  it('leaves the template versions alone without a version tag', async () => {
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(readPkg().dependencies['@mastra/core']).toBe('latest');
+    expect(tinyexec.x).not.toHaveBeenCalledWith('npm', expect.arrayContaining(['view']), expect.anything());
+  });
+
+  it('fails before installing when no Mastra package resolves for the tag', async () => {
+    tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+      if (command === 'npx' && args[0] === 'degit') fs.cpSync(templateDir, args[2]!, { recursive: true });
+      if (command === 'npm' && args[0] === 'view') throw new Error('ENOTFOUND registry.npmjs.org');
+      return { stdout: '', stderr: '', exitCode: 0, killed: false };
+    });
+
+    await expect(
+      create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics }),
+    ).rejects.toThrow('Could not resolve any Mastra package versions for the "alpha" tag');
+    const packageManager = detectPackageManager();
+    expect(tinyexec.x).not.toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), expect.anything());
+  });
+});
+
 describe('create (platform provisioning)', () => {
   it('writes platform credentials to .env and shows the "Platform connected" outro', async () => {
     await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });

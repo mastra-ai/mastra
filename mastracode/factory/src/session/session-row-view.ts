@@ -20,7 +20,6 @@ export type SessionRowsView = Omit<SessionRowsQuery, 'pin' | 'children'>;
 
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
 
-const UNMATERIALIZED_SETTLING_MS = 10 * 60_000;
 const HOUR_MS = 60 * 60 * 1_000;
 
 const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
@@ -31,12 +30,14 @@ const ACTIVITY_RANK: Record<SessionRow['status'], number> = {
   done: 2,
 };
 
+const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+
 const SESSION_ROW_ORDER: Record<SessionRowsView['sort'], (a: SessionRow, b: SessionRow) => number> = {
   activity: (a, b) =>
     ACTIVITY_RANK[a.cardStatus ?? a.status] - ACTIVITY_RANK[b.cardStatus ?? b.status] ||
-    b.session.createdAt.localeCompare(a.session.createdAt),
-  updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
-  created: (a, b) => b.session.createdAt.localeCompare(a.session.createdAt),
+    newestFirst(a.session.createdAt, b.session.createdAt),
+  updated: (a, b) => newestFirst(a.updatedAt, b.updatedAt),
+  created: (a, b) => newestFirst(a.session.createdAt, b.session.createdAt),
 };
 
 const UPDATED_WINDOW_HOURS: Record<NonNullable<SessionRowsView['updated']>, number> = {
@@ -111,7 +112,7 @@ export function sessionRowsView(
   view: SessionRowsView,
   viewerUserId: string,
   now: number,
-): Omit<SessionRowsResponse, 'settling'> {
+): SessionRowsResponse {
   const matching = filterSessionRows(rows.toSorted(compareSessionRows(view.sort)), view, viewerUserId, now);
   const groupKeyOf = GROUP_KEY_OF_ROW[view.groupBy];
   const rowsByGroup = new Map<string, SessionRow[]>();
@@ -141,15 +142,6 @@ export function sessionRowsView(
   };
 }
 
-export function isSettling(
-  sessions: readonly Pick<RowSession, 'materializedAt' | 'updatedAt'>[],
-  now: number,
-): boolean {
-  return sessions.some(
-    session => session.materializedAt === null && now - session.updatedAt.getTime() < UNMATERIALIZED_SETTLING_MS,
-  );
-}
-
 function liveSessionCounts(
   cards: readonly Card[],
   running: ReadonlySet<string>,
@@ -174,7 +166,6 @@ export function sessionActivity(facts: {
   cards: readonly Card[];
   runningSessionIds: ReadonlySet<string>;
   parkedSessionIds: ReadonlySet<string>;
-  now: number;
 }): SessionActivityResponse {
   const known = new Set([
     ...facts.sessions.map(session => session.sessionId),
@@ -188,6 +179,5 @@ export function sessionActivity(facts: {
       facts.sessions.flatMap(session => (session.materializedAt === null ? [session.sessionId] : [])),
     ),
     cards: liveSessionCounts(facts.cards, facts.runningSessionIds, facts.parkedSessionIds),
-    settling: isSettling(facts.sessions, facts.now),
   };
 }

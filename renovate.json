@@ -436,6 +436,12 @@
       "enabled": false
     },
     {
+      "description": "Keep the mongo Docker image used by stores/mongodb tests on 7.x. MongoDB 8.x and 9.0.8 refuse to start on Linux kernel 6.19.0 through 7.0.13 (SERVER-121912), which the CI runners run, so every MongoDB store job fails before any test. Remove once MongoDB ships a release that starts on those kernels.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
+    },
+    {
       "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",
       "matchPackageNames": ["agent-browser"],
       "allowedVersions": "<0.20.0"

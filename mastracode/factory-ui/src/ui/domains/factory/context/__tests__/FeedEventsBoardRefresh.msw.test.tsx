@@ -43,14 +43,12 @@ const NO_SESSION_ROWS: SessionRowsResponse = {
   groups: [],
   boards: [],
   owners: [],
-  settling: false,
 };
 const NO_SESSION_ACTIVITY: SessionActivity = {
   runningSessionIds: [],
   parkedSessionIds: [],
   initializingSessionIds: [],
   cards: { working: 0, waiting: 0 },
-  settling: false,
 };
 const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
