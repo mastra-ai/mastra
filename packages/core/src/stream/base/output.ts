@@ -1368,7 +1368,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#attemptToolCallIds.delete(chunk.payload.toolCallId);
                 for (const calls of [self.#toolCalls, self.#bufferedByStep.toolCalls]) {
                   const index = calls.findLastIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
-                  if (index !== -1) calls.splice(index, 1);
+                  if (index === -1) continue;
+                  calls.splice(index, 1);
+                  // Keep the step-start boundary on the same call, so a later retry can still replace this one.
+                  if (
+                    calls === self.#toolCalls &&
+                    self.#runOutputAtStepStart &&
+                    index < self.#runOutputAtStepStart.toolCalls
+                  ) {
+                    self.#runOutputAtStepStart.toolCalls--;
+                  }
                 }
               }
               // A call already recorded under this id in this step (a repeated tool-call) is not emitted twice.
