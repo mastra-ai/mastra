@@ -1642,12 +1642,14 @@ describe('provisioning protocol', () => {
         const pC = pause();
         const both = deferred();
         let arrived = 0;
-        const beforeOrphanDecide = async () => {
+        // Both transactions read J before either writes, so one must conflict and re-read; the
+        // barrier opens once, so the retried attempt passes straight through.
+        const afterOrphanJournalRead = async () => {
           if (++arrived === 2) both.resolve();
           await reached({ reached: both });
         };
-        hooks(a, { beforePendingDropCheck: pC.hook, beforeOrphanDecide });
-        hooks(b, { beforeOrphanDecide });
+        hooks(a, { beforePendingDropCheck: pC.hook, afterOrphanJournalRead });
+        hooks(b, { afterOrphanJournalRead });
         const c = attachN(coll).catch(e => e);
         let results: unknown[];
         let rev: number;
@@ -1686,6 +1688,47 @@ describe('provisioning protocol', () => {
         expect(await entry(`${coll}_c`)).toBeNull();
         expect(await listedId(db, coll, 'N')).toBe(r);
         clean.opts = { journalExpected: true };
+      });
+
+      it('R12-P1: an attach whose listing saw R before a cleanup dropped it never attaches the dropped index', async () => {
+        const { coll, r, doc } = await seedOrphan('r12p1');
+        const pB = pause();
+        const pC = pause();
+        hooks(b, { beforeOrphanDrop: pB.hook });
+        // C lists N (P1) and then parks at the start of its handshake.
+        hooks(a, { beforePendingDropCheck: pC.hook });
+        const cleanerB = (b as any).cleanupOrphan(doc, 2).catch((e: unknown) => e);
+        let c: Promise<any> | undefined;
+        try {
+          // B decided to drop before C wrote anything.
+          await reached(pB);
+          c = attachN(coll).catch(e => e);
+          await reached(pC);
+          pB.release.resolve();
+          expect(await cleanerB).toBe('dropped');
+          expect(await docsOn(coll)).toEqual([]);
+        } finally {
+          pB.release.resolve();
+          pC.release.resolve();
+        }
+        const result = await c;
+        const now = await listedId(db, coll, 'N');
+        const e = await entry(`${coll}_c`);
+        if (result === undefined) {
+          // Provisioned afresh: C owns a new incarnation, never R.
+          expect(now).toBeDefined();
+          expect(now).not.toBe(r);
+          expect(e?.ownsVectorIndex).toBe(true);
+          expect(idOf(e, 'N')).toBe(now);
+        } else {
+          // Or refused while R is still being removed, and rolled back.
+          expect(result).toBeInstanceOf(Error);
+          expect(e).toBeNull();
+        }
+        // B's drop saw C's registration, written after B's durable decision (R11): the one drop-time
+        // record of I11a that no handshake can prevent. C is never left on the dropped index.
+        expect(checker.violations).toEqual([expect.stringContaining(`referenced by ${coll}_c`)]);
+        checker.violations.length = 0;
       });
 
       describe('P-ATTACH-ORPHAN', () => {

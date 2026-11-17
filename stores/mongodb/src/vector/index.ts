@@ -543,8 +543,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     afterOrphanMarked?: (indexName: string, name: string) => Promise<void>;
     /** Called by orphan cleanup (§3.8) right before its drop by id; a throw is a failed drop. */
     beforeOrphanDrop?: (indexName: string, name: string) => Promise<void>;
-    /** Called by orphan cleanup (§3.8) after its listing, right before the step-3 transaction. */
-    beforeOrphanDecide?: (indexName: string, name: string) => Promise<void>;
+    /** Called inside the step-3 transaction of orphan cleanup, right after it read the journal doc. */
+    afterOrphanJournalRead?: (indexName: string, name: string) => Promise<void>;
   };
   /**
    * Name of the mastra-owned collection that durably records the logical-index → target
@@ -1126,7 +1126,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (listed) {
         if (!isLiveRow(listed)) throw stuck(listed);
         await check();
-        return { outcome: 'attached', row: listed };
+        // R12: a cleanup may have dropped R and removed its record between the listing and the
+        // check, which then sees nothing; re-list so a dropped index is never attached. Once the
+        // check passed, any such drop is complete: absent means provision below, dying means retry.
+        const [again] = await this.listSearchIndexRows(collection, name, 'P1');
+        if (again) {
+          if (!isLiveRow(again)) throw stuck(again);
+          return { outcome: 'attached', row: again };
+        }
       }
       // P2. An upsert only so the lease is on the server's clock, as the reconciler compares it there;
       // `_id` is this call's own, so it always inserts. Filtered on no state, so an existing doc
@@ -1708,11 +1715,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     for (let round = 0; round < 3; round++) {
       // Outside the transaction: listings never run in one (I7a). Evidence for I11b only.
       const observed = await this.liveIdOf(this.db.collection(collectionName), name, 'orphan');
-      await this.testHooks?.beforeOrphanDecide?.(indexName, name);
       let outcome: 'gone' | 'drop' | 'released' | 'transferred' | 'kept';
       try {
         outcome = await this.inTransaction(async session => {
           const j = await journal.findOne({ _id, state: 'orphaned' }, { session });
+          await this.testHooks?.afterOrphanJournalRead?.(indexName, name);
           if (!j) return 'gone' as const;
           if (j.dropDecided) return 'drop' as const;
           const current: (OwnershipView & { generation?: string })[] = await registry
