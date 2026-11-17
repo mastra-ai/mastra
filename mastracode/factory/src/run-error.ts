@@ -130,7 +130,13 @@ interface GatewayReply {
   code?: string;
   /** The gateway's own sentence, when it wrote one instead of repeating the code. */
   message?: string;
+  /** A v1 billing refusal: one of its `type` values with a `help_url` on a mastra.ai host. */
+  v1Billing?: true;
 }
+
+/** The `type` values of the v1 gateway's billing refusals, which carry a `help_url` and no `code`. */
+const V1_BILLING_TYPES = new Set(['billing_error', 'spend_limit_reached']);
+const MASTRA_HOST = /(?:^|\.)mastra\.ai$/;
 
 const OUT_OF_CREDITS = new Set(['insufficient_credit', 'credit_balance_exhausted']);
 const ORGANIZATION_BUDGET_EXHAUSTED = 'organization_budget_exhausted';
@@ -287,8 +293,9 @@ function explainGatewayRefusal(
 
 /**
  * The Mastra Gateway answered: a `mastra/…` model, a request sent to its host (production, or the
- * configured base URL), a v1 billing reply (which links to `gateway.mastra.ai`), or a v2 reply naming
- * itself a gateway error or carrying a reason code only the gateway sends. The request reaches the
+ * configured base URL), a v1 billing reply (a billing `type` with a `help_url` on a mastra.ai host, or
+ * from older gateways a message naming `gateway.mastra.ai`), or a v2 reply naming itself a gateway
+ * error or carrying a reason code only the gateway sends. The request reaches the
  * gateway without the `mastra/` prefix, and history keeps no request URL, so the web UI rebuilds a saved
  * error from its request origin, when one was recorded, and otherwise from the reply body.
  */
@@ -301,6 +308,7 @@ function isMastraGatewayError(
     providerModelId(error)?.startsWith(MASTRA_GATEWAY_PREFIX) === true ||
     calledMastraGateway(error, configuredGatewayHost(options.gatewayBaseUrl)) ||
     /gateway\.mastra\.ai/.test(providerErrorReason(error) ?? error.message) ||
+    reply?.v1Billing === true ||
     reply?.type === 'gateway_error' ||
     (reply?.code !== undefined && GATEWAY_REASON_CODES.has(reply.code))
   );
@@ -381,7 +389,25 @@ function replyFromBody(body: unknown): GatewayReply | undefined {
         : undefined;
   const message = rawMessage && rawMessage !== code && !CODE_SHAPED.test(rawMessage) ? rawMessage : undefined;
   if (!type && !code) return undefined;
-  return { ...(type ? { type } : {}), ...(code ? { code } : {}), ...(message ? { message } : {}) };
+  const helpUrl = 'help_url' in inner && isString(inner.help_url) ? inner.help_url : undefined;
+  const v1Billing = type !== undefined && V1_BILLING_TYPES.has(type) && helpUrl !== undefined && onMastraHost(helpUrl);
+  // The v1 spend limit names itself only by its type; read it as the v2 code of the same meaning.
+  const reason = code ?? (v1Billing && type === 'spend_limit_reached' ? type : undefined);
+  return {
+    ...(type ? { type } : {}),
+    ...(reason ? { code: reason } : {}),
+    ...(message ? { message } : {}),
+    ...(v1Billing ? { v1Billing: true as const } : {}),
+  };
+}
+
+function onMastraHost(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && MASTRA_HOST.test(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function isString(value: unknown): value is string {

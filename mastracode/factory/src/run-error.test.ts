@@ -76,6 +76,78 @@ describe('describeRunError', () => {
     });
   });
 
+  describe('Mastra Gateway v1 billing refusals', () => {
+    // The v1 reply as the gateway sends it: a billing `type`, a `help_url`, and no `code`. The live
+    // error is called without a gateway URL or `mastra/` model, so only the reply can identify it.
+    const v1Refusal = (error: Record<string, string>) => ({
+      name: 'AI_APICallError',
+      message: error.message!,
+      statusCode: 402,
+      responseBody: JSON.stringify({ error }),
+      requestBodyValues: { model: 'anthropic/claude-opus-4-5' },
+    });
+    const outOfCredits = {
+      message: "You don't have inference credits left. Add credits at https://projects.mastra.ai/",
+      type: 'billing_error',
+      help_url: 'https://projects.mastra.ai/',
+    };
+    const outOfMemoryTokens = {
+      message: "You don't have memory tokens left. Add credits or upgrade your plan at https://projects.mastra.ai/",
+      type: 'billing_error',
+      help_url: 'https://projects.mastra.ai/',
+    };
+    const spendLimit = {
+      message: 'Your organization reached its monthly Gateway spend limit. Raise it at https://projects.mastra.ai/',
+      type: 'spend_limit_reached',
+      help_url: 'https://projects.mastra.ai/',
+    };
+
+    it.each([
+      ['inference credits', outOfCredits],
+      ['memory tokens', outOfMemoryTokens],
+    ])('offers credits when %s run out, live and rebuilt from history', (_what, error) => {
+      const live = v1Refusal(error);
+      for (const failure of [live, toPersistedErrorIdentity(live)]) {
+        expect(describeRunError(failure)).toMatchObject({
+          title: 'Out of Mastra Gateway credits',
+          recoveries: ['credits', 'continue', 'model'],
+        });
+      }
+    });
+
+    it('sends a monthly spend limit to an organization admin instead of offering credits', () => {
+      const live = v1Refusal(spendLimit);
+      for (const failure of [live, toPersistedErrorIdentity(live)]) {
+        expect(describeRunError(failure)).toMatchObject({
+          title: 'Mastra Gateway spend limit reached',
+          recoveries: ['model'],
+        });
+      }
+    });
+
+    it('still recognizes the older replies that linked to the gateway host', () => {
+      const olderSpendLimit = v1Refusal({
+        message: 'Your organization reached its monthly Gateway spend limit. Raise it at https://gateway.mastra.ai/',
+        type: 'spend_limit_reached',
+        help_url: 'https://gateway.mastra.ai/',
+      });
+      expect(describeRunError(toPersistedErrorIdentity(olderSpendLimit))).toMatchObject({
+        title: 'Mastra Gateway spend limit reached',
+      });
+    });
+
+    it.each([
+      ['a billing type with a help link elsewhere', { ...outOfCredits, help_url: 'https://billing.example.com/' }],
+      ['a dashboard link in its text only', { message: outOfCredits.message, type: 'insufficient_quota' }],
+      ['a look-alike help host', { ...outOfCredits, help_url: 'https://projects.mastra.ai.example.com/' }],
+    ])("keeps another provider's 402 with %s a provider quota error", (_shape, error) => {
+      expect(describeRunError(toPersistedErrorIdentity(v1Refusal(error)))).toMatchObject({
+        title: 'Provider quota exhausted',
+        recoveries: ['credentials', 'model'],
+      });
+    });
+  });
+
   it('recognizes the gateway by the host it called when its reply names no gateway', () => {
     const outOfCredits = {
       name: 'AI_APICallError',
