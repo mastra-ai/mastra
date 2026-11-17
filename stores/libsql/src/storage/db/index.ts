@@ -1166,10 +1166,15 @@ export class LibSQLDB extends MastraBase {
           // Nullable columns use DEFAULT NULL; non-nullable use the type's default.
           const defaultValue = columnDef.nullable ? 'DEFAULT NULL' : this.getDefaultValue(columnDef.type);
 
-          // SQLite doesn't support ADD COLUMN IF NOT EXISTS, but we checked above
+          // SQLite has no ADD COLUMN IF NOT EXISTS. Another connection can add the column
+          // between the check above and this ALTER, in which case the column exists.
           const alterSql = `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${defaultValue}`;
-          await this.client.execute(alterSql);
-          this.logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          try {
+            await this.client.execute(alterSql);
+            this.logger.debug(`LibSQLDB: Added column ${columnName} to table ${tableName}`);
+          } catch (error) {
+            if (!(error instanceof Error && /duplicate column name/i.test(error.message))) throw error;
+          }
         }
       }
     } catch (error) {

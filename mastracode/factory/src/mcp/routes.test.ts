@@ -102,8 +102,6 @@ async function setup() {
     auditRecorder: auditDomain,
     sessions: createSourceControlSessionLookup([sourceControl]),
     sessionModel: { projects: seed.projects, modelDefaults: seed.modelDefaults },
-    intake: seed.intake,
-    startCoordinator: () => undefined,
     // No live agent controller: nothing is mid-run.
     messaging: async () => null,
   };
@@ -161,7 +159,6 @@ async function setup() {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      sandboxProvider: 'local',
     });
     for (const session of sessions) {
       await sourceControl.sessions.create({

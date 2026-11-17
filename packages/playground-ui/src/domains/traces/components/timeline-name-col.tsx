@@ -7,8 +7,8 @@ import { SpanTypeBadge } from './span-type-badge';
 import { Badge } from '@/ds/components/Badge';
 import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -150,11 +150,11 @@ export function TimelineNameCol({
             aria-expanded={isExpanded}
             className={cn(
               'flex size-5 cursor-pointer items-center justify-center rounded-md',
-              'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+              'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:opacity-50',
               focusRing,
             )}
           >
-            {isExpanded ? <IconChevronBottom /> : <IconChevronRight />}
+            {isExpanded ? <IconChevronDownMedium /> : <IconChevronRightMedium />}
           </button>
         )}
       </div>

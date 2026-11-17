@@ -52,9 +52,6 @@ export function stubFactory(factory: Record<string, unknown> = {}) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
     http.post(`${TEST_BASE_URL}/web/github/projects/repo-1/ensure`, () => HttpResponse.json({ ok: true })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),

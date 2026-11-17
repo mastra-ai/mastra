@@ -57,7 +57,6 @@ async function setup() {
     orgId: ORG,
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const sourceSession = await ensureFactorySourceSession({
     sourceControl,

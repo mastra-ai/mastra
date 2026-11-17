@@ -3,8 +3,8 @@ import type { LucideIcon } from 'lucide-react';
 import type { FactoryModelScope, FactoryProjectPayload } from '../../../../workspaces/services/github';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconBubbleText } from '@mastra/playground-ui/icons/central/IconBubbleText';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconChatBubbles } from '@mastra/playground-ui/icons/central/IconChatBubbles';
 
 export type ModelLane = 'chats' | 'runs';
 export type ModelDefaults = 'personal' | 'factory';
@@ -46,7 +46,7 @@ export const MODEL_LANE_LABELS: Record<ModelLane, string> = {
 };
 
 export const MODEL_LANE_ICONS: Record<ModelLane, LucideIcon> = {
-  chats: IconBubbleText,
+  chats: IconChatBubbles,
   runs: IconKanbanView,
 };
 

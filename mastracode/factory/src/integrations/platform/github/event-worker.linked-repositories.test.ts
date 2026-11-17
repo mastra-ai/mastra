@@ -115,7 +115,6 @@ async function linkRepository(replica: Replica, repositoryExternalId: string): P
     connectionId: connection.id,
     repositoryId: repository.id,
     branch: null,
-    sandboxProvider: 'local',
   });
   return { unlink: () => replica.github.projectRepositories.unlink({ orgId: 'org-1', id: link.id }) };
 }

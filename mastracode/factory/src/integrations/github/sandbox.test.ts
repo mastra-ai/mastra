@@ -418,6 +418,41 @@ describe('materializeRepo', () => {
     expect(sandbox.calls).toHaveLength(0);
   });
 
+  it('refuses a default branch git could read as an option', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(makeRow(), makeRepoInfo({ defaultBranch: '-main' }), sandbox, 'tok').catch(
+      e => e,
+    );
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
+  it('refuses a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(
+      makeRow(),
+      makeRepoInfo({ repoFullName: 'octocat/../secret' }),
+      sandbox,
+      'tok',
+    ).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
+  it('refuses a clone URL whose path rewrites to a different repository', async () => {
+    for (const cloneUrl of [
+      'https://github.com/octocat/../secret.git',
+      'https://github.com/octocat/%2e%2e/secret.git',
+      'https://github.com/octocat\\..\\secret.git',
+      'https://github.com\\octocat\\..\\secret.git',
+    ]) {
+      const sandbox = new FakeSandbox();
+      const err = await materializeRepo(makeRow(), makeRepoInfo({ cloneUrl }), sandbox, 'tok').catch(e => e);
+      expect(err).toBeInstanceOf(MaterializeError);
+      expect(sandbox.calls).toHaveLength(0);
+    }
+  });
+
   it('refuses to run git when the repo full name is not owner/name shaped', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(makeRow(), makeRepoInfo({ repoFullName: 'evil; whoami' }), sandbox, 'tok').catch(
@@ -430,6 +465,16 @@ describe('materializeRepo', () => {
 
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
+
+  it('does not fetch a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      repoFullName: 'octocat/../secret',
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
 
   it('removes the legacy environment credential helper for GitLab sessions', async () => {
     const sandbox = new FakeSandbox(script => {
@@ -868,6 +913,16 @@ describe('syncEnvironmentRepository', () => {
     ).rejects.toBeInstanceOf(MaterializeError);
     expect(sandbox.calls).toHaveLength(0);
   });
+
+  it('does not fetch a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await syncEnvironmentRepository(sandbox, '/workspace/docs', {
+      ...opts,
+      repoFullName: 'octocat/../secret',
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
 });
 
 describe('refreshMergeRequestCheckout', () => {
@@ -909,6 +964,16 @@ describe('refreshMergeRequestCheckout', () => {
     });
     await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).rejects.toThrow('local changes');
     expect(sandbox.calls.join('\n')).not.toContain('fetch origin');
+  });
+
+  it('does not fetch a clone URL whose path rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await refreshMergeRequestCheckout(sandbox, '/workspace/repo', {
+      ...input,
+      access: { ...input.access, cloneUrl: 'https://gitlab.com/acme/../secret.git' },
+    }).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
   });
 
   it('refuses a fetched head that differs from current provider metadata', async () => {
@@ -1027,7 +1092,7 @@ describe('pushBranch', () => {
     await pushBranch(sandbox, '/workspace/hello', 'feat/cloud-agent', 'tok-secret', 'octocat/hello');
 
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
-    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/cloud-agent']);
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '--porcelain', '-u', 'origin', 'feat/cloud-agent']);
     expect(push.options?.env).toMatchObject({
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.git.extraHeader',
@@ -1037,6 +1102,14 @@ describe('pushBranch', () => {
     expect(JSON.stringify(push.args)).not.toContain('tok-secret');
     expect(sandbox.calls.join('\n')).not.toContain('tok-secret');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
+  it('does not push a repository path that rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok', 'octocat/../secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
   });
 
   it('rejects an unsafe branch name before running git', async () => {
@@ -1049,7 +1122,7 @@ describe('pushBranch', () => {
 
   it('keeps push failures classified without mutating the remote', async () => {
     const sandbox = new FakeSandbox(script =>
-      script.includes('push -u origin')
+      script.includes('push --porcelain -u origin')
         ? { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' }
         : OK,
     );
@@ -1072,7 +1145,7 @@ describe('pushRepositoryBranch', () => {
     await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello');
 
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
-    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/gitlab']);
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '--porcelain', '-u', 'origin', 'feat/gitlab']);
     expect(push.options?.env).toMatchObject({
       GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://gitlab.com/acme/hello.git.extraHeader',
@@ -1083,9 +1156,48 @@ describe('pushRepositoryBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
+  it('reports the pushed commit and whether the remote already had it', async () => {
+    const result = (upToDate: boolean) => (script: string) =>
+      script.includes('rev-parse')
+        ? { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+        : script.includes('push --porcelain')
+          ? {
+              exitCode: 0,
+              stdout: upToDate
+                ? 'To https://gitlab.com/acme/hello.git\n=\trefs/heads/feat/gitlab:refs/heads/feat/gitlab\t[up to date]\nDone\n'
+                : 'To https://gitlab.com/acme/hello.git\n \trefs/heads/feat/gitlab:refs/heads/feat/gitlab\t1111111..abc123\nDone\n',
+              stderr: '',
+            }
+          : OK;
+    await expect(
+      pushRepositoryBranch(new FakeSandbox(result(false)), '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: false });
+    await expect(
+      pushRepositoryBranch(new FakeSandbox(result(true)), '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: true });
+  });
+
+  it('reports an up-to-date push whose configured destination has another name', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse')
+        ? { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+        : script.includes('push --porcelain')
+          ? {
+              exitCode: 0,
+              stdout:
+                'To https://gitlab.com/acme/hello.git\n=\trefs/heads/feat/gitlab:refs/heads/review\t[up to date]\nDone\n',
+              stderr: '',
+            }
+          : OK,
+    );
+    await expect(
+      pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: true });
+  });
+
   it('keeps a failed push credential-free in argv and persistent config', async () => {
     const sandbox = new FakeSandbox(script =>
-      script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
+      script.includes('push --porcelain -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
     );
     const error = await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello').catch(
       value => value,
@@ -1095,6 +1207,20 @@ describe('pushRepositoryBranch', () => {
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
+  });
+
+  it('does not push a clone URL whose path rewrites to a different repository', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await pushRepositoryBranch(
+      sandbox,
+      '/workspace/hello',
+      'feat/gitlab',
+      { ...access, cloneUrl: 'https://gitlab.com/acme\\..\\secret.git' },
+      'acme/hello',
+    ).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('push-failed');
+    expect(sandbox.calls).toHaveLength(0);
   });
 
   it('rejects missing credentials before running git', async () => {

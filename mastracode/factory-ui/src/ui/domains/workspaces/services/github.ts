@@ -91,7 +91,8 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  sandboxProvider: string;
+  /** When the repository last received a push, if the server reports it. */
+  pushedAt?: string | null;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
@@ -217,10 +218,11 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
 export async function listGithubRepos(
   baseUrl: string,
   query?: string,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; limit?: number },
 ): Promise<GithubRepo[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
+  if (options?.limit) params.set('limit', String(options.limit));
   if (options?.refresh) params.set('refresh', '1');
   const search = params.toString();
   const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
@@ -491,14 +493,15 @@ export async function connectInstallation(
 }
 
 /**
- * Link a GitHub repository to a Factory project under the given connection.
- * Returns the browser-shaped linked-repository payload.
+ * Link a repository to a Factory project under the given connection. With `selectIntake`, the server
+ * also adds a GitHub repository to issue intake. Returns the browser-shaped linked-repository payload.
  */
 export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
   repo: SourceControlRepository,
+  selectIntake: boolean,
 ): Promise<LinkedRepositoryPayload> {
   const gitlab = isGitLabRepository(repo);
   const res = await fetch(
@@ -510,7 +513,7 @@ export async function linkRepository(
       body: JSON.stringify({
         repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
-        sandboxProvider: repo.sandboxProvider,
+        selectIntake,
       }),
     },
   );

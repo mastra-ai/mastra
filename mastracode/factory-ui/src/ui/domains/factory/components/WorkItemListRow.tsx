@@ -8,13 +8,19 @@ import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import type { CardMorph } from '../hooks/useCardMorph';
-import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditActorProfile } from '../services/audit';
+import { workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardKey, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
+import {
+  CardActions,
+  CardStatus,
+  MetadataLabels,
+  SessionBadge,
+  SourceTitle,
+  WorkItemSourceIcon,
+} from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { SourceStateBadge } from './SourceStateBadge';
 import { WorkItemActivity } from './WorkItemActivity';
@@ -23,12 +29,14 @@ import { columnReviewVerdict, ReviewVerdictBadge, ReworkLine } from './WorkItemC
 
 export function WorkItemListRow({
   item,
+  href,
   columnStage,
-  morph,
   deepLinkRef,
   highlighted,
   activityStatus,
+  hasSession,
   relatedLinks,
+  upstreamLinks,
   locked,
   busy,
   dragPayload,
@@ -40,12 +48,14 @@ export function WorkItemListRow({
   rework,
 }: {
   item: WorkItem;
+  href: string;
   columnStage: BoardStageId;
-  morph: CardMorph;
   deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
   activityStatus?: ActivityStatus;
+  hasSession: boolean;
   relatedLinks: ReactNode;
+  upstreamLinks: ReactNode;
   locked: boolean;
   busy: boolean;
   dragPayload: DragPayload | undefined;
@@ -57,16 +67,14 @@ export function WorkItemListRow({
   rework?: ReworkReason;
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
-  const repository = useBoardRepository(item.githubProjectId);
   const verdict = columnReviewVerdict(item, columnStage, board);
+  // Native cards have no upstream link to carry their key, so the row shows it as text.
+  const nativeKey = item.url === null ? workItemShortReference(item) : undefined;
   return (
     <BoardListRow
-      testId="work-item-card"
       title={item.title}
-      cardRef={morph.setCardElement}
-      detailsRef={deepLinkRef}
-      expanded={morph.open}
-      onToggleDetails={morph.toggleDetails}
+      href={href}
+      linkRef={deepLinkRef}
       dragPayload={dragPayload}
       locked={locked}
       busy={busy}
@@ -76,13 +84,22 @@ export function WorkItemListRow({
       createdAt={sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt}
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
-        key: <CardKey item={item} contextRepository={repository} />,
         title: (
           <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
             <SourceTitle source={item.source} title={item.title} />
           </Txt>
         ),
-        links: relatedLinks,
+        links: (
+          <>
+            {nativeKey !== undefined && (
+              <Txt as="span" variant="meta" tone="faint" className="truncate">
+                {nativeKey}
+              </Txt>
+            )}
+            {upstreamLinks}
+            {relatedLinks}
+          </>
+        ),
         labels: (
           <span className="flex items-center gap-2">
             {item.workItem?.author && (
@@ -94,9 +111,10 @@ export function WorkItemListRow({
             <MetadataLabels metadata={sourceMetadata(item)} />
           </span>
         ),
-        status: (status.kind !== 'idle' || verdict || rework) && (
+        status: (status.kind !== 'idle' || hasSession || verdict || rework) && (
           <span className="flex min-w-0 items-center gap-2">
             <CardStatus status={status} compact />
+            {hasSession && <SessionBadge />}
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
             {rework && <ReworkLine rework={rework} />}
           </span>

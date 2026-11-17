@@ -149,7 +149,7 @@ export function RuleAddButton({ icon, className, children, ...props }: RuleAddBu
       data-slot="rule-add-button"
       className={cn(
         textStyle({ variant: 'caption', tone: 'muted' }),
-        'inline-flex h-control-sm items-center gap-1.5 rounded-full border border-dashed border-border px-3 hover:border-border-strong hover:text-foreground [&_svg]:size-3.5',
+        'inline-flex h-control-sm items-center gap-1.5 rounded-full border border-dashed border-border px-3 hover:border-border-strong hover:text-foreground [&_svg]:size-icon-sm',
         focusRing,
         className,
       )}

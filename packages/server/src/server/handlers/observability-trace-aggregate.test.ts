@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import {
+  TraceQueryUnsupportedError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   traceAggregateRequestSchema,
@@ -655,5 +656,20 @@ describe('AGGREGATE_TRACES', () => {
     expect(responses['504'].content['application/json'].schema.properties.code.const).toBe(
       'TRACE_QUERY_EXECUTION_TIMEOUT',
     );
+  });
+});
+
+it('maps a typed store unsupported error to the route-specific 501', async () => {
+  const { mastra, observabilityStore } = createHarness();
+  observabilityStore.aggregateTraces.mockRejectedValue(
+    new TraceQueryUnsupportedError('Indexed token search is not supported by this store'),
+  );
+  const error = await captureHttpException(
+    AGGREGATE_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, measures: ['count'] })),
+  );
+  expect(error.status).toBe(501);
+  expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+    code: 'TRACE_AGGREGATE_UNSUPPORTED',
+    message: 'Indexed token search is not supported by this store',
   });
 });

@@ -113,7 +113,6 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
     connectionId: 'connection-1',
     repositoryId: 'repo-1',
     branch: null,
-    sandboxProvider: 'railway',
     setupCommand: null,
     teardownCommand,
     createdAt: now,

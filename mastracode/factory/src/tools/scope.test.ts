@@ -27,7 +27,6 @@ async function seedFactory(orgId = 'org-1') {
     orgId,
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const createSession = (sessionId: string, userId: string, visibility: SourceControlSessionVisibility = 'org') =>
     sourceControl.sessions.create({

@@ -113,6 +113,18 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(SLACK_SESSION_URL);
   });
 
+  it('links a refused memory model to Memory settings instead of the session', () => {
+    const error = new Error(
+      "Observational memory observation run failed: The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400",
+    );
+    const card = rendered(slackRunErrorCard(error, slackRun()));
+
+    expect(card).toContain('Memory model not available');
+    expect(card).toContain('Change memory model');
+    expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/memory`);
+    expect(card).not.toContain('Change model');
+  });
+
   it('offers the Factory model settings and another model for a missing credential', () => {
     const error = new ProviderAuthRequiredError(
       "No usable openai credential is available for openai/gpt-5.5. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",

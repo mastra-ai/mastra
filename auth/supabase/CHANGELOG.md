@@ -1,5 +1,11 @@
 # @mastra/auth-supabase
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed slow handling of Gateway base URLs and Supabase URLs that contain very long runs of `/`. The resulting URLs are unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
 ## 1.2.0
 
 ### Minor Changes

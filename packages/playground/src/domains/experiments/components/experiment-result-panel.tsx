@@ -419,7 +419,7 @@ function ResultTags({ tags, selectedResults, onTagsChange, tagVocabulary, isUpda
               onClick={() => onTagsChange(tags.filter(t => t !== tag))}
               className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
             >
-              <IconCrossMedium className="size-3" />
+              <IconCrossMedium className="size-icon-xs" />
             </button>
           )}
         </ComputedTag>

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { createLegacyIntakeTablesForTests } from '../../test-utils.js';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base.js';
 
@@ -90,6 +91,46 @@ describe('IntakeStorage', () => {
     expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
   });
 
+  it('adds sources on top of the selection, and a paused selection starts from nothing', async () => {
+    const storage = await makeStorage();
+    await storage.saveConfig({
+      orgId: 'org1',
+      config: { github: { enabled: true, sourceIds: ['a'] }, linear: { enabled: false, sourceIds: ['team'] } },
+    });
+
+    await storage.addSources({ orgId: 'org1', integrationId: 'github', sourceIds: ['b', 'a'] });
+    await storage.addSources({ orgId: 'org1', integrationId: 'linear', sourceIds: ['other'] });
+    await storage.addSources({ orgId: 'org2', integrationId: 'github', sourceIds: ['c'] });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+      github: { enabled: true, sourceIds: ['a', 'b'] },
+      linear: { enabled: true, sourceIds: ['other'] },
+    });
+    expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: true, sourceIds: ['c'] } });
+  });
+
+  it('keeps every source when repositories are linked at the same time', async () => {
+    const storage = await makeStorage();
+    await storage.saveConfig({ orgId: 'org1', config: { github: { enabled: true, sourceIds: ['a'] } } });
+
+    await Promise.all(
+      ['b', 'c', 'd'].map(id => storage.addSources({ orgId: 'org1', integrationId: 'github', sourceIds: [id] })),
+    );
+
+    expect((await storage.getConfig({ orgId: 'org1' })).github?.sourceIds?.toSorted()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('adds sources once per migration, so a source removed afterwards stays removed', async () => {
+    const storage = await makeStorage();
+    const sourcesByOrg = async () => new Map([['org1', ['acme/repo']]]);
+    await storage.addSourcesOnce({ migration: 'seed', integrationId: 'github', sourcesByOrg });
+    await storage.saveConfig({ orgId: 'org1', config: { github: { enabled: false, sourceIds: null } } });
+
+    await storage.addSourcesOnce({ migration: 'seed', integrationId: 'github', sourcesByOrg });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({ github: { enabled: false, sourceIds: null } });
+  });
+
   describe('legacy per-member selections', () => {
     // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
     function tempDatabaseUrl(): string {
@@ -102,6 +143,7 @@ describe('IntakeStorage', () => {
       const backend = new LibSQLFactoryStorage({ id: 'intake-test-legacy', url });
       backend.registerDomain(new IntakeStorage());
       await backend.init();
+      await createLegacyIntakeTablesForTests(backend);
       const now = new Date();
       try {
         for (const row of rows) {
@@ -418,6 +460,7 @@ describe('IntakeStorage', () => {
       const backend = new LibSQLFactoryStorage({ id: 'intake-test-legacy-bindings', url });
       backend.registerDomain(new IntakeStorage());
       await backend.init();
+      await createLegacyIntakeTablesForTests(backend);
       try {
         await backend.ops.deleteMany('intake_source_subscriptions', {});
         await backend.ops.deleteMany('intake_data_migrations', {});
@@ -514,6 +557,51 @@ describe('IntakeStorage', () => {
       ]);
       // The old collection is left exactly as the earlier build wrote it, for a rollback.
       expect(await legacyRows(url)).toEqual(before);
+    });
+  });
+
+  describe('a database created by this release', () => {
+    it('never gets the pre-upgrade intake tables, and keeps selections and bindings across reboots', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'intake-fresh-'));
+      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+      const url = `file:${join(dir, 'intake.db')}`;
+      const config = { github: { enabled: true, sourceIds: ['acme/app'] } };
+
+      const firstBoot = await makeStorage(url, { org1: ['proj-1'] });
+      await firstBoot.saveConfig({ orgId: 'org1', config });
+      await firstBoot.setBinding({
+        orgId: 'org1',
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: 'proj-1',
+        userId: 'user1',
+      });
+      await firstBoot.dangerouslyClearAll();
+      await firstBoot.saveConfig({ orgId: 'org1', config });
+      await firstBoot.setBinding({
+        orgId: 'org1',
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: 'proj-1',
+        userId: 'user1',
+      });
+
+      const secondBoot = await makeStorage(url);
+      expect(await secondBoot.getConfig({ orgId: 'org1' })).toEqual(config);
+      expect(await secondBoot.listBindings({ orgId: 'org1' })).toMatchObject([
+        { integrationId: 'linear', sourceId: 'team-1', factoryProjectId: 'proj-1', labels: null },
+      ]);
+
+      const backend = new LibSQLFactoryStorage({ id: 'intake-test-fresh-read', url });
+      try {
+        for (const table of ['intake_settings', 'intake_source_bindings']) {
+          expect(await backend.collectionExists(table), table).toBe(false);
+        }
+        expect(await backend.collectionExists('intake_source_subscriptions')).toBe(true);
+        expect(await backend.collectionExists('intake_data_migrations')).toBe(true);
+      } finally {
+        await backend.close();
+      }
     });
   });
 });

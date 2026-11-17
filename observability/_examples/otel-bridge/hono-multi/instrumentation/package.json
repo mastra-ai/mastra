@@ -27,7 +27,7 @@
     "@opentelemetry/instrumentation-pg": "^0.74.0",
     "@opentelemetry/instrumentation-undici": "^0.32.0",
     "@opentelemetry/instrumentation-winston": "^0.66.0",
-    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/resources": "^2.12.1",
     "@opentelemetry/sdk-metrics": "^2.0.1",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",

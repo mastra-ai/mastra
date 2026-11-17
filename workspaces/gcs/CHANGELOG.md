@@ -1,5 +1,39 @@
 # @mastra/gcs
 
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- E2B sandboxes can run agent commands as a second, unprivileged OS user, and S3 and GCS mounts can name the user that owns their files. ([#30433](https://github.com/mastra-ai/mastra/pull/30433))
+
+  `E2BSandbox` takes a `user` option. Every command the agent runs — `executeCommand` and background processes alike — runs as that user instead of the template's default user, which has to keep `sudo` because mounting needs it. Without the option, nothing changes.
+
+  `S3Filesystem` and `GCSFilesystem` take an `owner` option, `{ uid, gid }`. It sets the ownership of the files inside the mount, so a command user other than the one that mounts can read and write them. Without it, the mount keeps probing the default user's uid and gid.
+
+  Together, the two options let agent commands run as a user that cannot read the credentials staged for a mount or become root:
+
+  ```ts
+  const workspace = new Workspace({
+    mounts: {
+      '/s3-data': new S3Filesystem({
+        bucket: 'my-bucket',
+        region: 'us-east-1',
+        owner: { uid: 1001, gid: 1001 },
+      }),
+    },
+    sandbox: new E2BSandbox({ user: 'agent' }),
+  });
+  ```
+
+  These options change command identity and mount ownership, not every operation: file tools and other files-API calls still run as the template's default user, which keeps the privileges mounting needs.
+
+  The `user` must already exist in the sandbox template.
+
+### Patch Changes
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b)]:
+  - @mastra/core@1.84.0-alpha.3
+
 ## 0.3.6
 
 ### Patch Changes

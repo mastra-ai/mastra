@@ -7,10 +7,13 @@ description: Autonomous, report-only documentation review for Mastra docs. Use w
 
 Audit Mastra documentation autonomously against source, the canonical `mastra-docs` guidance, and narrow deterministic checks. This skill is for report-only reviews. Do not edit documentation, ask the user to select jobs, or submit a fix plan unless the user separately requests implementation after the audit.
 
+An audit checks both accuracy and prose quality. Accurate prose that breaks `STYLEGUIDE.md` still gets findings. This applies even when the skill or prompt that invoked this audit frames docs review as correctness only. A breach of the canonical authoring rules is never "only a nit".
+
 ## Load first
 
-1. Activate the `mastra-docs` skill. Its references are the canonical authoring policy; do not restate their rules.
+1. Activate the `mastra-docs` skill. Its references are the canonical authoring policy; do not restate their rules. This step is required. An audit that did not load `STYLEGUIDE.md` is incomplete: if you can't load it, record that as a limitation and give a `fail` verdict.
 2. Read:
+   - `docs/AGENTS.md`
    - `references/RUBRIC.md`
    - `references/AUDIT-REPORT.md`
    - `.claude/skills/mastra-docs/references/STYLEGUIDE.md`
@@ -112,7 +115,21 @@ Apply `references/RUBRIC.md` and the canonical page guide:
 
 Guides and overviews still require source verification for APIs and behavior they teach; they are not forced into reference-page completeness.
 
-### 7. Run narrow deterministic checks
+### 7. Review prose quality
+
+Read every changed paragraph, heading, list item, table cell, callout, and diagram label against `STYLEGUIDE.md`. Work through each of its sections in turn: plain language, writing style, openings and endings, task-oriented instructions, links, headings, lists, and accessibility. Then check the page guide's rules for the page's shape.
+
+For each changed passage, ask:
+
+- Can a rushed reader, or one reading in a non-native language, act on it without rereading?
+- Does it define a term before using it, and use the same term as the code and neighboring pages?
+- Does it state the point directly, or hide it behind contrast framing, hedging, filler, or stacked qualifications?
+- Does each sentence carry one idea? Split sentences that chain several conditions or clauses.
+- Is emphasis such as bold, callouts, and lists used for structure the reader needs, or for decoration?
+
+Record one finding per distinct violation, citing the changed-doc line and the `STYLEGUIDE.md` or page-guide line it breaks. Don't drop or downgrade a prose finding because the technical claim is correct, or because Vale passed. Vale catches only a subset of the styleguide. When the same violation repeats across a page, report it once and list every line.
+
+### 8. Run narrow deterministic checks
 
 Run the read-only docs-audit checker once for all changed pages:
 
@@ -121,9 +138,11 @@ bash .claude/skills/docs-audit/scripts/run-checks.sh \
   --docs <all-audited-files>
 ```
 
-Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `*-target=warn` as warning-level findings on the page, a skipped check, or (for `validate-target`) ambiguous attribution; it needs report context and is not a target failure or a clean pass. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
+Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `*-target=warn` as warning-level findings on the page, a skipped check, or (for `validate-target`) ambiguous attribution; it needs report context and is not a target failure or a clean pass.
 
-### 8. Report and stop
+Read every Vale warning on a changed line, not only errors. Report each one that a human reader would also notice as a prose-quality finding. Don't run Vale separately; the checker's output is the deterministic result. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
+
+### 9. Report and stop
 
 Produce one compact final report using `references/AUDIT-REPORT.md`. Use one row per page where possible, group code blocks that share a role and evidence, and keep each finding to the evidence, contradiction, impact, and bounded direction needed to act. Include:
 
@@ -131,6 +150,7 @@ Produce one compact final report using `references/AUDIT-REPORT.md`. Use one row
 - per-page classification and canonical-guidance compliance map
 - source paths inspected
 - contextual outcome for every code block or page-level code set
+- prose-quality outcome for every changed page
 - strict reference completeness outcomes where applicable
 - deterministic target results and separate repo-wide noise
 - uniquely identified, source-backed findings ordered by severity
@@ -143,6 +163,7 @@ Do not ask follow-up questions, edit files, submit a plan, or run post-fix check
 - Audit every changed authored page in scope
 - Keep `mastra-docs` as the sole owner of authoring rules
 - Treat source and exported types as truth
+- Enforce prose quality against `STYLEGUIDE.md` with the same rigor as accuracy
 - Use narrow evidence-driven reads rather than broad source archaeology
 - Verify code in page context, not through blanket independent compilation
 - Keep reference completeness bounded by the page's declared public surface

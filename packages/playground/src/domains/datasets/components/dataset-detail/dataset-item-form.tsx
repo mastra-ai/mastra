@@ -59,7 +59,7 @@ export function EditModeContent({
     <>
       <div className="mb-4">
         <Txt as="h3" variant="heading" className="flex items-center gap-2">
-          <IconPencil className="h-5 w-5" /> Edit Item
+          <IconPencil className="size-icon-lg" /> Edit Item
         </Txt>
       </div>
 

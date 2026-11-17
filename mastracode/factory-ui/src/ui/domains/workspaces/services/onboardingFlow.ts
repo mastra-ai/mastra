@@ -39,7 +39,6 @@ const repositoryFields = {
   owner: z.string(),
   defaultBranch: z.string(),
   private: z.boolean(),
-  sandboxProvider: z.string(),
 };
 const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
   z.object({ ...repositoryFields, id: z.number(), installationId: z.number(), installationStorageId: z.string() }),

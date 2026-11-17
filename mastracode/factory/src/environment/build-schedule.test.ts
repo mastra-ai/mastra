@@ -65,7 +65,6 @@ async function seedProject(seed: FactoryStorageTestSeed) {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'platform',
   });
   return project;
 }

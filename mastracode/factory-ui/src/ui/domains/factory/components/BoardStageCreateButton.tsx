@@ -25,7 +25,7 @@ export function BoardStageCreateButton({
       aria-controls={`new-work-item-${stage.id}`}
       onClick={onOpen}
     >
-      <IconPlusMedium size={13} aria-hidden />
+      <IconPlusMedium aria-hidden />
     </Button>
   );
 }

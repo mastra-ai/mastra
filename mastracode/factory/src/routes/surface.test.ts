@@ -52,7 +52,6 @@ async function seedFactoryWithRepository(options?: {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   const github = { id: 'github', sourceControlStorage: sourceControl } as unknown as GithubIntegration;
   return { seeded, sourceControl, project, projectRepository, installation, github };
@@ -200,7 +199,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const prepare = vi.fn(async () => ({}) as never);
     const input = bindingInput(project.id);
@@ -384,9 +382,9 @@ describe('prepareFactoryRuleBinding', () => {
 
       it('starts the phase as the Factory when the organization runs on its own provider and stores no key', async () => {
         const seed = await seedFactoryWithRepository({ modelScope });
-        await seed.seeded.customProviders.upsert({
-          orgId: 'org-1',
-          userId: 'factory-creator',
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-1' },
+          createdBy: 'factory-creator',
           input: {
             providerId: 'acme',
             name: 'Acme',
@@ -401,9 +399,9 @@ describe('prepareFactoryRuleBinding', () => {
 
       it("does not count another organization's provider as this one's", async () => {
         const seed = await seedFactoryWithRepository({ modelScope });
-        await seed.seeded.customProviders.upsert({
-          orgId: 'org-elsewhere',
-          userId: 'someone-elsewhere',
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-elsewhere' },
+          createdBy: 'someone-elsewhere',
           input: {
             providerId: 'acme',
             name: 'Acme',
@@ -416,6 +414,49 @@ describe('prepareFactoryRuleBinding', () => {
 
         await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
         expect(prepare).not.toHaveBeenCalled();
+      });
+
+      it("does not count a member's personal provider as the organization's", async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.create({
+          owner: { orgId: 'org-1', userId: 'approver-1' },
+          createdBy: 'approver-1',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+        expect(prepare).not.toHaveBeenCalled();
+      });
+
+      it('does not count an endpoint a hosted Factory refuses to call', async () => {
+        vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deploy-1');
+        try {
+          const seed = await seedFactoryWithRepository({ modelScope });
+          await seed.seeded.customProviders.create({
+            owner: { orgId: 'org-1' },
+            createdBy: 'factory-creator',
+            input: {
+              providerId: 'acme',
+              name: 'Acme',
+              url: 'http://10.0.0.5/v1',
+              apiKey: 'sk-acme',
+              models: ['fast-1'],
+            },
+          });
+          const { prepare, started } = start(seed, 'approver-1');
+
+          await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+          expect(prepare).not.toHaveBeenCalled();
+        } finally {
+          vi.unstubAllEnvs();
+        }
       });
 
       it.each([
@@ -756,7 +797,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const planSession = await sourceControl.sessions.create({
       sessionId: 'sess-plan',
@@ -799,7 +839,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: doomedRepository.id,
-      sandboxProvider: 'local',
     });
     const orphaned = await sourceControl.sessions.create({
       sessionId: 'sess-orphaned',
@@ -863,7 +902,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: otherConnection.id,
       repositoryId: otherRepository.id,
-      sandboxProvider: 'local',
     });
     const foreign = await sourceControl.sessions.create({
       sessionId: 'sess-foreign',
@@ -974,7 +1012,7 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
-  it('blocks autonomous dispatch on an unattributed multi-repository item before creating a session', async () => {
+  it("starts an unattributed multi-repository item in the environment's first repository", async () => {
     const { seeded, sourceControl, project, projectRepository, installation, github } =
       await seedFactoryWithRepository();
     const second = await sourceControl.repositories.upsert({
@@ -990,22 +1028,17 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      sandboxProvider: 'local',
     });
-    const createSession = vi.spyOn(sourceControl.sessions, 'create');
-    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+    const prepare = vi.fn(async () => ({}) as never);
     const input = bindingInput(project.id);
     (input.item as { metadata: Record<string, unknown> | null }).metadata = null;
 
-    const error = await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input).catch(
-      failure => failure,
-    );
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input);
 
-    expect(error).toBeInstanceOf(FactoryDispatchError);
-    expect(error).toMatchObject({ code: 'source_repository_ambiguous' });
-    expect(error.message).toContain('internetburrito/hydra');
-    expect(createSession).not.toHaveBeenCalled();
-    expect(prepare).not.toHaveBeenCalled();
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      projectRepositoryId: projectRepository.id,
+    });
   });
 
   it('retries an unattributed role in its existing linked repository without choosing the first', async () => {
@@ -1024,7 +1057,6 @@ describe('prepareFactoryRuleBinding', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: second.id,
-      sandboxProvider: 'local',
     });
     const existing = await sourceControl.sessions.create({
       sessionId: 'sess-hydra',
