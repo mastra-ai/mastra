@@ -47,19 +47,10 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
-          # Test code and fixtures never ship, so alerts in them are noise. Source files that
-          # only tests import still get scanned.
-          config: |
-            paths-ignore:
-              - '**/*.test.ts'
-              - '**/*.test.tsx'
-              - '**/*.test.js'
-              - '**/*.test.mjs'
-              - '**/*.spec.ts'
-              - '**/__tests__/**'
-              - '**/__fixtures__/**'
-              - '**/test-fixtures/**'
 
+      # Analyze writes the results file without uploading it, so test-file alerts can be
+      # dropped first. Tests stay in the analysis: they supply the call sites that let
+      # CodeQL reach some source code, and excluding them hid real alerts in that code.
       - name: Analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
@@ -68,6 +59,27 @@ jobs:
           # repository; it plays no part in alerts. Zipping the ~9 GB javascript database ran
           # past the job timeout after the results were already uploaded.
           upload-database: false
+          upload: never
+          output: sarif-results
+
+      # Test code and fixtures never ship, so alerts located in them are noise. Alerts in
+      # source code are kept, including ones whose data flow starts in a test.
+      - name: Drop alerts in test files and fixtures
+        run: |
+          for file in sarif-results/*.sarif; do
+            jq '.runs[].results |= map(select(
+              (.locations[0].physicalLocation.artifactLocation.uri // "")
+              | test("(^|/)(__tests__|__fixtures__|test-fixtures)/|\\.test\\.(ts|tsx|js|mjs)$|\\.spec\\.ts$")
+              | not))' "$file" > "$file.filtered"
+            echo "$file: kept $(jq '[.runs[].results[]] | length' "$file.filtered") of $(jq '[.runs[].results[]] | length' "$file") results"
+            mv "$file.filtered" "$file"
+          done
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          sarif_file: sarif-results
+          category: /language:${{ matrix.language }}
 
   notify:
     name: Notify Slack of CodeQL results
