@@ -64,7 +64,6 @@ export type TracesConfigContextValue = {
 export type TracesFiltersActions = {
   /** Replaces the filter tokens and groups. The scope tokens are always kept. */
   setFilterTokens: (tokens: TracesFilters['tokens'], groups: TracesFilters['groups']) => void;
-  setTextSearch: (value: string | undefined) => void;
   setDatePreset: (preset: TraceDatePreset) => void;
   setDate: (value: Date | undefined, end: 'from' | 'to') => void;
   setDateRange: (from: Date | undefined, to: Date | undefined) => void;

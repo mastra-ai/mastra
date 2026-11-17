@@ -2,7 +2,7 @@ import { EntityType } from '@mastra/core/observability';
 import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { buildTraceQueryRequest, resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
@@ -46,7 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
-import { hasTokenSearch } from '@/domains/observability/lib/token-search-predicate';
+import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
@@ -129,14 +129,13 @@ export function TracesExplorerRoot({
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
   const filters = useMemo(() => {
-    const sanitized = sanitizeTracesFilters(rawFilters, {
+    return sanitizeTracesFilters(rawFilters, {
+      withTextSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
       withOutcomeFields,
     });
-    if (withTextSearch || sanitized.textSearch === undefined) return sanitized;
-    return { ...sanitized, textSearch: undefined };
   }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTextSearch]);
 
   const isScoped = !!scope;
@@ -207,10 +206,6 @@ export function TracesExplorerRoot({
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
         updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
       },
-      setTextSearch: value => {
-        if (latest.current.filters.textSearch === value) return;
-        updateFilters({ ...latest.current.filters, textSearch: value });
-      },
       setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
       setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),
       setDateRange: (from, to) => pickRange(applyDateRange(latest.current.filters, from, to)),
@@ -224,7 +219,6 @@ export function TracesExplorerRoot({
         const before = rangeBeforeZoom(zoomMemory.current, base);
         zoomMemory.current = undefined;
         updateFilters({
-          textSearch: base.textSearch,
           tokens: base.tokens,
           groups: base.groups,
           ...(before ?? { datePreset: defaultPreset }),
@@ -300,10 +294,8 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const tokenSearchApplied = hasTokenSearch(
-    buildTraceQueryRequest({ tokens: filters.tokens, groups: filters.groups, withTextSearch, now: new Date(0) }).where,
-  );
-  const contentFiltersApplied = tokenSearchApplied || filters.tokens.length > 0 || filters.groups.length > 0;
+  const tokenSearchApplied = withTextSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
+  const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(

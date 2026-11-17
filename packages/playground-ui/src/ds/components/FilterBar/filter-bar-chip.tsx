@@ -216,7 +216,10 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
-  const validationMessage = !draft && typeof item.value === 'string' ? field?.validateInput?.(item.value) : undefined;
+  const validationMessage =
+    !draft && operator?.arity !== 'none' && typeof item.value === 'string'
+      ? field?.validateInput?.(item.value)
+      : undefined;
   const operatorImplied = field ? !field.alwaysShowOperator && ctx.getFieldOperators(field).length === 1 : false;
   const label = [
     field?.label ?? item.fieldId,

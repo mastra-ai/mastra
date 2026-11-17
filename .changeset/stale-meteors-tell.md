@@ -2,4 +2,4 @@
 '@mastra/playground-ui': minor
 ---
 
-Updated search requests for hosts supporting token search.
+Added content filters with matching histograms for supporting hosts.

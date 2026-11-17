@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Replaced experimental textSearch with token predicates for supporting hosts.
+Replaced experimental textSearch contracts and capabilities with token predicates for supporting hosts.

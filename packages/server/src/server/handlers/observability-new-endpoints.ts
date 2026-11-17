@@ -348,7 +348,14 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     mode,
     after,
     limit,
+    ...legacy
   }) => {
+    if ('textSearch' in legacy && legacy.textSearch !== undefined) {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'The experimental textSearch field is no longer supported',
+      });
+    }
     if (rootSource === 'aggregated') {
       throwTraceQueryError(501, {
         code: 'TRACE_QUERY_UNSUPPORTED',
@@ -807,7 +814,13 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       code: 'SPAN_QUERY_UNSUPPORTED',
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
-  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
+  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page, ...legacy }) => {
+    if ('textSearch' in legacy && legacy.textSearch !== undefined) {
+      throwTraceQueryError(501, {
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'The experimental textSearch field is no longer supported',
+      });
+    }
     let plan;
     try {
       plan = coreStorage.planSpanQuery(

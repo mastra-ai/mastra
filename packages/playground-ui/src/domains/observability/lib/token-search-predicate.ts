@@ -1,4 +1,5 @@
-import type { TraceQueryPredicate, TraceQueryScalarPredicate, TraceQueryTokenField } from '@mastra/core/storage';
+import type { TraceQueryScalarPredicate, TraceQueryTokenField } from '@mastra/core/storage';
+import type { TraceFilterNode } from '@/domains/traces/trace-query-filters';
 import type { FilterBarField } from '@/ds/components/FilterBar/types';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
@@ -47,15 +48,7 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
   return [...searchable, ...fields.filter(field => !searchable.some(search => search.id === field.id))];
 }
 
-export function hasTokenSearch(predicate: TraceQueryPredicate | undefined): boolean {
-  if (!predicate) return false;
-  if ('op' in predicate) {
-    if (predicate.op === 'hasAllTokens') return true;
-    if (predicate.op === 'and' || predicate.op === 'or') return predicate.args.some(hasTokenSearch);
-    if (predicate.op === 'not') return hasTokenSearch(predicate.arg);
-    return false;
-  }
-  const relation =
-    'spans' in predicate ? predicate.spans : 'scores' in predicate ? predicate.scores : predicate.feedback;
-  return hasTokenSearch('some' in relation ? relation.some : relation.none);
+export function hasTokenSearchFilter(node: TraceFilterNode): boolean {
+  if ('nodes' in node) return node.nodes.some(hasTokenSearchFilter);
+  return node.operatorId === 'hasAllTokens' && !!tokenSearchPredicate(node.fieldId.replace(/^spans\./, ''), node.value);
 }

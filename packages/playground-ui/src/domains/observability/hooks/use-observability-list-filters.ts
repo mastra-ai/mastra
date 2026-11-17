@@ -1,5 +1,4 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { effectiveTextSearch } from '../lib/text-search';
 import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
 import type { ZoomMemory } from '../lib/zoom-memory';
 import {
@@ -55,9 +54,8 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
   {
     sortFields,
-    withTextSearch = false,
     defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
-  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset; withTextSearch?: boolean } = {},
+  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
@@ -156,23 +154,10 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
     update(params => writeObservabilityListSort(params, next));
 
-  const searchValue = withTextSearch ? (searchParams.get('textSearch') ?? undefined) : undefined;
-  const textSearch = effectiveTextSearch(searchValue);
-  const setTextSearch = (value: string | undefined) =>
-    update(next => {
-      if (value !== undefined) next.set('textSearch', value);
-      else next.delete('textSearch');
-      next.delete('page');
-      next.delete('traceId');
-      next.delete('spanId');
-    });
-  const contentFiltersApplied = !!textSearch || tokens.length > 0 || groups.length > 0;
+  const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
   const filtersApplied = contentFiltersApplied || datePreset !== defaultDatePreset;
 
   return {
-    searchValue,
-    textSearch,
-    setTextSearch,
     datePreset,
     dateFrom,
     dateTo,

@@ -149,6 +149,17 @@ describe('SpansExplorerBody', () => {
         spanAggregateTokenSearch: true,
       },
     };
+    it.each(['exists', 'notExists'])('keeps Error %s valid on search-enabled hosts', async operator => {
+      setHandlers(spanRowsPage, searchable);
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => HttpResponse.json<AggregateSpansResponse>({ rows: [], truncated: false })),
+      );
+      const { queries } = renderBodyAtUrl(`filter.error=&filter.error.op=${operator}`);
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      const label = operator === 'exists' ? 'exists' : 'does not exist';
+      expect(screen.getByRole('group', { name: `Error ${label}` }).getAttribute('aria-invalid')).not.toBe('true');
+      expect(queries.at(-1)?.where).toEqual({ op: 'and', args: [{ op: operator, path: 'error' }] });
+    });
     it.each(['spanQueryTokenSearch', 'spanAggregateTokenSearch'] as const)(
       'disables search for the whole page without %s',
       async capability => {
