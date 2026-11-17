@@ -951,6 +951,51 @@ describe('ProjectRoutes', () => {
     warn.mockRestore();
   });
 
+  it.each([
+    ['brings in its issues by default', {}, ['acme/web', 'acme/api']],
+    ['leaves issue intake alone when the caller opts out', { selectIntake: false }, ['acme/web']],
+  ])('linking a GitHub repository %s', async (_name, options, expected) => {
+    const seed = await createFactoryStorageForTests();
+    await seed.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/web'] } } });
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+      accountName: 'acme',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: 'repo-1', slug: 'acme/api', defaultBranch: 'main' },
+    });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { intake: seed.intake }));
+    const connectResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ integrationId: 'github', installationId: installation.id }),
+    });
+    const { connection } = (await connectResponse.json()) as { connection: { id: string } };
+
+    const linkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${connection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ repositoryId: repository.id, branch: 'main', ...options }),
+      },
+    );
+
+    expect(linkResponse.status).toBe(201);
+    const { github: selection } = await seed.intake.getConfig({ orgId: 'org-1', integrationIds: ['github'] });
+    expect(selection).toEqual({ enabled: true, sourceIds: expected });
+  });
+
   it('does not 500 when a linked GitHub installation was pruned (uninstalled)', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

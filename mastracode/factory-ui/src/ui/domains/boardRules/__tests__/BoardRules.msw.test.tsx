@@ -62,7 +62,7 @@ describe('Board rules', () => {
     expect(ruleNames('Issue closed')).toEqual(['Closed issues go to Done']);
     expect(await lane(OPENED).findByRole('link', { name: 'checked last, after Release Preview' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake#intake-order`,
+      `/factories/${FACTORY_ID}/work/intake#intake-order`,
     );
     // A rule under one that takes every item is never reached.
     expect(

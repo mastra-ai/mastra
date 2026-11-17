@@ -43,17 +43,7 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
 
 export const VOICE_INPUT_ANCHOR = 'voice-input';
 
-/** The order intake asks boards to take a new item, in Settings → Intake. */
-export const INTAKE_ORDER_ANCHOR = 'intake-order';
-
-/** Items no board took, in Settings → Intake. */
-export const NOT_ROUTED_ANCHOR = 'not-routed';
-
-type SettingsAnchor =
-  | ModelDefaultsAnchor
-  | typeof VOICE_INPUT_ANCHOR
-  | typeof INTAKE_ORDER_ANCHOR
-  | typeof NOT_ROUTED_ANCHOR;
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 

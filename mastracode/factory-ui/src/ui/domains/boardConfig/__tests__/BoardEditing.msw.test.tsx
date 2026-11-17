@@ -126,7 +126,7 @@ describe('Creating a board', () => {
     // Cards only reach a new board through its rules, checked in the project's intake order.
     expect(form.getByRole('link', { name: 'intake order' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake#intake-order`,
+      `/factories/${FACTORY_ID}/work/intake#intake-order`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 

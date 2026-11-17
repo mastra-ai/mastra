@@ -46,6 +46,7 @@ import type {
 import { authorTrusted } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -68,6 +69,7 @@ import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import { githubIssueIntakeSelected } from './issue-intake.js';
 import { isRepositoryPullRequest } from './pull-request-source.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -512,6 +514,7 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
+  intake: Pick<IntakeStorage, 'getConfig'>;
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
@@ -1132,6 +1135,13 @@ export class GithubRules {
       reReviewEvent ? null : provenance,
       senderIsResponder && !reviewEntryRequested,
     );
+    if (
+      event === 'issueOpened' &&
+      !resolvedItem &&
+      !(await githubIssueIntakeSelected(this.options.intake, project.orgId, repositoryName))
+    ) {
+      return { status: 'ignored' };
+    }
     // A review-entry request must never treat a branch-matched authoring Work
     // card as the PR's Review card. A missing Review card is materialized below.
     const matchedItem =
@@ -2728,6 +2738,7 @@ export function githubRulesOptions(
     github,
     sourceControl: context.storage.sourceControl,
     integrationStorage: context.storage.generic,
+    intake: context.storage.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,

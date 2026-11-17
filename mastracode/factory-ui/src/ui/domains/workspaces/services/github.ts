@@ -493,14 +493,15 @@ export async function connectInstallation(
 }
 
 /**
- * Link a GitHub repository to a Factory project under the given connection.
- * Returns the browser-shaped linked-repository payload.
+ * Link a repository to a Factory project under the given connection. With `selectIntake`, the server
+ * also adds a GitHub repository to issue intake. Returns the browser-shaped linked-repository payload.
  */
 export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
   repo: SourceControlRepository,
+  selectIntake: boolean,
 ): Promise<LinkedRepositoryPayload> {
   const gitlab = isGitLabRepository(repo);
   const res = await fetch(
@@ -512,6 +513,7 @@ export async function linkRepository(
       body: JSON.stringify({
         repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
+        selectIntake,
       }),
     },
   );
