@@ -9,6 +9,7 @@ import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { AuditActorProfile } from '../services/audit';
+import { workItemShortReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
@@ -67,6 +68,8 @@ export function WorkItemListRow({
 }) {
   const board = boardOf(useBoardCatalog(item.githubProjectId).data, item);
   const verdict = columnReviewVerdict(item, columnStage, board);
+  // Native cards have no upstream link to carry their key, so the row shows it as text.
+  const nativeKey = item.url === null ? workItemShortReference(item) : undefined;
   return (
     <BoardListRow
       title={item.title}
@@ -88,6 +91,11 @@ export function WorkItemListRow({
         ),
         links: (
           <>
+            {nativeKey !== undefined && (
+              <Txt as="span" variant="meta" tone="faint" className="truncate">
+                {nativeKey}
+              </Txt>
+            )}
             {upstreamLinks}
             {relatedLinks}
           </>

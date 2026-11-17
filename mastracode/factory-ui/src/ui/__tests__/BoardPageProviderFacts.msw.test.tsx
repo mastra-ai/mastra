@@ -11,6 +11,22 @@ import { nativeFactsCard, providerFactsCard } from './fixtures/providerFactsCard
 import { stubWorkBoard } from './workBoardStubs';
 
 describe('native card facts', () => {
+  it('shows a hand-filed card number in the list, where it has no upstream link to carry it', async () => {
+    stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+        HttpResponse.json({
+          workItems: [{ ...nativeFactsCard, metadata: { ...nativeFactsCard.metadata, cardNumber: 12 } }],
+        }),
+      ),
+    );
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/work?layout=list'] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const card = await screen.findByTestId('work-item-card');
+    expect(within(card).getByText('#12', { exact: true })).toBeVisible();
+  });
+
   describe('when a label filter matches a persisted native card', () => {
     it.each(['board', 'list'])('keeps its label visible in the filtered %s', async layout => {
       stubWorkBoard();
