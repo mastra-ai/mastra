@@ -705,6 +705,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "expectedRevision",
       "name",
       "on",
+      "outsiderPullRequestsGated",
       "target",
       "when"
     ],
@@ -986,6 +987,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "enabled",
       "name",
       "on",
+      "outsiderPullRequestsGated",
       "pullRequestOpenedMovesOnly",
       "target",
       "when"
@@ -3391,7 +3393,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"
@@ -3582,6 +3583,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 }
               },
               "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
+              },
+              "outsiderPullRequestsGated": {
                 "type": "boolean",
                 "const": true
               },
@@ -3922,6 +3927,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -7286,8 +7295,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "on": {
           "$ref": "#/$defs/__schema12"
         },
-        "expectedRevision": {
+        "outsiderPullRequestsGated": {
           "$ref": "#/$defs/__schema14"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema15"
         }
       },
       "required": [
@@ -7557,6 +7569,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema14": {
+          "type": "boolean",
+          "const": false
+        },
+        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -7666,6 +7682,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -9966,6 +9986,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "pullRequestOpenedMovesOnly": {
           "type": "boolean",
           "const": true
+        },
+        "outsiderPullRequestsGated": {
+          "type": "boolean",
+          "const": true
         }
       },
       "required": [
@@ -10259,6 +10283,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "pullRequestOpenedMovesOnly": {
+              "type": "boolean",
+              "const": true
+            },
+            "outsiderPullRequestsGated": {
               "type": "boolean",
               "const": true
             },
@@ -10622,6 +10650,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 }
               },
               "pullRequestOpenedMovesOnly": {
+                "type": "boolean",
+                "const": true
+              },
+              "outsiderPullRequestsGated": {
                 "type": "boolean",
                 "const": true
               },
@@ -13076,7 +13108,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"

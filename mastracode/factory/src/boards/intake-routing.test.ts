@@ -120,22 +120,12 @@ describe('resolveIntake', () => {
     expect(resolution).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
   });
 
-  it('forces the evaluator from the option first, then a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
+  it('forces the evaluator from a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
     // Nothing forced: each project uses its own setting.
-    expect(intakeEvaluatorFrom(undefined, {})).toBeUndefined();
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
-      evaluator: 'intake-order',
-      source: 'env',
-    });
-    expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'route-list' })).toEqual({
-      evaluator: 'route-list',
-      source: 'env',
-    });
-    expect(intakeEvaluatorFrom('route-list', { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toEqual({
-      evaluator: 'route-list',
-      source: 'option',
-    });
+    expect(intakeEvaluatorFrom({})).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('intake-order');
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'route-list' })).toBe('route-list');
   });
 });
 
@@ -184,7 +174,7 @@ describe('compareIntakeOrder', () => {
 });
 
 describe('resolveIntakePlacement', () => {
-  it("lands a card in the first phase when the route's phase can't be reached from it", () => {
+  it("lands a card in the route's phase even when the first phase can't move to it", () => {
     const target = (phaseKey: string) => [route({ target: { boardKey: 'stepwise', phaseKey } })];
     expect(resolveIntakePlacement(target('triaged'), issue(), stepwise)).toEqual({
       board: 'stepwise',
@@ -193,13 +183,17 @@ describe('resolveIntakePlacement', () => {
     });
     expect(resolveIntakePlacement(target('fixing'), issue(), stepwise)).toEqual({
       board: 'stepwise',
+      phase: 'fixing',
+      routeId: 'route',
+    });
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'fixing' }))).toBeUndefined();
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'triaged' }))).toBeUndefined();
+    // A phase gone since the rule was saved still falls back to the first phase.
+    expect(resolveIntakePlacement(target('gone'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
       phase: 'reported',
       routeId: 'route',
     });
-    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'fixing' }))).toMatchObject({
-      code: 'unreachable_phase',
-    });
-    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'triaged' }))).toBeUndefined();
   });
 
   it('places nothing without routes', () => {
@@ -281,7 +275,7 @@ describe('resolveIntakePlacement', () => {
 });
 
 describe('intakeTargetProblem', () => {
-  it('lets a route that only moves existing cards name a terminal or unreachable phase', () => {
+  it('lets a route that only moves existing cards name a terminal phase too', () => {
     const closes = (boardKey: string, phaseKey: string) => ({
       target: { boardKey, phaseKey },
       on: ['work_item.closed'],

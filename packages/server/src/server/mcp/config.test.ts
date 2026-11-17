@@ -92,6 +92,56 @@ describe('resolveBuiltinMCPConfig isSelected', () => {
   });
 });
 
+describe('resolveBuiltinMCPConfig studioUrl', () => {
+  const studioUrl = (server: ServerConfig) => resolveBuiltinMCPConfig(mastraWith(server)).studioUrl;
+
+  it("defaults to the local Studio under mastra dev, from the server's Studio settings", () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    expect(studioUrl({})).toBe('http://localhost:4111');
+    expect(studioUrl({ host: '0.0.0.0', port: 4311, studioBase: '/studio/' })).toBe('http://localhost:4311/studio');
+    expect(studioUrl({ host: 'devbox.local', studioProtocol: 'https', studioPort: 443 })).toBe(
+      'https://devbox.local:443',
+    );
+    expect(studioUrl({ studioHost: 'studio.local' })).toBe('http://studio.local:4111');
+    expect(studioUrl({ host: '::1' })).toBe('http://[::1]:4111');
+    expect(studioUrl({ studioHost: '[::1]' })).toBe('http://[::1]:4111');
+    expect(studioUrl({ mcp: { studioUrl: false } })).toBeUndefined();
+  });
+
+  it('follows the port and host mastra dev passes in the environment', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    vi.stubEnv('PORT', '4112');
+    vi.stubEnv('MASTRA_HOST', 'devbox.local');
+    expect(studioUrl({})).toBe('http://devbox.local:4112');
+    expect(studioUrl({ port: 5000, host: 'other.local' })).toBe('http://other.local:5000');
+    vi.stubEnv('MASTRA_HOST', '0.0.0.0');
+    expect(studioUrl({})).toBe('http://localhost:4112');
+  });
+
+  it('normalizes studioBase the way the dev server does', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    expect(studioUrl({ studioBase: 'studio' })).toBe('http://localhost:4111/studio');
+    expect(studioUrl({ studioBase: '//admin//ui/' })).toBe('http://localhost:4111/admin/ui');
+    expect(studioUrl({ studioBase: ' / ' })).toBe('http://localhost:4111');
+  });
+
+  it('uses https when the dev server serves HTTPS, from server.https or mastra dev --https', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    const https = { key: Buffer.from('key'), cert: Buffer.from('cert') };
+    expect(studioUrl({ https })).toBe('https://localhost:4111');
+    expect(studioUrl({ https, studioProtocol: 'http' })).toBe('http://localhost:4111');
+    vi.stubEnv('MASTRA_HTTPS_KEY', 'a2V5');
+    vi.stubEnv('MASTRA_HTTPS_CERT', 'Y2VydA==');
+    expect(studioUrl({})).toBe('https://localhost:4111');
+  });
+
+  it('is only set elsewhere when configured', () => {
+    vi.stubEnv('MASTRA_DEV', '');
+    expect(studioUrl({})).toBeUndefined();
+    expect(studioUrl({ mcp: { studioUrl: 'https://studio.example.com/' } })).toBe('https://studio.example.com');
+  });
+});
+
 describe('resolveServerRoute', () => {
   it('falls back to /mcp when server.mcp.path collides with an existing route, logging an error', () => {
     for (const path of ['/agents', '/agents/some-agent', '/workflows/w/runs/r']) {

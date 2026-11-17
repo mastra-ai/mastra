@@ -672,6 +672,7 @@ function SelectedPage({
   onSelect,
   highlightMentionOf,
   compact,
+  onOpenPage,
 }: {
   source: KnowledgeExplorerSource;
   pageId: string;
@@ -679,6 +680,7 @@ function SelectedPage({
   onSelect: (pageId: string) => void;
   highlightMentionOf?: string;
   compact?: boolean;
+  onOpenPage?: () => void;
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
@@ -705,6 +707,7 @@ function SelectedPage({
   return (
     <KnowledgePageDetail
       compact={compact}
+      onOpenPage={onOpenPage}
       page={detail.data.page}
       notes={detail.data.notes}
       pin={detail.data.pin ?? undefined}
@@ -729,6 +732,19 @@ function SelectedPage({
         ) : undefined
       }
     />
+  );
+}
+
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const needle = query.trim().toLowerCase();
+  const at = needle ? text.toLowerCase().indexOf(needle) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-badge-blue-subtle text-foreground">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
   );
 }
 
@@ -764,7 +780,16 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
                       setQuery('');
                     }}
                   >
-                    <div className="line-clamp-2">{page.name}</div>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="line-clamp-2 wrap-anywhere">
+                        <Highlighted text={page.name} query={query} />
+                      </span>
+                      {page.description ? (
+                        <Txt as="span" variant="caption" tone="muted" className="line-clamp-1 wrap-anywhere">
+                          <Highlighted text={page.description} query={query} />
+                        </Txt>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -1539,6 +1564,10 @@ export function KnowledgePageExplorer({
                           onSelect={selectFromSearch}
                           highlightMentionOf={highlightMentionOf}
                           compact
+                          onOpenPage={() => {
+                            focusTabOnPageOpen.current = true;
+                            openPage(drawerShownId);
+                          }}
                         />
                       </div>
                     </DataPanel>
