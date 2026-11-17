@@ -280,6 +280,78 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
     expect(steps[0]!.text).toBe(RECOVERED_TEXT);
     expect(steps[0]!.toolCalls).toEqual([]);
     expect(steps[0]!.sources).toEqual([]);
+    // The run drops the failed attempt's sources but keeps its call: the eager tool already ran and
+    // its result was carried into the retried request.
+    const full = await output.getFullOutput();
+    expect(full.sources).toEqual([]);
+    expect(full.toolCalls.map(call => call.payload.toolCallId)).toEqual(['call-1']);
+    expect(JSON.stringify(model.doStreamCalls[1]!.prompt)).toContain('call-1');
+  });
+
+  it("reports the retried request's args for a call it repeats under the failed attempt's id", async () => {
+    let calls = 0;
+    const executed: string[] = [];
+    const echoTool = createTool({
+      id: 'echo',
+      description: 'Echo the input back.',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => {
+        executed.push(text);
+        return { text };
+      },
+    });
+    const toolCall = (text: string) => ({
+      type: 'tool-call' as const,
+      toolCallId: 'call-1',
+      toolName: 'echo',
+      input: JSON.stringify({ text }),
+      providerExecuted: false,
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        const start = [
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: `resp-${calls}`, modelId: 'mock', timestamp: new Date(0) },
+        ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream:
+            calls === 1
+              ? convertArrayToReadableStream([...start, toolCall('first'), { type: 'error', error: retryableError() }])
+              : calls === 2
+                ? convertArrayToReadableStream([
+                    ...start,
+                    toolCall('second'),
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ])
+                : textStream(`resp-${calls}`, RECOVERED_TEXT),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'api-error-retry-same-call-id',
+      name: 'API error retry same call id',
+      instructions: 'Answer.',
+      model,
+      tools: { echo: echoTool },
+      errorProcessors: [retryOnceProcessor()],
+    });
+
+    const output = await agent.stream('What is the answer?', { maxSteps: 3, eagerToolExecution: false });
+    await output.consumeStream();
+
+    expect(calls).toBe(3);
+    expect(executed).toEqual(['second']);
+    const steps = await output.steps;
+    expect(steps[0]!.toolCalls.map(call => call.payload.args)).toEqual([{ text: 'second' }]);
+    const full = await output.getFullOutput();
+    expect(full.toolCalls.map(call => call.payload.args)).toEqual([{ text: 'second' }]);
   });
 
   it('does not carry a structured object from the failed attempt onto the recovered one', async () => {

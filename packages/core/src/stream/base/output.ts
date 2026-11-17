@@ -630,6 +630,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
   };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
+  /** Run-level sources, files and tool calls as of the last `step-start` that has no `step-finish` yet. */
+  #runOutputAtStepStart?: { sources: number; files: number; toolCalls: number };
   // Records keyed by provider-supplied tool call IDs have no prototype, so IDs like "__proto__"
   // or "constructor" are plain keys.
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = Object.create(null);
@@ -1175,7 +1177,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#bufferedByStep.text = '';
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
-              // So does whatever else the unfinished request streamed: it belongs to no step.
+              // So does whatever else the unfinished request streamed: it belongs to no step. Its
+              // sources and files leave the run too. Its tool calls stay, since an eager tool may
+              // already have run and been carried into the next request, but a call the next
+              // request makes under the same id replaces the recorded one.
+              if (self.#runOutputAtStepStart) {
+                self.#bufferedSources.length = self.#runOutputAtStepStart.sources;
+                self.#bufferedFiles.length = self.#runOutputAtStepStart.files;
+                for (const call of self.#toolCalls.slice(self.#runOutputAtStepStart.toolCalls)) {
+                  self.#replaceableToolCallIds.add(call.payload.toolCallId);
+                }
+              }
+              self.#runOutputAtStepStart = {
+                sources: self.#bufferedSources.length,
+                files: self.#bufferedFiles.length,
+                toolCalls: self.#toolCalls.length,
+              };
               Object.assign(self.#bufferedByStep, {
                 sources: [],
                 files: [],
@@ -1538,6 +1555,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
               self.#bufferedByStepReasoningDetails = {};
               self.#reasoningAtStepStart = undefined;
+              self.#runOutputAtStepStart = undefined;
               self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
@@ -3122,6 +3140,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedReasoning.length = 0;
     this.#bufferedReasoningDetails = {};
     this.#reasoningAtStepStart = undefined;
+    this.#runOutputAtStepStart = undefined;
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;
