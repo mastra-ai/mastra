@@ -34,27 +34,35 @@ curl -sS -H "Authorization: Bearer $SLACK_TOKEN" https://slack.com/api/auth.test
 
 ### 1. List the GitHub logins that need an entry
 
-Take the last 90 days. `gh` writes colour codes into `--jq` output when `CLICOLOR_FORCE` is set, which breaks the `jq` calls below, so run `unset CLICOLOR_FORCE` first. GitHub search returns at most 1,000 PRs per query and `main` merges more than that in 90 days, so query one week at a time. If any week fails (GitHub sometimes answers 502 or 504), run that week again. Don't continue with a gap.
+Take the last 90 days. `gh` writes colour codes into `--jq` output when `CLICOLOR_FORCE` is set, which breaks the `jq` calls below, so run `unset CLICOLOR_FORCE` first. GitHub search returns at most 1,000 PRs per query and `main` merges more than that in 90 days, so query one week at a time. GitHub sometimes answers 502 or 504, so each week is retried; if a week still fails, the loop stops. Don't continue with a gap.
 
 ```bash
 work=$(mktemp -d)
-for w in $(seq 0 12); do
-  from=$(date -u -v-$(( (w+1)*7 ))d +%F 2>/dev/null || date -u -d "$(( (w+1)*7 )) days ago" +%F)
-  to=$(date -u -v-$(( w*7 ))d +%F 2>/dev/null || date -u -d "$(( w*7 )) days ago" +%F)
-  gh pr list --repo mastra-ai/mastra --state merged --base main --limit 1000 \
-    --search "merged:$from..$to" --json author,mergedBy,reviews \
-    --jq '.[] | (.author.login, .mergedBy.login, (.reviews[] | select(.state=="APPROVED") | .author.login))' \
-    > "$work/week-$w.txt" || echo "week $w failed: run it again"
-done
+(
+  for w in $(seq 0 12); do
+    from=$(date -u -v-$(( (w+1)*7 ))d +%F 2>/dev/null || date -u -d "$(( (w+1)*7 )) days ago" +%F)
+    to=$(date -u -v-$(( w*7 ))d +%F 2>/dev/null || date -u -d "$(( w*7 )) days ago" +%F)
+    for try in 1 2 3 4; do
+      gh pr list --repo mastra-ai/mastra --state merged --base main --limit 1000 \
+        --search "merged:$from..$to" --json author,mergedBy,reviews \
+        --jq '.[] | (.author.login, .mergedBy.login, (.reviews[] | select(.state=="APPROVED") | .author.login))' \
+        > "$work/week-$w.txt" && break
+      [ "$try" = 4 ] && { echo "week $w failed: stop and run step 1 again" >&2; exit 1; }
+      sleep 10
+    done
+  done
+)
 ```
 
-Add co-authors credited on `main` through GitHub noreply addresses (`<id>+<login>@users.noreply.github.com`):
+If it prints `week ... failed`, stop: the list is missing that week.
+
+Add co-authors credited on `main` through GitHub noreply addresses, both `<id>+<login>@users.noreply.github.com` and the older `<login>@users.noreply.github.com` (the same forms the alert reads). If the fetch fails, stop rather than read a stale `origin/main`:
 
 ```bash
-git fetch -q origin main
+git fetch -q origin main || { echo "fetch failed: stop" >&2; false; } &&
 git log origin/main --since=90.days --format=%B \
-  | grep -ioE '^co-authored-by:.*<[0-9]+\+[^@>]+@users\.noreply\.github\.com>' \
-  | sed -E 's/.*<[0-9]+\+([^@]+)@.*/\1/' > "$work/coauthors.txt"
+  | grep -ioE '^co-authored-by:.*<([0-9]+\+)?[^@<>[:space:]]+@users\.noreply\.github\.com>' \
+  | sed -E 's/.*<([0-9]+\+)?([^@<>[:space:]]+)@.*/\2/' > "$work/coauthors.txt"
 ```
 
 Keep only people, with their GitHub profile name. `gh pr list` drops the `[bot]` suffix from app accounts, so you can't spot them by name. Ask GitHub for each login's account type instead: apps return 404, bots `Bot` and organisations `Organization`. Retry a lookup that fails with anything other than 404, and stop if it still fails: a silently dropped login would quietly lose a person.
@@ -110,8 +118,8 @@ Match only on exact, unique names. A wrong tag pings the wrong person; a missing
 Normalise every name on both sides the same way: Unicode NFKC, lower-case, trim, and collapse inner whitespace. Nothing else: no fuzzy matching, nicknames, first names, partial matches or emails.
 
 - **Rule A, profile name.** The GitHub profile `name` equals a Slack user's `real_name` or `display_name`, and exactly one Slack user and exactly one GitHub login in your list carry that name. A second candidate on either side makes it ambiguous.
-- **Rule B, login as display name.** Only for logins rule A didn't settle. The GitHub login equals a Slack `display_name`, unique on both sides, and the GitHub profile name, if set, doesn't contradict the Slack `real_name` (after normalising, they are equal or one of them is empty).
-- If A and B point at different Slack users, leave the login out.
+- **Rule B, login as display name.** The GitHub login equals a Slack `display_name`, unique on both sides, and the GitHub profile name, if set, doesn't contradict the Slack `real_name` (after normalising, they are equal or one of them is empty).
+- Check both rules for every login, even one rule A already matched. If A and B point at different Slack users, leave the login out. Otherwise use whichever matched.
 - One Slack user must never end up under two logins.
 
 Everyone else is left out. Keep a list of the logins you left out, split into _ambiguous_ (more than one candidate, or the names contradict) and _no candidate_. Don't pick the likeliest; the person you're working for can settle an ambiguous login in a line if they want it in.
