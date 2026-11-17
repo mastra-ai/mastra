@@ -149,7 +149,7 @@ async function setup(toolName: string) {
     await new Promise(resolve => setTimeout(resolve, 10));
   };
 
-  return { session, events, parked, runId, otherRun, sendStreamResume, releaseRun };
+  return { session, events, parked, runId, otherRun, sendStreamResume, releaseRun, registeredAgent };
 }
 
 describe('AgentController: answering a prompt whose run can no longer be resumed', () => {
@@ -209,5 +209,23 @@ describe('AgentController: answering a prompt whose run can no longer be resumed
     expect(events.some(event => event.type === 'agent_start')).toBe(true);
     expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
     expect(events.some(event => event.type === 'error')).toBe(false);
+  });
+
+  it('keeps a prompt on the same run that the agent still holds', async () => {
+    const { session, events, parked, runId, registeredAgent } = await setup('confirmAction');
+    // Another runtime answered only the parked call; the run still waits on its sibling.
+    vi.spyOn(registeredAgent, 'listSuspendedRuns').mockResolvedValue({
+      runs: [{ runId, toolCalls: [{ toolCallId: 'same-run-sibling', toolName: 'ask_user' }] }],
+    } as any);
+
+    await session.respondToToolSuspension({ toolCallId: parked.toolCallId, resumeData: { confirmed: true } });
+
+    const cancelled = events.filter(event => event.type === 'tool_suspension_cancelled');
+    expect(cancelled.map(event => event.toolCallId)).toEqual([parked.toolCallId]);
+    expect(session.suspensions.has({ toolCallId: 'same-run-sibling', runId })).toBe(true);
+    const prompts = [...session.displayState.get().pendingSuspensions.values()].map(prompt => prompt.toolCallId);
+    expect(prompts.sort()).toEqual(['other-run-call', 'same-run-sibling']);
+    // The run stays parked for the call it still holds.
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
   });
 });

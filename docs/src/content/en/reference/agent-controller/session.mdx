@@ -325,7 +325,7 @@ An addressed resume uses the source thread's mode, model, and thread-owned prefe
 
 After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable without finishing another thread's active run.
 
-If the suspended run no longer exists, for example because another runtime already resumed it, every prompt parked on that run is retracted with a `tool_suspension_cancelled` event whose `reason` is the resume error. The run ends with an `error`, and the next message starts a fresh run. Prompts parked on other runs stay open.
+If the agent no longer holds the suspended call, for example because another runtime already resumed it, the prompt is retracted with a `tool_suspension_cancelled` event whose `reason` is the resume error. Other prompts on that run that the agent no longer holds are retracted with it, and the run ends with an `error`, so the next message starts a fresh run. Prompts the agent still holds, and prompts parked on other runs, stay open.
 
 ```typescript
 await session.respondToToolSuspension({

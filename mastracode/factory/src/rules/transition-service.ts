@@ -224,20 +224,10 @@ function staleRejection(result: FactoryTransitionResultRejected, current: Card):
   );
 }
 
-/** A stale move whose target is the card's current phase has nothing left to do: report where it is. */
-function alreadyInStage(
-  result: FactoryTransitionResultRejected,
-  current: Card,
-  stage: FactoryRuleStage,
-): FactoryTransitionResult {
-  return {
-    status: 'accepted',
-    transitionId: result.transitionId,
-    itemId: result.itemId,
-    revision: current.revision,
-    stage,
-    decisions: [],
-  };
+/** Whether a stale move asked for the board and phase the card is already in. */
+function reachedTarget(request: FactoryTransitionRequest, current: Card): boolean {
+  if (request.reenter || (request.toBoard !== undefined && request.toBoard !== request.board)) return false;
+  return boardForWorkItem(current) === request.board && currentStage(current.stages) === request.stage;
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -410,11 +400,21 @@ export class FactoryTransitionService {
     let from = item;
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
-      if (current && !request.reenter && currentStage(current.stages) === request.stage) {
+      if (current && reachedTarget(request, current)) {
         // Another move already took the card where this one was going (e.g. an approval
-        // that waited while a later run moved it on). Retrying would only go stale again.
-        result = alreadyInStage(result, current, request.stage);
+        // that waited while a later run moved it on). Retrying at the old revision would
+        // only go stale again, so evaluate the move once more against the card as it is:
+        // it commits as a same-phase move, or is rejected for a real reason.
         from = current;
+        result = await this.#evaluateAndCommit(
+          { ...request, expectedRevision: current.revision },
+          transitionId,
+          current,
+        );
+        if (isStale(result)) {
+          const latest = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+          if (latest) result = staleRejection(result, latest);
+        }
       } else if (current) {
         result = staleRejection(result, current);
       }

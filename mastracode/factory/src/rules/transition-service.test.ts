@@ -3258,26 +3258,28 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
 );
 
 describe('a stale agent move into the phase the card already reached', () => {
-  const ship = defineBoard({
-    id: 'ship',
-    name: 'Ship',
-    initialPhase: 'intake',
-    phases: {
-      intake: { name: 'Intake', kind: 'resting', nextPhases: ['building'] },
-      building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['self-review'] },
-      'self-review': {
-        name: 'Self-review',
-        kind: 'working',
-        runner: { context: 'review' },
-        nextPhases: ['review', 'building'],
+  const shipBoard = (transitionPolicy?: BoardTransitionPolicy) =>
+    defineBoard({
+      id: 'ship',
+      name: 'Ship',
+      initialPhase: 'intake',
+      transitionPolicy,
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['building'] },
+        building: { name: 'Building', kind: 'working', runner: { context: 'work' }, nextPhases: ['self-review'] },
+        'self-review': {
+          name: 'Self-review',
+          kind: 'working',
+          runner: { context: 'review' },
+          nextPhases: ['review', 'building'],
+        },
+        review: { name: 'Review', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
       },
-      review: { name: 'Review', kind: 'resting', nextPhases: ['done'] },
-      done: { name: 'Done', kind: 'terminal' },
-    },
-  });
+    });
 
   /** An agent's move, parked for approval, while another run already took the card into Review. */
-  async function overtakenCard() {
+  async function overtakenCard(transitionPolicy?: BoardTransitionPolicy) {
     const seed = await createFactoryStorageForTests();
     const read = await createItem(seed.workItems, {
       board: 'ship',
@@ -3287,7 +3289,7 @@ describe('a stale agent move into the phase the card already reached', () => {
     const service = new FactoryTransitionService({
       configVersion: 'ship-rules',
       storage: seed.workItems,
-      boards: createBoardRegistry({ boards: [ship] }),
+      boards: createBoardRegistry({ boards: [shipBoard(transitionPolicy)] }),
       audit: seed.audit,
     });
     await service.transition({
@@ -3332,6 +3334,54 @@ describe('a stale agent move into the phase the card already reached', () => {
       revision: current.revision,
     });
     expect(await audited()).toEqual(before);
+  });
+
+  it('keeps the real rejection of a stale move the board would not allow anyway', async () => {
+    const { read, current, storage, parkedMove } = await overtakenCard(context =>
+      context.fromStage === context.toStage
+        ? { type: 'reject', code: 'forbidden', reason: 'Cards do not move into the phase they are in.' }
+        : undefined,
+    );
+
+    await expect(parkedMove('review')).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'forbidden',
+      reason: 'Cards do not move into the phase they are in.',
+    });
+    expect(await storage.get({ orgId: 'org-1', id: read.id })).toMatchObject({ revision: current.revision });
+  });
+
+  it("still applies the move's own effects when it lands on the card's phase", async () => {
+    const seed = await createFactoryStorageForTests();
+    const read = await createItem(seed.workItems, { board: 'ship', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'ship-rules',
+      storage: seed.workItems,
+      boards: createBoardRegistry({ boards: [shipBoard()] }),
+    });
+    // A person drags the card into Building, which arms it, then the revision moves on.
+    await expect(
+      service.transition({ ...request(read, { board: 'ship', stage: 'building' }), cause: 'board_drag' }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+    await seed.workItems.update({
+      orgId: 'org-1',
+      id: read.id,
+      userId: 'factory-rule-dispatcher',
+      patch: { metadata: { openPullRequestNumber: 5 } },
+    });
+    const current = (await seed.workItems.get({ orgId: 'org-1', id: read.id }))!;
+    expect(current).toMatchObject({ stages: ['building'], autonomyArmedAt: expect.any(Date) });
+
+    // An intake route read the card before the drag; a route's move withdraws what a person armed.
+    await expect(
+      service.transition({
+        ...request(read, { board: 'ship', stage: 'building', expectedRevision: read.revision }),
+        actor: { type: 'system', id: 'intake-route' },
+        ingress: { type: 'rule', identity: 'stale-route-move' },
+        eventRoute: { routeId: 'route-1' },
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'building' });
+    expect((await seed.workItems.get({ orgId: 'org-1', id: read.id }))?.autonomyArmedAt).toBeNull();
   });
 
   it('still rejects a stale move into another phase with the revision to retry at', async () => {

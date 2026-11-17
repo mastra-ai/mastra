@@ -1777,9 +1777,24 @@ export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallI
   return JSON.stringify([resourceId, threadId, runId, toolCallId]);
 }
 
-/** Whether a resume failed because the agent no longer holds the suspended run. */
+/** Whether a resume failed because the agent no longer holds the suspended call. */
 function isUnresumableRun(error: unknown): boolean {
   return error instanceof MastraError && error.id === 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN';
+}
+
+/** The calls of a run the agent still holds in storage; best-effort, empty when unknown. */
+async function storedToolCallIds(
+  agent: { listSuspendedRuns?: Agent['listSuspendedRuns'] },
+  { threadId, resourceId, runId }: SuspensionAddress,
+): Promise<Set<string>> {
+  if (typeof agent.listSuspendedRuns !== 'function') return new Set();
+  try {
+    const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+    const calls = runs.find(run => run.runId === runId)?.toolCalls ?? [];
+    return new Set(calls.flatMap(call => (call.toolCallId ? [call.toolCallId] : [])));
+  } catch {
+    return new Set();
+  }
 }
 
 /**
@@ -1892,6 +1907,15 @@ export class SessionSuspensions {
       }
     }
     return dropped;
+  }
+
+  /** Whether any suspension is still parked on the run. */
+  hasRun({ resourceId, threadId, runId }: { resourceId: string; threadId: string; runId: string }): boolean {
+    for (const suspension of this.#pending.values()) {
+      if (suspension.resourceId === resourceId && suspension.threadId === threadId && suspension.runId === runId)
+        return true;
+    }
+    return false;
   }
 
   /** Discard the in-memory suspension mirror for a deleted thread. */
@@ -6297,7 +6321,9 @@ export class Session<TState = unknown> {
       this.emit({ type: 'error', error: err });
       // The run tracker may already be reset by the failed start, so name the
       // ending run; otherwise the display would drop other runs' prompts too.
-      if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
+      // A run the agent still holds other calls of stays parked for them.
+      const runStillParked = isUnresumableRun(error) && this.suspensions.hasRun(address);
+      if (!this.suspensions.has(address) && !runStillParked && this.getCurrentRunId() === address.runId)
         await this.finishAgentRun('error', { runId: address.runId });
     }
   }
@@ -6961,16 +6987,22 @@ export class Session<TState = unknown> {
       // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
       restoreAbortedRun?.();
       if (!observer?.dispatched() && isUnresumableRun(error)) {
-        // The agent has no suspended run left to resume (another runtime answered
-        // it, or it was lost). Re-parking would leave prompts that every answer
-        // fails on, so retract every prompt parked on that run instead.
+        // The agent no longer holds this call (another runtime answered it, or the
+        // run was lost). Re-parking would leave a prompt that every answer fails on,
+        // so retract it, along with the run's other prompts the agent no longer holds.
+        // The answered prompt was already dropped before the resume.
         const reason = getErrorFromUnknown(error).message;
-        for (const pending of [
-          { ...address, toolName: suspension.toolName },
-          ...this.suspensions.deleteForRun(address),
-        ]) {
-          this.emit({ type: 'tool_suspension_cancelled', ...pending, reason });
+        const held = await storedToolCallIds(agent, address);
+        const gone = [{ ...address, toolName: suspension.toolName }];
+        for (const sibling of this.suspensions.deleteForRun(address)) {
+          if (!held.has(sibling.toolCallId)) {
+            gone.push(sibling);
+            continue;
+          }
+          this.suspensions.register(sibling);
+          this.#suspensionAgents.set(this.suspensions.get(sibling)!, agent);
         }
+        for (const pending of gone) this.emit({ type: 'tool_suspension_cancelled', ...pending, reason });
       } else if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
