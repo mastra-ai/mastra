@@ -1,5 +1,5 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -404,6 +404,71 @@ describe('WorkspaceFiles', () => {
       await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
       expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+    });
+  });
+  describe('on a phone', () => {
+    const PANEL_WIDTH = 300;
+
+    beforeEach(() => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(
+        query =>
+          ({
+            matches: true,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      );
+      stubContainerWidth(390);
+    });
+
+    /** jsdom lays nothing out, so the drawer's width has to be given for a drag to measure against. */
+    const giveDrawerWidth = () => {
+      const panel = document.querySelector<HTMLElement>('[data-aside-reveal-layer="panel"]');
+      if (!panel) throw new Error('The session panel drawer is not mounted');
+      Object.defineProperty(panel, 'offsetWidth', { configurable: true, value: PANEL_WIDTH });
+    };
+
+    const dragLeft = (target: Element) => {
+      const at = (clientX: number) => ({
+        touches: [{ identifier: 1, clientX, clientY: 400 }],
+        changedTouches: [{ identifier: 1, clientX, clientY: 400 }],
+      });
+      fireEvent.touchStart(target, at(350));
+      for (const x of [330, 300, 250, 200, 150]) fireEvent.touchMove(target, at(x));
+      fireEvent.touchEnd(target, { touches: [], changedTouches: [{ identifier: 1, clientX: 150, clientY: 400 }] });
+    };
+
+    it('slides the panel in from the right edge when the header toggle is pressed, and out on a tap beside it', async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(await screen.findByRole('button', { name: 'Session panel' }));
+
+      const drawer = await screen.findByRole('dialog', { name: 'Session panel' });
+      expect(drawer.querySelector('[data-aside-reveal-layer="panel"]')).not.toBeNull();
+      expect(await within(drawer).findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+
+      await user.click(within(drawer).getByRole('button', { name: 'Close session panel' }));
+
+      expect(screen.queryByRole('dialog', { name: 'Session panel' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('opens the panel when the page is swiped left', async () => {
+      renderPanel();
+      await screen.findByRole('button', { name: 'Session panel' });
+      await waitFor(giveDrawerWidth);
+
+      dragLeft(screen.getByRole('banner'));
+
+      const drawer = await screen.findByRole('dialog', { name: 'Session panel' });
+      expect(await within(drawer).findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Session panel', pressed: true })).toBeInTheDocument();
     });
   });
 });

@@ -5,8 +5,8 @@ const EASE = [0.32, 0.72, 0, 1] as const;
 const EASE_START_SLOPE = EASE[1] / EASE[0];
 export const REVEAL_EASE = `cubic-bezier(${EASE.join(', ')})`;
 
-const DRAG_VAR = '--sidebar-reveal-drag';
-const DURATION_VAR = '--sidebar-reveal-duration';
+/** Marks which reveal holds the shared scope, so a drawer's swipes can't start the drawer on the other edge. */
+const OWNER_ATTR = 'data-reveal-owner';
 
 const LOCK_DISTANCE_PX = 8;
 const TURN_DISTANCE_PX = 8;
@@ -33,16 +33,27 @@ type Track = {
   samples: Sample[];
 };
 
+export type RevealSide = 'left' | 'right';
+
 type RevealGestureOptions = {
   scopeRef: RefObject<HTMLElement | null>;
+  /** Namespaces the layer attribute (`data-<name>-reveal-layer`) and the drag variables (`--<name>-reveal-*`). */
+  name: string;
+  /** The screen edge the panel sits on. A left panel opens on a rightward swipe, a right panel on a leftward one. */
+  side: RevealSide;
   open: boolean;
   onGrab: () => void;
   onRelease: (open: boolean) => void;
   onSettled: () => void;
 };
 
-export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled }: RevealGestureOptions) {
+export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease, onSettled }: RevealGestureOptions) {
   const settleRef = useRef(0);
+  const layerAttr = `data-${name}-reveal-layer`;
+  const dragVar = `--${name}-reveal-drag`;
+  const durationVar = `--${name}-reveal-duration`;
+  // Distances are tracked toward "open": positive opens whichever edge the panel is on.
+  const toward = side === 'left' ? 1 : -1;
   const isOpen = useEffectEvent(() => open);
   const handleGrab = useEffectEvent(onGrab);
   const handleRelease = useEffectEvent(onRelease);
@@ -53,18 +64,21 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
     if (!scope) return;
     const token = ++settleRef.current;
     requestAnimationFrame(() => {
-      const running = revealLayers(scope).flatMap(layer => layer.getAnimations());
+      const running = revealLayers(scope, layerAttr).flatMap(layer => layer.getAnimations());
       void Promise.allSettled(running.map(animation => animation.finished)).then(() => {
         if (token !== settleRef.current) return;
-        clearRevealVar(revealLayers(scope), DURATION_VAR);
+        clearRevealVar(revealLayers(scope, layerAttr), durationVar);
+        if (!isOpen()) releaseOwner(scope, name);
         handleSettled();
       });
     });
   });
 
   useEffect(() => {
+    const scope = scopeRef.current;
+    if (open && scope) scope.setAttribute(OWNER_ATTR, name);
     settle();
-  }, [open]);
+  }, [open, scopeRef, name]);
 
   useEffect(() => {
     const scope = scopeRef.current;
@@ -76,9 +90,9 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       const committed = Math.abs(ended.offset - ended.origin) >= COMMIT_DISTANCE_PX;
       const endsOpen = committed ? ended.heading > 0 : ended.startedOpen;
       const distance = Math.abs((endsOpen ? ended.width : 0) - ended.offset);
-      const speedTowardTarget = endsOpen ? velocity : -velocity;
-      setRevealVar(ended.layers, DURATION_VAR, `${settleDuration(distance, speedTowardTarget)}ms`);
-      clearRevealVar(ended.layers, DRAG_VAR);
+      const speedTowardTarget = (endsOpen ? velocity : -velocity) * toward;
+      setRevealVar(ended.layers, durationVar, `${settleDuration(distance, speedTowardTarget)}ms`);
+      clearRevealVar(ended.layers, dragVar);
       handleRelease(endsOpen);
       settle();
     };
@@ -88,22 +102,26 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       const dy = touch.clientY - current.startY;
       if (Math.hypot(dx, dy) < LOCK_DISTANCE_PX) return 'pending';
 
-      const layers = revealLayers(scope);
-      const width = layerNamed(layers, 'panel')?.offsetWidth ?? 0;
+      const owner = scope.getAttribute(OWNER_ATTR);
+      if (owner && owner !== name) return 'ignored';
+      const layers = revealLayers(scope, layerAttr);
+      const width = layerNamed(layers, layerAttr, 'panel')?.offsetWidth ?? 0;
       const opening = !isOpen();
-      if (!width || Math.abs(dx) <= Math.abs(dy) || dx > 0 !== opening) return 'ignored';
+      if (!width || Math.abs(dx) <= Math.abs(dy) || dx * toward > 0 !== opening) return 'ignored';
       if (ownsHorizontalSwipe(current.target, scope, dx)) return 'ignored';
 
       current.locked = true;
       current.startedOpen = !opening;
       current.width = width;
       current.startX += Math.sign(dx) * LOCK_DISTANCE_PX;
-      current.origin = liveOffset(layerNamed(layers, 'scrim')) ?? (opening ? 0 : width);
-      current.heading = Math.sign(dx);
+      const live = liveOffset(layerNamed(layers, layerAttr, 'scrim'));
+      current.origin = live === undefined ? (opening ? 0 : width) : live * toward;
+      current.heading = Math.sign(dx * toward);
       current.turn = current.origin;
       current.layers = layers;
-      setRevealVar(layers, DURATION_VAR, '0ms');
+      setRevealVar(layers, durationVar, '0ms');
       settleRef.current++;
+      scope.setAttribute(OWNER_ATTR, name);
       handleGrab();
       return 'locked';
     };
@@ -149,9 +167,9 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       }
 
       if (event.cancelable) event.preventDefault();
-      current.offset = Math.min(current.width, Math.max(0, current.origin + touch.clientX - current.startX));
+      current.offset = Math.min(current.width, Math.max(0, current.origin + (touch.clientX - current.startX) * toward));
       steer(current);
-      setRevealVar(current.layers, DRAG_VAR, String(current.offset / current.width));
+      setRevealVar(current.layers, dragVar, String(current.offset / current.width));
     };
 
     const onTouchEnd = (event: TouchEvent) => {
@@ -172,19 +190,24 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       scope.removeEventListener('touchend', onTouchEnd);
       scope.removeEventListener('touchcancel', onTouchEnd);
       settles.current++;
-      const layers = revealLayers(scope);
-      clearRevealVar(layers, DRAG_VAR);
-      clearRevealVar(layers, DURATION_VAR);
+      const layers = revealLayers(scope, layerAttr);
+      clearRevealVar(layers, dragVar);
+      clearRevealVar(layers, durationVar);
+      releaseOwner(scope, name);
     };
-  }, [scopeRef]);
+  }, [scopeRef, layerAttr, dragVar, durationVar, name, toward]);
 }
 
-function revealLayers(scope: ParentNode) {
-  return Array.from(scope.querySelectorAll<HTMLElement>('[data-sidebar-reveal-layer]'));
+function revealLayers(scope: ParentNode, layerAttr: string) {
+  return Array.from(scope.querySelectorAll<HTMLElement>(`[${layerAttr}]`));
 }
 
-function layerNamed(layers: readonly HTMLElement[], name: 'panel' | 'scrim') {
-  return layers.find(layer => layer.dataset.sidebarRevealLayer === name);
+function layerNamed(layers: readonly HTMLElement[], layerAttr: string, name: 'panel' | 'scrim') {
+  return layers.find(layer => layer.getAttribute(layerAttr) === name);
+}
+
+function releaseOwner(scope: Element, name: string) {
+  if (scope.getAttribute(OWNER_ATTR) === name) scope.removeAttribute(OWNER_ATTR);
 }
 
 function setRevealVar(layers: readonly HTMLElement[], name: string, value: string) {

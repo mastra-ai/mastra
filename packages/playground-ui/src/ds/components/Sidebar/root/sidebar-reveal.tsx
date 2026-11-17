@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { focusFirstIn, inertOutside } from './reveal-focus';
 import { useSidebar } from './sidebar-context';
 import { REVEAL_EASE, useRevealGesture } from './use-reveal-gesture';
 import { focusRingInset } from '@/ds/primitives/transitions';
@@ -9,7 +10,6 @@ import { cn } from '@/lib/utils';
 import './sidebar-reveal.css';
 
 const REVEAL_EASE_VAR = '--sidebar-reveal-ease';
-const TABBABLE = 'a[href], button, input, select, textarea, summary, [tabindex]';
 
 type SidebarRevealProps = {
   children: ReactNode;
@@ -54,6 +54,8 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
 
   useRevealGesture({
     scopeRef,
+    name: 'sidebar',
+    side: 'left',
     open: openMobile,
     onGrab: () => flushSync(() => setMobileDrawerPresent(true)),
     onRelease: setOpenMobile,
@@ -104,31 +106,4 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
       <span tabIndex={0} className="sr-only" onFocus={() => focusFirstIn(panelRef.current)} />
     </div>
   );
-}
-
-function focusFirstIn(container: HTMLElement | null) {
-  if (!container) return;
-  for (const candidate of container.querySelectorAll(TABBABLE)) {
-    if (!(candidate instanceof HTMLElement) || candidate.tabIndex < 0) continue;
-    candidate.focus();
-    if (document.activeElement === candidate) return;
-  }
-  container.focus();
-}
-
-function inertOutside(root: Element) {
-  const marked: Element[] = [];
-  let node = root;
-  while (node !== document.body && node.parentElement) {
-    const parent = node.parentElement;
-    for (const sibling of parent.children) {
-      if (sibling === node || sibling.hasAttribute('inert')) continue;
-      sibling.setAttribute('inert', '');
-      marked.push(sibling);
-    }
-    node = parent;
-  }
-  return () => {
-    for (const element of marked) element.removeAttribute('inert');
-  };
 }

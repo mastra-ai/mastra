@@ -30,6 +30,7 @@ export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, s
         data-slot="app-shell-content"
         className="flex h-full min-h-0 min-w-0 flex-col"
         data-sidebar-reveal-layer="page"
+        data-aside-reveal-layer="page"
       >
         {mobileHeader}
         <div

@@ -1,0 +1,86 @@
+/* The right-edge mirror of sidebar-reveal.css: the page slides left instead of right. */
+@property --aside-reveal-drag {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --aside-reveal-duration {
+  syntax: '*';
+  inherits: false;
+}
+
+@property --aside-reveal-progress {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --aside-reveal-motion {
+  syntax: '*';
+  inherits: false;
+}
+
+[data-aside-reveal] {
+  --aside-reveal-width: calc(100vw - 3.5rem);
+  --aside-reveal-radius: 0 var(--studio-frame-radius, 1.5rem) var(--studio-frame-radius, 1.5rem) 0;
+  --aside-reveal-rest: 0;
+  --aside-reveal-settle: 320ms;
+}
+
+[data-aside-reveal][data-aside-reveal-open='true'] {
+  --aside-reveal-rest: 1;
+  --aside-reveal-settle: 400ms;
+}
+
+[data-aside-reveal] [data-aside-reveal-layer] {
+  --aside-reveal-progress: var(--aside-reveal-drag, var(--aside-reveal-rest));
+  --aside-reveal-motion: var(--aside-reveal-duration, var(--aside-reveal-settle)) var(--aside-reveal-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-aside-reveal] [data-aside-reveal-layer] {
+    --aside-reveal-motion: 0ms;
+  }
+}
+
+[data-aside-reveal-layer='panel'] {
+  scale: calc(0.95 + 0.05 * var(--aside-reveal-progress));
+  opacity: var(--aside-reveal-progress);
+  transition:
+    scale var(--aside-reveal-motion),
+    opacity var(--aside-reveal-motion);
+}
+
+[data-aside-reveal-layer='scrim'] {
+  translate: calc(-1 * var(--aside-reveal-progress) * var(--aside-reveal-width)) 0;
+  border-radius: var(--aside-reveal-radius);
+  opacity: var(--aside-reveal-progress);
+  transition:
+    translate var(--aside-reveal-motion),
+    opacity var(--aside-reveal-motion);
+}
+
+[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='panel'] {
+  will-change: scale, opacity;
+}
+
+[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='scrim'] {
+  will-change: translate, opacity;
+}
+
+[data-aside-reveal][data-aside-reveal-present='true'] [data-aside-reveal-layer='page'] {
+  position: relative;
+  z-index: 1;
+  overflow: clip;
+  border-radius: var(--aside-reveal-radius);
+  box-shadow:
+    0 0 0 1px var(--surface-rim),
+    var(--elevation-overlay);
+  translate: calc(-1 * var(--aside-reveal-progress) * var(--aside-reveal-width)) 0;
+  transition: translate var(--aside-reveal-motion);
+  will-change: translate;
+}
+
+[data-aside-reveal][data-aside-reveal-present='true'] [data-slot='app-shell'] {
+  overflow-x: clip;
+}

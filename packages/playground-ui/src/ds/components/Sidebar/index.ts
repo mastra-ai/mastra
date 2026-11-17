@@ -27,6 +27,7 @@ export {
   type SidebarState,
   type SidebarStateContextValue,
 } from './root/sidebar-context';
+export { AsideReveal, type AsideRevealProps } from './root/aside-reveal';
 export { SidebarMobileTrigger, type SidebarMobileTriggerProps } from './root/sidebar-mobile-trigger';
 export { SidebarProvider, type SidebarProviderProps } from './root/sidebar-provider';
 export { SIDEBAR_WIDTHS } from './root/sidebar-widths';

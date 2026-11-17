@@ -1,7 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { useState } from 'react';
+import { AsideReveal, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
+import { useRef, useState } from 'react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
 import { cardRadiusClass, cardWidthStyle, popoverSizeClass } from '../layout';
@@ -11,7 +12,9 @@ import { IconSidebarSimpleRightWide } from '@mastra/playground-ui/icons/central/
 
 export function WorkspaceFilesToggle() {
   const { open, setOpen, workspacePath, canDock } = useWorkspacePanel();
+  const isMobile = useMaybeSidebarState()?.isMobile ?? false;
   const [size, setSize] = useState<WorkspacePanelSize>('compact');
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (!workspacePath) return null;
 
@@ -32,6 +35,27 @@ export function WorkspaceFilesToggle() {
       >
         <IconSidebarSimpleRightWide />
       </Button>
+    );
+  }
+
+  // Phones get the panel as a right-edge drawer, swiped in like the navigation drawer on the left.
+  if (isMobile) {
+    return (
+      <>
+        <Button
+          ref={triggerRef}
+          size="icon-sm"
+          variant={open ? 'default' : 'ghost'}
+          aria-label="Session panel"
+          aria-pressed={open}
+          onClick={() => setOpen(!open)}
+        >
+          <IconSidebarSimpleRightWide />
+        </Button>
+        <AsideReveal open={open} onOpenChange={setOpen} label="Session panel" triggerRef={triggerRef} className="p-2">
+          <WorkspaceFilesContent visible={open} onSizeChange={setSize} />
+        </AsideReveal>
+      </>
     );
   }
 
