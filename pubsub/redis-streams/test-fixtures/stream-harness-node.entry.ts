@@ -502,10 +502,15 @@ async function main() {
       if (!thread) throw new Error(`no thread subscription ${cmd.id}`);
       if (cmd.waitForTerminalMs) {
         const deadline = Date.now() + cmd.waitForTerminalMs;
-        while (!thread.raw.some(frame => TERMINAL.has(frame.type)) && Date.now() < deadline) {
+        while (
+          !thread.raw.some(frame => TERMINAL.has(frame.type) || frame.type === '(threw)') &&
+          Date.now() < deadline
+        ) {
           await new Promise(resolve => setTimeout(resolve, 50));
         }
-        if (!thread.raw.some(frame => TERMINAL.has(frame.type))) thread.raw.push({ type: '(timeout)' });
+        if (!thread.raw.some(frame => TERMINAL.has(frame.type) || frame.type === '(threw)')) {
+          thread.raw.push({ type: '(timeout)' });
+        }
       }
       thread.unsubscribe();
       await Promise.race([thread.done, new Promise(resolve => setTimeout(resolve, 1_000))]);
