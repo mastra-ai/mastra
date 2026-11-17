@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Update observability query compatibility.
+Reject unsupported token search predicates.

@@ -77,8 +77,7 @@ export type TracesFiltersActions = {
 export type TracesFiltersContextValue = TracesFiltersActions & {
   /** The host's filters with the entries this server can't query dropped. */
   filters: TracesFilters;
-  /** Normalized search accepted by the query API; raw text stays in filters. */
-  textSearch?: string;
+  hasTokenSearch: boolean;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;

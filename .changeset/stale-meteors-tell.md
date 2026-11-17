@@ -2,4 +2,4 @@
 '@mastra/playground-ui': minor
 ---
 
-Update experimental observability search filters.
+Updated search requests for hosts supporting token search.

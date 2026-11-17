@@ -189,6 +189,7 @@ export const buildTracesQueryRequest = ({
     tokens: filters.tokens,
     groups: filters.groups,
     excludedFieldIds: traceQueryUnqueryableFieldIds(support),
+    withTextSearch: support.withTextSearch,
     now,
   });
 

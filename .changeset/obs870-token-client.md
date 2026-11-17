@@ -2,4 +2,4 @@
 '@mastra/client-js': minor
 ---
 
-Update experimental observability query types.
+Updated experimental search types for supporting hosts.

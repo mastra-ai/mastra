@@ -2,4 +2,4 @@
 '@mastra/server': minor
 ---
 
-Update experimental observability query contracts.
+Removed unsupported experimental textSearch requests.

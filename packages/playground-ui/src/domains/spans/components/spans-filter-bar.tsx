@@ -13,8 +13,6 @@ const createItemId = (fieldId: string) => fieldId;
 
 export type SpansFilterBarProps = {
   withTextSearch?: boolean;
-  textSearch?: string;
-  onTextSearchChange?: (value: string | undefined) => void;
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
@@ -38,8 +36,6 @@ export type SpansFilterBarProps = {
 /** The spans filter bar: the time range plus the fields `querySpans()` accepts. */
 export function SpansFilterBar({
   withTextSearch = false,
-  textSearch,
-  onTextSearchChange,
   datePreset,
   dateFrom,
   dateTo,
@@ -60,8 +56,6 @@ export function SpansFilterBar({
     tokens,
     groups,
     onFiltersChange,
-    textSearch,
-    onTextSearchChange,
   });
 
   return (

@@ -2,7 +2,7 @@ import { EntityType } from '@mastra/core/observability';
 import type { TraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import { buildTraceQueryRequest, resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
@@ -46,7 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
-import { effectiveTextSearch } from '@/domains/observability/lib/text-search';
+import { hasTokenSearch } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
@@ -123,7 +123,9 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
-  const withTextSearch = withQueryTrace && (capabilities?.capabilities.traceQueryTokenSearch ?? false);
+  const withTextSearch =
+    withQueryTrace &&
+    !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
   const filters = useMemo(() => {
@@ -298,22 +300,33 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const textSearch = effectiveTextSearch(filters.textSearch);
-  const contentFiltersApplied = !!textSearch || filters.tokens.length > 0 || filters.groups.length > 0;
+  const tokenSearchApplied = hasTokenSearch(
+    buildTraceQueryRequest({ tokens: filters.tokens, groups: filters.groups, withTextSearch, now: new Date(0) }).where,
+  );
+  const contentFiltersApplied = tokenSearchApplied || filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
     () => ({
       ...filtersActions,
       filters,
-      textSearch,
+      hasTokenSearch: tokenSearchApplied,
       dateFrom,
       dateTo,
       filtersApplied,
       contentFiltersApplied,
       runningSelected,
     }),
-    [filtersActions, filters, textSearch, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
+    [
+      filtersActions,
+      filters,
+      tokenSearchApplied,
+      dateFrom,
+      dateTo,
+      filtersApplied,
+      contentFiltersApplied,
+      runningSelected,
+    ],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

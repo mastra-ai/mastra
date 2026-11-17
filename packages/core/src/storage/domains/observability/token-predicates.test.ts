@@ -3,8 +3,16 @@ import { planSpanAggregate } from './span-aggregate';
 import { planSpanQuery, encodeSpanQueryCursor } from './span-query';
 import { parseTraceAggregateRequest } from './trace-aggregate';
 import { planTraceAggregate } from './trace-aggregate-planner';
-import { parseQueryThreadsInput, parseTraceQueryRequest, TraceQueryCursorError } from './trace-query';
+import {
+  parseQueryThreadsInput,
+  parseTraceQueryRequest,
+  TraceQueryCursorError,
+  TRACE_QUERY_TOKEN_FIELDS,
+} from './trace-query';
 import { planThreadQuery, planTraceQuery } from './trace-query-plan';
+
+const issue = (code: string, path: Array<string | number>) =>
+  expect.objectContaining({ issues: expect.arrayContaining([expect.objectContaining({ code, path })]) });
 
 const options = { allowTokenSearch: true };
 const timeRange = { from: '2026-11-01T00:00:00Z', to: '2026-11-08T00:00:00Z' };
@@ -117,22 +125,34 @@ describe.each(cases)('%s token predicates', (_, plan, related) => {
       related ? { type: 'relation', collection: 'spans', quantifier: 'some', predicate: expected } : expected,
     );
   });
-  it('supports all six fields without changing token case or punctuation', () => {
-    const result = plan(wrap(token('all', '  foo-Bar 😀  ')));
-    expect(JSON.stringify(result.where)).toContain('foo-Bar 😀');
+  it.each(TRACE_QUERY_TOKEN_FIELDS)('supports %s without changing token case or punctuation', field => {
+    const result = plan(wrap(token(field, '  foo-Bar 😀  ')));
+    const expected = { type: 'tokens', field, operator: 'hasAllTokens', value: 'foo-Bar 😀' };
+    expect(result.where).toEqual(
+      related ? { type: 'relation', collection: 'spans', quantifier: 'some', predicate: expected } : expected,
+    );
   });
   it.each(['attributes', 'requestContext', 'name', 'all); DROP TABLE spans'])('rejects nonindexed field %s', field => {
-    expect(() => plan(wrap(token(field, 'tacos')))).toThrow();
+    expect(() => plan(wrap(token(field, 'tacos')))).toThrow(issue('invalid_request', ['where']));
   });
   it.each(['', ' ', 'x'.repeat(257), null, 12])('rejects invalid search value %j', value => {
-    expect(() => plan(wrap(token('input', value)))).toThrow();
+    expect(() => plan(wrap(token('input', value)))).toThrow(
+      issue(
+        'invalid_request',
+        typeof value === 'string'
+          ? [...(related ? ['where', 'spans', 'some'] : ['where']), 'right', 'literal']
+          : ['where'],
+      ),
+    );
   });
   it('counts Unicode code points for the token value limit', () => {
     expect(() => plan(wrap(token('input', '😀'.repeat(256))))).not.toThrow();
-    expect(() => plan(wrap(token('input', '😀'.repeat(257))))).toThrow();
+    expect(() => plan(wrap(token('input', '😀'.repeat(257))))).toThrow(
+      issue('invalid_request', [...(related ? ['where', 'spans', 'some'] : ['where']), 'right', 'literal']),
+    );
   });
   it('rejects the removed top-level textSearch field', () => {
-    expect(() => plan(undefined, { textSearch: 'tacos' })).toThrow();
+    expect(() => plan(undefined, { textSearch: 'tacos' })).toThrow(issue('invalid_request', []));
   });
 });
 
@@ -150,30 +170,36 @@ it('binds span cursors to token fields and values', () => {
   }
 });
 it('rejects trace root, feedback, score, and delta token predicates', () => {
-  for (const where of [
-    token('input', 'tacos'),
-    { feedback: { some: token('input', 'tacos') } },
-    { scores: { some: token('input', 'tacos') } },
-  ]) {
-    expect(() => planTraceQuery(parseTraceQueryRequest({ timeRange, where }), options)).toThrow();
+  for (const [where, path] of [
+    [token('input', 'tacos'), ['where']],
+    [{ feedback: { some: token('input', 'tacos') } }, ['where', 'feedback', 'some']],
+    [{ scores: { some: token('input', 'tacos') } }, ['where', 'scores', 'some']],
+  ] as const) {
+    expect(() => planTraceQuery(parseTraceQueryRequest({ timeRange, where }), options)).toThrow(
+      issue('field_not_allowed', [...path]),
+    );
   }
   expect(() =>
     planTraceQuery(
       parseTraceQueryRequest({ timeRange, mode: 'delta', where: { spans: { some: token('all', 'tacos') } } }),
       options,
     ),
-  ).toThrow();
+  ).toThrow(issue('invalid_request', ['where']));
 });
 
 it('rejects token predicates when an older host has not opted in', () => {
   const where = token('all', 'tacos');
   const traceWhere = { spans: { some: where } };
-  expect(() => planSpanQuery({ timeRange, where })).toThrow();
-  expect(() => planSpanAggregate({ timeRange, where, measures: ['count'] })).toThrow();
-  expect(() => planTraceQuery(parseTraceQueryRequest({ timeRange, where: traceWhere }))).toThrow();
+  expect(() => planSpanQuery({ timeRange, where })).toThrow(issue('operator_not_allowed', ['where', 'op']));
+  expect(() => planSpanAggregate({ timeRange, where, measures: ['count'] })).toThrow(
+    issue('operator_not_allowed', ['where', 'op']),
+  );
+  expect(() => planTraceQuery(parseTraceQueryRequest({ timeRange, where: traceWhere }))).toThrow(
+    issue('operator_not_allowed', ['where', 'spans', 'some', 'op']),
+  );
   expect(() =>
     planTraceAggregate(parseTraceAggregateRequest({ timeRange, where: traceWhere, measures: ['count'] })),
-  ).toThrow();
+  ).toThrow(issue('operator_not_allowed', ['where', 'spans', 'some', 'op']));
 });
 
 it.each(['selection', 'related trace'])('explains that thread queries cannot use token search in %s', location => {

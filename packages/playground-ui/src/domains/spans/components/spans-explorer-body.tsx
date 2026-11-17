@@ -11,7 +11,6 @@ import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
-import { spanTokenSearch } from '@/domains/observability/lib/token-search-predicate';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
 import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
@@ -44,8 +43,10 @@ export type SpansExplorerBodyProps = {
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
 export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
   const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
-  const withTextSearch = capabilities?.capabilities.spanQueryTokenSearch ?? false;
-  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS, withTextSearch });
+  const withTextSearch = !!(
+    capabilities?.capabilities.spanQueryTokenSearch && capabilities.capabilities.spanAggregateTokenSearch
+  );
+  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS });
   const { timeRange, tokens, groups } = filters;
   const columns = useTraceColumnPreferences({ scope: 'spans' });
 
@@ -92,21 +93,31 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const where = useMemo(
     () =>
       buildSpanQueryWhere(tokens, groups, {
+        withTextSearch,
         withContextFields,
         withOutcomeFields,
         withModelFields,
         withTimeToFirstChunk,
         withTimeToFirstToken,
       }),
-    [tokens, groups, withContextFields, withOutcomeFields, withModelFields, withTimeToFirstChunk, withTimeToFirstToken],
+    [
+      tokens,
+      groups,
+      withTextSearch,
+      withContextFields,
+      withOutcomeFields,
+      withModelFields,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+    ],
   );
   const query = useMemo<SpanQueryArgs>(
     () => ({
       timeRange,
       orderBy: [{ field: sortField, direction: sortDirection }],
-      where: spanTokenSearch(where, filters.textSearch),
+      where,
     }),
-    [timeRange, sortField, sortDirection, where, filters.textSearch],
+    [timeRange, sortField, sortDirection, where],
   );
 
   const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
@@ -143,9 +154,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
             <ActionRow>
               <ActionRow.Start>
                 <SpansFilterBar
-                  textSearch={filters.searchValue}
                   withTextSearch={withTextSearch}
-                  onTextSearchChange={withTextSearch ? filters.setTextSearch : undefined}
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
                   dateTo={filters.dateTo}
@@ -169,7 +178,6 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
         chart={
           <SpansExplorerHistogram
             timeRange={timeRange}
-            textSearch={filters.textSearch}
             where={where}
             onZoom={({ from, to }) => filters.onZoom(from, to)}
           />

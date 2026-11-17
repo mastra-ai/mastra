@@ -27,12 +27,13 @@ export function TracesExplorerHistogram() {
   const {
     rootSource,
     withQueryTrace,
+    withTextSearch,
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
     withOutcomeFields,
   } = useTracesConfig();
-  const { filters, textSearch, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
   const selectionKey = JSON.stringify(
@@ -40,6 +41,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
+      withTextSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -55,6 +57,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
+      withTextSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -69,10 +72,19 @@ export function TracesExplorerHistogram() {
       // No groupBy means a single group; the default limit would multiply past the server's row cap.
       limit: 1,
     };
-  }, [filters, dateFrom, dateTo, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, now]);
+  }, [
+    filters,
+    dateFrom,
+    dateTo,
+    withRootDuration,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
+    withOutcomeFields,
+    withTextSearch,
+    now,
+  ]);
 
   const hidden =
-    !!textSearch ||
     rootSource === 'aggregated' ||
     !withQueryTrace ||
     !aggregateAvailable.enabled ||

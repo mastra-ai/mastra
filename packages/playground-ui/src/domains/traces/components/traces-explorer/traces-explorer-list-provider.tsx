@@ -12,7 +12,6 @@ import {
   useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
-import { traceTokenSearch } from '@/domains/observability/lib/token-search-predicate';
 
 type TracesListProviderProps = {
   sort: TracesSort;
@@ -32,6 +31,7 @@ export const TracesListProvider = memo(function TracesListProvider({
   const {
     rootSource,
     withQueryTrace,
+    withTextSearch,
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
@@ -41,7 +41,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withDeltaPolling,
     isCapabilitiesLoading,
   } = useTracesConfig();
-  const { filters, textSearch, dateFrom, dateTo } = useTracesFilters();
+  const { filters, hasTokenSearch, dateFrom, dateTo } = useTracesFilters();
   const { displayedPreferences } = useTraceUsageColumns();
   // A TTFC/TTFT sort the store can't run, or on a column that isn't shown, lists newest first instead.
   // The host keeps its raw value, like filters the server can't query.
@@ -61,6 +61,7 @@ export const TracesListProvider = memo(function TracesListProvider({
         filters,
         dateFrom,
         dateTo,
+        withTextSearch,
         withRootDuration,
         withTimeToFirstChunk,
         withTimeToFirstToken,
@@ -69,14 +70,13 @@ export const TracesListProvider = memo(function TracesListProvider({
       });
       return {
         ...query,
-        where: traceTokenSearch(query.where, textSearch),
         ...(rootSource === 'aggregated' ? { rootSource } : {}),
       };
     },
     orderBy: [sort],
     // An explicit projection must never fall back to the legacy list endpoint.
     withQueryTrace: rootSource === 'aggregated' || withQueryTrace,
-    withDeltaPolling: !textSearch && rootSource !== 'aggregated' && withDeltaPolling,
+    withDeltaPolling: !hasTokenSearch && rootSource !== 'aggregated' && withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });

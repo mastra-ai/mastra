@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Update experimental observability search filters.
+Replaced experimental textSearch with token predicates for supporting hosts.

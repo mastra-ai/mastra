@@ -172,6 +172,13 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   'spans.timeToFirstChunkMs': 'filterSpanTimeToFirstChunkMs',
   'spans.timeToFirstTokenMs': 'filterSpanTimeToFirstTokenMs',
   'spans.error': 'filterSpanError',
+  'spans.input': 'filterSpanInput',
+  'spans.output': 'filterSpanOutput',
+  'spans.inputPreview': 'filterSpanInputPreview',
+  'spans.outputPreview': 'filterSpanOutputPreview',
+  'spans.errorPreview': 'filterSpanErrorPreview',
+  'spans.all': 'filterSpanAll',
+
   'scores.scorerId': 'filterScorerId',
   'scores.score': 'filterScore',
   'feedback.feedbackType': 'filterFeedbackType',
@@ -200,7 +207,7 @@ export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOp
 
 /** The legacy pick-multi neutral value. A text-match literal `Any` is a real word, not the sentinel. */
 export const isLegacyAnyValue = (value: unknown, operatorId: TraceFilterOperatorId): boolean =>
-  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches';
+  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches' && operatorId !== 'hasAllTokens';
 
 const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
   const raw = searchParams.get(traceFilterOperatorParam(valueParam));
@@ -298,6 +305,7 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'lte', label: 'at most' },
   { id: 'matches', label: 'matches', freeText: true },
   { id: 'notMatches', label: 'does not match', freeText: true },
+  { id: 'hasAllTokens', label: 'contains words', freeText: true },
 ];
 
 export const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
@@ -413,6 +421,7 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
 
 /** Which optional trace query fields the server declares support for. */
 export type TraceQueryFieldSupport = {
+  withTextSearch?: boolean;
   /** Root `durationMs`, declared by `traceQueryRootDuration`. */
   withRootDuration?: boolean;
   /** Root and span `timeToFirstChunkMs`, declared by `traceQueryTimeToFirstChunk`. */
@@ -742,9 +751,8 @@ export function filterBarExpressionToTraceFilters(expression: FilterBarExpressio
 }
 
 function filterBarGroupToTraceGroup(group: FilterBarGroup): TraceFilterGroup {
-  const nodes = group.nodes.map(
-    (node): TraceFilterNode =>
-      isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
+  const nodes = group.nodes.map((node): TraceFilterNode =>
+    isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
   );
   // Empty groups are kept: "Advanced filter…" emits one and opens its editor, and the
   // FilterBar prunes it itself when the popover closes without any condition.
@@ -780,10 +788,9 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     const operatorId = readTraceFilterOperator(searchParams, paramName);
     const raw = searchParams.getAll(paramName);
 
-    // Presence-only fields can't match a value; a hand-edited URL that gives
-    // them one would show a chip for a filter that is never applied. A pending
-    // chip (empty value, no operator yet) must still survive the round-trip.
-    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+    // Error supports presence and gated word search. Other value operators are
+    // invalid; retain pending chips so users can finish selecting an operator.
+    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId) && operatorId !== 'hasAllTokens') {
       if (operatorId ? !isPresenceOperator(operatorId) : Boolean(raw[0])) continue;
     }
 

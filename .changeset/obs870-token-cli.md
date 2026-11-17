@@ -2,4 +2,4 @@
 'mastra': minor
 ---
 
-Update experimental observability command schemas.
+Updated experimental search commands for supporting hosts.

@@ -1,5 +1,6 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { tokenSearchPredicate } from '../observability/lib/token-search-predicate';
 import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
@@ -27,6 +28,7 @@ export const TRACE_FILTER_OPERATOR_IDS = [
   'lte',
   'matches',
   'notMatches',
+  'hasAllTokens',
 ] as const;
 export type TraceFilterOperatorId = (typeof TRACE_FILTER_OPERATOR_IDS)[number];
 
@@ -61,6 +63,7 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
   lte: 'lte',
   matches: 'matches',
   notMatches: 'notMatches',
+  hasAllTokens: 'hasAllTokens',
 } as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
 
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
@@ -136,6 +139,8 @@ export function scalarPredicate(
 ): TraceQueryScalarPredicate | undefined {
   const queryOp = TRACE_FILTER_OPERATOR_TO_QUERY_OP[op];
   switch (queryOp) {
+    case 'hasAllTokens':
+      return tokenSearchPredicate(path, values[0]);
     case 'exists':
     case 'notExists':
       return { op: queryOp, path };
@@ -187,9 +192,16 @@ const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error']);
 function tokenToTraceQueryPredicate(
   token: TraceFilterToken,
   excludedFieldIds: ReadonlySet<string>,
+  withTextSearch: boolean,
 ): TokenPredicate | undefined {
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) || excludedFieldIds.has(token.fieldId)) return undefined;
   const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
+  if (operatorId === 'hasAllTokens') {
+    const { scope, path } = resolveTraceQueryPath(token.fieldId);
+    if (!withTextSearch || scope !== 'spans') return undefined;
+    const predicate = tokenSearchPredicate(path, token.value);
+    return predicate ? { scope, predicate } : undefined;
+  }
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
   // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
   if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
@@ -253,13 +265,17 @@ function tokenToTraceQueryPredicate(
  *  merged into a single `some`. Inside an `or` group each token stands alone. */
 function predicatesForTokens(
   tokens: TraceFilterToken[],
-  { mergeRelated, excludedFieldIds }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string> },
+  {
+    mergeRelated,
+    excludedFieldIds,
+    withTextSearch,
+  }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string>; withTextSearch: boolean },
 ) {
   const args: TraceQueryPredicate[] = [];
   const related: Record<TraceQueryRelatedScope, TraceQueryScalarPredicate[]> = { spans: [], scores: [], feedback: [] };
 
   for (const token of tokens) {
-    const result = tokenToTraceQueryPredicate(token, excludedFieldIds);
+    const result = tokenToTraceQueryPredicate(token, excludedFieldIds, withTextSearch);
     if (!result) continue;
     if (!('scope' in result)) {
       args.push(result.predicate);
@@ -283,12 +299,13 @@ function predicatesForTokens(
 function groupToTraceQueryPredicate(
   group: TraceFilterGroup,
   excludedFieldIds: ReadonlySet<string>,
+  withTextSearch: boolean,
 ): TraceQueryPredicate | undefined {
   const tokens = group.nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node));
-  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds });
+  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds, withTextSearch });
   for (const node of group.nodes) {
     if (!isTraceFilterGroup(node)) continue;
-    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds);
+    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds, withTextSearch);
     if (predicate) args.push(predicate);
   }
   if (args.length === 0) return undefined;
@@ -303,6 +320,7 @@ export function buildTraceQueryRequest({
   tokens,
   groups = [],
   excludedFieldIds = new Set(),
+  withTextSearch = false,
   now,
 }: Omit<Parameters<typeof buildTraceListFilters>[0], 'tokens' | 'status'> & {
   status?: TraceStatusFilter;
@@ -310,6 +328,7 @@ export function buildTraceQueryRequest({
   groups?: TraceFilterGroup[];
   /** Fields the server cannot query (e.g. `durationMs` without `traceQueryRootDuration`); dropped from tokens and groups. */
   excludedFieldIds?: ReadonlySet<string>;
+  withTextSearch?: boolean;
   now: Date;
 }): Pick<QueryTracesInput, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
@@ -317,10 +336,10 @@ export function buildTraceQueryRequest({
   if (rootEntityType) args.push({ op: 'eq', left: { path: 'entityType' }, right: { literal: rootEntityType } });
   if (status && status !== 'running') args.push({ op: 'eq', left: { path: 'status' }, right: { literal: status } });
 
-  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds }));
+  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds, withTextSearch }));
 
   for (const group of groups) {
-    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds);
+    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds, withTextSearch);
     if (predicate) args.push(predicate);
   }
 
