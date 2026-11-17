@@ -1999,6 +1999,33 @@ describe('agent-controller routes', () => {
           vi.useRealTimers();
         }
       });
+
+      // The age cap measures the oldest frame still waiting. A snapshot that a
+      // newer one replaced must not count once the frames before it are read.
+      it('a tab that is still reading is not closed for a snapshot that was replaced', async () => {
+        const { session, open } = await openSession('user-reading-slowly');
+        const metrics = recordMetrics();
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        try {
+          const reader = await open();
+          expect(((await reader.read()).value as any).type).toBe('display_state_changed');
+          session.emit({ type: 'agent_start' });
+          await nextTurn();
+          vi.advanceTimersByTime(50_000);
+          // Its snapshot replaces the one queued with agent_start 50 s ago.
+          session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'bash', args: {} });
+          expect(((await reader.read()).value as any).type).toBe('agent_start');
+
+          // What is waiting now has waited 25 s.
+          vi.advanceTimersByTime(25_000);
+
+          expect(metrics.filter(m => m.name === 'mastra_agent_controller_sse_slow_client_closes_total')).toEqual([]);
+          expect(((await reader.read()).value as any).type).toBe('tool_start');
+          await reader.cancel();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
   });
 

@@ -715,9 +715,6 @@ function toWireDisplayEvent(
 const SSE_MAX_PENDING_FRAMES = 5_000;
 const SSE_MAX_PENDING_AGE_MS = 60_000;
 
-/** Stands in for a snapshot that a newer one replaced while both were waiting. */
-const DROPPED = Symbol('dropped');
-
 type PendingFrame = { frame: unknown; queuedAt: number; turn?: number };
 
 /**
@@ -805,7 +802,6 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       const pending: PendingFrame[] = [];
       // Waiting snapshots, oldest first, all from the turn of the newest one.
       let snapshots: PendingFrame[] = [];
-      let pendingCount = 0;
       let droppedSnapshots = 0;
       // The adapter asked for a frame and none was waiting.
       let wanted = false;
@@ -822,7 +818,6 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
         unsubscribe?.();
         pending.length = 0;
         snapshots = [];
-        pendingCount = 0;
         if (droppedSnapshots > 0) {
           emitStreamMetric(mastra, 'mastra_agent_controller_sse_snapshots_dropped_total', droppedSnapshots, {
             controllerId,
@@ -839,7 +834,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
           controllerId,
           sessionId,
           reason,
-          pendingFrames: pendingCount,
+          pendingFrames: pending.length,
           oldestPendingMs: Date.now() - pending[0]!.queuedAt,
           droppedSnapshots,
         });
@@ -847,7 +842,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
         cleanup(true);
       };
       const checkBacklog = () => {
-        if (pendingCount > SSE_MAX_PENDING_FRAMES) closeBehind('max_pending');
+        if (pending.length > SSE_MAX_PENDING_FRAMES) closeBehind('max_pending');
         else if (pending.length > 0 && Date.now() - pending[0]!.queuedAt > SSE_MAX_PENDING_AGE_MS) {
           closeBehind('max_wait');
         }
@@ -866,32 +861,27 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
         const entry: PendingFrame = { frame, queuedAt: Date.now() };
         if (isDisplayStateFrame(frame)) {
           // A newer snapshot carries everything an older one does, so a
-          // snapshot still waiting from an earlier turn is dropped. Other
-          // events are never dropped and keep their order.
+          // snapshot still waiting from an earlier turn is removed. Other
+          // events are never dropped and keep their order. Every event is
+          // followed by a snapshot, so an older one sits near the end.
           const turn = currentLoopTurn();
           snapshots = snapshots.filter(older => {
             if (older.turn === turn) return true;
-            older.frame = DROPPED;
-            pendingCount--;
+            const index = pending.lastIndexOf(older);
+            if (index !== -1) pending.splice(index, 1);
             droppedSnapshots++;
             return false;
           });
-          while (pending[0]?.frame === DROPPED) pending.shift();
           entry.turn = turn;
           snapshots.push(entry);
         }
         pending.push(entry);
-        pendingCount++;
         checkBacklog();
       };
       const takeNext = (): PendingFrame | undefined => {
-        for (let entry = pending.shift(); entry; entry = pending.shift()) {
-          if (entry.frame === DROPPED) continue;
-          if (snapshots[0] === entry) snapshots.shift();
-          pendingCount--;
-          return entry;
-        }
-        return undefined;
+        const entry = pending.shift();
+        if (entry && snapshots[0] === entry) snapshots.shift();
+        return entry;
       };
 
       // The stream yields raw event objects plus `:`-prefixed SSE comments
@@ -910,7 +900,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
                 if (cleanedUp) return;
                 // A waiting frame keeps the connection busy already; a client
                 // that stopped reading is closed once its oldest frame is too old.
-                if (pendingCount > 0) checkBacklog();
+                if (pending.length > 0) checkBacklog();
                 else push(': heartbeat\n\n');
                 scheduleHeartbeat();
               }, 25_000);
