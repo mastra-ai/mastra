@@ -1039,6 +1039,16 @@ export class TraceQueryCursorError extends Error {
   }
 }
 
+/** A valid query uses a feature the selected storage adapter cannot execute. */
+export class TraceQueryUnsupportedError extends Error {
+  readonly code = 'TRACE_QUERY_UNSUPPORTED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'TraceQueryUnsupportedError';
+  }
+}
+
 export class TraceQueryExecutionError extends Error {
   readonly code = 'TRACE_QUERY_EXECUTION_TIMEOUT';
 

@@ -40,7 +40,7 @@ export function withTokenSearchFields(fields: FilterBarField[], enabled: boolean
       label: prefix === 'spans.' ? (path === 'all' ? 'Any span content' : `Span ${label.toLowerCase()}`) : label,
       icon:
         path === 'error' || path === 'errorPreview' ? IconExclamationTriangle : (existing?.icon ?? IconMagnifyingGlass),
-      operators: ['hasAllTokens', ...(existing?.operators ?? [])],
+      operators: [...(existing?.operators ?? []), 'hasAllTokens'],
       alwaysShowOperator: true,
       validateInput: value => (tokenSearchValue(value) ? undefined : 'Enter words to search (up to 256 characters)'),
     };

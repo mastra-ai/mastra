@@ -192,13 +192,13 @@ const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error']);
 function tokenToTraceQueryPredicate(
   token: TraceFilterToken,
   excludedFieldIds: ReadonlySet<string>,
-  withTextSearch: boolean,
+  withTokenSearch: boolean,
 ): TokenPredicate | undefined {
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) || excludedFieldIds.has(token.fieldId)) return undefined;
   const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
   if (operatorId === 'hasAllTokens') {
     const { scope, path } = resolveTraceQueryPath(token.fieldId);
-    if (!withTextSearch || scope !== 'spans') return undefined;
+    if (!withTokenSearch || scope !== 'spans') return undefined;
     const predicate = tokenSearchPredicate(path, token.value);
     return predicate ? { scope, predicate } : undefined;
   }
@@ -268,14 +268,14 @@ function predicatesForTokens(
   {
     mergeRelated,
     excludedFieldIds,
-    withTextSearch,
-  }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string>; withTextSearch: boolean },
+    withTokenSearch,
+  }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string>; withTokenSearch: boolean },
 ) {
   const args: TraceQueryPredicate[] = [];
   const related: Record<TraceQueryRelatedScope, TraceQueryScalarPredicate[]> = { spans: [], scores: [], feedback: [] };
 
   for (const token of tokens) {
-    const result = tokenToTraceQueryPredicate(token, excludedFieldIds, withTextSearch);
+    const result = tokenToTraceQueryPredicate(token, excludedFieldIds, withTokenSearch);
     if (!result) continue;
     if (!('scope' in result)) {
       args.push(result.predicate);
@@ -299,13 +299,13 @@ function predicatesForTokens(
 function groupToTraceQueryPredicate(
   group: TraceFilterGroup,
   excludedFieldIds: ReadonlySet<string>,
-  withTextSearch: boolean,
+  withTokenSearch: boolean,
 ): TraceQueryPredicate | undefined {
   const tokens = group.nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node));
-  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds, withTextSearch });
+  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds, withTokenSearch });
   for (const node of group.nodes) {
     if (!isTraceFilterGroup(node)) continue;
-    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds, withTextSearch);
+    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds, withTokenSearch);
     if (predicate) args.push(predicate);
   }
   if (args.length === 0) return undefined;
@@ -320,7 +320,7 @@ export function buildTraceQueryRequest({
   tokens,
   groups = [],
   excludedFieldIds = new Set(),
-  withTextSearch = false,
+  withTokenSearch = false,
   now,
 }: Omit<Parameters<typeof buildTraceListFilters>[0], 'tokens' | 'status'> & {
   status?: TraceStatusFilter;
@@ -328,7 +328,7 @@ export function buildTraceQueryRequest({
   groups?: TraceFilterGroup[];
   /** Fields the server cannot query (e.g. `durationMs` without `traceQueryRootDuration`); dropped from tokens and groups. */
   excludedFieldIds?: ReadonlySet<string>;
-  withTextSearch?: boolean;
+  withTokenSearch?: boolean;
   now: Date;
 }): Pick<QueryTracesInput, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
@@ -336,10 +336,10 @@ export function buildTraceQueryRequest({
   if (rootEntityType) args.push({ op: 'eq', left: { path: 'entityType' }, right: { literal: rootEntityType } });
   if (status && status !== 'running') args.push({ op: 'eq', left: { path: 'status' }, right: { literal: status } });
 
-  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds, withTextSearch }));
+  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds, withTokenSearch }));
 
   for (const group of groups) {
-    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds, withTextSearch);
+    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds, withTokenSearch);
     if (predicate) args.push(predicate);
   }
 

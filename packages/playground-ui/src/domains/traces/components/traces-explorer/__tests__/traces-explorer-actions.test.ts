@@ -235,7 +235,7 @@ describe('sanitizeTracesFilters', () => {
         tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
       };
       expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([]);
-      expect(sanitizeTracesFilters(filters, { withTextSearch: true })).toBe(filters);
+      expect(sanitizeTracesFilters(filters, { withTokenSearch: true })).toBe(filters);
     },
   );
 

@@ -66,6 +66,7 @@ export {
   TraceQueryCursorError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceQueryUnsupportedError,
   resolveTraceQueryTimeoutMs,
   findPredicateComplexityIssue,
   isTraceQueryMetadataPath,

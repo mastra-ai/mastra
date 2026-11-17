@@ -178,7 +178,6 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   'spans.outputPreview': 'filterSpanOutputPreview',
   'spans.errorPreview': 'filterSpanErrorPreview',
   'spans.all': 'filterSpanAll',
-
   'scores.scorerId': 'filterScorerId',
   'scores.score': 'filterScore',
   'feedback.feedbackType': 'filterFeedbackType',
@@ -421,7 +420,7 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
 
 /** Which optional trace query fields the server declares support for. */
 export type TraceQueryFieldSupport = {
-  withTextSearch?: boolean;
+  withTokenSearch?: boolean;
   /** Root `durationMs`, declared by `traceQueryRootDuration`. */
   withRootDuration?: boolean;
   /** Root and span `timeToFirstChunkMs`, declared by `traceQueryTimeToFirstChunk`. */
@@ -751,8 +750,9 @@ export function filterBarExpressionToTraceFilters(expression: FilterBarExpressio
 }
 
 function filterBarGroupToTraceGroup(group: FilterBarGroup): TraceFilterGroup {
-  const nodes = group.nodes.map((node): TraceFilterNode =>
-    isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
+  const nodes = group.nodes.map(
+    (node): TraceFilterNode =>
+      isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
   );
   // Empty groups are kept: "Advanced filter…" emits one and opens its editor, and the
   // FilterBar prunes it itself when the popover closes without any condition.

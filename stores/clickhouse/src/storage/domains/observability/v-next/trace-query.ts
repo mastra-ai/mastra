@@ -258,7 +258,8 @@ function compileScalarPredicate<TField extends string>(
   parameters: ParameterBuilder,
   allowMetadata = false,
 ): string {
-  if (predicate.type === 'tokens') throw new Error('Indexed token search is not supported by this store');
+  if (predicate.type === 'tokens')
+    throw new coreStorage.TraceQueryUnsupportedError('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');

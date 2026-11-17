@@ -149,6 +149,28 @@ describe('SpansExplorerBody', () => {
         spanAggregateTokenSearch: true,
       },
     };
+    it('offers exists first when adding an Error filter on a search-enabled host', async () => {
+      setHandlers(spanRowsPage, searchable);
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => HttpResponse.json<AggregateSpansResponse>({ rows: [], truncated: false })),
+      );
+      const { queries } = renderBodyAtUrl('');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Error' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Error', exact: true }));
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
+        'exists',
+        'does not exist',
+        'contains words',
+      ]);
+      fireEvent.click(screen.getByRole('option', { name: 'exists', exact: true }));
+      await waitFor(() =>
+        expect(queries.at(-1)?.where).toEqual({ op: 'and', args: [{ op: 'exists', path: 'error' }] }),
+      );
+      expect(screen.getByRole('group', { name: 'Error exists' }).getAttribute('aria-invalid')).not.toBe('true');
+    });
     it.each(['exists', 'notExists'])('keeps Error %s valid on search-enabled hosts', async operator => {
       setHandlers(spanRowsPage, searchable);
       server.use(
@@ -259,7 +281,7 @@ describe('SpansExplorerBody', () => {
       ['inputPreview', 'Input Preview'],
       ['outputPreview', 'Output Preview'],
       ['errorPreview', 'Error Preview'],
-    ] as const)('does not send %s token predicates without the span capability', async field => {
+    ] as const)('does not send %s token predicates without the span capability', async (field, label) => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
         capabilities: { ...spanQueryCapabilities.capabilities, traceQueryTokenSearch: true },
@@ -267,6 +289,8 @@ describe('SpansExplorerBody', () => {
       const { queries } = renderBodyAtUrl(`filter.${field}=needle&filter.${field}.op=hasAllTokens`);
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
       expect(tokenTerms(queries.at(-1))).toEqual([]);
+      expect(screen.queryByRole('button', { name: `Remove ${label} filter` })).toBeNull();
+      expect(screen.queryByText('needle')).toBeNull();
       const input = screen.getByRole('combobox', { name: 'Add filter' });
       fireEvent.focus(input);
       fireEvent.change(input, { target: { value: 'Any Content' } });

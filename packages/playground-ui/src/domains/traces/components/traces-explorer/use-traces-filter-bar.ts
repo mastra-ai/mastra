@@ -27,7 +27,7 @@ const NO_SUGGESTIONS: string[] = [];
 export function useTracesFilterBarFields(): FilterBarField[] {
   const {
     hiddenFieldIds,
-    withTextSearch,
+    withTokenSearch,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
@@ -65,7 +65,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
           withTimeToFirstToken,
           withOutcomeFields,
         }),
-        withTextSearch,
+        withTokenSearch,
         'spans.',
       ),
     ],
@@ -75,7 +75,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       hiddenFieldIds,
       metadataFields,
       canonicalFields,
-      withTextSearch,
+      withTokenSearch,
       withQueryTrace,
       withRootDuration,
       withTimeToFirstChunk,

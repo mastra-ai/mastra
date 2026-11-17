@@ -437,6 +437,12 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       return await observabilityStore.queryTraces(plan);
     } catch (error) {
+      if (
+        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+        error instanceof coreStorage.TraceQueryUnsupportedError
+      ) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
           code: error.code,
@@ -590,6 +596,12 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       return await observabilityStore.aggregateTraces(plan);
     } catch (error) {
+      if (
+        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+        error instanceof coreStorage.TraceQueryUnsupportedError
+      ) {
+        throwTraceQueryError(501, { code: 'TRACE_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
       }
@@ -734,6 +746,12 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       return await observabilityStore.aggregateSpans(plan);
     } catch (error) {
+      if (
+        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+        error instanceof coreStorage.TraceQueryUnsupportedError
+      ) {
+        throwTraceQueryError(501, { code: 'SPAN_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
       }
@@ -871,6 +889,12 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       return await observabilityStore.querySpans(plan);
     } catch (error) {
+      if (
+        typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+        error instanceof coreStorage.TraceQueryUnsupportedError
+      ) {
+        throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
           code: error.code,

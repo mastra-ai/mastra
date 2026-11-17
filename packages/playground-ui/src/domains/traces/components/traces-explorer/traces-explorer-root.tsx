@@ -123,20 +123,20 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
-  const withTextSearch =
+  const withTokenSearch =
     withQueryTrace &&
     !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
   const filters = useMemo(() => {
     return sanitizeTracesFilters(rawFilters, {
-      withTextSearch,
+      withTokenSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
       withOutcomeFields,
     });
-  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTextSearch]);
+  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTokenSearch]);
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -248,7 +248,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
-      withTextSearch,
+      withTokenSearch,
       withFeedback,
       feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
@@ -271,7 +271,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
-      withTextSearch,
+      withTokenSearch,
       withFeedback,
       hasFeedbackOptions,
       contextMode,
@@ -294,7 +294,7 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const tokenSearchApplied = withTextSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
+  const tokenSearchApplied = withTokenSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);

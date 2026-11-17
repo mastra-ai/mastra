@@ -261,11 +261,11 @@ export function createSpanFilterBarFields({
 function tokenToSpanQueryPredicate(
   token: TraceFilterToken,
   allowedFieldIds: ReadonlySet<string>,
-  withTextSearch: boolean,
+  withTokenSearch: boolean,
 ): TraceQueryScalarPredicate | undefined {
   const { fieldId } = token;
   if (token.operatorId === 'hasAllTokens')
-    return withTextSearch ? tokenSearchPredicate(fieldId, token.value) : undefined;
+    return withTokenSearch ? tokenSearchPredicate(fieldId, token.value) : undefined;
   if (!allowedFieldIds.has(fieldId)) return undefined;
   const operatorId = token.operatorId ?? 'is';
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
@@ -299,13 +299,13 @@ function tokenToSpanQueryPredicate(
 function groupToSpanQueryPredicate(
   group: TraceFilterGroup,
   allowedFieldIds: ReadonlySet<string>,
-  withTextSearch: boolean,
+  withTokenSearch: boolean,
 ): TraceQueryScalarPredicate | undefined {
   const args = group.nodes
     .map(node =>
       isTraceFilterGroup(node)
-        ? groupToSpanQueryPredicate(node, allowedFieldIds, withTextSearch)
-        : tokenToSpanQueryPredicate(node, allowedFieldIds, withTextSearch),
+        ? groupToSpanQueryPredicate(node, allowedFieldIds, withTokenSearch)
+        : tokenToSpanQueryPredicate(node, allowedFieldIds, withTokenSearch),
     )
     .filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   if (args.length === 0) return undefined;
@@ -322,12 +322,12 @@ export function buildSpanQueryWhere(
   groups: TraceFilterGroup[],
   {
     withContextFields,
-    withTextSearch = false,
+    withTokenSearch = false,
     withOutcomeFields = false,
     withModelFields = false,
     ...support
   }: StreamingTimingSupport & {
-    withTextSearch?: boolean;
+    withTokenSearch?: boolean;
     withContextFields: boolean;
     withOutcomeFields?: boolean;
     withModelFields?: boolean;
@@ -343,8 +343,8 @@ export function buildSpanQueryWhere(
     support,
   );
   const args = [
-    ...tokens.map(token => tokenToSpanQueryPredicate(token, allowedFieldIds, withTextSearch)),
-    ...groups.map(group => groupToSpanQueryPredicate(group, allowedFieldIds, withTextSearch)),
+    ...tokens.map(token => tokenToSpanQueryPredicate(token, allowedFieldIds, withTokenSearch)),
+    ...groups.map(group => groupToSpanQueryPredicate(group, allowedFieldIds, withTokenSearch)),
   ].filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   return args.length ? { op: 'and', args } : undefined;
 }

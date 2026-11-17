@@ -141,7 +141,7 @@ export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQuer
   const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
   const tokens = filters.tokens.filter(
     token =>
-      isQueryableToken(token, unqueryableFieldIds) && (support.withTextSearch || token.operatorId !== 'hasAllTokens'),
+      isQueryableToken(token, unqueryableFieldIds) && (support.withTokenSearch || token.operatorId !== 'hasAllTokens'),
   );
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
@@ -189,7 +189,7 @@ export const buildTracesQueryRequest = ({
     tokens: filters.tokens,
     groups: filters.groups,
     excludedFieldIds: traceQueryUnqueryableFieldIds(support),
-    withTextSearch: support.withTextSearch,
+    withTokenSearch: support.withTokenSearch,
     now,
   });
 

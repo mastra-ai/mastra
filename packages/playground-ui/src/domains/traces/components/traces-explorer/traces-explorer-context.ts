@@ -33,7 +33,7 @@ export type TracesConfigContextValue = {
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
-  withTextSearch: boolean;
+  withTokenSearch: boolean;
   withFeedback: boolean;
   feedbackOptions?: FeedbackOptions;
   /** The span query API is on, so the host can offer a spans view next to the traces list. */

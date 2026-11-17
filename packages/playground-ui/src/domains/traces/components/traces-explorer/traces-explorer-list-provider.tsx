@@ -31,7 +31,7 @@ export const TracesListProvider = memo(function TracesListProvider({
   const {
     rootSource,
     withQueryTrace,
-    withTextSearch,
+    withTokenSearch,
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
@@ -61,7 +61,7 @@ export const TracesListProvider = memo(function TracesListProvider({
         filters,
         dateFrom,
         dateTo,
-        withTextSearch,
+        withTokenSearch,
         withRootDuration,
         withTimeToFirstChunk,
         withTimeToFirstToken,

@@ -43,10 +43,10 @@ export type SpansExplorerBodyProps = {
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
 export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
   const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
-  const withTextSearch = !!(
+  const withTokenSearch = !!(
     capabilities?.capabilities.spanQueryTokenSearch && capabilities.capabilities.spanAggregateTokenSearch
   );
-  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS });
+  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS, withTokenSearch });
   const { timeRange, tokens, groups } = filters;
   const columns = useTraceColumnPreferences({ scope: 'spans' });
 
@@ -93,7 +93,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const where = useMemo(
     () =>
       buildSpanQueryWhere(tokens, groups, {
-        withTextSearch,
+        withTokenSearch,
         withContextFields,
         withOutcomeFields,
         withModelFields,
@@ -103,7 +103,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
     [
       tokens,
       groups,
-      withTextSearch,
+      withTokenSearch,
       withContextFields,
       withOutcomeFields,
       withModelFields,
@@ -154,7 +154,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
             <ActionRow>
               <ActionRow.Start>
                 <SpansFilterBar
-                  withTextSearch={withTextSearch}
+                  withTokenSearch={withTokenSearch}
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
                   dateTo={filters.dateTo}

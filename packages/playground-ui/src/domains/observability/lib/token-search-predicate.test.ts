@@ -29,9 +29,9 @@ describe('trace content filters', () => {
       'Span error preview',
     ]);
     expect(fields.find(field => field.id === 'spans.error')?.operators).toEqual([
-      'hasAllTokens',
       'exists',
       'notExists',
+      'hasAllTokens',
     ]);
     expect(withTokenSearchFields([], true)[0]?.label).toBe('Any Content');
   });

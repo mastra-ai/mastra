@@ -27,7 +27,7 @@ export function TracesExplorerHistogram() {
   const {
     rootSource,
     withQueryTrace,
-    withTextSearch,
+    withTokenSearch,
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
@@ -41,7 +41,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
-      withTextSearch,
+      withTokenSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -57,7 +57,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
-      withTextSearch,
+      withTokenSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -80,7 +80,7 @@ export function TracesExplorerHistogram() {
     withTimeToFirstChunk,
     withTimeToFirstToken,
     withOutcomeFields,
-    withTextSearch,
+    withTokenSearch,
     now,
   ]);
 

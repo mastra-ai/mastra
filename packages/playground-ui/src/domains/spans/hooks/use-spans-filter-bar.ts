@@ -35,7 +35,7 @@ const NO_SUGGESTIONS: string[] = [];
 export type UseSpansFilterBarFieldsOptions = {
   /** Window the value suggestions are looked up in. */
   timeRange: TraceQueryDiscoveryTimeRange;
-  withTextSearch?: boolean;
+  withTokenSearch?: boolean;
 };
 
 /**
@@ -44,7 +44,7 @@ export type UseSpansFilterBarFieldsOptions = {
  */
 export function useSpansFilterBarFields({
   timeRange,
-  withTextSearch = false,
+  withTokenSearch = false,
 }: UseSpansFilterBarFieldsOptions): FilterBarField[] {
   const client = useMastraClient();
   const { data: capabilities } = useObservabilityCapabilities();
@@ -72,11 +72,11 @@ export function useSpansFilterBarFields({
           environments,
           valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
         }),
-        withTextSearch,
+        withTokenSearch,
       ),
     ],
     [
-      withTextSearch,
+      withTokenSearch,
       withContextFields,
       withTimeToFirstChunk,
       withTimeToFirstToken,
