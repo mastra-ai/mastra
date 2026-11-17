@@ -1,5 +1,26 @@
 # mastra
 
+## 1.40.1-alpha.0
+
+### Patch Changes
+
+- Added the session panel to a Factory card that has no session yet, as the card's sessions do. Before you send the first message, it lists the card's source, its pull request, its description, the pull requests it links to and the stages it has moved through. The page also drops its **New session** title, matching a card's session page. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- Fixed the blank header on a Factory session with no card and no title, such as one started from Slack. It now shows the session's branch as the page title, matching its name in the sidebar. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- Improved starting a session from a Factory card: sending the first message no longer swaps the page for a new one. The message shows as soon as you send it, and when the session's thread opens, the conversation, composer, header, stage bar and session panel stay on screen instead of loading and animating in again. The composer keeps its focus, its model and anything typed while the session starts. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+  The same holds when a suggested action such as Review or Investigate starts the card's session: its thread opens in the same conversation and loads its history there, with the card's stage bar and session panel already filled in, instead of replacing the composer.
+
+  Switching to another session from the sidebar, or opening one from a link, keeps the current page until the next session's stage bar and panel are ready, so they appear complete instead of loading in. Opening a session's address directly still shows the page right away.
+
+  Fixed the first message from a card sometimes never being sent and landing back in the composer. A start that failed after linking the card to its session now keeps your message on the card with the error, instead of opening the thread without it.
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0fed9c3`](https://github.com/mastra-ai/mastra/commit/0fed9c3747390d623c4e1c19698d6b730baf569d), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/loggers@1.3.11-alpha.0
+  - @mastra/deployer@1.85.0-alpha.0
+
 ## 1.40.0
 
 ### Minor Changes

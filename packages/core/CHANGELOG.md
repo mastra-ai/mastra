@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.85.0-alpha.0
+
+### Minor Changes
+
+- Session streams opened with `displayState=false` now start with the session's current state as ordinary events (the reply in flight as `message_start`, the latest memory status as `om_status`, and the thread's token total) instead of starting empty. Clients that keep display-state snapshots are unaffected. ([#30727](https://github.com/mastra-ai/mastra/pull/30727))
+
+  `Session.initialStateEvents()` returns those events for any other transport that needs the same catch-up. `usage_update` events now also carry `total`, the running token total after the step, so clients no longer have to add up per-step usage.
+
+### Patch Changes
+
+- Agents with input or output processors make fewer storage reads per call. ([#30720](https://github.com/mastra-ai/mastra/pull/30720))
+
+  Each `generate()` or `stream()` call runs short internal workflows to prepare the call and to run processors. These workflows are never stored, but they still read a cancellation status from storage before and between their steps. Those reads always came back empty. With two input processors and one output processor on PostgreSQL, a call made 25 status reads, and 14 of them were these empty reads. These workflows no longer read the status. Canceling the call still stops them.
+
+  Your own workflows keep their checks, including workflows you pass as processors. They still stop when another server cancels the run.
+
+- `Agent.generate()` and `Agent.stream()` now raise an error when a model step stops at its output-token limit before writing any text or tool calls, for example when a reasoning model spends its whole budget thinking. Previously the run finished with empty text and no error. The error says the model reached its maximum output length, the same message AgentController shows. Truncated text that ends at the limit is still returned as before. ([#30595](https://github.com/mastra-ai/mastra/pull/30595))
+
 ## 1.84.0
 
 ### Minor Changes
