@@ -806,7 +806,7 @@ describe("a card's work requested from a chat", () => {
     const card = await heldReviewCard(env);
 
     await expect(
-      env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review' }),
+      env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review', rerun: true }),
     ).resolves.toMatchObject({ workItemId: card.id, stage: 'pr-review', reran: true });
 
     // What the dispatcher reads: a review run approved by the person, which it starts without asking.
@@ -824,14 +824,29 @@ describe("a card's work requested from a chat", () => {
     ]);
   });
 
+  // Slack, 2026-11-16: "find the work item for this PR and move it to review" on a card that had
+  // already been reviewed. Moving a card to the stage it is in must not start another pass unasked.
+  it('tells the agent the card is already in that stage, and that its run waits for approval, without rerunning it', async () => {
+    const env = await boardSetup();
+    const card = await heldReviewCard(env);
+
+    await expect(
+      env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review' }),
+    ).resolves.toMatchObject({
+      workItemId: card.id,
+      unchanged: true,
+      message: expect.stringContaining('waiting for approval'),
+    });
+    expect((await env.runs(card.id)).map(record => record.status)).toEqual(['proposed']);
+  });
+
   it('refuses a second run while the first is still queued, as the board refuses a busy card', async () => {
     const env = await boardSetup();
     const card = await heldReviewCard(env);
-    await env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' });
+    const rerun = { workItem: card.id, stage: 'pr-review', rerun: true };
+    await env.run('factory_transition_work_item', rerun);
 
-    await expect(env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' })).rejects.toThrow(
-      'The move was refused (card_busy)',
-    );
+    await expect(env.run('factory_transition_work_item', rerun)).rejects.toThrow('The move was refused (card_busy)');
     expect((await env.runs(card.id)).filter(record => record.status === 'pending')).toHaveLength(1);
   });
 
@@ -839,9 +854,9 @@ describe("a card's work requested from a chat", () => {
     const env = await boardSetup({ interactive: false });
     const card = await heldReviewCard(env);
 
-    await expect(env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review' })).rejects.toThrow(
-      'needs a person in this turn',
-    );
+    await expect(
+      env.run('factory_transition_work_item', { workItem: card.id, stage: 'pr-review', rerun: true }),
+    ).rejects.toThrow('needs a person in this turn');
     expect((await env.runs(card.id)).map(record => record.status)).toEqual(['proposed']);
   });
 

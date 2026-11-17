@@ -195,8 +195,9 @@ export function createFactorySessionTools(
     description: [
       'Start a side session in this Factory with a prompt. It runs on its own sandbox and branch as you, and reports back to this session with `factory-session` notifications.',
       'A side session uses this session’s model. Pass `model` to start it on another model the session credentials can run.',
-      'Use it only for self-contained work no card tracks, like an investigation or a quick experiment; when the result should land as a pull request, file a work item instead.',
-      "Work on an issue or pull request that has a card (a review, a build, a plan) runs on that card: find it with factory_list_work_items (a pasted link works) and move it, or rerun its stage, with factory_transition_work_item, as the board's buttons do.",
+      'Use it when the person asks for a side session, and for work no card stage does: investigations and research, experiments, pushing fixes to an existing pull request or taking one over, or work that should leave the board alone.',
+      "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it.",
+      'Find cards with factory_list_work_items (a pasted link works) and move them, or rerun their stage, with factory_transition_work_item.',
     ].join(' '),
     inputSchema: z
       .object({

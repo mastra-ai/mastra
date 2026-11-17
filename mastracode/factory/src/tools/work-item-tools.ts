@@ -215,9 +215,10 @@ export function createFactoryWorkItemTools(
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: [
-        "Move a work item to another stage of its board, or run the stage it is already in again, as the person you are working with: the same request the board's own move and Start buttons send.",
+        "Move a work item to another stage of its board, or with `rerun` run the stage it is already in again, as the person you are working with: the same requests the board's own move and Start buttons send.",
         "The board's rules decide whether the move is allowed and what it starts. The run it starts counts as approved by that person, so it does not wait in the approval queue.",
-        "This is how to get a card's work done (a review, a build, a plan): when someone asks to review a pull request that has a card, move the card to its review stage, or rerun that stage, instead of reviewing it yourself or in a side session.",
+        'Use it when someone asks for a card\'s own stage work, such as "review this pull request" on a pull request that has a card: the card\'s review is recorded on the card and posted on the pull request.',
+        'When the person asks for a side session, a review in this chat, or work the stage does not do (pushing fixes to a pull request, taking it over), do that instead.',
       ].join(' '),
       inputSchema: z
         .object({
@@ -227,16 +228,56 @@ export function createFactoryWorkItemTools(
             .trim()
             .min(1)
             .max(64)
+            .describe('Destination stage key, as factory_inspect_work_item lists it (e.g. "planning" or "done").'),
+          rerun: z
+            .boolean()
+            .optional()
             .describe(
-              'Destination stage key, as factory_inspect_work_item lists it (e.g. "planning" or "done"). The stage the card is already in runs it again.',
+              "With the stage the card is already in: run it again, as the board's Start button does. Without it, a request for the card's own stage changes nothing and says what the stage is doing.",
             ),
         })
         .strict(),
-      execute: async ({ workItem, stage }) => {
+      execute: async ({ workItem, stage, rerun: rerunRequested }) => {
         if (!deps.transitionService) throw new Error('Factory stage transitions are not available right now.');
         const item = await requireItem(workItem);
+        // Following the card is what lets this session hear when its run waits on someone, and
+        // answer it from here. It comes after the request: a failed follow is reported with it.
+        const followed = async <T extends object>(result: T) => {
+          try {
+            await follow(item, 'moved');
+            return result;
+          } catch (error) {
+            return {
+              ...result,
+              warnings: [
+                `This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`,
+              ],
+            };
+          }
+        };
+        const sameStage = item.stages.length === 1 && item.stages[0] === stage;
+        // Already there: report the stage instead of starting it again without being asked, which
+        // would rerun a finished review or plan on a "move it to review".
+        if (sameStage && rerunRequested !== true) {
+          const held = (
+            await deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+              workItemId: item.id,
+              statuses: ['proposed'],
+            })
+          ).filter(decision => decision.decision.type === 'invokeSkill').length;
+          return followed({
+            workItemId: item.id,
+            stage,
+            revision: item.revision,
+            unchanged: true,
+            message:
+              `${workItemLabel(item)} is already in ${stage}` +
+              (held > 0 ? ', and its run there is waiting for approval.' : '.') +
+              " Pass rerun: true to run the stage again, as the board's Start button does; factory_inspect_work_item shows its sessions and runs.",
+          });
+        }
         // The board's Start button sends the card's own stage with `reenter`; the rules decide the rest.
-        const rerun = item.stages.length === 1 && item.stages[0] === stage;
+        const rerun = sameStage;
         // Rerunning starts a run approved by whoever asks, so like the button it needs a person.
         if (rerun && !scope.interactive) {
           throw new Error(
@@ -273,26 +314,13 @@ export function createFactoryWorkItemTools(
               }),
         });
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);
-        // The move can start a phase session the Factory owns. Following the card is what lets
-        // this session hear when that run waits on someone, and answer it from here.
-        // The card has moved by now: a failed follow is reported with the move, not instead of it.
-        const moved = {
+        // The move can start a phase session the Factory owns; the card has moved by now.
+        return followed({
           workItemId: item.id,
           stage: result.stage,
           revision: result.revision,
           ...(rerun ? { reran: true } : {}),
-        };
-        try {
-          await follow(item, 'moved');
-        } catch (error) {
-          return {
-            ...moved,
-            warnings: [
-              `This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`,
-            ],
-          };
-        }
-        return moved;
+        });
       },
     }),
 
