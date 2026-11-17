@@ -714,6 +714,18 @@ describe('EventsClient.subscribe with a cursor store', () => {
     expect(s.requests).toHaveLength(0);
   });
 
+  it('does not load the cursor of a subscription closed before iteration', async () => {
+    const s = await server([answerReady]);
+    const load = vi.fn(async () => {
+      throw new Error('store offline');
+    });
+    const subscription = client(s.url).subscribe('connect', { cursorStore: { load, save: () => {} } });
+    subscription.close();
+    await expect(take(subscription, 1)).resolves.toEqual([]);
+    expect(load).not.toHaveBeenCalled();
+    expect(s.requests).toHaveLength(0);
+  });
+
   it('ends with the store error when saving fails', async () => {
     const s = await server([
       (_req, res) => {
@@ -765,6 +777,26 @@ describe('EventsClient.subscribe gaps and planned closes', () => {
     for (const e of await take(subscription, 1)) order.push(e.id);
     expect(gaps).toEqual([{ reason: 'trimmed', after: '5', resumedAfter: '90' }]);
     expect(order).toEqual(['gap', '91']);
+  });
+
+  it('delivers nothing after the subscription closes while a gap is being handled', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        // One write, so the event after the gap is already parsed when onGap runs.
+        res.write(
+          ready('90') + `event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n` + event('91', {}),
+        );
+      },
+    ]);
+    const { saved, store } = memoryStore();
+    const subscription = client(s.url).subscribe('connect', {
+      after: '5',
+      cursorStore: store,
+      onGap: () => subscription.close(),
+    });
+    await expect(take(subscription, 1)).resolves.toEqual([]);
+    expect(saved).toEqual([{ eventId: '90' }]);
   });
 
   it('keeps delivering past a gap when nobody listens for gaps', async () => {
@@ -1088,6 +1120,29 @@ describe('ConnectClient.events', () => {
     expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_shared');
   });
 
+  it('keeps the identity the client resolved at construction when the environment changes', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-a');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_a');
+    vi.stubEnv('MASTRA_EVENTS_API_URL', s.url);
+    const connect = new ConnectClient();
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-b');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_b');
+    vi.stubEnv('MASTRA_EVENTS_API_URL', 'http://127.0.0.1:1');
+    await take(connect.events.subscribe('connect'), 1);
+
+    expect(connect.events.eventsUrl).toBe(s.url);
+    expect(s.requests[0]!.url).toBe('/v1/projects/proj_a/topics/connect');
+    expect(s.requests[0]!.headers.authorization).toBe('Bearer token-a');
+  });
+
   it('does not apply the client timeout to the event stream', async () => {
     const s = await server([
       (_req, res) => {
@@ -1171,6 +1226,18 @@ describe('parseServerSentEvents', () => {
   it('rejects a line longer than 32 MiB', async () => {
     const mebibyte = 'x'.repeat(1024 * 1024);
     const error = await failure(parse(['data: ', ...Array.from({ length: 33 }, () => mebibyte)]));
+    expect(error.code).toBe('invalid_response');
+  });
+
+  it('rejects a line longer than 32 MiB that arrives with its line break', async () => {
+    // A comment, so only the line check (not the frame data limit) can catch it.
+    const error = await failure(parse([`: ${'x'.repeat(33 * 1024 * 1024)}\n\n`]));
+    expect(error.code).toBe('invalid_response');
+  });
+
+  it('rejects a frame whose data lines add up to more than 32 MiB', async () => {
+    const line = `data: ${'x'.repeat(1024 * 1024)}\n`;
+    const error = await failure(parse([...Array.from({ length: 33 }, () => line), '\n']));
     expect(error.code).toBe('invalid_response');
   });
 });

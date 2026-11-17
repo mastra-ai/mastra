@@ -89,6 +89,28 @@ export interface ConnectRequestInit {
   signal?: AbortSignal;
 }
 
+/** Credentials, project and URLs a client resolves once, at construction. */
+interface ConnectClientIdentity {
+  client: ResolvedClient;
+  eventsUrl: string;
+  timeoutMs: number;
+}
+
+function resolveIdentity(config: ConnectClientConfig): ConnectClientIdentity {
+  const timeoutMs = config.timeoutMs ?? DEFAULT_CONNECT_CLIENT_TIMEOUT_MS;
+  // AbortSignal.timeout rejects a fractional delay, so require whole milliseconds.
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid timeoutMs: expected a positive whole number of milliseconds up to ${MAX_TIMER_MS}, got ${timeoutMs}.`,
+    );
+  }
+  // Resolved here, not on first `events` access, so a bad URL fails fast.
+  const eventsUrl = resolveEventsUrl(config);
+  const client = resolveClient(config);
+  return { client: { ...client, baseUrl: stripVersionSuffix(client.baseUrl) }, eventsUrl, timeoutMs };
+}
+
 /**
  * Typed client for the Mastra platform integrations API (`/v2`): project
  * connections, credentials, the connection proxy, and connect sessions.
@@ -105,25 +127,17 @@ export interface ConnectRequestInit {
  * ```
  */
 export class ConnectClient {
-  readonly #config: ConnectClientConfig;
+  readonly #identity: ConnectClientIdentity;
   readonly #client: ResolvedClient;
-  readonly #projectId: string | undefined;
   #events: EventsClient | undefined;
 
-  constructor(config: ConnectClientConfig = {}) {
-    const timeoutMs = config.timeoutMs ?? DEFAULT_CONNECT_CLIENT_TIMEOUT_MS;
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS) {
-      throw new MastraConnectError(
-        'invalid_options',
-        `Invalid timeoutMs: expected a positive number up to ${MAX_TIMER_MS}, got ${timeoutMs}.`,
-      );
-    }
-    // Fail fast on a bad events URL rather than on first `events` access.
-    resolveEventsUrl(config);
-    const resolved = resolveClient(config);
-    this.#config = config;
-    this.#client = { ...resolved, baseUrl: stripVersionSuffix(resolved.baseUrl), timeoutMs };
-    this.#projectId = resolved.headers['x-mastra-project-id'];
+  /**
+   * @param identity Internal: what a parent client resolved, so `withResource`
+   * keeps its credentials, project and URLs.
+   */
+  constructor(config: ConnectClientConfig = {}, identity?: ConnectClientIdentity) {
+    this.#identity = identity ?? resolveIdentity(config);
+    this.#client = { ...this.#identity.client, timeoutMs: this.#identity.timeoutMs };
   }
 
   /** The integrations API base URL this client calls. */
@@ -133,7 +147,7 @@ export class ConnectClient {
 
   /** The project this client lists and links connections for, when configured. */
   get projectId(): string | undefined {
-    return this.#projectId;
+    return this.#client.headers['x-mastra-project-id'];
   }
 
   /** The end-user resource key this client asserts, when scoped. */
@@ -146,13 +160,21 @@ export class ConnectClient {
    * Streams are long-lived, so `timeoutMs` does not apply to them.
    */
   get events(): EventsClient {
-    this.#events ??= new EventsClient(this.#config);
+    this.#events ??= new EventsClient({}, { client: this.#identity.client, eventsUrl: this.#identity.eventsUrl });
     return this.#events;
   }
 
   /** Returns a client scoped to an end-user resource; this client is unchanged. */
   withResource(resourceId: string): ConnectClient {
-    return new ConnectClient({ ...this.#config, resourceId: validateResourceId(resourceId) });
+    const scoped = validateResourceId(resourceId);
+    const { client } = this.#identity;
+    return new ConnectClient(
+      {},
+      {
+        ...this.#identity,
+        client: { ...client, resourceId: scoped, headers: { ...client.headers, [RESOURCE_ID_HEADER]: scoped } },
+      },
+    );
   }
 
   /**
@@ -283,7 +305,7 @@ export class ConnectClient {
   }
 
   #requireProject(projectId: string | undefined): string {
-    const resolved = projectId?.trim() || this.#projectId;
+    const resolved = projectId?.trim() || this.projectId;
     if (!resolved) {
       throw new MastraConnectError(
         'missing_project_id',

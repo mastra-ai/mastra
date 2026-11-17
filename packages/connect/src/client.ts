@@ -191,7 +191,17 @@ const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
 async function bufferResponse(response: Response): Promise<Response> {
   if (response.status === 0 || NULL_BODY_STATUSES.has(response.status)) return response;
   const body = await response.arrayBuffer();
-  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  const buffered = new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  // A constructed Response has an empty url; callers resolve a relative Location against it.
+  Object.defineProperties(buffered, {
+    url: { value: response.url },
+    redirected: { value: response.redirected },
+  });
+  return buffered;
 }
 
 /** Metadata for errors raised after the platform answered. */

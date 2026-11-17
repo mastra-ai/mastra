@@ -203,12 +203,16 @@ export class EventsClient {
   readonly #eventsUrl: string;
   readonly #options: EventsClientOptions;
 
-  constructor(options: EventsClientOptions = {}) {
+  /**
+   * @param resolved Internal: the identity a `ConnectClient` already resolved,
+   * so its `events` never re-reads options or the environment.
+   */
+  constructor(options: EventsClientOptions = {}, resolved?: { client: ResolvedClient; eventsUrl: string }) {
     assertPositiveMs('reconnectDelayMs', options.reconnectDelayMs);
     assertPositiveMs('maxReconnectDelayMs', options.maxReconnectDelayMs);
     assertPositiveMs('idleTimeoutMs', options.idleTimeoutMs);
-    this.#client = resolveClient(options);
-    this.#eventsUrl = resolveEventsUrl(options);
+    this.#client = resolved?.client ?? resolveClient(options);
+    this.#eventsUrl = resolved?.eventsUrl ?? resolveEventsUrl(options);
     this.#options = options;
   }
 
@@ -394,6 +398,8 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     let serverRetryMs: number | undefined;
     let retryAfterMs: number | undefined;
     try {
+      // A subscription closed before iteration ends without touching the store.
+      if (closed.aborted) return;
       await this.#loadCursor();
       while (!closed.aborted) {
         const connection = new AbortController();
@@ -461,6 +467,8 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     const closed = this.#abort.signal;
     try {
       for await (const frame of parseServerSentEvents(body, idle.touch)) {
+        // The parser may hold frames read before close(), e.g. during an awaited onGap.
+        if (closed.aborted) return;
         if (frame.retry !== undefined) onRetry(frame.retry);
         if (frame.event === 'ready') {
           if (frame.id !== undefined) {
@@ -719,6 +727,7 @@ export async function* parseServerSentEvents(
   let pendingLength = 0;
   let event = '';
   let data: string[] = [];
+  let dataLength = 0;
   let id: string | undefined;
   let retry: number | undefined;
   let hasField = false;
@@ -760,6 +769,9 @@ export async function* parseServerSentEvents(
           else if (i + 1 === buffer.length) skipLeadingLf = true;
         }
         start = i + 1;
+        if (line.length > MAX_LINE_LENGTH) {
+          throw new MastraConnectError('invalid_response', 'The events service sent a line longer than 32 MiB.');
+        }
 
         if (line === '') {
           if (hasField) {
@@ -772,6 +784,7 @@ export async function* parseServerSentEvents(
           }
           event = '';
           data = [];
+          dataLength = 0;
           id = undefined;
           retry = undefined;
           hasField = false;
@@ -786,6 +799,13 @@ export async function* parseServerSentEvents(
           event = fieldValue;
           hasField = true;
         } else if (field === 'data') {
+          dataLength += fieldValue.length;
+          if (dataLength > MAX_LINE_LENGTH) {
+            throw new MastraConnectError(
+              'invalid_response',
+              'The events service sent a frame with more than 32 MiB of data.',
+            );
+          }
           data.push(fieldValue);
           hasField = true;
         } else if (field === 'id') {

@@ -132,8 +132,8 @@ describe('ConnectClient configuration', () => {
     );
   });
 
-  it('rejects a non-positive timeout or one setTimeout cannot honor', () => {
-    for (const timeoutMs of [0, 2 ** 31]) {
+  it('rejects a non-positive, fractional, or oversized timeout', () => {
+    for (const timeoutMs of [0, 1.5, 2 ** 31]) {
       expect(() => new ConnectClient({ accessToken: TOKEN, timeoutMs })).toThrow(
         expect.objectContaining({ code: 'invalid_options' }),
       );
@@ -487,6 +487,20 @@ describe('ConnectClient.fetchRaw', () => {
     expect(response.headers.get('location')).toBe('https://github.com/login/oauth');
     expect(calls[0]!.init?.redirect).toBe('manual');
   });
+
+  it('keeps the response URL, so a relative Location resolves against it', async () => {
+    const url = `${BASE}/v1/server/github-app/authorize`;
+    const { fetchMock } = recordingFetch(() => {
+      const response = new Response(null, { status: 302, headers: { location: '../callback' } });
+      Object.defineProperty(response, 'url', { value: url });
+      return response;
+    });
+
+    const response = await makeClient(fetchMock).fetchRaw('GET', '/v1/server/github-app/authorize');
+
+    expect(response.url).toBe(url);
+    expect(new URL(response.headers.get('location')!, response.url).href).toBe(`${BASE}/v1/server/callback`);
+  });
 });
 
 describe('ConnectClient sessions and links', () => {
@@ -538,6 +552,24 @@ describe('ConnectClient.withResource', () => {
     expect(calls[0]!.headers.get('x-mastra-resource-id')).toBe('user_42');
     expect(calls[0]!.url.searchParams.get('resourceId')).toBe('user_42');
     expect(calls[1]!.headers.get('x-mastra-resource-id')).toBeNull();
+  });
+
+  it('keeps the identity resolved at construction when the environment changes', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-a');
+    vi.stubEnv('MASTRA_ORG_ID', 'org_a');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_a');
+    const { fetchMock, calls } = recordingFetch(() => Response.json({ connections: [] }));
+    const client = new ConnectClient({ baseUrl: BASE, fetch: fetchMock as unknown as typeof fetch });
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-b');
+    vi.stubEnv('MASTRA_ORG_ID', 'org_b');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_b');
+    await client.withResource('user_42').listConnections();
+
+    expect(calls[0]!.url.pathname).toBe('/v2/projects/proj_a/connections');
+    expect(calls[0]!.headers.get('authorization')).toBe('Bearer token-a');
+    expect(calls[0]!.headers.get('x-organization-id')).toBe('org_a');
+    expect(calls[0]!.headers.get('x-mastra-resource-id')).toBe('user_42');
   });
 
   it('validates the resource key', () => {
