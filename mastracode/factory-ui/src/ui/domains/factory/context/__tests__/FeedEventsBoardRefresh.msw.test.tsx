@@ -9,9 +9,8 @@ import { answerBoardPhases, versionedCard } from '../../../../../../e2e/ui/board
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { NO_SESSION_ACTIVITY } from '../../../../../../e2e/ui/session-reads';
 import { queryKeys } from '../../../../../api/keys';
-import type { SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
+import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
 import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
@@ -44,7 +43,13 @@ const NO_SESSION_ROWS: SessionRowsResponse = {
   groups: [],
   boards: [],
   owners: [],
-  activity: NO_SESSION_ACTIVITY,
+};
+const NO_SESSION_ACTIVITY: SessionActivity = {
+  runningSessionIds: [],
+  parkedSessionIds: [],
+  cardStatuses: {},
+  sessionHeldCardIds: [],
+  cards: { working: 0, waiting: 0 },
 };
 const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
@@ -104,7 +109,7 @@ function moreRefreshes(requests: BoardRequests, count: number) {
     cards: requests.cards + count,
     decisions: requests.decisions + count,
     sessionRows: requests.sessionRows + count,
-    sessionActivity: requests.sessionActivity,
+    sessionActivity: requests.sessionActivity + count,
   };
 }
 
@@ -193,7 +198,7 @@ describe('FeedEventsProvider, on the board', () => {
     vi.useRealTimers();
   });
 
-  it('refreshes cards, decisions and session rows, which carry the session activity, within a second of a lone frame', async () => {
+  it('refreshes cards, decisions, session rows and session activity within a second of a lone frame', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -204,8 +209,6 @@ describe('FeedEventsProvider, on the board', () => {
     await advance(rendered.client, WITHIN_A_SECOND_MS);
 
     await waitFor(() => expect(requests).toEqual(oneMoreRefresh(before)));
-    expect(requests.sessionActivity).toBe(0);
-    expect(rendered.result.current.sessionActivity).toEqual(NO_SESSION_ACTIVITY);
     await waitForMutationsIdle(rendered.client);
   });
 
@@ -317,7 +320,7 @@ describe('FeedEventsProvider, on the board', () => {
       stream.ping();
       await advance(rendered.client, SERVER_PING_EVERY_MS);
     }
-    const safetyRereads = requests.sessionRows - connected.sessionRows;
+    const safetyRereads = requests.sessionActivity - connected.sessionActivity;
     expect(safetyRereads).toBeLessThanOrEqual(5);
     expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
 
@@ -331,6 +334,7 @@ describe('FeedEventsProvider, on the board', () => {
       expect(requests.cards).toBeGreaterThan(dropped.cards);
       expect(requests.decisions).toBeGreaterThan(dropped.decisions);
       expect(requests.sessionRows).toBeGreaterThan(dropped.sessionRows);
+      expect(requests.sessionActivity).toBeGreaterThan(dropped.sessionActivity);
     });
   });
 
@@ -387,7 +391,7 @@ describe('FeedEventsProvider, on the board', () => {
     settleMove();
     await waitFor(() => expect(rendered.result.current.move.isSuccess).toBe(true));
     await advance(rendered.client, WITHIN_A_SECOND_MS);
-    await waitFor(() => expect(requests.sessionRows).toBeGreaterThan(moving.sessionRows));
+    await waitFor(() => expect(requests.sessionActivity).toBeGreaterThan(moving.sessionActivity));
     expect(shownStages()).toEqual(['review']);
     await waitForMutationsIdle(rendered.client);
   });

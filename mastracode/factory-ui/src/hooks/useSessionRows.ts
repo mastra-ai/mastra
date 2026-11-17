@@ -1,11 +1,10 @@
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 import { hashKey, queryOptions, skipToken, useQuery } from '@tanstack/react-query';
-import type { QueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { SessionRowsRequest, SessionRowsResponse } from '../api/types';
+import type { SessionRowsRequest } from '../api/types';
 import { fetchSessionActivity, fetchSessionRows } from '../ui/domains/workspaces/services/sessionRowReads';
 import { STATUS_MARKER_BY_ACTIVITY } from '../ui/domains/workspaces/services/sessionRows';
 
@@ -24,24 +23,10 @@ export function sessionRowsQueryOptions(
   });
 }
 
-function sidebarRowsRead(client: QueryClient, factoryProjectId: string) {
-  return client.getQueryCache().find<SessionRowsResponse>({
-    queryKey: queryKeys.sessionRowsRoot(factoryProjectId),
-    exact: false,
-    predicate: query => query.isActive() || query.state.fetchStatus === 'fetching',
-  });
-}
-
 export function sessionActivityQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.sessionActivity(factoryProjectId),
-    queryFn: factoryProjectId
-      ? ({ client, signal }) => {
-          const readAlone = () => fetchSessionActivity(baseUrl, factoryProjectId, signal);
-          const rows = sidebarRowsRead(client, factoryProjectId);
-          return rows ? rows.fetch().then(({ activity }) => activity, readAlone) : readAlone();
-        }
-      : skipToken,
+    queryFn: factoryProjectId ? ({ signal }) => fetchSessionActivity(baseUrl, factoryProjectId, signal) : skipToken,
     refetchOnWindowFocus: true,
   });
 }

@@ -381,17 +381,18 @@ describe('GET /web/factory/projects/:id/session-rows', () => {
 });
 
 describe('GET /web/factory/projects/:id/session-activity', () => {
-  it("answers each live card's status and counts the working and waiting cards, as the rows carry them", async () => {
+  it("answers each live card's status and counts the working and waiting cards", async () => {
     const working = await createCardSession('working-run', 'Working');
     const parked = await createCardSession('parked-run', 'Parked');
     await createCardSession('quiet-run', 'Quiet');
     await createSession('starting', { materialized: false });
-    const app = buildApp('u1', {
-      running: [{ threadId: 'working-run', resourceId: 'u1' }],
-      parked: new Set(['parked-run']),
-    });
 
-    const [rows, body] = await Promise.all([readRows(app), readActivity(app)]);
+    const body = await readActivity(
+      buildApp('u1', {
+        running: [{ threadId: 'working-run', resourceId: 'u1' }],
+        parked: new Set(['parked-run']),
+      }),
+    );
 
     expect(body).toEqual({
       runningSessionIds: ['working-run'],
@@ -400,7 +401,6 @@ describe('GET /web/factory/projects/:id/session-activity', () => {
       sessionHeldCardIds: [working.id, parked.id].toSorted((a, b) => a.localeCompare(b)),
       cards: { working: 1, waiting: 1 },
     });
-    expect(rows.activity).toEqual(body);
   });
 
   it("answers each card the status of its sidebar row, whatever its sessions' own statuses", async () => {
@@ -500,12 +500,9 @@ describe.each([{ authEnabled: true }, { authEnabled: false }])(
       for (const viewer of ['u1', 'u3']) {
         const [revealedRowsSeen, rowsSeen, activitySeen, sessionsSeen] = await responsesFor(app, viewer);
         expect(sessionsSeen, viewer).toContain('"team-session"');
-        for (const body of [revealedRowsSeen, rowsSeen]) {
-          const { activity: carried, ...listing } = JSON.parse(body ?? '');
-          expect(carried, viewer).toEqual(JSON.parse(activitySeen ?? ''));
-          for (const id of privateIds) expect(JSON.stringify(listing), viewer).not.toContain(id);
+        for (const body of [revealedRowsSeen, rowsSeen, sessionsSeen]) {
+          for (const id of privateIds) expect(body, viewer).not.toContain(id);
         }
-        for (const id of privateIds) expect(sessionsSeen, viewer).not.toContain(id);
         expect(JSON.parse(activitySeen ?? ''), viewer).toMatchObject({
           runningSessionIds: ['their-card-run'],
           parkedSessionIds: ['their-card-run'],

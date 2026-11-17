@@ -112,7 +112,7 @@ export function sessionRowsView(
   view: SessionRowsView,
   viewerUserId: string,
   now: number,
-): Omit<SessionRowsResponse, 'activity'> {
+): SessionRowsResponse {
   const matching = filterSessionRows(rows.toSorted(compareSessionRows(view.sort)), view, viewerUserId, now);
   const groupKeyOf = GROUP_KEY_OF_ROW[view.groupBy];
   const rowsByGroup = new Map<string, SessionRow[]>();
@@ -163,15 +163,12 @@ export function sessionActivity(facts: {
     ...facts.cards.flatMap(card => Object.values(card.sessions).map(ref => ref.sessionId)),
   ]);
   const sorted = (ids: Iterable<string>) => [...ids].toSorted((a, b) => a.localeCompare(b));
-  const cards = [...facts.cardStatuses];
-  const inFlight = cards.filter(([, { status }]) => isInFlight(status));
+  const cards = [...facts.cardStatuses].toSorted(([a], [b]) => a.localeCompare(b));
   return {
     runningSessionIds: sorted([...facts.runningSessionIds].filter(id => known.has(id))),
     parkedSessionIds: sorted(facts.parkedSessionIds),
-    cardStatuses: Object.fromEntries(
-      inFlight.toSorted(([a], [b]) => a.localeCompare(b)).map(([id, { status }]) => [id, status]),
-    ),
-    sessionHeldCardIds: sorted(cards.flatMap(([id, { held }]) => (held ? [id] : []))),
-    cards: liveSessionCounts(inFlight.map(([, { status }]) => status)),
+    cardStatuses: Object.fromEntries(cards.flatMap(([id, { status }]) => (isInFlight(status) ? [[id, status]] : []))),
+    sessionHeldCardIds: cards.flatMap(([id, { held }]) => (held ? [id] : [])),
+    cards: liveSessionCounts(cards.map(([, { status }]) => status)),
   };
 }

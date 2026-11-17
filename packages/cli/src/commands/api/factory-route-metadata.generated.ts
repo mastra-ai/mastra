@@ -489,7 +489,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "sessionRows",
     "method": "GET",
     "path": "/web/factory/projects/:id/session-rows",
-    "description": "List the sidebar's session rows of a view, grouped and in order, with how many match and the project's session activity",
+    "description": "List the sidebar's session rows of a view, grouped and in order, with how many match",
     "pathParams": [
       "id"
     ],
@@ -5161,60 +5161,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "userId"
             ]
           }
-        },
-        "activity": {
-          "type": "object",
-          "properties": {
-            "runningSessionIds": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "parkedSessionIds": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "cardStatuses": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {
-                "$ref": "#/$defs/__schema4"
-              }
-            },
-            "sessionHeldCardIds": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "cards": {
-              "type": "object",
-              "properties": {
-                "working": {
-                  "$ref": "#/$defs/__schema0"
-                },
-                "waiting": {
-                  "$ref": "#/$defs/__schema0"
-                }
-              },
-              "required": [
-                "working",
-                "waiting"
-              ]
-            }
-          },
-          "required": [
-            "runningSessionIds",
-            "parkedSessionIds",
-            "cardStatuses",
-            "sessionHeldCardIds",
-            "cards"
-          ]
         }
       },
       "required": [
@@ -5222,8 +5168,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "matching",
         "groups",
         "boards",
-        "owners",
-        "activity"
+        "owners"
       ],
       "$defs": {
         "__schema0": {

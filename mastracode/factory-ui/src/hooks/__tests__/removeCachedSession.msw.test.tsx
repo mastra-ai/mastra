@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { NO_SESSION_ACTIVITY } from '../../../e2e/ui/session-reads';
 import { queryKeys } from '../../api/keys';
 import type { SessionRowsRequest, SessionRowsResponse, SessionRowWire } from '../../api/types';
 import { createQueryClient } from '../../query-client';
@@ -49,7 +48,6 @@ function rowsAnswer(rows: SessionRowWire[], groupTotal: number): SessionRowsResp
     groups: [{ key: 'all', total: groupTotal, rows }],
     boards: [],
     owners: [],
-    activity: NO_SESSION_ACTIVITY,
   };
 }
 
