@@ -59,7 +59,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "hono": "^4.13.13",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.7",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

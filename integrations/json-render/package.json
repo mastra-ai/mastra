@@ -68,7 +68,7 @@
     "msw": "^2.15.0",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.7",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

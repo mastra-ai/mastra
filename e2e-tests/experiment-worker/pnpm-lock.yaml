@@ -54,7 +54,7 @@ importers:
         specifier: ^0.18.0
         version: 0.18.0
       '@types/node':
-        specifier: ^26.6.5
+        specifier: ^26.6.6
         version: 26.6.6
       get-port:
         specifier: ^7.2.0

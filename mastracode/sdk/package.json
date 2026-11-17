@@ -100,9 +100,9 @@
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.5",
     "msw": "^2.12.11",
-    "tsdown": "0.23.1",
+    "tsdown": "0.23.7",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
     "vitest": "catalog:"
