@@ -98,6 +98,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('SkillOverridesS
     });
   });
 
+  it('updates a created skill only while it exists, and never turns an edit into one', async () => {
+    const { overrides, orgId } = await makeStorage();
+    const scope = { orgId, projectId: 'project-a' };
+    const update = (skillName: string, content: string) =>
+      overrides.updateCreated({ ...scope, skillName, content, updatedBy: 'user-2' });
+
+    expect(await update('release-notes', 'nothing yet')).toBeNull();
+    await overrides.create({ ...scope, skillName: 'release-notes', content: 'first', updatedBy: 'user-1' });
+    expect(await update('release-notes', 'second')).toMatchObject({
+      kind: 'created',
+      content: 'second',
+      updatedBy: 'user-2',
+    });
+    expect(await overrides.revision(scope)).toBe(2);
+
+    // Deleted first, a late save finds nothing and stores nothing.
+    await overrides.delete({ ...scope, skillName: 'release-notes' });
+    expect(await update('release-notes', 'late')).toBeNull();
+    expect(await overrides.get({ ...scope, skillName: 'release-notes' })).toBeNull();
+
+    await save(overrides, scope, 'factory-plan', 'edited');
+    expect(await update('factory-plan', 'not mine')).toBeNull();
+    expect(await overrides.get({ ...scope, skillName: 'factory-plan' })).toMatchObject({
+      kind: 'edit',
+      content: 'edited',
+    });
+  });
+
   it('creates one skill when the same name is created concurrently', async () => {
     const { overrides, orgId } = await makeStorage();
     const scope = { orgId, projectId: 'project-a' };

@@ -36,8 +36,9 @@ function nameProblem(name: string): string | undefined {
 
 /**
  * Writes the editor's fields back as a SKILL.md. Values are JSON-quoted, which
- * YAML reads as the same strings, so descriptions with `:` or `#` stay intact,
- * and frontmatter fields the editor does not show are kept.
+ * YAML reads as the same strings, so descriptions with `:` or `#` stay intact
+ * and a name such as `123` stays a string, and frontmatter fields the editor
+ * does not show are kept.
  */
 export function composeSkillMarkdown({
   name,
@@ -51,7 +52,7 @@ export function composeSkillMarkdown({
   instructions: string;
 }): string {
   const fields = [
-    `name: ${name}`,
+    `name: ${JSON.stringify(name)}`,
     `description: ${JSON.stringify(description)}`,
     ...Object.entries(frontmatter ?? {}).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
   ];

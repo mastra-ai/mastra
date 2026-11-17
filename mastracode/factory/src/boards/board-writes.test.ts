@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { projectSkillNamesOf } from '../skills/catalog.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
@@ -121,6 +121,36 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     expect((await boards.describe(scope)).details.get('notes')?.problems).toEqual([
       expect.stringContaining("runs skill 'release-notes', but no such skill exists"),
     ]);
+  });
+
+  it("flags a created skill as missing only while the project's skills can't be read", async () => {
+    const { writes, writer, scope, boards, skillOverrides } = await setup();
+    const project = { orgId: scope.orgId, projectId: scope.factoryProjectId };
+    const create = (skillName: string) =>
+      skillOverrides.create({
+        ...project,
+        skillName,
+        content: `---\nname: ${skillName}\ndescription: A skill\n---\n\n# ${skillName}\n`,
+        updatedBy: 'admin',
+      });
+    await create('release-notes');
+    const runsNotes = {
+      ...bugs,
+      phases: bugs.phases.map(phase =>
+        phase.key === 'fixing' ? { ...phase, runner: { context: 'work', skill: 'release-notes' } } : phase,
+      ),
+    };
+    await writes.create(scope, runsNotes, writer);
+    const problems = async () => (await boards.describe(scope)).details.get('bugs')?.problems;
+    expect(await problems()).toEqual([]);
+
+    // Another save moves the revision; the names read after it fails once.
+    await create('changelog');
+    vi.spyOn(skillOverrides, 'list').mockRejectedValueOnce(new Error('connection reset'));
+    expect(await problems()).toEqual([expect.stringContaining("runs skill 'release-notes', but no such skill exists")]);
+
+    // The revision hasn't moved since, but the next load reads the names again.
+    expect(await problems()).toEqual([]);
   });
 
   it('creates a board, serves it at once, and records who did it', async () => {

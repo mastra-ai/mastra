@@ -6,7 +6,13 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
 import type { Context } from 'hono';
 
-import { hashSkillContent, listFactorySkills, readFactorySkillOriginals } from '../skills/catalog.js';
+import {
+  createdSkillInfo,
+  hashSkillContent,
+  listFactorySkills,
+  originalSkillInfo,
+  readFactorySkillOriginals,
+} from '../skills/catalog.js';
 import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -45,7 +51,10 @@ export interface SkillRoutesDeps extends RouteDependencies {
   /** Per-project skill edits. Without it the catalog lists originals only and edit routes are not served. */
   overrides?: {
     projects: Pick<FactoryProjectsStorage, 'ensureReady' | 'get'>;
-    storage: Pick<SkillOverridesStorage, 'ensureReady' | 'list' | 'get' | 'upsert' | 'create' | 'delete'>;
+    storage: Pick<
+      SkillOverridesStorage,
+      'ensureReady' | 'list' | 'get' | 'upsert' | 'create' | 'updateCreated' | 'delete'
+    >;
     audit: AuditEmitter;
   };
 }
@@ -137,12 +146,6 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
   async #canEdit(c: Context, orgId: string): Promise<boolean> {
     const { auth } = this.deps;
     return !auth.enabled() || (await auth.isOrganizationAdmin(c, orgId));
-  }
-
-  async #catalogEntry(scope: { orgId: string; projectId: string }, name: string) {
-    const { overrides, skills } = this.deps;
-    const edits = overrides ? await overrides.storage.list(scope) : [];
-    return (await listFactorySkills(skills, edits)).find(skill => skill.name === name);
   }
 
   routes(): ApiRoute[] {
@@ -251,7 +254,8 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
             },
           });
         }
-        return c.json({ skill: original ? ((await this.#catalogEntry(access, name)) ?? null) : null });
+        // The response describes what the delete left, not a reread another write could change.
+        return c.json({ skill: original ? originalSkillInfo(name, original) : null });
       }
 
       let body: unknown;
@@ -270,14 +274,12 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           400,
         );
       }
-      await overrides!.storage.upsert({
-        ...scope,
-        content: request.data.content,
-        ...(original
-          ? { baseHash: hashSkillContent(original.raw), kind: 'edit' as const }
-          : { baseHash: '', kind: 'created' as const }),
-        updatedBy: access.userId,
-      });
+      const write = { ...scope, content: request.data.content, updatedBy: access.userId };
+      // A created skill is only updated while it exists, so a save racing a delete doesn't bring it back.
+      const saved = original
+        ? await overrides!.storage.upsert({ ...write, baseHash: hashSkillContent(original.raw), kind: 'edit' })
+        : await overrides!.storage.updateCreated(write);
+      if (!saved) return c.json({ error: 'not_found', message: `Skill "${name}" not found.` }, 404);
       await overrides!.audit.emit({
         context: c,
         input: {
@@ -287,7 +289,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           metadata: { origin: original?.origin ?? 'project' },
         },
       });
-      return c.json({ skill: await this.#catalogEntry(access, name) });
+      return c.json({ skill: original ? originalSkillInfo(name, original, saved) : createdSkillInfo(saved) });
     };
 
     const handleSkillCreate = async (context: unknown) => {
@@ -337,7 +339,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
           factoryProjectId: access.projectId,
         },
       });
-      return c.json({ skill: await this.#catalogEntry(access, name) }, 201);
+      return c.json({ skill: createdSkillInfo(created) }, 201);
     };
 
     return [

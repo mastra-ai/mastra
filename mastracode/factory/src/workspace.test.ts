@@ -3945,6 +3945,27 @@ describe('FactorySkillSource layering', () => {
       );
     });
 
+    it('serves a created skill whose name only a folder without a SKILL.md uses', async () => {
+      const localRoot = await makeLocalRoot({});
+      // The app removed its release-notes skill but left the folder behind.
+      await fs.mkdir(path.join(localRoot, 'release-notes', 'references'), { recursive: true });
+      const content = '---\nname: release-notes\ndescription: notes\n---\n\n# Ours\n';
+      const source = new FactorySkillSource(
+        repoFallback([]),
+        [repoRoot],
+        localRoot,
+        async () => true,
+        [],
+        async () => new Map([['release-notes', { content, updatedAt: new Date(), created: true }]]),
+      );
+      const skillDir = path.join(FACTORY_SKILLS_MOUNT, 'release-notes');
+
+      expect((await source.readdir(FACTORY_SKILLS_MOUNT)).map(entry => entry.name)).toContain('release-notes');
+      expect((await source.readdir(skillDir)).map(entry => entry.name).sort()).toEqual(['SKILL.md', 'references']);
+      expect(await source.exists(path.join(skillDir, 'SKILL.md'))).toBe(true);
+      expect(String(await source.readFile(path.join(skillDir, 'SKILL.md')))).toBe(content);
+    });
+
     it('picks up app-local skills added after the source was created', async () => {
       const localRoot = await makeLocalRoot({});
       const source = new FactorySkillSource(repoFallback(['late-skill']), [repoRoot], localRoot);

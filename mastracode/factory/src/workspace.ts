@@ -278,11 +278,15 @@ export class FactorySkillSource implements SkillSource {
     return (await this.skillOverrides()).get(skillName);
   }
 
-  /** True when a code, folder, or bundled skill has this name, so a created skill of the name is its edit instead. */
+  /**
+   * True when a code, folder, or bundled skill has this name, so a created skill of the name is its edit
+   * instead. Only a SKILL.md makes a skill, as for the catalog: a folder left without one serves nothing.
+   */
   async #servedByLayer(skillName: string): Promise<boolean> {
+    const skillFile = path.join(skillName, 'SKILL.md');
     if (this.#codeSource && (await this.#codeSource.exists(skillName))) return true;
-    if (this.#localSource && (await this.#localSource.exists(skillName))) return true;
-    return this.#bundledSource.exists(skillName);
+    if (this.#localSource && (await this.#localSource.exists(skillFile))) return true;
+    return this.#bundledSource.exists(skillFile);
   }
 
   /** Names of the skills the project created that no layer serves; each is a directory holding only its SKILL.md. */
@@ -376,6 +380,9 @@ export class FactorySkillSource implements SkillSource {
       // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
       for (const entry of codeEntries) merged.set(entry.name, entry);
+      // A created skill in a folder an app skill left behind still has its SKILL.md.
+      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
+      if (created && !created.file) merged.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));

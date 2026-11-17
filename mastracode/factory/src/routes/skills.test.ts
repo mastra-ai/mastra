@@ -626,10 +626,12 @@ describe('project skill edit routes', () => {
     writeFileSync(join(projectDir, 'factory-skills', dir, 'SKILL.md'), content);
   }
 
-  async function setup() {
+  /** `afterAudit` runs once each write is audited, before the route responds, as another request could. */
+  async function setup({ afterAudit }: { afterAudit?: () => Promise<void> } = {}) {
     const seed = await createFactoryStorageForTests();
     const admins = new Set([ADMIN.workosId]);
     const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => admins.has(userId) });
+    const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
     const routes = new SkillRoutes({
       auth,
       controllerId: 'code',
@@ -637,7 +639,12 @@ describe('project skill edit routes', () => {
       overrides: {
         projects: seed.projects,
         storage: seed.skillOverrides,
-        audit: new AuditDomain({ auth, audit: seed.audit, projects: seed.projects }),
+        audit: {
+          emit: async input => {
+            await auditDomain.emit(input);
+            await afterAudit?.();
+          },
+        },
       },
     }).routes();
     const projectA = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'A' } });
@@ -723,6 +730,46 @@ describe('project skill edit routes', () => {
       expect(await auditActions()).toEqual([
         { action: 'factory.skill.created', project: projectA.id, targets: [{ type: 'skill', id: 'release-notes' }] },
       ]);
+    });
+
+    it('creates a skill with an all-digit name when the SKILL.md quotes it, as the settings editor writes it', async () => {
+      const { projectA, create, skill } = await setup();
+      const response = await create(
+        ADMIN,
+        projectA.id,
+        '123',
+        '---\nname: "123"\ndescription: "Numbered"\n---\n\n# 123\n',
+      );
+      expect(response.status).toBe(201);
+      expect(await skill(ADMIN, projectA.id, '123')).toMatchObject({ origin: 'project', description: 'Numbered' });
+    });
+
+    it('answers a create or save with the skill it stored, even when another admin deletes it at once', async () => {
+      let deleteAfterAudit: (() => Promise<unknown>) | undefined;
+      const { seed, projectA, create, save } = await setup({
+        afterAudit: async () => void (await deleteAfterAudit?.()),
+      });
+      const scope = { orgId: 'org-1', projectId: projectA.id, skillName: 'release-notes' };
+      deleteAfterAudit = () => seed.skillOverrides.delete(scope);
+
+      const created = await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      expect(created.status).toBe(201);
+      expect(((await created.json()) as { skill: unknown }).skill).toMatchObject({
+        name: 'release-notes',
+        content: '# Notes',
+        origin: 'project',
+      });
+      expect(await seed.skillOverrides.get(scope)).toBeNull();
+
+      deleteAfterAudit = undefined;
+      await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      deleteAfterAudit = () => seed.skillOverrides.delete(scope);
+      const saved = await save(ADMIN, projectA.id, 'release-notes', releaseNotes('# Shorter'));
+      expect(saved.status).toBe(200);
+      expect(((await saved.json()) as { skill: unknown }).skill).toMatchObject({
+        content: '# Shorter',
+        origin: 'project',
+      });
     });
 
     it('updates a created skill, then deletes it', async () => {

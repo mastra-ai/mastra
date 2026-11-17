@@ -127,6 +127,35 @@ export async function readFactorySkillOriginals(
   return originals;
 }
 
+/** The catalog entry of a skill the project created, from its stored row. */
+export function createdSkillInfo(created: SkillOverrideRecord): FactorySkillInfo {
+  return {
+    name: created.skillName,
+    ...parseSkillMarkdown(created.skillName, created.content),
+    origin: 'project',
+    builtIn: false,
+    created: { updatedBy: created.updatedBy, updatedAt: created.updatedAt.toISOString() },
+  };
+}
+
+/** The catalog entry of a code, folder, or bundled skill, showing the project's `edit` of it when it has one. */
+export function originalSkillInfo(
+  name: string,
+  { raw, origin }: FactorySkillOriginal,
+  edit?: SkillOverrideRecord,
+): FactorySkillInfo {
+  const builtIn = FACTORY_SKILL_NAMES.has(name);
+  if (!edit) return { name, ...parseSkillMarkdown(name, raw), origin, builtIn };
+  return {
+    name,
+    ...parseSkillMarkdown(name, edit.content),
+    origin,
+    builtIn,
+    edited: { updatedBy: edit.updatedBy, updatedAt: edit.updatedAt.toISOString() },
+    originalChanged: hashSkillContent(raw) !== edit.baseHash,
+  };
+}
+
 /**
  * List the skills the Factory skill mount serves, sorted by name. With a
  * project's `overrides`, edited skills show the edited text, who edited them,
@@ -141,34 +170,11 @@ export async function listFactorySkills(
 ): Promise<FactorySkillInfo[]> {
   const edits = new Map(overrides.map(override => [override.skillName, override]));
   const originals = await readFactorySkillOriginals(codeSkills);
-  const skills: FactorySkillInfo[] = [];
-  for (const created of overrides) {
-    if (created.kind !== 'created' || originals.has(created.skillName)) continue;
-    skills.push({
-      name: created.skillName,
-      ...parseSkillMarkdown(created.skillName, created.content),
-      origin: 'project',
-      builtIn: false,
-      created: { updatedBy: created.updatedBy, updatedAt: created.updatedAt.toISOString() },
-    });
-  }
-  for (const [name, { raw, origin }] of originals) {
-    const edit = edits.get(name);
-    const builtIn = FACTORY_SKILL_NAMES.has(name);
-    if (!edit) {
-      skills.push({ name, ...parseSkillMarkdown(name, raw), origin, builtIn });
-      continue;
-    }
-    skills.push({
-      name,
-      ...parseSkillMarkdown(name, edit.content),
-      origin,
-      builtIn,
-      edited: { updatedBy: edit.updatedBy, updatedAt: edit.updatedAt.toISOString() },
-      originalChanged: hashSkillContent(raw) !== edit.baseHash,
-    });
-  }
-  return skills.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const created = overrides.filter(override => override.kind === 'created' && !originals.has(override.skillName));
+  return [
+    ...created.map(createdSkillInfo),
+    ...[...originals].map(([name, original]) => originalSkillInfo(name, original, edits.get(name))),
+  ].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 /**

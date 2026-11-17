@@ -124,10 +124,11 @@ export class BoardWrites {
 
   /**
    * Validates a definition the way `defineBoard()` does, plus the skills its runners name: the app's,
-   * and `projectSkills`, the skills the project it is stored in created. A code board's copy is also
-   * checked against the code behaviour of its board and phase keys.
+   * and `projectSkills`, the skills the project it is stored in created. `null` leaves the runners'
+   * skills unchecked, for a caller that checks them per project. A code board's copy is also checked
+   * against the code behaviour of its board and phase keys.
    */
-  validate(input: unknown, projectSkills?: ReadonlySet<string>): StoredBoardInput {
+  validate(input: unknown, projectSkills?: ReadonlySet<string> | null): StoredBoardInput {
     const { boards } = this.deps;
     const parsed = storedBoardInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -141,6 +142,7 @@ export class BoardWrites {
       }
     }
     const board = code ? compileStoredBoard(parsed.data, code) : compileStoredBoard(parsed.data);
+    if (projectSkills === null) return parsed.data;
     const problems = findBoardSkillProblems(boardRegistryOf([board]), boards.codeSkills, undefined, projectSkills);
     const unknown = problems.filter(problem => problem.includes(UNKNOWN_SKILL));
     if (unknown.length > 0) throw new BoardWriteError(422, { error: 'unknown_skill', message: unknown.join(' ') });

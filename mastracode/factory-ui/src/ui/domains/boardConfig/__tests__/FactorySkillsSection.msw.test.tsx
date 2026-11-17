@@ -50,7 +50,7 @@ function serve({
       const { content } = (await request.json()) as { content: string };
       const name = String(params.name);
       writes.push({ method: 'PUT', name, content });
-      if (!content.includes(`name: ${name}\n`)) {
+      if (!content.includes(`name: ${JSON.stringify(name)}\n`)) {
         return HttpResponse.json({ error: 'invalid_skill', message: 'name must match' }, { status: 400 });
       }
       const description = JSON.parse(/^description: (.*)$/m.exec(content)![1]) as string;
@@ -245,7 +245,7 @@ describe('FactorySkillsSection', () => {
         {
           method: 'PUT',
           name: 'changelog-lint',
-          content: '---\nname: changelog-lint\ndescription: "Our lint: check # first"\n---\n\n# Lint\n',
+          content: '---\nname: "changelog-lint"\ndescription: "Our lint: check # first"\n---\n\n# Lint\n',
         },
       ]);
       expect(await within(card('changelog-lint')).findByText('Edited')).toBeInTheDocument();
@@ -403,12 +403,28 @@ describe('FactorySkillsSection', () => {
         {
           method: 'POST',
           name: 'release-notes',
-          content: '---\nname: release-notes\ndescription: "Write notes: what # changed"\n---\n\n\n',
+          content: '---\nname: "release-notes"\ndescription: "Write notes: what # changed"\n---\n\n\n',
         },
       ]);
       const created = await screen.findByRole('button', { name: /^release-notes/ });
       expect(within(created).getByText('Custom')).toBeInTheDocument();
       expect(within(card('changelog-lint')).queryByText('Custom')).not.toBeInTheDocument();
+    });
+
+    it('keeps an all-digit name a string in the SKILL.md it sends', async () => {
+      const { writes } = serve();
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'New skill' }));
+      const dialog = await screen.findByRole('dialog', { name: 'New skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), '123');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Numbered');
+      await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0]).toMatchObject({ method: 'POST', name: '123' });
+      expect(writes[0].content).toMatch(/^---\nname: "123"\n/);
     });
 
     it('explains a name agents cannot use and keeps Create disabled', async () => {

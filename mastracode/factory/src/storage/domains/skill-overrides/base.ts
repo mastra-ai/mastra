@@ -192,29 +192,39 @@ export class SkillOverridesStorage extends FactoryStorageDomain {
    * Stores a skill the project created, or returns `null` when the project already created one by that name.
    * An edit stored under the name is replaced: its skill is gone from the app, so nothing served it.
    */
-  async create({
-    content,
-    updatedBy,
-    skillName,
-    ...scope
-  }: SkillScope & { content: string; updatedBy: string }): Promise<SkillOverrideRecord | null> {
+  create(input: SkillScope & { content: string; updatedBy: string }): Promise<SkillOverrideRecord | null> {
+    return this.#writeCreated(input, existing => existing?.kind !== 'created');
+  }
+
+  /**
+   * Saves a new SKILL.md for a skill the project created, or returns `null` when it has no created skill by
+   * that name, so a save that loses a race with a delete doesn't create the skill again.
+   */
+  updateCreated(input: SkillScope & { content: string; updatedBy: string }): Promise<SkillOverrideRecord | null> {
+    return this.#writeCreated(input, existing => existing?.kind === 'created');
+  }
+
+  /** Writes a created skill when `canWrite` accepts the row stored under its name, else returns `null`. */
+  async #writeCreated(
+    { content, updatedBy, skillName, ...scope }: SkillScope & { content: string; updatedBy: string },
+    canWrite: (existing: SkillOverrideDbRow | null) => boolean,
+  ): Promise<SkillOverrideRecord | null> {
     await this.#ensureRevisionRow(scope);
     return this.storage.withTransaction(async ops => {
-      // Lock the revision row first, so two creates of one name serialize and the second sees the first.
-      const result: { created?: SkillOverrideDbRow } = {};
+      // Lock the revision row first, so concurrent writes of one name serialize and each sees the last.
+      const result: { written?: SkillOverrideDbRow } = {};
       await ops.updateAtomic<RevisionDbRow>('factory_skill_override_revisions', projectWhere(scope), async row => {
         const skill = { ...projectWhere(scope), skill_name: skillName };
-        const existing = await ops.findOne<SkillOverrideDbRow>('factory_skill_overrides', skill);
-        if (existing?.kind === 'created') return null;
+        if (!canWrite(await ops.findOne<SkillOverrideDbRow>('factory_skill_overrides', skill))) return null;
         const now = new Date();
-        result.created = await ops.upsertOne<SkillOverrideDbRow>(
+        result.written = await ops.upsertOne<SkillOverrideDbRow>(
           'factory_skill_overrides',
           ['org_id', 'factory_project_id', 'skill_name'],
           { ...skill, content, base_hash: '', kind: 'created', updated_by: updatedBy, updated_at: now },
         );
         return { revision: row.revision + 1, updated_at: now };
       });
-      return result.created ? toRecord(result.created) : null;
+      return result.written ? toRecord(result.written) : null;
     });
   }
 

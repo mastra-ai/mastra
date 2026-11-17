@@ -138,6 +138,8 @@ export interface ProjectSkillNames {
 }
 
 const NO_PROJECT_SKILLS: ReadonlySet<string> = new Set();
+/** Recorded when the project's skills couldn't be read; never a stored revision, so the next load rereads them. */
+const UNREAD_SKILLS_REVISION = -1;
 
 export interface ProjectBoardCacheOptions {
   /** The code boards, built-ins included when enabled. */
@@ -368,6 +370,11 @@ export class ProjectBoardCache implements ProjectBoardSource {
    * read, so a storage failure flags those runners instead of failing the boards.
    */
   async projectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string>> {
+    return (await this.#readProjectSkillNames(scope)) ?? NO_PROJECT_SKILLS;
+  }
+
+  /** Undefined when the names can't be read, so a load knows not to cache what it compiled without them. */
+  async #readProjectSkillNames(scope: StoredBoardScope): Promise<ReadonlySet<string> | undefined> {
     if (!this.#projectSkills) return NO_PROJECT_SKILLS;
     try {
       return await this.#projectSkills.names(scope);
@@ -376,7 +383,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
         `project-skills:${scopeKey(scope)}`,
         `Could not read the skills project ${scope.factoryProjectId} created; boards that run them show them as missing: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return NO_PROJECT_SKILLS;
+      return undefined;
     }
   }
 
@@ -385,8 +392,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     try {
       return await this.#projectSkills.revision(scope);
     } catch {
-      // Never equal to a stored revision, so the next load rereads the names.
-      return -1;
+      return UNREAD_SKILLS_REVISION;
     }
   }
 
@@ -422,20 +428,22 @@ export class ProjectBoardCache implements ProjectBoardSource {
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
     const reviewInUse = (await this.#reviewBoardInUse?.(scope)) ?? false;
-    const skillsRevision = await this.#projectSkillsRevision(scope);
+    let skillsRevision = await this.#projectSkillsRevision(scope);
     if (
       current &&
       current.version === version &&
       current.reviewInUse === reviewInUse &&
       current.skillsRevision === skillsRevision &&
-      skillsRevision !== -1
+      skillsRevision !== UNREAD_SKILLS_REVISION
     ) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
     const snapshot = await this.#consistentSnapshot(scope);
-    const projectSkills = await this.projectSkillNames(scope);
-    const boards = this.#compile(scope, snapshot.boards, reviewInUse, projectSkills);
+    const projectSkills = await this.#readProjectSkillNames(scope);
+    // Compiled without the names, the boards flag their skills as missing: the next load reads them again.
+    if (projectSkills === undefined) skillsRevision = UNREAD_SKILLS_REVISION;
+    const boards = this.#compile(scope, snapshot.boards, reviewInUse, projectSkills ?? NO_PROJECT_SKILLS);
     if ((this.#generations.get(key) ?? 0) === generation) {
       this.#entries.set(key, {
         boards,
