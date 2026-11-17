@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
@@ -7,11 +8,12 @@ import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { PageLayout } from '@/ds/components/PageLayout';
-import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
+import { AsideReveal, Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { IconSidebarSimpleRightWide } from '@/ds/icons/central/IconSidebarSimpleRightWide';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -170,6 +172,62 @@ export const Mobile: Story = {
       </SidebarProvider>
     </TooltipProvider>
   ),
+};
+
+function MobileWithAsideDemo() {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <TooltipProvider>
+      <SidebarProvider>
+        <div className="h-dvh w-dvw bg-sidebar font-body">
+          <AppShell
+            sidebar={<DemoSidebar />}
+            mobileHeader={
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 lg:hidden">
+                <span className="flex items-center gap-3">
+                  <Sidebar.MobileTrigger />
+                  <span className="text-subheading text-foreground">Workspace</span>
+                </span>
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  aria-label="Details"
+                  aria-pressed={open}
+                  onClick={() => setOpen(!open)}
+                >
+                  <IconSidebarSimpleRightWide className="size-5" />
+                </button>
+              </div>
+            }
+          >
+            <MainCard>
+              <MainContent />
+            </MainCard>
+          </AppShell>
+          <AsideReveal open={open} onOpenChange={setOpen} label="Details" triggerRef={triggerRef} className="p-4">
+            <p className="text-column text-foreground">Details panel</p>
+            <p className="mt-1 text-meta text-muted-foreground">
+              Swiped in from the right edge, mirroring the navigation drawer on the left.
+            </p>
+          </AsideReveal>
+        </div>
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+}
+
+export const MobileWithAside: Story = {
+  parameters: {
+    viewport: { defaultViewport: 'mobile1' },
+    docs: {
+      description: {
+        story:
+          '`AsideReveal` is the right-edge counterpart of the navigation drawer. Swipe the page left or tap the panel button to slide the page left and uncover the panel; swipe right, tap the tinted strip, or press Escape to close. Only one drawer is out at a time.',
+      },
+    },
+  },
+  render: () => <MobileWithAsideDemo />,
 };
 
 export const WithoutRouteHeader: Story = {

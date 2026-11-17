@@ -993,7 +993,7 @@ describe('Sidebar', () => {
     const mobileTrigger = screen.getByRole('button', { name: 'Open navigation menu' });
     fireEvent.click(mobileTrigger);
 
-    expect(screen.getByRole('dialog', { name: 'Navigation' }).getAttribute('data-mobile-mode')).toBe('takeover');
+    expect(screen.getByRole('dialog', { name: 'Navigation' }).getAttribute('data-reveal-drawer')).toBe('sidebar');
     expect(screen.getByText('Observability')).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
     expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');

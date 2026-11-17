@@ -3,6 +3,8 @@ import type { CSSProperties } from 'react';
 import { SidebarContext, MobileDrawerContext } from './sidebar-context';
 import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
 import { SIDEBAR_WIDTHS } from './sidebar-widths';
+import { REVEAL_EASE } from './use-reveal-gesture';
+import type { RevealName } from './use-reveal-gesture';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
@@ -18,6 +20,7 @@ type InitialSidebarState = {
 type SidebarScopeStyle = CSSProperties & {
   '--sidebar-width': string;
   '--sidebar-width-mobile': string;
+  '--reveal-ease': string;
 };
 
 export type SidebarProviderProps = {
@@ -107,7 +110,14 @@ export function SidebarProvider({
   stateRef.current = state;
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
+  const [scope, setScope] = React.useState<HTMLDivElement | null>(null);
+  // Stable for the provider's lifetime, so React attaches it once.
+  const [attachScope] = React.useState(() => (node: HTMLDivElement | null) => {
+    scopeRef.current = node;
+    setScope(node);
+  });
   const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const drawerOwnerRef = React.useRef<RevealName | null>(null);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -119,6 +129,8 @@ export function SidebarProvider({
   }, [mobileBreakpoint]);
 
   const setOpenMobile = React.useCallback((open: boolean) => {
+    // One drawer at a time: a shortcut must not open navigation over an open aside.
+    if (open && drawerOwnerRef.current === 'aside') return;
     openMobileRef.current = open;
     if (open) setMobileDrawerPresent(true);
     setOpenMobileState(open);
@@ -240,6 +252,8 @@ export function SidebarProvider({
       commit,
       setGestureActive,
       scopeRef,
+      scope,
+      drawerOwnerRef,
       panelRef,
       LinkComponent,
     }),
@@ -258,24 +272,26 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      scope,
       LinkComponent,
     ],
   );
 
   const drawerValue = React.useMemo<MobileDrawerContextValue>(
-    () => ({ openMobile, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent }),
-    [openMobile, setOpenMobile],
+    () => ({ openMobile, mobileDrawerPresent, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent }),
+    [openMobile, mobileDrawerPresent, setOpenMobile],
   );
 
   const scopeStyle: SidebarScopeStyle = {
     [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax)}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,
+    '--reveal-ease': REVEAL_EASE,
     display: 'contents',
   };
 
   return (
     <div
-      ref={scopeRef}
+      ref={attachScope}
       data-sidebar-scope
       data-sidebar-state={state}
       data-sidebar-mobile={isMobile ? 'true' : 'false'}
