@@ -2723,17 +2723,19 @@ export class MastraFactory {
           return route ? [route] : [];
         })
       : [];
-    if (eventRoutes.length > 0 && !process.env.MASTRA_PROJECT_ID?.trim()) {
+    const eventsProjectId = process.env.MASTRA_PROJECT_ID?.trim();
+    if (eventRoutes.length > 0 && !eventsProjectId) {
       console.warn(
         'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
       );
-    } else if (eventRoutes.length > 0) {
+    } else if (eventRoutes.length > 0 && eventsProjectId) {
       integrationWorkers.push(
         new PlatformEventsWorker({
           // Built from env like every auto-installed Platform integration's client, so it reads
           // the same project they list. An explicit integration given its own `connect` config
           // for another project would get no events here.
           events: createPlatformConnectClient().events,
+          projectId: eventsProjectId,
           storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
           routes: eventRoutes,
         }),

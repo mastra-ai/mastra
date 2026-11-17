@@ -21,7 +21,6 @@ import type { PlatformConnectBinding } from './connect-binding.js';
 export const PLATFORM_EVENTS_STORAGE_ID = 'platform-events';
 
 const CURSOR_ORG_ID = '__platform_events_worker__';
-const CURSOR_USER_ID = 'worker';
 const CONNECT_TOPIC = 'connect';
 const DEFAULT_LEASE_TTL_MS = 60_000;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
@@ -77,6 +76,8 @@ export type PlatformEventsWorkerStorage = IntegrationStorageHandle<
 
 export interface PlatformEventsWorkerConfig {
   events: EventsClient;
+  /** Project whose topics the worker reads. Its cursors are kept per project, so a new project starts fresh. */
+  projectId: string;
   storage: PlatformEventsWorkerStorage;
   routes: readonly PlatformConnectEventRoute[];
   topics?: readonly PlatformTopicSubscription[];
@@ -99,6 +100,7 @@ interface TopicDiagnostics {
 type StreamEvent = { id: string; timestamp: number };
 
 interface StreamOptions {
+  projectId: string;
   cursorStore: EventCursorStore;
   onGap(gap: EventStreamGap): void;
   signal: AbortSignal;
@@ -144,6 +146,8 @@ export class PlatformEventsWorker extends MastraWorker {
   readonly name = 'platform-events';
 
   readonly #events: EventsClient;
+  readonly #projectId: string;
+  readonly #cursorUserId: string;
   readonly #storage: PlatformEventsWorkerStorage;
   readonly #routes = new Map<string, PlatformConnectEventRoute>();
   readonly #runners: TopicRunner[];
@@ -166,6 +170,8 @@ export class PlatformEventsWorker extends MastraWorker {
   constructor(config: PlatformEventsWorkerConfig) {
     super();
     this.#events = config.events;
+    this.#projectId = config.projectId;
+    this.#cursorUserId = `project:${config.projectId}`;
     this.#storage = config.storage;
     for (const route of config.routes) {
       for (const key of route.binding.providerKeys) {
@@ -212,7 +218,7 @@ export class PlatformEventsWorker extends MastraWorker {
   async start(): Promise<void> {
     if (this.#running) return;
     if (!this.deps) throw new Error('PlatformEventsWorker: call init() before start()');
-    this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, this.#cursorUserId));
     this.#running = true;
     this.deps.logger.info('Platform events worker started', {
       topics: this.#runners.map(runner => runner.topic),
@@ -281,7 +287,7 @@ export class PlatformEventsWorker extends MastraWorker {
     // read, so the cursor can move back; that only replays events, which
     // handlers already tolerate (delivery is at-least-once).
     try {
-      this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+      this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, this.#cursorUserId));
     } catch (error) {
       this.deps?.logger.warn('Platform events: could not read the saved cursors; retrying the lease', {
         error: error instanceof Error ? error.message : String(error),
@@ -345,6 +351,7 @@ export class PlatformEventsWorker extends MastraWorker {
         // Inside the try: a client that can't subscribe at all (no project id,
         // bad options) is logged and retried like a failed stream.
         subscription = runner.subscribe({
+          projectId: this.#projectId,
           cursorStore: {
             load: () => stored ?? null,
             save: cursor => {
@@ -488,7 +495,7 @@ export class PlatformEventsWorker extends MastraWorker {
     const snapshot: EventsWorkerSettings = { version: 1, cursors: { ...this.#settings.cursors } };
     this.#saving = this.#saving
       .catch(() => {})
-      .then(() => this.#storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, snapshot));
+      .then(() => this.#storage.settings.save(CURSOR_ORG_ID, this.#cursorUserId, snapshot));
     return this.#saving;
   }
 

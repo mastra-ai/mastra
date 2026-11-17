@@ -13,19 +13,24 @@ import type {
 import { startFakePlatform } from './test-utils.js';
 import type { FakePlatform } from './test-utils.js';
 
-function memoryStorage(initial: unknown = null) {
-  let value = structuredClone(initial);
+/** Settings per user id; the worker keeps its cursors under `project:<projectId>`. */
+function memoryStorage(initial: unknown = null, userId = 'project:proj_factory') {
+  const values = new Map<string, unknown>([[userId, structuredClone(initial)]]);
   const storage = {
     integrationId: 'platform',
     settings: {
-      get: async () => structuredClone(value),
-      save: async (_orgId: string, _userId: string, next: unknown) => {
-        value = structuredClone(next);
+      get: async (_orgId: string, key: string) => structuredClone(values.get(key) ?? null),
+      save: async (_orgId: string, key: string, next: unknown) => {
+        values.set(key, structuredClone(next));
       },
     },
   } as unknown as PlatformEventsWorkerStorage;
   const stored = (topic = 'connect') =>
-    (value as { cursors?: Record<string, { eventId?: string; timestamp?: number }> } | null)?.cursors?.[topic];
+    (
+      values.get('project:proj_factory') as {
+        cursors?: Record<string, { eventId?: string; timestamp?: number }>;
+      } | null
+    )?.cursors?.[topic];
   return { storage, stored, cursor: (topic = 'connect') => stored(topic)?.eventId };
 }
 
@@ -71,6 +76,7 @@ async function startWorker(
 ) {
   const worker = new PlatformEventsWorker({
     events: platform.connect().events,
+    projectId: platform.projectId,
     storage: options.storage ?? memoryStorage().storage,
     routes: options.routes,
     ...(options.topics ? { topics: options.topics } : {}),
@@ -230,6 +236,28 @@ describe('PlatformEventsWorker', () => {
     await vi.waitFor(() => expect(second.handled.map(event => event.id)).toEqual([whileDown]));
     expect(platform.streamRequests.at(-1)).toEqual({ topic: 'connect', lastEventId: before });
     expect(second.route.reconcile).not.toHaveBeenCalled();
+  });
+
+  it("never resumes from a cursor saved for another project, reading this project's live tail instead", async () => {
+    const platform = await platformWith([{ id: 'conn-gitlab', integrationId: 'gitlab' }]);
+    // The deployment used to point at another project, whose stream ids mean nothing here.
+    const { storage, cursor } = memoryStorage(
+      { version: 1, cursors: { connect: { eventId: '9000', timestamp: Date.now() } } },
+      'project:proj_old',
+    );
+    const gitlab = recordingRoute(platform, 'gitlab');
+    await startWorker(platform, { routes: [gitlab.route], storage });
+    await subscribed(platform);
+
+    await vi.waitFor(() => expect(gitlab.route.reconcile).toHaveBeenCalledTimes(1));
+    expect(platform.streamRequests).toEqual([{ topic: 'connect', lastEventId: undefined }]);
+    const id = platform.publishConnect({
+      connectionId: 'conn-gitlab',
+      integrationId: 'gitlab',
+      eventType: 'Issue Hook',
+      payload: {},
+    });
+    await vi.waitFor(() => expect(cursor()).toBe(id));
   });
 
   it('reconciles every routed integration once when it first reads from the live tail', async () => {
@@ -484,6 +512,7 @@ describe('PlatformEventsWorker', () => {
     });
     const worker = new PlatformEventsWorker({
       events,
+      projectId: platform.projectId,
       storage: memoryStorage().storage,
       routes: [gitlab.route],
       resubscribeDelayMs: 20,
@@ -513,6 +542,7 @@ describe('PlatformEventsWorker', () => {
       () =>
         new PlatformEventsWorker({
           events: platform.connect().events,
+          projectId: platform.projectId,
           storage: memoryStorage().storage,
           routes: [
             recordingRoute(platform, 'gitlab').route,

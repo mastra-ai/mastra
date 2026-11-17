@@ -278,6 +278,7 @@ describe('PlatformGitLabIntegration events', () => {
     let saved: unknown = null;
     const worker = new PlatformEventsWorker({
       events: gitlab.binding.connect.events,
+      projectId: platform.projectId,
       storage: {
         integrationId: 'platform',
         settings: {
