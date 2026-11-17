@@ -1,3 +1,4 @@
+// CI trial trigger: selects core unit tests for the 16-vCPU measurement. Do not merge.
 import type { UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
