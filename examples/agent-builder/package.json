@@ -35,7 +35,7 @@
     "@mastra/stagehand": "beta",
     "@mastra/slack": "beta",
     "@mastra/e2b": "beta",
-    "ws": "^8.18.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "mastra": "link:../../packages/cli",
