@@ -87,7 +87,8 @@ vi.mock('./coding-agents', () => ({
   detectCodingAgentSkills: vi.fn(),
 }));
 
-vi.mock('./provider-adapter', () => ({
+vi.mock('./provider-adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('./provider-adapter')>()),
   adaptDefaultTemplate: vi.fn(),
   writeManagedApiKey: vi.fn(),
 }));
@@ -550,6 +551,47 @@ describe('managed Gateway', () => {
       apiKey: 'gateway-key',
       extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
     });
+  });
+
+  it('writes a gateway URL with a path as origin and path, without a trailing /v1/', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const adapter = await mockGatewayAdapter();
+    clientMocks.gatewayUrl = 'https://gateway.example.test/base/v1/';
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway.example.test/base' } }),
+    );
+  });
+
+  it.each([
+    ['a line break', 'https://gateway.example.test\nOTHER=1'],
+    ['a #', 'https://gateway.example.test/#fragment'],
+    ['a quote', 'https://gateway.example.test/"x'],
+    ['no http scheme', 'ftp://gateway.example.test'],
+    ['an unparseable value', 'not a url'],
+  ])('keeps the key but leaves out a gateway URL with %s', async (_label, gatewayUrl) => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const adapter = await mockGatewayAdapter();
+    clientMocks.gatewayUrl = gatewayUrl;
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith({
+      projectPath: path.resolve('my-project'),
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: 'gateway-key',
+    });
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('MASTRA_GATEWAY_URL is not a valid http(s) URL, so it was not written to .env.'),
+    );
   });
 
   it('links the dashboard at $0 without waiting for credits', async () => {

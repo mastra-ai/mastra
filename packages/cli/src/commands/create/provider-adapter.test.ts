@@ -608,6 +608,27 @@ describe('writeManagedApiKey', () => {
     );
   });
 
+  it.each([
+    ['an invalid variable name', { 'BAD-KEY': 'value' }],
+    ['a variable name with a line break', { 'OK\nEVIL': 'value' }],
+    ['a value with a line break', { MASTRA_GATEWAY_URL: 'https://gateway.example.test\nOTHER=1' }],
+    ['a value with a #', { MASTRA_GATEWAY_URL: 'https://gateway.example.test/#x' }],
+  ])('refuses to write .env when extraEnv has %s', async (_label, extraEnv) => {
+    const projectPath = await createFixture();
+    const envPath = path.join(projectPath, '.env');
+    const originalEnv = await fs.readFile(envPath, 'utf8');
+
+    const written = await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+      extraEnv,
+    });
+
+    expect(written).toBe(false);
+    expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
+  });
+
   it('replaces a gateway URL already in .env instead of adding a second one', async () => {
     const projectPath = await createFixture();
     await fs.writeFile(
