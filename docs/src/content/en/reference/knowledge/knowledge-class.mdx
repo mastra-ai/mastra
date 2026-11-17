@@ -346,7 +346,7 @@ const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', '
 reindexLinks(): Promise<number>
 ```
 
-Rebuilds the page link index from every page body, and resolves to how many pages it indexed. Writes keep the index current, so this is for pages that predate it or were written straight to the store. It needs no vector store.
+Rebuilds the page link index from every page body, and resolves to how many pages it indexed. Writes keep the index current, so this is for pages that predate it or were written straight to the store, and for links a write left as they were. A write re-resolves at most 100 linking pages, and checks at most 99 pages sharing a name. Past either limit it logs a warning that names `reindexLinks()`. It needs no vector store.
 
 #### `renameScopeDeclaration()`
 

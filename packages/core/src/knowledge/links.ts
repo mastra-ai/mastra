@@ -5,6 +5,7 @@ import {
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_BODY_LINKS,
   MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
   parseKnowledgePageRef,
 } from '../storage/domains/knowledge';
 
@@ -180,6 +181,13 @@ export async function knowledgeSubtree(storage: KnowledgeStorage, root: Knowledg
 export const MAX_KNOWLEDGE_LINK_REFRESH_SOURCES = 100;
 
 /**
+ * Most same-named pages a write checks for links its page made ambiguous or took over: one under the
+ * store's page list limit, so a full page means there may be more. Past it, links to the rest keep
+ * their targets until `knowledge.reindexLinks()` runs; the write reports it.
+ */
+export const MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES = MAX_KNOWLEDGE_PAGE_LIST_LIMIT - 1;
+
+/**
  * Re-resolves the pages whose body links one of `pages` or names a ref one of them answers to now,
  * after they were created, renamed, moved, merged or deleted, in page id order up to
  * {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES}. With `withDescendants`, the pages' subtrees count too
@@ -204,10 +212,15 @@ export async function refreshKnowledgeLinksTo(
   }
   // A page that now answers to a name can make a link by that name to another page ambiguous, or
   // claim it from another scope. Those links are stored resolved, so find them by their target.
+  const crowded: string[] = [];
   for (const name of names) {
-    for (const namesake of await storage.findPagesByName({ name, read: 'all', limit: LIST_PAGE })) {
-      targets.add(namesake.id);
-    }
+    const namesakes = await storage.findPagesByName({
+      name,
+      read: 'all',
+      limit: MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES + 1,
+    });
+    if (namesakes.length > MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES) crowded.push(`"${name}"`);
+    for (const namesake of namesakes.slice(0, MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES)) targets.add(namesake.id);
   }
   const sources = (
     await storage.listPageBodyLinkSources({
@@ -215,7 +228,14 @@ export async function refreshKnowledgeLinksTo(
       toPageIds: [...targets],
     })
   ).sort();
-  if (!sources.length) return;
+  const crowdedError = () =>
+    new Error(
+      `More than ${MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES} pages are named ${crowded.join(', ')}; links to the rest were left as they were`,
+    );
+  if (!sources.length) {
+    if (crowded.length) throw crowdedError();
+    return;
+  }
   const batch = sources.slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES);
   const live = new Map((await storage.getPages({ ids: batch, read: 'all' })).map(page => [page.id, page]));
   const resolver = new BodyLinkResolver(storage);
@@ -233,6 +253,7 @@ export async function refreshKnowledgeLinksTo(
     const names = pages.map(page => `"${page.name}"`).join(', ');
     throw new Error(`${left} more pages link to ${names}; their links were left as they were`);
   }
+  if (crowded.length) throw crowdedError();
 }
 
 /**

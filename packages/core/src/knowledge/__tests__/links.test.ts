@@ -208,6 +208,26 @@ describe('Knowledge page link index', () => {
     for (const id of sources) expect(await out(id)).toEqual([target.id]);
   });
 
+  it('reports when more than 99 pages share the name a write checks, and leaves the rest to reindexLinks', async () => {
+    const { knowledge, out, warnings } = setup();
+    const first = (await knowledge.upsertPage({ scope: 'org:acme', path: 'old', name: 'Target' })).page;
+    const hub = (await knowledge.upsertPage({ scope: 'org:acme', path: 'hub', name: 'Hub', body: 'See [[Target]].' }))
+      .page;
+    expect(await out(hub.id)).toEqual([first.id]);
+    // Newer namesakes elsewhere push the oldest past the checked 99.
+    for (let i = 0; i < 99; i++) {
+      await knowledge.upsertPage({ scope: 'resource:u-1', path: `t${i}`, name: 'Target' });
+    }
+    warnings.length = 0;
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'new', name: 'Target' });
+    expect(warnings.some(w => w.includes('More than 99 pages are named "Target"') && w.includes('reindexLinks()'))).toBe(
+      true,
+    );
+
+    await knowledge.reindexLinks();
+    expect(await out(hub.id)).toEqual([]);
+  });
+
   it('skips the link refresh when a write keeps the name it had', async () => {
     const { knowledge, write, edit, countCalls } = setup();
     const page = await write('Policy', 'v1');
