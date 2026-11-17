@@ -44,13 +44,29 @@ function errorName(error: unknown): string | undefined {
   return typeof error.name === 'string' && PUBLIC_ERROR_NAMES.has(error.name) ? error.name : undefined;
 }
 
+const MAX_CAUSE_DEPTH = 8;
+
+function causeChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  for (let current = error; current && chain.length < MAX_CAUSE_DEPTH; current = causeOf(current)) {
+    if (chain.includes(current)) break;
+    chain.push(current);
+  }
+  return chain;
+}
+
 function publicDetail(error: unknown): string | undefined {
-  for (const candidate of [error, causeOf(error)]) {
+  const chain = causeChain(error);
+  for (const candidate of chain) {
     if (!isProviderCallError(candidate)) continue;
     const kind = classifyProviderError(candidate);
     if (kind !== 'unknown') return PROVIDER_FAILURE_DETAIL[kind];
   }
-  return errorName(error) ?? errorName(causeOf(error));
+  for (const candidate of chain) {
+    const name = errorName(candidate);
+    if (name) return name;
+  }
+  return undefined;
 }
 
 /**

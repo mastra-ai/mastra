@@ -42,6 +42,24 @@ describe('publicFailureReason', () => {
     expect(reason).not.toContain('org-123');
   });
 
+  it('finds a provider failure below intermediate wrappers', () => {
+    const rateLimited = providerError('Rate limit for org-123 exceeded', { statusCode: 429 });
+    const modelCall = new Error('model call failed at https://llm.internal/v1', { cause: rateLimited });
+    const wrapped = new FactoryDispatchError('run_failed', `Review ended in error: ${modelCall.message}`, {
+      cause: modelCall,
+    });
+    expect(publicFailureReason('run_failed', wrapped)).toBe(
+      'Agent run ended in error (the model provider rate-limited the run)',
+    );
+  });
+
+  it('stops on a cyclic cause chain', () => {
+    const a = new Error('a') as Error & { cause?: unknown };
+    const b = new Error('b', { cause: a });
+    a.cause = b;
+    expect(publicFailureReason('unknown', a)).toBe('Factory automation failed');
+  });
+
   it('recognizes context overflow and quota from the provider response', () => {
     expect(
       publicFailureReason(
