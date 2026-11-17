@@ -254,7 +254,12 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
 
       await mastra.restartAllActiveWorkflowRuns();
 
-      expect([...executions].sort()).toEqual(names.slice(1).map((_, i) => `run-${i + 1}`));
+      expect([...executions].sort()).toEqual(
+        names
+          .slice(1)
+          .map((_, i) => `run-${i + 1}`)
+          .sort(),
+      );
     });
   });
 }
