@@ -18,6 +18,7 @@ import type {
 } from './declarations';
 import {
   addKnowledgeNote,
+  moveKnowledgePage,
   removeKnowledgeNote,
   removeKnowledgePage,
   updateKnowledgeNote,
@@ -25,6 +26,7 @@ import {
 } from './host-writes';
 import type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
@@ -253,6 +255,21 @@ export class Knowledge extends MastraBase {
    */
   removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
     return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Moves the page at `scope#path`, with its subtree, under the page at `parent` (a key path; left
+   * out, the top of the scope), in `toScope` when given. The page keeps its id, notes, pins and
+   * vectors; paths below it change, and links by path are re-resolved. Throws
+   * `KnowledgeNotFoundError` for a missing page or parent, and refuses a page declared in config, a
+   * move into its own subtree, a key the new parent already has, and a move past the depth limit.
+   * Host-only, like {@link Knowledge.upsertPage}. Not retried: a concurrent write to the page
+   * between the read and the move throws.
+   *
+   * @experimental
+   */
+  movePage(input: KnowledgeMovePageInput): Promise<KnowledgePage> {
+    return moveKnowledgePage(this.#hostWriter(), input);
   }
 
   /**
@@ -513,6 +530,7 @@ export interface KnowledgeScopeGrant {
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 export type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
