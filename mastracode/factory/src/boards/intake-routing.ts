@@ -472,6 +472,21 @@ export function routesHandleEvent(
   return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
 }
 
+/**
+ * Whether the event is an outside author's pull request event on an issue's card: a pull request
+ * event that doesn't settle the pull request, whose author the event doesn't vouch for, on a card
+ * that isn't the pull request's own. Merging and closing settle the pull request either way, so
+ * they never count.
+ */
+export function untrustedLinkedPullRequestEvent(event: BoardEventFacts, cardFacts: RuleFacts): boolean {
+  return (
+    isPullRequestEvent(event.type) &&
+    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
+    cardFacts['source.kind'] !== 'pull_request' &&
+    event.pullRequestTrusted !== true
+  );
+}
+
 /** A card-move route that matched but can't take the card where it points, and why. */
 export interface SkippedEventRoute {
   routeId: string;
@@ -534,11 +549,7 @@ export function traceEventRoute(
   // (`outsiderPullRequestsGated`) keeps the old gate: an outsider's pull request linked to an
   // issue's card moves the card only by a rule that asks about the pull request's trust. Merging
   // and closing settle the pull request either way, so those still move the card.
-  const untrustedLinkedPullRequest =
-    isPullRequestEvent(event.type) &&
-    !SETTLING_PULL_REQUEST_EVENTS.has(event.type) &&
-    cardFacts['source.kind'] !== 'pull_request' &&
-    pullRequestTrusted !== true;
+  const untrustedLinkedPullRequest = untrustedLinkedPullRequestEvent(event, cardFacts);
   const rules: EventRuleTrace[] = [];
   let move: EventMove | undefined;
   for (const route of routes) {

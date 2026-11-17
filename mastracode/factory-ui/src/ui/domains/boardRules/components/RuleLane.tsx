@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { SETTLING_PULL_REQUEST_EVENTS, testsField } from '@mastra/factory/boards/board-events';
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
 import { useRowDrag } from '../../settings/components/useRowDrag';
 import {
@@ -28,6 +27,7 @@ import {
   LEGACY_OPENED_EVENT,
   movesCardsOnly,
   shadowedBy,
+  skipsOutsidersOn,
 } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ConditionChips } from './ConditionChips';
@@ -269,24 +269,21 @@ export function RuleLane({
                 </Txt>
               ))}
               {skip && <SkipWarning skips={skip} />}
-              {rule.outsiderPullRequestsGated &&
-                !testsField(rule.when, 'pullRequest.trusted') &&
-                event.startsWith('pull_request.') &&
-                !SETTLING_PULL_REQUEST_EVENTS.has(event) && (
-                  <Txt
-                    as="span"
-                    variant="caption"
-                    tone="muted"
-                    className="mt-1 ml-3 flex flex-wrap items-center gap-x-1.5 gap-y-1"
-                  >
-                    Skips outside authors’ pull requests (older rule).
-                    {canEdit && (
-                      <button type="button" onClick={() => onUngate(rule)} className="underline">
-                        Let outside authors match
-                      </button>
-                    )}
-                  </Txt>
-                )}
+              {skipsOutsidersOn(rule, event) && (
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="mt-1 ml-3 flex flex-wrap items-center gap-x-1.5 gap-y-1"
+                >
+                  Skips outside authors’ pull requests (older rule).
+                  {canEdit && (
+                    <button type="button" onClick={() => onUngate(rule)} className="underline">
+                      Let outside authors match
+                    </button>
+                  )}
+                </Txt>
+              )}
               {movesCardsOnly(rule, event) && (
                 <Txt as="span" variant="caption" tone="muted" className="mt-1 ml-3">
                   Moves cards only: files no new pull requests

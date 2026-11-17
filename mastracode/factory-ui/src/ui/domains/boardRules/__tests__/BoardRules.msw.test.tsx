@@ -885,6 +885,58 @@ describe('Board rules', () => {
     expect(screen.queryByText(/older rule/)).not.toBeInTheDocument();
   });
 
+  it('keeps rules under an older gated rule reachable, as outside authors’ pull requests fall through it', async () => {
+    const PUSHES = 'Pull request gets new commits';
+    const target = { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false, moveToBoardKey: null };
+    serveRules({
+      rules: [
+        rule({
+          id: ruleId('gated-all'),
+          name: 'Pushes re-review',
+          on: ['pull_request.synchronized'],
+          when: null,
+          target,
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-gated'),
+          name: 'Docs pushes wait in Triage',
+          on: ['pull_request.synchronized'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'triage' },
+        }),
+        rule({
+          id: ruleId('closed-all'),
+          name: 'Closed pull requests cancel',
+          on: ['pull_request.closed'],
+          when: null,
+          target: { ...target, phaseKey: 'canceled' },
+          outsiderPullRequestsGated: true,
+        }),
+        rule({
+          id: ruleId('below-closed'),
+          name: 'Closed docs cancel too',
+          on: ['pull_request.closed'],
+          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
+          target: { ...target, phaseKey: 'canceled' },
+        }),
+      ],
+    });
+    renderRules();
+
+    await screen.findByRole('region', { name: PUSHES });
+    // The gated rule skips outside authors' pull requests, so the rule below still catches those.
+    expect(
+      within(lane(PUSHES).getByRole('listitem', { name: 'Docs pushes wait in Triage' })).queryByText(/Never reached/),
+    ).not.toBeInTheDocument();
+    // Closing settles the pull request whoever wrote it: there the gate holds nothing back.
+    expect(
+      within(lane('Pull request closed unmerged').getByRole('listitem', { name: 'Closed docs cancel too' })).getByText(
+        'Never reached: rule 1 above matches every card.',
+      ),
+    ).toBeVisible();
+  });
+
   it('turns a rule off, which marks it skipped', async () => {
     const { sent } = serveRules({ rules: [closed()] });
     const user = userEvent.setup();

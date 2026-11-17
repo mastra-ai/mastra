@@ -11,6 +11,7 @@ import {
   boardFlow,
   boardForWorkItem,
   cardBoardFlow,
+  cardRuleFacts,
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
@@ -35,6 +36,7 @@ import {
   resolveIntake,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
+  untrustedLinkedPullRequestEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -1541,6 +1543,10 @@ export class FactoryDecisionDispatcher {
     if (!requestsConsent(boards, record, decision)) return false;
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
     if (!item) return true;
+    // A run queued by a card move on an outside author's pull request event is compute and code
+    // execution on that author's say-so: it waits for a person, past the card's armed autonomy
+    // and however its phase starts.
+    if (decision.type === 'invokeSkill' && decision.untrustedPullRequestEvent === true) return true;
     // Once someone starts a card, the runs that carry it to review are that same request continuing.
     if (item.autonomyArmedAt != null) return false;
     if (reviewsFactoryAuthoredCode(boards, item, decision)) return false;
@@ -2700,7 +2706,12 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity },
       cause: 'event_route',
       causalChain,
-      eventRoute: { routeId: route.routeId },
+      eventRoute: {
+        routeId: route.routeId,
+        // The rule owns the move; a run the destination queues on an outside author's pull
+        // request event still waits for a person.
+        ...(untrustedLinkedPullRequestEvent(event, cardRuleFacts(item)) ? { untrustedPullRequest: true } : {}),
+      },
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale')

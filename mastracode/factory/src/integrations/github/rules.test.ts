@@ -7822,6 +7822,47 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       },
     );
 
+    // Moving the card is the rule's call; running Factory on the pull request's code is a
+    // person's. The review that moving an outsider's linked pull request into the auto-starting
+    // phase queues parks as a proposal for approval; a maintainer's is released on its own — no
+    // session is bound here, so the released run shows as a start attempt retrying, where the
+    // parked one never attempts at all.
+    it.each([
+      ['parks the review', 'an outsider', 'read', { status: 'proposed', attempts: 0, lastError: null }],
+      ['starts the review', 'a maintainer', 'write', { status: 'retry', failureCode: 'session_unavailable' }],
+    ] as const)(
+      "%s a stored Review rule testing nothing queues when %s's linked pull request moves issue 42's card into the auto-starting Review phase",
+      async (_what, _author, permission, expected) => {
+        const h = await harness(permission);
+        const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+        const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+        await h.boards.listIntakeRoutes(scope);
+        await h.storage.ops.updateMany('factory_intake_route_locks', where, {
+          seeded_defaults: DEFAULT_INTAKE_ROUTES.map(({ key }) => key).filter(key => key !== 'linked-pull-request'),
+        });
+        await h.storage.ops.deleteMany('factory_intake_routes', { ...where, name: LINKED_PULL_REQUEST_ROUTE.name });
+        await h.storage.ops.updateMany(
+          'factory_intake_routes',
+          { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name },
+          { when_condition: null },
+        );
+        const issue = await h.issueCard(42, 'intake');
+
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        // The chain takes three passes: link the pull request, move the card, decide its review.
+        await h.dispatch();
+
+        expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+        expect(await reviewsStarted(h, issue.id)).toEqual([
+          expect.objectContaining({
+            ...expected,
+            decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }),
+            approvedAt: null,
+          }),
+        ]);
+      },
+    );
+
     it.each([
       ['an outsider', 'read', undefined],
       ['a maintainer', 'write', 'b'.repeat(40)],

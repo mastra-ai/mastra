@@ -453,6 +453,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'precedingMessage',
           'cancelInFlight',
           'startsAfterOwnMove',
+          'untrustedPullRequestEvent',
           'resume',
           'goal',
         ],
@@ -475,6 +476,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       }
       if (value.startsAfterOwnMove !== undefined && typeof value.startsAfterOwnMove !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill startsAfterOwnMove must be a boolean.');
+      }
+      if (value.untrustedPullRequestEvent !== undefined && typeof value.untrustedPullRequestEvent !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill untrustedPullRequestEvent must be a boolean.');
       }
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
@@ -499,6 +503,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
         ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
+        ...(value.untrustedPullRequestEvent === true ? { untrustedPullRequestEvent: true } : {}),
         ...(goal ? { goal } : {}),
       };
     }

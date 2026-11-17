@@ -1,4 +1,4 @@
-import type { RuleGroup } from '../rules/rule-group.js';
+import type { RuleCondition, RuleGroup } from '../rules/rule-group.js';
 import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 
@@ -180,14 +180,37 @@ export function testsField(group: RuleGroup | null, field: string): boolean {
   );
 }
 
+/** Whether the one condition only lets a trusted author's pull request through. */
+function requiresTrust(condition: RuleCondition): boolean {
+  if (condition.field !== 'pullRequest.trusted') return false;
+  return (
+    (condition.operator === 'equals' && condition.value === true) ||
+    (condition.operator === 'not_equals' && condition.value === false)
+  );
+}
+
+/**
+ * Whether every way the group can match demands a trusted pull request author: one of an AND's
+ * conditions requires it, or every branch of an OR does. Presence alone is not enough — an OR
+ * that names `pullRequest.trusted` in one branch still matches an outside author through another.
+ */
+export function requiresTrustedPullRequest(group: RuleGroup | null): boolean {
+  if (!group) return false;
+  const requires = (member: RuleGroup | RuleCondition): boolean =>
+    'field' in member ? requiresTrust(member) : requiresTrustedPullRequest(member);
+  if (group.operator === 'OR') return group.conditions.length > 0 && group.conditions.every(requires);
+  return group.conditions.some(requires);
+}
+
 /**
  * Whether a rule's card moves would also act for outside authors' pull requests: it listens on a
- * pull request event that doesn't settle one, and its conditions never ask about `pullRequest.trusted`.
+ * pull request event that doesn't settle one, and its conditions don't demand a trusted author on
+ * every path a card can match through.
  */
 export function matchesOutsiderPullRequests(on: readonly string[], when: RuleGroup | null): boolean {
   return (
     on.some(event => event.startsWith('pull_request.') && !SETTLING_PULL_REQUEST_EVENTS.has(event)) &&
-    !testsField(when, 'pullRequest.trusted')
+    !requiresTrustedPullRequest(when)
   );
 }
 
