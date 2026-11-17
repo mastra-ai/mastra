@@ -321,10 +321,13 @@ describe('parsePushedBranches', () => {
     ]);
   });
 
-  it('ignores a dry run even when its output is redirected', () => {
-    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
-    expect(parsePushedBranches(push(output, 'git push -n origin a 2>&1 | tail'))).toEqual([]);
-  });
+  it.each(['git push -n origin a 2>&1 | tail', 'git push 2>&1 -n origin a | tail', 'git push &>/tmp/log --dry-run origin a'])(
+    'ignores a dry run even when its output is redirected: %s',
+    command => {
+      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+      expect(parsePushedBranches(push(output, command))).toEqual([]);
+    },
+  );
 
   it('still reads a real push that follows a dry run', () => {
     const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
