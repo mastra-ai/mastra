@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 70.0.1-alpha.0
+
+### Patch Changes
+
+- Knowledge shows organization and project scopes by name (Organization) instead of their raw address, and a page's peek counts and lists its links from the server's link index, so Links in and Links out match the graph. ([#30724](https://github.com/mastra-ai/mastra/pull/30724))
+
+- Settings rows with their control beside the label now keep the same height with or without a description, so a card's rows stay even. A list's first row (`SettingsListHeader`, `SettingsEmptyRow`) is now as tall as those rows too, so "No request headers" lines up with the settings above it. Stacked rows on narrow screens and rows with the control below the label are unchanged. On narrow screens, a `SettingsItem`'s value or actions now sit on their own line under the title, as a `SettingsRow`'s control does, so a long value no longer squeezes the title. ([#30509](https://github.com/mastra-ai/mastra/pull/30509))
+
+- Fixed section titles (`SettingsTitle`, `SettingsDescription`) sitting 10px to the right of everything around them outside settings pages, such as field labels on Platform's create project forms and page titles on billing. Outside a `SettingsLayout`, section titles now line up with the page's left edge. Section titles also use the same primary color as field labels everywhere, settings pages included; on settings pages they keep their inset, in line with the inset page title. ([#30711](https://github.com/mastra-ai/mastra/pull/30711))
+
+- Empty settings lists now use the same white text as a list's count, so `SettingsEmptyRow` ("No join links") and `SettingsListHeader` ("2 members") read as the same row in every app. ([#30503](https://github.com/mastra-ai/mastra/pull/30503))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/client-js@1.61.1-alpha.0
+  - @mastra/react@1.15.2-alpha.0
+
 ## 70.0.0
 
 ### Minor Changes

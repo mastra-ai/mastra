@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.29.1-alpha.0
+
+### Patch Changes
+
+- Factory chat tabs no longer rebuild the full display state on every streamed chunk, which cuts main-thread time on long runs. Reloading or switching back to a thread mid-reply still shows the text so far and keeps streaming. ([#30727](https://github.com/mastra-ai/mastra/pull/30727))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/code-sdk@1.19.2-alpha.0
+
 ## 0.29.0
 
 ### Minor Changes

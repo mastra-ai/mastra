@@ -1,5 +1,28 @@
 # @mastra/mssql
 
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- Added Observational Memory support to `@mastra/mssql`, so agents can use `observationalMemory: true` with SQL Server storage (#23309). ([#30716](https://github.com/mastra-ai/mastra/pull/30716))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+  import { MSSQLStore } from '@mastra/mssql';
+
+  const memory = new Memory({
+    storage: new MSSQLStore({ id: 'mssql', connectionString: process.env.MSSQL_URL! }),
+    options: { observationalMemory: true },
+  });
+  ```
+
+  It stays correct when several processes work on the same thread at once: only one record is created per thread or resource, a write to a record that a reflection has already replaced is reported as not applied, and a reflection carries pending tokens and buffered observations over to the new generation. Based on the original work by @PremkumarS-dev in #24374.
+
+### Patch Changes
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+
 ## 1.11.2
 
 ### Patch Changes
