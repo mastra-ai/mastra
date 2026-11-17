@@ -3172,6 +3172,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             reason: 'retry',
             warnings,
             isContinued: true,
+            // The failed request is re-attempted within the same logical step, as durable does:
+            // no step, no step-finish, and nothing counted against maxSteps (COR-1554).
+            signalPreempted: true,
           },
           metadata: {
             providerMetadata: runState.state.providerOptions,

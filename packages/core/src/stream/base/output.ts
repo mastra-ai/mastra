@@ -1175,6 +1175,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#bufferedByStep.text = '';
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
+              // So does whatever else the unfinished request streamed: it belongs to no step.
+              Object.assign(self.#bufferedByStep, {
+                sources: [],
+                files: [],
+                toolCalls: [],
+                toolResults: [],
+                dynamicToolCalls: [],
+                dynamicToolResults: [],
+                staticToolCalls: [],
+                staticToolResults: [],
+                content: [],
+              });
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;

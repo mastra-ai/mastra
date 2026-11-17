@@ -221,11 +221,65 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
     const response = await output.response;
     expect(responseTexts(response.messages)).toEqual([RECOVERED_TEXT]);
 
-    // The retried attempt reports no content of its own, not the accepted tool step's.
-    const retried = (await output.steps).filter(step => (step.finishReason as string) === 'retry');
-    expect(retried).toHaveLength(1);
-    expect(retried[0]!.text).toBe('');
-    expect(retried[0]!.content).toEqual([]);
+    // The failed request is re-attempted within the recovered step, not reported as a step of
+    // its own (COR-1554), and that step carries none of the failed attempt's partial text.
+    const steps = await output.steps;
+    expect(steps.map(step => step.finishReason)).toEqual(['tool-calls', 'stop']);
+    expect(steps[1]!.text).toBe(RECOVERED_TEXT);
+    expect(steps[1]!.toolCalls).toEqual([]);
+  });
+
+  it("does not report the failed attempt's tool calls or sources on the recovered step", async () => {
+    let calls = 0;
+    const echoTool = createTool({
+      id: 'echo',
+      description: 'Echo the input back.',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => ({ text }),
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream:
+            calls === 1
+              ? convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+                  { type: 'source', sourceType: 'url', id: 'source-1', url: 'https://example.com', title: 'x' },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'echo',
+                    input: JSON.stringify({ text: 'hi' }),
+                    providerExecuted: false,
+                  },
+                  { type: 'error', error: retryableError() },
+                ])
+              : textStream('resp-2', RECOVERED_TEXT),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'api-error-retry-step-parts',
+      name: 'API error retry step parts',
+      instructions: 'Answer.',
+      model,
+      tools: { echo: echoTool },
+      errorProcessors: [retryOnceProcessor()],
+    });
+
+    const output = await agent.stream('What is the answer?', { maxSteps: 3 });
+    await output.consumeStream();
+
+    expect(calls).toBe(2);
+    const steps = await output.steps;
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.text).toBe(RECOVERED_TEXT);
+    expect(steps[0]!.toolCalls).toEqual([]);
+    expect(steps[0]!.sources).toEqual([]);
   });
 
   it('does not carry a structured object from the failed attempt onto the recovered one', async () => {
