@@ -674,9 +674,10 @@ export class GithubRules {
       ingress: { identity: `${installationId}:${parsed.deliveryId}` },
       actor: { ...actor },
       // A pull request update carries who made it: run approval reads the actor, not the author.
+      // Factory's own app is never a collaborator; its authorship is its trust signal.
       event:
         isPullRequestEvent(event.type) ?
-          { ...event, actorTrusted: actor.type === 'github' && actor.trusted }
+          { ...event, actorTrusted: actor.type === 'github' && (actor.trusted || actor.factoryAuthored) }
         : event,
       fromCardSession,
     });
@@ -1402,8 +1403,9 @@ export class GithubRules {
       }
       if (context.pullRequest) {
         const trusted = githubPullRequestTrusted(context);
-        // An unknown actor — a polled or system delivery — vouches for nothing.
-        const actorTrusted = context.actor.type === 'github' && context.actor.trusted;
+        // An unknown actor — a polled or system delivery — vouches for nothing. Factory's own
+        // app is never a collaborator, so its authorship is its trust signal, as everywhere else.
+        const actorTrusted = context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
         decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
       }
 
