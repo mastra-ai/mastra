@@ -72,7 +72,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
-          rest.modelSpanTracker?.recordChunk?.(chunk);
+          try {
+            rest.modelSpanTracker?.recordChunk?.(chunk);
+          } catch {
+            // Optional tracing must not prevent accepted output from reaching the caller.
+          }
           streamPublisher?.publish(chunk, messageList);
         },
         close: () => {
