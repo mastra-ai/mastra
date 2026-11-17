@@ -7,6 +7,12 @@ import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 import { mergePendingFeedback, settlePendingFeedback, usePendingFeedback } from '../feedback/optimistic-feedback';
 import type { FeedbackListResponse } from '../feedback/optimistic-feedback';
+import {
+  applyPendingFeedbackDeletions,
+  hasDeletingFeedback,
+  settlePendingFeedbackDeletions,
+  usePendingFeedbackDeletions,
+} from '../feedback/pending-feedback-deletions';
 import type { MastraQueryOptions } from '../shared/query-options';
 
 type SpanFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
@@ -35,31 +41,39 @@ export const useSpanFeedback = <TData = FeedbackListResponse,>({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const pageNumber = page ?? 0;
+  const deletions = usePendingFeedbackDeletions({ traceId, spanId });
   const pending = usePendingFeedback({ traceId, spanId, enabled: pageNumber === 0 });
   const { select: callerSelect, ...restQueryOptions } = queryOptions ?? {};
   // The caller's selector runs on the merged data, so it still sees pending comments.
   const select = useCallback(
     (data: SpanFeedbackResponse) => {
-      const merged = mergePendingFeedback(data, pending);
+      const merged = applyPendingFeedbackDeletions(mergePendingFeedback(data, pending), deletions);
       return callerSelect ? callerSelect(merged) : (merged as TData);
     },
-    [pending, callerSelect],
+    [pending, deletions, callerSelect],
   );
   return useQuery({
     // `spanId` must stay in the key, otherwise React Query serves the previously
     // selected span's feedback when switching spans within the same trace.
     queryKey: ['span-feedback', traceId, spanId, pageNumber],
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal, queryKey }) => {
       const data = await client.listFeedback({
         filters: { traceId, spanId },
         pagination: { page: pageNumber, perPage: 10 },
       });
       // A cancelled or superseded fetch must not settle pending comments its result never displays.
       if (pageNumber === 0 && !signal.aborted) settlePendingFeedback(queryClient, { traceId, spanId }, data);
+      if (!signal.aborted)
+        settlePendingFeedbackDeletions(
+          queryClient,
+          { traceId, spanId },
+          queryClient.getQueryData<SpanFeedbackResponse>(queryKey),
+          data,
+        );
       return data;
     },
     select,
-    refetchInterval: query => getFeedbackRefetchInterval(query, pending.length > 0),
+    refetchInterval: query => getFeedbackRefetchInterval(query, pending.length > 0 || hasDeletingFeedback(deletions)),
     gcTime: 0,
     staleTime: 0,
     ...restQueryOptions,
