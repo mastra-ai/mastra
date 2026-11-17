@@ -1,4 +1,3 @@
-import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
@@ -17,6 +16,7 @@ import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import type { MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
 import { Notice } from '@/ds/components/Notice';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
 import { Icon } from '@/ds/icons/Icon';
 
 const REF_LINK_CLASS = 'text-foreground underline underline-offset-2';
@@ -99,7 +99,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tab
             <Icon>
               <DisclosureChevron direction="right" />
             </Icon>
-            <Badge variant="blue" icon={<CheckCircleIcon />}>
+            <Badge variant="blue" icon={<IconCircleCheck />}>
               {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
             </Badge>
           </button>

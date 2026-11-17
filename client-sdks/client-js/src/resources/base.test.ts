@@ -121,6 +121,58 @@ describe('BaseResource', () => {
     });
   });
 
+  describe('method-aware retry defaults', () => {
+    const respondWith500 = () => {
+      server.on('request', (req, res) => {
+        requestCount++;
+        req.resume(); // Drain the body so the failing response is not blocked by unread input
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      });
+    };
+
+    it.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
+      'does not repeat a %s after a server-side failure without an explicit retry count',
+      async method => {
+        respondWith500();
+        const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+        await expect(defaultResource.request('/write', { method, body: { action: 'apply' } })).rejects.toBeInstanceOf(
+          Error,
+        );
+        expect(requestCount).toBe(1);
+      },
+    );
+
+    it('keeps the default retry count for read methods', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(defaultResource.request('/read', { method: 'GET' })).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(4); // Initial request + 3 default retries
+    });
+
+    it('preserves an explicit client retry count for writes', async () => {
+      respondWith500();
+      const retryingResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingResource.request('/write', { method: 'POST', body: { action: 'apply' } }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(3); // Initial request + 2 configured retries
+    });
+
+    it('lets a per-request retry count opt a write back in', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(
+        defaultResource.request('/write', { method: 'POST', body: { action: 'apply' }, retries: 1 }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(2); // Initial request + 1 per-request retry
+    });
+  });
+
   it('should let a request override the client retry count', async () => {
     server.on('request', (_req, res) => {
       requestCount++;

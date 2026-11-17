@@ -32,7 +32,6 @@ describe('IntakeSection gitlab', () => {
                   listedRepository('gitlab-link', 'acme/app', {
                     integrationId: 'gitlab',
                     branch: 'main',
-                    sandboxWorkdir: '~/app',
                   }),
                 ],
               },

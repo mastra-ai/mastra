@@ -26,51 +26,60 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CircleCheck,
-  CircleDot,
-  Columns3,
-  FolderGit2,
-  GitMerge,
-  GitPullRequest,
-  Hash,
-  ListPlus,
-  Plug,
-  Plus,
-  ShieldCheck,
-  Tag,
-  Type,
-  User,
-  Users,
-  Zap,
-} from 'lucide-react';
+import { FolderGit2 } from 'lucide-react';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
+import { IconFontStyle } from '@mastra/playground-ui/icons/central/IconFontStyle';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconMerged } from '@mastra/playground-ui/icons/central/IconMerged';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
+import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { CONDITION_OPERATORS, conditionFields } from './conditionFields';
+import { andLimits, repositoryHint } from '../services/rules';
+import {
+  CONDITION_OPERATORS,
+  VALUE_PLACEHOLDERS,
+  conditionFields,
+  isPresenceField,
+  legacyConditionFields,
+} from './conditionFields';
 import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
 import type { Group, Item, Row } from './conditionTree';
+import { narrowSuggestions } from './sourceSuggestions';
+import { IconListAdd } from '@mastra/playground-ui/icons/central/IconListAdd';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 const FIELD_ICONS: Record<string, LucideIcon> = {
-  'item.labels': Tag,
-  'item.title': Type,
-  'item.author': User,
-  'item.key': Hash,
-  'item.state': CircleDot,
-  'item.assignees': Users,
-  'item.pullRequest': GitPullRequest,
-  'author.trusted': ShieldCheck,
-  'source.kind': GitPullRequest,
-  'source.integration': Plug,
-  'source.provider': Plug,
+  'item.labels': IconTag,
+  'item.title': IconFontStyle,
+  'item.author': IconUser,
+  'item.key': IconHashtag,
+  'item.state': IconCircleRecord,
+  'item.assignees': IconUserDuo,
+  'item.pullRequest': IconPullRequest,
+  'item.trusted': IconShieldCheck,
+  'pullRequest.trusted': IconShieldCheck,
+  'source.kind': IconPullRequest,
+  'source.integration': IconPlugin1,
+  'source.provider': IconPlugin1,
   'source.repository': FolderGit2,
-  'pullRequest.closesIssue': GitMerge,
-  'closedIssue.phase': Columns3,
-  'closedIssue.hasPullRequest': GitPullRequest,
-  'event.type': Zap,
-  'event.reason': CircleCheck,
+  'pullRequest.closesIssue': IconMerged,
+  'closedIssue.phase': IconColumns3,
+  'closedIssue.hasPullRequest': IconPullRequest,
+  'event.type': IconZap,
+  'event.reason': IconCircleCheck,
 };
+
+const LEGACY_FIELDS = legacyConditionFields();
 
 function operatorLabel(field: FilterBarField | undefined, operator: string): string {
   return (
@@ -81,7 +90,8 @@ function operatorLabel(field: FilterBarField | undefined, operator: string): str
 }
 
 function optionsOf(field: FilterBarField | undefined): FilterBarOption[] | undefined {
-  return Array.isArray(field?.suggestions) ? field.suggestions : undefined;
+  // Nothing to pick from (a project with no repositories yet) reads as no list: the value is typed.
+  return Array.isArray(field?.suggestions) && field.suggestions.length > 0 ? field.suggestions : undefined;
 }
 
 /**
@@ -109,6 +119,8 @@ export function ConditionRows({
 }) {
   const fields = conditionFields(facts, options);
   const [root, setRoot] = useState(() => fromRule(rule));
+  const { rule: current, incomplete } = toRule(root);
+  const hint = repositoryHint(current);
 
   const update = (next: Group) => {
     setRoot(next);
@@ -127,9 +139,14 @@ export function ConditionRows({
         emptyHint={emptyHint}
         onChange={update}
       />
-      {toRule(root).incomplete && (
+      {incomplete && (
         <Txt as="p" variant="caption" tone="muted">
           Finish or remove unfinished conditions to save.
+        </Txt>
+      )}
+      {hint && (
+        <Txt as="p" variant="caption" tone="muted">
+          {hint}
         </Txt>
       )}
     </div>
@@ -142,6 +159,7 @@ function GroupLines({
   group,
   depth,
   fields,
+  limits = [],
   emptyHint,
   onChange,
   onRemove,
@@ -151,6 +169,8 @@ function GroupLines({
   group: Group;
   depth: number;
   fields: FilterBarField[];
+  /** Conditions every card this group tests also meets: those of the AND groups around it. */
+  limits?: Row[];
   /** Only the top group can be empty: a group left empty is removed. */
   emptyHint?: string;
   onChange: (group: Group) => void;
@@ -166,12 +186,12 @@ function GroupLines({
 
   const actions = (
     <>
-      <RuleAddButton icon={<Plus />} onClick={() => add(emptyRow())}>
+      <RuleAddButton icon={<IconPlusMedium />} onClick={() => add(emptyRow())}>
         Add condition
       </RuleAddButton>
       {canNest(depth) && (
         <RuleAddButton
-          icon={<ListPlus />}
+          icon={<IconListAdd />}
           onClick={() => add({ key: newKey(), logic: group.logic === 'AND' ? 'OR' : 'AND', items: [emptyRow()] })}
         >
           Add group
@@ -197,6 +217,12 @@ function GroupLines({
   }
 
   const joiner = group.logic === 'AND' ? 'and' : 'or';
+  // In an AND group, each row also holds for the others; an OR group's rows say nothing about each other.
+  const here = andLimits(
+    group.logic,
+    limits,
+    group.items.filter((item): item is Row => !isGroup(item)),
+  );
   return (
     <RuleLines role={role} aria-label={label}>
       {group.items.map((item, index) => (
@@ -212,6 +238,7 @@ function GroupLines({
                 group={item}
                 depth={depth + 1}
                 fields={fields}
+                limits={here}
                 onChange={next => replace(index, next.items.length > 0 ? next : undefined)}
                 onRemove={() => replace(index, undefined)}
               />
@@ -220,6 +247,7 @@ function GroupLines({
             <ConditionLine
               row={item}
               fields={fields}
+              limits={here.filter(limit => limit !== item)}
               onChange={next => replace(index, next)}
               onRemove={() => replace(index, undefined)}
             />
@@ -236,29 +264,41 @@ function GroupLines({
 }
 
 function FieldIcon({ id }: { id: string }) {
-  const Icon = FIELD_ICONS[id] ?? CircleDot;
+  const Icon = FIELD_ICONS[id] ?? IconCircleRecord;
   return <Icon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />;
 }
 
 function ConditionLine({
   row,
   fields,
+  limits,
   onChange,
   onRemove,
 }: {
   row: Row;
   fields: FilterBarField[];
+  /** The other conditions a card must meet with this one, which can narrow its suggestions. */
+  limits: Row[];
   onChange: (row: Row) => void;
   onRemove: () => void;
 }) {
-  const field = fields.find(candidate => candidate.id === row.field);
+  const legacy = LEGACY_FIELDS.find(candidate => candidate.id === row.field);
+  // A stored rule may name a field the picker no longer offers: it still shows, and can be changed away from.
+  const shown = legacy && !fields.some(candidate => candidate.id === legacy.id) ? [legacy, ...fields] : fields;
+  const listed = shown.find(candidate => candidate.id === row.field);
+  const field = listed && narrowSuggestions(listed, limits);
+  // A stored comparison on a presence field (say, a pull request number) keeps its regular controls.
+  const presence =
+    !!field &&
+    isPresenceField(field.id) &&
+    (!row.operator || row.operator === 'exists' || row.operator === 'not_exists');
 
   return (
     <RuleLineContent>
       <Select
         value={row.field || null}
         onValueChange={id => {
-          const next = fields.find(candidate => candidate.id === id);
+          const next = shown.find(candidate => candidate.id === id);
           if (!next) return;
           const operator = next.operators?.[0] ?? 'equals';
           onChange({ ...row, field: next.id, operator, value: valueFor(next, operator, undefined) });
@@ -273,7 +313,7 @@ function ConditionLine({
           </span>
         </SelectTrigger>
         <SelectContent>
-          {fields.map(candidate => (
+          {shown.map(candidate => (
             <SelectItem key={candidate.id} value={candidate.id}>
               <span className="flex items-center gap-2">
                 <FieldIcon id={candidate.id} />
@@ -285,7 +325,8 @@ function ConditionLine({
       </Select>
 
       {field?.type === 'boolean' && <BooleanValue row={row} field={field} onChange={onChange} />}
-      {field && field.type !== 'boolean' && (
+      {field && presence && <PresenceValue row={row} field={field} onChange={onChange} />}
+      {field && field.type !== 'boolean' && !presence && (
         <>
           <Select
             value={row.operator}
@@ -343,9 +384,49 @@ function BooleanValue({ row, field, onChange }: { row: Row; field: FilterBarFiel
   );
 }
 
+/** A fact only tested for being there reads as "Has pull request is [Yes | No]". */
+function PresenceValue({ row, field, onChange }: { row: Row; field: FilterBarField; onChange: (row: Row) => void }) {
+  return (
+    <>
+      <Txt as="span" variant="caption" tone="muted">
+        is
+      </Txt>
+      <SegmentedControl
+        size="sm"
+        aria-label={field.label}
+        value={row.operator === 'not_exists' ? 'false' : 'true'}
+        onValueChange={value =>
+          onChange({ ...row, operator: value === 'true' ? 'exists' : 'not_exists', value: undefined })
+        }
+      >
+        <SegmentedControlItem value="true">Yes</SegmentedControlItem>
+        <SegmentedControlItem value="false">No</SegmentedControlItem>
+      </SegmentedControl>
+    </>
+  );
+}
+
 function ValueControl({ row, field, onChange }: { row: Row; field: FilterBarField; onChange: (row: Row) => void }) {
   const options = optionsOf(field);
   const many = MANY.has(row.operator);
+  const typed = CONDITION_OPERATORS.find(operator => operator.id === row.operator)?.freeText === true;
+  // An open field keeps one control while its suggestions load, so a value being typed isn't lost.
+  if (field.strict === false && !typed) {
+    const values = Array.isArray(row.value)
+      ? row.value.map(String)
+      : row.value === undefined
+        ? []
+        : [String(row.value)];
+    return (
+      <OpenValues
+        options={(options ?? []).map(option => ({ value: option.value, label: option.label ?? option.value }))}
+        values={values}
+        many={many}
+        placeholder={VALUE_PLACEHOLDERS[field.id] ?? 'Search or type a value'}
+        onChange={next => onChange({ ...row, value: many ? next : next[0] })}
+      />
+    );
+  }
   if (options && many) {
     const values = Array.isArray(row.value) ? row.value.map(String) : [];
     return (
@@ -435,6 +516,86 @@ function ManyValues({
   );
 }
 
+/**
+ * Picks from suggestions or takes any typed value: "Use “acme/next”", listed after the suggestions it
+ * matches, adds what was typed. One value, or
+ * several for "is any of"; values the suggestions don't list still show, and stay until removed.
+ */
+function OpenValues({
+  options,
+  values,
+  many,
+  placeholder,
+  onChange,
+}: {
+  options: Choice[];
+  values: string[];
+  many: boolean;
+  placeholder: string;
+  onChange: (values: string[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const typed = query.trim();
+  const listed = (value: string) => options.some(option => option.value.toLowerCase() === value.toLowerCase());
+  const chosen = values.map(value => options.find(option => option.value === value) ?? { value, label: value });
+  // What was typed goes last, so Enter picks a suggestion it matches; alone, it's the only choice.
+  const items = [
+    ...options,
+    ...chosen.filter(choice => !options.includes(choice)),
+    ...(typed && !listed(typed) && !values.includes(typed) ? [{ value: typed, label: `Use “${typed}”` }] : []),
+  ];
+  const labels = chosen.map(choice => choice.value);
+  const shared = {
+    autoHighlight: true,
+    items,
+    inputValue: query,
+    onInputValueChange: setQuery,
+    itemToStringLabel: (option: Choice) => option.label,
+    isItemEqualToValue: (option: Choice, value: Choice) => option.value === value.value,
+  };
+  const content = (
+    <ComboboxContent>
+      <ComboboxSearch placeholder={placeholder} />
+      <ComboboxEmpty>Type a value to use it.</ComboboxEmpty>
+      <ComboboxList>
+        {(option: Choice) => (
+          <ComboboxItem key={option.value} value={option}>
+            {option.label}
+          </ComboboxItem>
+        )}
+      </ComboboxList>
+    </ComboboxContent>
+  );
+  const summary = (
+    <Txt as="span" variant="caption" className={cn('font-medium', labels.length === 0 && 'text-muted-foreground')}>
+      {labels.length === 0 ? placeholder : listSummary(labels)}
+    </Txt>
+  );
+  if (many) {
+    return (
+      <ComboboxRoot
+        {...shared}
+        multiple
+        value={chosen}
+        onValueChange={next => onChange(next.map(option => option.value))}
+      >
+        <ComboboxTrigger size="sm" aria-label="Values" title={labels.join(', ')} className="w-fit max-w-64">
+          {summary}
+        </ComboboxTrigger>
+        {content}
+      </ComboboxRoot>
+    );
+  }
+  return (
+    <ComboboxRoot {...shared} value={chosen[0] ?? null} onValueChange={next => next && onChange([next.value])}>
+      <ComboboxTrigger size="sm" aria-label="Value" title={labels[0]} className="w-fit max-w-64">
+        {summary}
+      </ComboboxTrigger>
+      {content}
+    </ComboboxRoot>
+  );
+}
+
 function textOf(value: Row['value']): string {
   if (Array.isArray(value)) return value.join(', ');
   return value === undefined ? '' : String(value);
@@ -477,7 +638,7 @@ function TextValue({
       size="sm"
       aria-label="Value"
       type={field.type === 'number' && !many ? 'number' : 'text'}
-      placeholder={many ? 'Values, comma separated' : 'Value'}
+      placeholder={VALUE_PLACEHOLDERS[field.id] ?? (many ? 'Values, comma separated' : 'Value')}
       value={text}
       className="w-48"
       onChange={event => setDraft(event.target.value)}

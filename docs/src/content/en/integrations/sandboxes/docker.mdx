@@ -130,6 +130,71 @@ check `.mastra-sandbox/setup-failed` first.
 If any entry's access or head can't be resolved, the whole resolution rejects
 and the sandbox falls back to its default template.
 
+## Docker Cloud Sandboxes
+
+`DockerSandboxesSandbox` runs commands in a Docker Cloud Sandboxes microVM instead of a local container. Supply an authenticated `@docker/sandboxes` client to access Docker Cloud Sandboxes.
+
+```typescript
+import { Sandboxes, pat } from '@docker/sandboxes'
+import { Workspace } from '@mastra/core/workspace'
+import { DockerSandboxesSandbox } from '@mastra/docker'
+
+const client = new Sandboxes({
+  auth: pat({
+    username: process.env.DOCKER_USERNAME!,
+    personalAccessToken: process.env.DOCKER_PAT!,
+  }),
+})
+const workspace = new Workspace({
+  sandbox: new DockerSandboxesSandbox({
+    id: sessionId,
+    image: 'ubuntu:24.04',
+    environment: { NODE_ENV: 'production' },
+    client,
+  }),
+})
+```
+
+The `id` is used as the remote sandbox display name for reconnection lookup, so a new instance with the same `id` reconnects to an existing microVM and restarts it if it was stopped. Each instance uses a separate creation idempotency key. Pass `sandboxId` to reconnect directly to a known remote sandbox.
+
+Commands run through `sh -lc`, so command strings can use pipes, redirects and `&&`. Separate `args` are shell-quoted. `executeCommand` supports `timeout`, `abortSignal`, streaming `onStdout`/`onStderr` callbacks and `maxRetainedBytes` (default 1 MiB per stream). Calling `destroy()` deletes the remote sandbox.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'image',
+    type: 'string',
+    description: 'Image used to create the cloud sandbox.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Stable logical identifier used as the remote display name for reconnection lookup.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description: 'Remote sandbox name to reconnect to directly.',
+    isOptional: true,
+  },
+  {
+    name: 'environment',
+    type: 'Record<string, string>',
+    description: 'Environment variables set on a newly created cloud sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'Sandboxes',
+    description:
+      'Authenticated Docker Cloud Sandboxes client. Supply one to access Docker Cloud Sandboxes; caller-owned clients are not closed on `destroy()`.',
+    isOptional: true,
+  },
+]}
+/>
+
 ## Constructor parameters
 
 <PropertiesTable

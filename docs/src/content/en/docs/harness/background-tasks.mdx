@@ -135,6 +135,8 @@ The `_background` override only _modifies_ tools the developer has already opted
 
 When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
+A timeout of `0` means no timeout. Set `timeoutMs: 0` on a tool or agent tool entry, or `defaultTimeoutMs: 0` on the manager, for tasks that should run until they finish or are cancelled.
+
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
 ## Background tasks related stream chunks
@@ -203,7 +205,7 @@ export const mastra = new Mastra({
 
 When a deferred task finishes and no `untilIdle` stream is open for its thread, Mastra sends the agent a `notification` signal with the tag `background-task`. The signal names the tool call and task, and tells the agent the result is now on the tool call. It doesn't copy the result into the prompt. This covers a `stream()` call without `untilIdle`, a client that disconnected, and a task resumed after it [suspended](#suspending-and-resuming).
 
-- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome. The woken run uses the request context of the run that dispatched the task, so a model, instructions, or memory resolved from that context resolve the same way.
+- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome. The woken run uses the request context of the run that dispatched the task, so a model, instructions, or memory resolved from that context resolve the same way. This also holds when the agent that claimed the thread runs on another server: the context is sent along with the signal, minus the auth token, the signed-in user, and any values that can't be sent as JSON or are too large to serialize. That server's run keeps its own auth token and user.
 - If a run is already active on the thread, including the run that dispatched the task, the signal is delivered to that run's next model request. If that run ends without making another request, the signal runs as its own turn.
 - If another agent's run holds the thread, for example while it waits for a tool approval, the signal waits and wakes the agent once that run ends.
 - If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
@@ -500,6 +502,59 @@ const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
 ```
 
 These read from storage rather than the pubsub stream, so they're suitable for paginated lists and detail views.
+
+## Execution ownership and recovery
+
+Every Mastra process with background tasks enabled runs its own manager. You can run several processes or replicas against the same storage backend. The managers coordinate through an execution lease stored on each task record. A lease is a time-limited claim on a task that its owner must keep renewing. When the owner stops renewing it, another manager can take the task over.
+
+### Deployment requirements
+
+- Every manager must use the same storage backend, and its `updateTask` must apply the write conditions atomically. Mastra's storage adapters do. In-memory storage is only shared within one process.
+- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with Network Time Protocol (NTP), to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. The startup scan recovers a task as soon as its lease has expired by the reader's clock. Follow-up scans wait about one second past the expiry to absorb small differences.
+- A longer [`leaseDurationMs`](/reference/configuration#backgroundtasks) delays recovery after a crash. A shorter one adds storage writes and makes it more likely that a stalled owner loses its lease while still running. The default is 30 seconds and the minimum is 3000 ms.
+
+### Lease guarantees and repeated tool calls
+
+The lease guarantees that at most one manager can commit a task's state at a time. The tool itself can still run more than once when:
+
+- The owner stalls, for example because its event loop is blocked or it can't reach storage, for longer than the lease. Another manager recovers the task while the first execution is still running.
+- The owner crashes after the tool has acted on an external system but before the result is saved. The recovered task runs the tool again.
+- A durable agent restarts the task with `restart()` while the previous execution is still running.
+
+Make tools that change external systems safe to repeat, for example by passing the tool call ID as an idempotency key. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+
+A resume interrupted by shutdown is the one exception to the single-committer guarantee. It restores the previous `suspended` state with a write that checks only that the task is `running`, and that write can overwrite a manager that took the task over in the meantime.
+
+### Claim and renew a lease
+
+Each manager gets a random owner ID when it's created. A restarted process gets a new ID and counts as a new owner.
+
+Before a manager runs a task, it claims the task with a conditional write. The write sets the status to `running`, records the manager's `ownerId`, and sets `leaseExpiresAt` to the current time plus `leaseDurationMs`. It only applies if the task still has the status, owner, and lease that the manager last read. When two managers race for the same task, one claim succeeds and the other manager skips the task without running it.
+
+While the task runs, the owner renews the lease every `leaseDurationMs / 3`, with a minimum of one second. Each renewal is conditional on the task still being `running` under the same owner. The task's final writes, such as `completed`, `failed`, `timed_out`, or `suspended`, carry the same condition, so a manager that lost the task can't overwrite the result of the manager that replaced it.
+
+The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A lease that isn't released, for example because the process crashed, expires on its own.
+
+### Recover a task from a dead owner
+
+A manager treats a `running` task as abandoned only after its lease expires.
+
+When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs tasks scans for abandoned tasks on startup. If the scan finds a lease that hasn't expired yet, the manager scans again shortly after that lease expires, and repeats until no live lease is left. A task that a manager starts after that and then abandons waits for the next startup scan. For each task the scan recovers:
+
+- If the task has `maxRetries` above `0`, it returns to `pending` and is dispatched again.
+- Otherwise, it fails with `Worker process terminated before task completed`.
+
+The recovery write is conditional on the owner and lease that the scan read, so only one manager recovers each task.
+
+If the pubsub redelivers the unacknowledged dispatch of an abandoned task, the redelivery claims the task once its lease expires and runs it again, even when `maxRetries` is `0`.
+
+The manager that runs the recovered task needs an executor for it. See the known limitations under [non-agent owners](#non-agent-owners).
+
+`manager.restart(taskId)` is an explicit takeover. It claims a `running` task even while another manager holds a live lease. Durable agents use it when a redelivered step finds the task for its tool call. The task's results then reach the new stream. A restart on the manager that already runs the task doesn't stop the earlier execution. Both executions share an owner ID, and the earlier one can commit first.
+
+### Stop work after losing a lease
+
+When a lease renewal fails because the task is now owned by another manager or was cancelled, the previous owner aborts the `abortSignal` passed to the tool. After a takeover, `abortSignal.reason` is an error with the message `Background task execution ownership was taken over by another worker`. The abort is best effort. If the manager can't read the task at that point, it doesn't retry the abort. The previous owner normally notices at its next renewal. A stalled event loop or slow storage can delay that renewal. A tool that ignores `abortSignal` keeps running until it returns, but its result is rejected.
 
 ## Non-agent owners
 

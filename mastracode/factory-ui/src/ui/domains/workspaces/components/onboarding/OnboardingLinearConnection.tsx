@@ -12,7 +12,6 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
   if (status?.connected)
     return (
       <OnboardingConnectionRow
-        compact
         icon={<LinearIcon />}
         name="Linear"
         description={`Connected to ${status.workspace?.name ?? 'Linear'}.`}
@@ -25,17 +24,11 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
     );
   if (status?.reason === 'missing_config')
     return (
-      <OnboardingConnectionRow
-        compact
-        icon={<LinearIcon />}
-        name="Linear"
-        description="Unavailable for this deployment."
-      />
+      <OnboardingConnectionRow icon={<LinearIcon />} name="Linear" description="Unavailable for this deployment." />
     );
   if (status?.reason === 'organization_required')
     return (
       <OnboardingConnectionRow
-        compact
         icon={<LinearIcon />}
         name="Linear"
         description="Join an organization to connect Linear."
@@ -44,10 +37,10 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
   if (status?.reason === 'auth_required')
     return (
       <OnboardingConnectionRow
-        compact
         icon={<LinearIcon />}
         name="Linear"
         description="Authorization expired. Reconnect Linear to continue."
+        tone="warning"
         action={
           <Button size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
             Reconnect
@@ -58,7 +51,6 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
   if (status?.reason === 'not_connected')
     return (
       <OnboardingConnectionRow
-        compact
         icon={<LinearIcon />}
         name="Linear"
         description="Issues and priorities for your work board."
@@ -71,10 +63,10 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
     );
   return (
     <OnboardingConnectionRow
-      compact
       icon={<LinearIcon />}
       name="Linear"
       description="Couldn't load Linear connection."
+      tone="error"
       action={
         <Button variant="ghost" size="sm" aria-label="Retry Linear" onClick={() => void query.refetch()}>
           Retry

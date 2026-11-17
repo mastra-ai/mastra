@@ -632,7 +632,7 @@ const stream = await agent.stream('message for agent')
             type: 'ToolHooks',
             isOptional: true,
             description:
-              'Per-execution hooks that run before and after tool calls. Overrides matching agent-level hooks for this execution. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call.',
+              'Per-execution hooks that run before and after tool calls, for example to log or save audit records. `afterToolCall: (context) => void | Promise<void>` receives `toolName`, `input`, and `output` or `error`. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call. Overrides matching agent-level hooks for this execution. See [Run logic around tool calls](/docs/agents/tools#run-logic-around-tool-calls).',
           },
           {
             name: 'savePerStep',

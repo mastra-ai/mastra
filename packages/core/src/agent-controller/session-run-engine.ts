@@ -907,7 +907,8 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
+        // The policy is that of the run's own thread, which may not be the one the session holds now.
+        const policy = this.#session.resolveToolApproval(toolName, requestContext);
 
         // Resolve the call against the run that raised it, not the session's
         // currently-bound thread/run/resource. The session can switch thread or

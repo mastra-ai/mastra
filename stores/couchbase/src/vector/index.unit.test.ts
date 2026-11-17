@@ -655,6 +655,53 @@ describe('Unit Testing CouchbaseVector', () => {
       ).rejects.toThrow('Including vectors in search results is not yet supported by the Couchbase vector store');
     });
 
+    describe('query filters', () => {
+      let client: CouchbaseVector;
+      let warn: ReturnType<typeof vi.fn>;
+
+      beforeEach(async () => {
+        client = new CouchbaseVector({
+          connectionString: 'COUCHBASE_CONNECTION_STRING',
+          username: 'COUCHBASE_USERNAME',
+          password: 'COUCHBASE_PASSWORD',
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+          id: 'couchbase-filter-unit-test',
+        });
+        await client.getCollection();
+        warn = vi.fn();
+        client.__setLogger({
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn,
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any);
+        mockScopeSearchFn.mockClear();
+      });
+
+      it('ignores a filter, still searches, and warns once without exposing filter values', async () => {
+        const filter = { resource_id: 'sensitive-resource-id' };
+        await expect(
+          client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter }),
+        ).resolves.toBeInstanceOf(Array);
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter });
+
+        expect(mockScopeSearchFn).toHaveBeenCalledTimes(2);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]![0])).toContain('metadata filters');
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('sensitive-resource-id');
+      });
+
+      it('does not warn when the filter is empty or absent', async () => {
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0], filter: {} });
+        await client.query({ indexName: test_indexName, queryVector: [1.0, 2.0, 3.0] });
+        expect(mockScopeSearchFn).toHaveBeenCalledTimes(2);
+        expect(warn).not.toHaveBeenCalled();
+      });
+    });
+
     it('should throw error for empty vectors array in upsert', async () => {
       await expect(
         couchbase_client.upsert({

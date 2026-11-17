@@ -1,6 +1,3 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardIdOf, boardOf } from '../../factory/boardFlow';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
 import {
   CommandPaletteBody,
@@ -9,20 +6,11 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canStartRun } from '../../factory/boardCardState';
-import { currentItemStage, itemStageLabel } from '../../factory/boardStages';
-import { candidatePayload } from '../../factory/boardDrag';
-import { cardMoves } from '../../factory/cardPrimaryAction';
-import { useBoardItems } from '../../factory/hooks/useBoardItems';
-import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
-import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
-import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
+import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
@@ -43,44 +31,32 @@ import { GlobalSearchWorkItemResults } from './GlobalSearchWorkItemResults';
 import { GlobalSearchWorkItemsStatus } from './GlobalSearchWorkItemsStatus';
 
 export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factoryId: string; closeSearch: () => void }) {
-  const currentUserId = useFactoryAuth().data?.user?.userId;
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const sessions = useGlobalSearchSessions(searchableFactoryId);
-  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
-  const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
-  const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
+  const [query, setQuery] = useState('');
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId, query);
   const catalog = useBoardCatalog(searchableFactoryId);
-  const defaultBoard = catalog.data?.find(board => board.id === DEFAULT_BOARD_ID);
-  // Unfiled candidates come from the intake feed, which files onto the default board.
-  const workBoard = useBoardItems({
-    factoryProjectId: searchableFactoryId,
-    kind: boardIdOf({}),
-    currentUserId,
-    onFailure: toastFailureAfterPaletteCloses,
-  });
-  const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
-  const { effectByItem } = useItemDecisions(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
   const sessionGroups = createSessionSearchGroups({
     factoryId,
     repositories: sessions.repositories,
-    workItems: workItems.items,
+    workItems: workItems.withSessions,
+    boards: catalog.data,
   });
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
-    workItems: workItems.items,
-    candidates: intake.candidates,
+    workItems: workItems.unstarted,
     boards: catalog.data,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
     review: sessionGroups.review.length,
-    items: unstartedItems.length,
+    items: workItems.count,
     user: sessionGroups.user.length,
     factories: factories.length,
   });
@@ -91,24 +67,15 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
+        onValueChange={setQuery}
         placeholder="Search sessions, reviews, #issues, pages, and Factories"
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
-      {runs.repositorySelection && (
-        <RepositoryPickerDialog
-          repositories={runs.repositoryChoices}
-          onClose={runs.closeRepositorySelection}
-          onSelect={async repository => {
-            await runs.selectRepository(repository);
-            closeSearch();
-          }}
-        />
-      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
-          {!sessionsPending && !intake.pending && <CommandEmpty>No matching results.</CommandEmpty>}
+          {!sessionsPending && <CommandEmpty>No matching results.</CommandEmpty>}
           {scopeIncludes(activeScope, 'navigation') && (
             <GlobalSearchNavigationResults factoryId={factoryId} onSelect={selectPath} />
           )}
@@ -121,58 +88,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
               results={unstartedItems}
-              onSelect={result => {
-                const target = result.target;
-                if (target.kind === 'candidate') {
-                  // Until the default board's catalog entry loads there is nowhere to file it: stay open.
-                  if (!defaultBoard) {
-                    toast.error('The board is still loading. Try again in a moment.');
-                    return;
-                  }
-                  // A board with no move for it still takes it, filed in its initial phase.
-                  const [move] = cardMoves(target.candidate, target.candidate.column, defaultBoard);
-                  closeSearch();
-                  workBoard.handleDrop(
-                    candidatePayload(target.candidate),
-                    move?.stage ?? defaultBoard.initialPhase,
-                    'card_action',
-                  );
-                  return;
-                }
-                const item = target.item;
-                const board = workBoard;
-                const definition = boardOf(catalog.data, item);
-                const movingTo = board.evaluatingStages.get(item.id);
-                const { owner } = boardCardState({
-                  decision: effectByItem.get(item.id),
-                  moving:
-                    movingTo === undefined
-                      ? undefined
-                      : { stage: movingTo, label: itemStageLabel(item, movingTo, definition) },
-                  preparing: runs.preparingFor(item.id),
-                });
-                if (!canStartRun(owner.kind)) {
-                  closeSearch();
-                  toast.error(BUSY_CARD_MOVE_REFUSAL);
-                  return;
-                }
-                // Moves read from the phase the card sits in (its furthest, as its label shows), not its board's first.
-                const stage = currentItemStage(item, definition);
-                const [move] = definition && stage !== undefined ? cardMoves(item, stage, definition) : [];
-                if (move) {
-                  closeSearch();
-                  board.move(item.id, move.stage);
-                  return;
-                }
-                void runs
-                  .openOrCreateSession(item)
-                  .then(result => {
-                    if (result !== 'repository-selection-required') closeSearch();
-                  })
-                  .catch(error =>
-                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
-                  );
-              }}
+              onSelect={result => selectPath(cardPath(factoryId, result.item.id, undefined), false)}
             />
           )}
           {scopeIncludes(activeScope, 'user') && (
@@ -182,14 +98,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />
           )}
           {isWorkItemScope(activeScope) && hasRepositories && (
-            <GlobalSearchWorkItemsStatus
-              boardFailed={workItems.failed}
-              intakeFailed={intake.failed}
-              onRetry={() => {
-                workItems.retry();
-                intake.retry();
-              }}
-            />
+            <GlobalSearchWorkItemsStatus failed={workItems.failed} onRetry={workItems.retry} />
           )}
           {scopeIncludes(activeScope, 'factories') && (
             <GlobalSearchFactoriesResults factories={factories} activeFactoryId={factoryId} onSelect={selectPath} />

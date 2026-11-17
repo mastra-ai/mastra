@@ -51,7 +51,7 @@ export class IssueReconcileWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('IssueReconcileWorker: call init() before start()');
     this.#running = true;
-    this.deps.logger.info(`${this.#integrationId} issue reconcile worker started`, { intervalMs: this.#intervalMs });
+    this.deps.logger.debug(`${this.#integrationId} issue reconcile worker started`, { intervalMs: this.#intervalMs });
     this.#schedule(0);
   }
 

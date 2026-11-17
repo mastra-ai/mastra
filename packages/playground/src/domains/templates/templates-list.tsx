@@ -3,11 +3,12 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { raisedSurfaceStyle, surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { NetworkIcon, WorkflowIcon } from 'lucide-react';
+import { NetworkIcon } from 'lucide-react';
 import { getRepoName } from './get-repo-name';
 
 type Template = {
@@ -55,7 +56,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
           <article
             className={cn(
               raisedSurfaceStyle,
-              'state-layer grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg',
+              'grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg state-layer',
             )}
             key={template.slug}
           >

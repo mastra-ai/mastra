@@ -49,6 +49,8 @@ import type { RunFenceCheck } from '../run-fencing';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
+  override readonly listThreadsPaginatesInMemory = true;
+
   /**
    * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
    * execution holding the fence settles, so a running execution's fence is

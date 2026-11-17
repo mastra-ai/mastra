@@ -1,11 +1,11 @@
 import { Tabs } from '@base-ui/react/tabs';
-import { ArrowLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { navItemClasses } from '../nav/sidebar-nav-item-classes';
 import { useSidebar } from '../root/sidebar-context';
 import { useSidebarNavStack } from './sidebar-nav-stack-context';
 import { sidebarNavStackPageClasses } from './sidebar-nav-stack-page-classes';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { cn } from '@/lib/utils';
 
 export type SidebarNavStackViewProps = ComponentPropsWithoutRef<'div'> & {
@@ -31,14 +31,17 @@ export function SidebarNavStackView({
 }: SidebarNavStackViewProps) {
   const { state } = useSidebar();
   const { activeValue, closeView } = useSidebarNavStack();
-  const active = state !== 'collapsed' && activeValue === value;
+  const open = activeValue === value;
+  const active = state !== 'collapsed' && open;
   const backRef = React.useRef<HTMLButtonElement>(null);
-  const wasActiveRef = React.useRef(active);
+  const wasOpenRef = React.useRef(open);
 
+  // Opening the view moves focus to its Back button. Expanding the sidebar onto a view that was already open doesn't:
+  // focus stays where it was.
   React.useEffect(() => {
-    if (active && !wasActiveRef.current) backRef.current?.focus();
-    wasActiveRef.current = active;
-  }, [active]);
+    if (active && !wasOpenRef.current) backRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [active, open]);
 
   React.useEffect(() => {
     if (!active || !closeOnEscape) return;
@@ -77,7 +80,7 @@ export function SidebarNavStackView({
         onClick={handleBack}
         className={cn(navItemClasses(), 'mb-2 grid grid-cols-[2rem_1fr_2rem] px-1')}
       >
-        <ArrowLeftIcon className="justify-self-center" aria-hidden="true" />
+        <IconArrowLeft className="justify-self-center" aria-hidden="true" />
         <span className="min-w-0 truncate text-center">{title}</span>
         <span aria-hidden="true" />
       </button>

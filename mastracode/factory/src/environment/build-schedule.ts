@@ -65,7 +65,7 @@ function isWorkflowSchedule(schedule: AnySchedule | null): schedule is WorkflowS
 
 function toView(schedule: WorkflowSchedule | null): EnvironmentBuildSchedule {
   if (!schedule) return { enabled: false, cron: null, timezone: null };
-  return { enabled: schedule.status === 'active', cron: schedule.cron, timezone: schedule.timezone ?? null };
+  return { enabled: schedule.status === 'active', cron: schedule.cron ?? null, timezone: schedule.timezone ?? null };
 }
 
 /** The project's build schedule as the environment reports it. */

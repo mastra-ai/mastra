@@ -11,13 +11,13 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
+import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
-import { PULL_REQUEST_SOURCE_FILTER } from './domains/factory/boardSourceFilters';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
 import { useBoardCatalog } from '../hooks/useBoardCatalog';
@@ -32,15 +32,19 @@ import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
   prefetchBoard,
+  prefetchCardDraft,
   prefetchComposer,
+  prefetchDraft,
   prefetchFactories,
   prefetchFactoryLayout,
   prefetchRuleDecisions,
+  prefetchRetiredReviewBoard,
   prefetchSidebar,
+  retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
-import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
+import { cardDraftPath, createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Only the boards ship in the startup bundle; every other page loads on first
@@ -56,6 +60,14 @@ const NewPage = lazyPage(
     }),
   <AppPageLoader />,
 );
+const CardDraftPage = lazyPage(
+  () =>
+    import('./pages/CardDraftPage').then(module => {
+      ThreadPage.preload().catch(() => undefined);
+      return module.CardDraftPage;
+    }),
+  <AppPageLoader />,
+);
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
   <AppPageLoader />,
@@ -68,8 +80,12 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
-const CardMovesPage = lazyPage(
-  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
+const BoardIntakePage = lazyPage(
+  () => import('./pages/BoardIntakePage').then(module => module.BoardIntakePage),
+  <AppPageLoader />,
+);
+const BoardRulesPage = lazyPage(
+  () => import('./pages/BoardRulesPage').then(module => module.BoardRulesPage),
   <AppPageLoader />,
 );
 const NewBoardPage = lazyPage(
@@ -116,8 +132,8 @@ function RootLanding() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  // Onboarding does the same once its factory exists (created on repo pick): the
-  // GitHub/Linear round-trips must resume the wizard, not land on the factory.
+  // Onboarding does the same once its pending factory exists: the
+  // GitHub/Linear round-trips must resume onboarding, not land on the factory.
   if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
 
   return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
@@ -134,10 +150,7 @@ function RetiredReviewBoardRedirect() {
   if (catalog.isPending) return null;
   if (catalog.data?.some(board => board.id === 'review'))
     return <Navigate to={`../boards/review${search}`} relative="path" replace />;
-  const params = new URLSearchParams(search);
-  // Picked sources widen the filter, so any other source would show cards the Review board never held.
-  params.set('source', PULL_REQUEST_SOURCE_FILTER);
-  return <Navigate to={`../work?${params}`} relative="path" replace />;
+  return <Navigate to={`../work?${retiredReviewBoardSearch(search)}`} relative="path" replace />;
 }
 
 function FactoryHomeRedirect() {
@@ -218,6 +231,14 @@ function KnowledgeRoute() {
   return <KnowledgePage />;
 }
 
+/** A card's link names no draft, so each visit starts its own. */
+function CardDraftRedirect() {
+  const { factoryId, workItemId } = useParams<{ factoryId: string; workItemId: string }>();
+  const [draftSessionId] = useState(() => crypto.randomUUID());
+  if (!factoryId || !workItemId) return null;
+  return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
+}
+
 export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   const loadOnEntry = createLoadOnEntry(services);
   const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
@@ -248,7 +269,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
               children: [
                 {
                   element: <AppLayout />,
-                  // Load the chat code while its session links appear, before "Open session" is clicked.
+                  // Load the chat code while its session links appear, before a card or session is clicked.
                   ...loadOnEntry(prefetchSidebar, ThreadPage),
                   children: [
                     {
@@ -258,21 +279,39 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
-                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
                         { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                        {
+                          path: 'cards/:workItemId',
+                          element: <CardDraftRedirect />,
+                          ...loadOnEntry(prefetchCardDraft, CardDraftPage),
+                        },
+                        {
+                          path: 'cards/:workItemId/new/:draftSessionId',
+                          ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                        },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'new-board', ...lazyRoute(NewBoardPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
                         // The Review board was retired: new pull requests live on Work.
-                        { path: 'review', element: <RetiredReviewBoardRedirect />, ...loadOnEntry(prefetchBoard) },
+                        {
+                          path: 'review',
+                          element: <RetiredReviewBoardRedirect />,
+                          ...loadOnEntry(prefetchRetiredReviewBoard),
+                        },
                         { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'work/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
-                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
-                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
+                        { path: 'boards/:boardId/intake', ...lazyRoute(BoardIntakePage) },
+                        // Card moves became the board's Rules page.
+                        { path: 'work/moves', element: <Navigate to="../rules" relative="path" replace /> },
+                        { path: 'boards/:boardId/moves', element: <Navigate to="../rules" relative="path" replace /> },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },
@@ -284,7 +323,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         {
                           path: 'settings',
                           children: [
-                            { index: true, element: <Navigate to="preferences" replace /> },
+                            { index: true, element: <Navigate to="account" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
                             { path: 'board', element: <BoardSettingsRedirect /> },
                             { path: 'skills', element: <SkillsSettingsRedirect /> },

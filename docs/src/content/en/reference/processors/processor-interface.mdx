@@ -1158,6 +1158,29 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
 
 Dropping a chunk only affects that single chunk. The stream continues and the next chunk is still processed. To stop the stream entirely, call `abort()`.
 
+#### Emitting a second chunk
+
+`processOutputStream` returns one chunk, but a processor sometimes needs to emit two for one input, such as text it held back followed by the chunk that released it. Return the first chunk and set the second on `state` under `REPROCESS_PART_KEY`. Mastra emits the stashed chunk right after the returned one.
+
+The stashed chunk goes through the output processors again, including the one that stashed it, so that processor must pass it through unchanged on the second pass:
+
+```typescript title="src/mastra/processors/sign-off.ts"
+import { REPROCESS_PART_KEY } from '@mastra/core/processors'
+import type { ChunkType } from '@mastra/core/stream'
+import type { ProcessOutputStreamArgs, Processor } from '@mastra/core/processors'
+
+export class SignOff implements Processor<'sign-off'> {
+  readonly id = 'sign-off'
+
+  async processOutputStream({ part, state }: ProcessOutputStreamArgs): Promise<ChunkType> {
+    if (part.type !== 'text-end' || state.signed) return part
+    state.signed = true
+    state[REPROCESS_PART_KEY] = part
+    return { ...part, type: 'text-delta', payload: { id: part.payload.id, text: '\n\nCheers!' } }
+  }
+}
+```
+
 ---
 
 ### `processOutputResult`

@@ -35,12 +35,6 @@ async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise
  *  - start/finish bracket the entire run
  *  - the `textStream` getter yields plain string deltas, replays, and spans tool loops
  */
-async function collect<T>(stream: ReadableStream<T> | AsyncIterable<T>): Promise<T[]> {
-  const items: T[] = [];
-  for await (const item of stream as AsyncIterable<T>) items.push(item);
-  return items;
-}
-
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
   const getMock = useLoopScenarioAimock();
 

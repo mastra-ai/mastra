@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.95",
+  "version": "0.0.96",
   "description": "",
   "type": "module",
   "private": true,
@@ -40,7 +40,7 @@
   "devDependencies": {
     "@ai-sdk/gateway": "2.0.174",
     "@ai-sdk/provider": "2.0.5",
-    "@ai-sdk/provider-utils": "3.0.43",
+    "@ai-sdk/provider-utils": "3.0.46",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",

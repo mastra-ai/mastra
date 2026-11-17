@@ -1880,26 +1880,94 @@ curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/sp
 
 #### `mastra api score create`
 
-Creates an observability score. The input uses the server score body shape. Inspect it with `--schema`.
+Creates a score for a trace. Wrap the record in `score` with a required `traceId` and an optional `spanId`. The CLI generates an ID and timestamp when omitted and preserves them across retries. Pass `--schema` to inspect the request fields.
 
 ```bash
-mastra api score create <input>
+mastra api score create '{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'
 ```
+
+Score and feedback creates accept an optional top-level `contextMode`. Use `"resolve"` to look up context from a stored trace or span, or `"provided"` to write the fields you supply without a lookup. When you omit `contextMode`, OSS uses `provided` and Platform uses `resolve`, regardless of any context fields you supply.
+
+Successful writes on Platform mean the record is accepted for storage and may not be readable immediately. Output preserves the server's success response and any returned ID and timestamp. Older servers may return only `success`.
 
 #### `mastra api score list`
 
-Lists observability scores. Pass optional JSON input for filters such as run ID or pagination.
+Lists scores with optional filters and pagination.
 
 ```bash
-mastra api score list [input]
+mastra api score list '{"traceId":"trace_123","page":0,"perPage":50}'
 ```
 
 #### `mastra api score get`
 
-Gets one observability score by ID.
+Gets a score by ID. Missing scores return `{"data":{"score":null}}`.
 
 ```bash
-mastra api score get <scoreId>
+mastra api score get score_123
+```
+
+#### `mastra api feedback create`
+
+Creates feedback for a trace or span. Wrap the record in `feedback`. Feedback requires `traceId`, with IDs and timestamps generated when omitted.
+
+```bash
+mastra api feedback create '{"contextMode":"resolve","feedback":{"traceId":"trace_123","feedbackType":"comment","feedbackSource":"user","value":"actionable","feedbackUserId":"reviewer_123"}}'
+```
+
+`feedbackUserId` identifies the feedback author. `userId` describes the trace or span context and is separate from the author.
+
+#### `mastra api feedback list`
+
+Lists feedback with optional filters and pagination.
+
+```bash
+mastra api feedback list '{"traceId":"trace_123","reviewStatus":"needs-review","page":0,"perPage":50}'
+```
+
+#### `mastra api feedback get`
+
+Gets feedback by ID. Missing feedback returns `{"data":{"feedback":null}}`.
+
+```bash
+mastra api feedback get feedback_123
+```
+
+#### `mastra api feedback replace`
+
+Replaces the full feedback record. Send the original `feedbackId`, `traceId`, and `timestamp`, along with the complete replacement. Copy the timestamp from the create response or a subsequent read. The ID in the argument must match the body. Scores don't support replacement.
+
+```bash
+mastra api feedback replace feedback_123 '{"feedback":{"feedbackId":"feedback_123","traceId":"trace_123","timestamp":"2026-11-11T10:00:00.123Z","feedbackType":"comment","feedbackSource":"user","value":"corrected"}}'
+```
+
+Creates and replacements retry missing trace/span responses and transient failures within the command timeout, for at most six attempts or 30 seconds. Each accepted replacement retry counts as a new replacement. Older servers without PUT support return an error.
+
+#### `mastra api feedback review-status`
+
+Changes only the review status to `needs-review` or `reviewed`. No timestamp is required. Missing feedback returns an error, including records still waiting to be stored on Platform.
+
+```bash
+mastra api feedback review-status feedback_123 '{"reviewStatus":"reviewed"}'
+```
+
+#### Score and feedback analytics
+
+Both command groups expose `aggregate`, `breakdown`, `timeseries`, and `percentiles` for numeric values. Select scores by `scorerId` and feedback by `feedbackType`. Use `--schema` on an operation to inspect its filters and options.
+
+```bash
+mastra api score aggregate '{"scorerId":"quality","aggregation":"avg"}'
+mastra api score breakdown '{"scorerId":"quality","aggregation":"avg","groupBy":["entityName"]}'
+mastra api feedback timeseries '{"feedbackType":"rating","aggregation":"avg","interval":"1d"}'
+mastra api feedback percentiles '{"feedbackType":"rating","percentiles":[0.5,0.95],"interval":"1d"}'
+```
+
+#### Score and feedback deletion
+
+Deletes records by ID. Platform returns `accepted: true` when cleanup is queued. OSS returns `success` after deletion.
+
+```bash
+mastra api score delete '{"scoreIds":["score_123"]}'
+mastra api feedback delete '{"feedbackIds":["feedback_123"]}'
 ```
 
 #### `mastra api dataset list`

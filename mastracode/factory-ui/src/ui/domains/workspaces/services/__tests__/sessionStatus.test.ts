@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chatSessionPhase, sessionRowStatus } from '../sessionStatus';
+import { chatSessionPhase } from '../sessionStatus';
 
 const idle = {
   sessionError: false,
@@ -10,19 +10,6 @@ const idle = {
   initializing: false,
   pending: false,
 };
-
-describe('sessionRowStatus', () => {
-  it('shows a sandbox still coming up over the run already registered on it', () => {
-    expect(sessionRowStatus({ running: true, initializing: true })).toBe('initializing');
-    expect(sessionRowStatus({ running: true, initializing: false })).toBe('working');
-  });
-
-  it('shows a run parked on a prompt as waiting while it is still in flight, and runs no marker when idle', () => {
-    expect(sessionRowStatus({ running: true, initializing: false, attention: true })).toBe('ready');
-    expect(sessionRowStatus({ running: false, initializing: false, attention: true })).toBe('ready');
-    expect(sessionRowStatus({ running: false, initializing: false })).toBeUndefined();
-  });
-});
 
 describe('chatSessionPhase', () => {
   it('reports a live run as working even while history still loads', () => {

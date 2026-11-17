@@ -169,6 +169,7 @@ describe('Sessions sidebar lists one row per card', () => {
   });
 
   it('renders a card row the same way as a plain user session', async () => {
+    localStorage.setItem('mastracode.sessionListView', JSON.stringify({ groupBy: 'none' }));
     renderSection();
 
     const cardRow = await screen.findByRole('link', { name: 'Write docs' });
@@ -227,15 +228,14 @@ describe('Sessions sidebar view options', () => {
     expect(await screen.findByRole('link', { name: 'Build fix login' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('shows when a session last moved under its name once compact view is off', async () => {
+  it('shows when a session last moved under its name until compact view is on', async () => {
     const user = userEvent.setup();
     renderSection();
     const row = await screen.findByRole('link', { name: 'Build fix login' });
-    expect(row.querySelector('time')).toBeNull();
+    expect(within(row).getByText('Sep 4')).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
 
     await toggleSessionView(user, 'Compact view');
 
-    const time = within(screen.getByRole('link', { name: 'Build fix login' })).getByText('Sep 4');
-    expect(time).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
+    expect(screen.getByRole('link', { name: 'Build fix login' }).querySelector('time')).toBeNull();
   });
 });

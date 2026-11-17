@@ -19,6 +19,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
+import { hasEveryWord, searchWords } from '../work-items/search-words.js';
 import { propagateClientDisconnect } from './disconnect.js';
 import { factoryActivityEvent } from './events.js';
 
@@ -141,13 +142,10 @@ function createSearchFetchTools(
         'Search this Factory’s work items by title or id. Returns matching items with ids to pass to `fetch`.',
       inputSchema: z.object({ query: z.string().describe('Words to look for in work item titles.') }),
       execute: async ({ query }) => {
-        const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const words = searchWords(query);
         const items = await deps.tools.workItems.listShared(project);
         const results = items
-          .filter(item => {
-            const haystack = `${item.id} ${item.title}`.toLowerCase();
-            return terms.every(term => haystack.includes(term));
-          })
+          .filter(item => hasEveryWord(`${item.id} ${item.title}`.toLowerCase(), words))
           .slice(0, 20)
           .map(item => ({
             id: item.id,

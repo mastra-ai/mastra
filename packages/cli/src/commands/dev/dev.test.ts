@@ -522,6 +522,27 @@ describe('dev command - factory mode environment', () => {
     const callOptions = execaMock.mock.calls[0][2] as { env: Record<string, string> };
     expect(callOptions.env.MASTRA_FACTORY_DEV).toBe('true');
     expect(callOptions.env.MASTRA_TELEMETRY_COMMAND).toBe('factory dev');
+    expect(callOptions.env.MASTRA_FACTORY_DEBUG).toBeUndefined();
+  });
+
+  it('should set MASTRA_FACTORY_DEBUG=true in spawned env for mastra factory dev --debug', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: true,
+      factory: true,
+    });
+
+    const callOptions = execaMock.mock.calls[0][2] as { env: Record<string, string> };
+    expect(callOptions.env.MASTRA_FACTORY_DEBUG).toBe('true');
   });
 
   it('should pass factory: true to DevBundler when factory is set', async () => {

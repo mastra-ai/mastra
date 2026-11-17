@@ -165,15 +165,6 @@ function latestStageWorker(item: WorkItem): { actorId: string; occurredAt: strin
   }, undefined);
 }
 
-export function workItemHumanActorIds(item: WorkItem): string[] {
-  const actorIds = [
-    item.createdBy,
-    ...item.stageHistory.flatMap(entry => [entry.by, entry.exitedBy]),
-    ...Object.values(item.sessions).map(session => session.startedBy),
-  ].filter(isHumanActorId);
-  return [...new Set(actorIds)];
-}
-
 export function workItemActivity(item: WorkItem, page: AuditEventPage | undefined): WorkItemActivity {
   const actors = page?.actors ?? {};
   const auditEvents = page?.events.filter(event => targetsWorkItem(event, item.id)) ?? [];
@@ -214,9 +205,4 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   // the current assignee ("who owns this now") over the reporter/opener.
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
-}
-
-/** Comments render as themselves; the audit row each one also writes would show it twice. */
-export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
-  return activity.events.filter(event => !event.action.includes('.comment_'));
 }

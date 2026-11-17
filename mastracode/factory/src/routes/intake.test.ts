@@ -2,10 +2,12 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Intake } from '../capabilities/intake.js';
+import { PlatformGithubIntegration } from '../integrations/platform/github/integration.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
+import type { IntakeRoutesDeps } from './intake.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -53,7 +55,11 @@ const integrations = [
   { id: 'linear', intake: linear },
 ];
 
-function buildApp(user: { workosId: string; organizationId?: string } | null, intakeIntegrations = integrations) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  intakeIntegrations = integrations,
+  onSourcesSelected?: IntakeRoutesDeps['onSourcesSelected'],
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -67,6 +73,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
       intake: seed.intake,
       projects: seed.projects,
       integrations: intakeIntegrations,
+      ...(onSourcesSelected ? { onSourcesSelected } : {}),
     }).routes(),
   );
   return app;
@@ -88,12 +95,12 @@ describe('intake configuration', () => {
     expect((await buildApp({ workosId: 'u1' }).request('/web/intake/config')).status).toBe(403);
   });
 
-  it('defaults every configured capability to enabled with no selected sources', async () => {
+  it('defaults every configured capability to disabled with no selected sources', async () => {
     const response = await buildApp(orgUser).request('/web/intake/config');
     expect(await response.json()).toEqual({
       config: {
-        github: { enabled: true, sourceIds: null },
-        linear: { enabled: true, sourceIds: null },
+        github: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
       },
     });
   });
@@ -121,6 +128,51 @@ describe('intake configuration', () => {
         },
       },
     ]);
+  });
+
+  it('reports only the sources a save newly selects, so their existing items can be brought in', async () => {
+    const onSourcesSelected = vi.fn();
+    const app = buildApp(orgUser, integrations, onSourcesSelected);
+    const put = (config: unknown) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+    await put({ github: { enabled: true, sourceIds: ['acme/app'] } });
+    await put({
+      github: { enabled: true, sourceIds: ['acme/app', 'acme/api'] },
+      linear: { enabled: false, sourceIds: null },
+    });
+    await put({ github: { enabled: true, sourceIds: ['acme/api'] } });
+
+    expect(onSourcesSelected.mock.calls).toEqual([
+      [{ orgId: 'org1', integrationId: 'github', sourceIds: ['acme/app'] }],
+      [{ orgId: 'org1', integrationId: 'github', sourceIds: ['acme/api'] }],
+    ]);
+  });
+
+  it("accepts GitHub's Dependabot opt-in under its own id and rejects it when GitHub is absent", async () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.test');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'test-key');
+    const platformGithub = new PlatformGithubIntegration();
+    vi.unstubAllEnvs();
+    const withGithub = [{ id: 'github', intake: github }, ...platformGithub.additionalIntakes];
+    const config = { dependabot: { enabled: true, sourceIds: ['acme/app'] } };
+    const put = (app: Hono) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+    expect((await put(buildApp(orgUser, integrations))).status).toBe(400);
+
+    const response = await put(buildApp(orgUser, withGithub));
+    expect(response.status).toBe(200);
+    expect((await response.json()).config.dependabot).toEqual(config.dependabot);
+    expect(await seed.intake.getConfig({ orgId: 'org1', integrationIds: ['dependabot'] })).toEqual(config);
   });
 
   describe('source bindings', () => {
@@ -425,14 +477,14 @@ describe('intake configuration', () => {
       expect(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'linear' })).toEqual([]);
     });
 
-    it('never writes the frozen pre-upgrade bindings collection', async () => {
+    it('never creates the frozen pre-upgrade bindings collection on a new database', async () => {
       const { platform, payments } = await factories();
       await put({ ...ops, factoryProjectId: platform.id });
       await put({ ...ops, factoryProjectId: payments.id, labels: ['payments'] });
       await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: platform.id });
       await remove({ ...ops, factoryProjectId: payments.id });
 
-      expect(await seed.storage.ops.findMany('intake_source_bindings', {})).toEqual([]);
+      expect(await seed.storage.collectionExists?.('intake_source_bindings')).toBe(false);
     });
   });
 

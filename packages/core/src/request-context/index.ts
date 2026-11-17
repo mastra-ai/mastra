@@ -2,6 +2,7 @@ export {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_MESSAGE_AUTHOR_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
@@ -9,6 +10,7 @@ export {
   RequestContext,
   isReservedRequestContextKey,
   mergeVersionOverrides,
+  withoutLiveRequestKeys,
 } from '@internal/core/request-context';
 export type { VersionOverrides, VersionSelector } from '@internal/core/request-context';
 

@@ -204,8 +204,7 @@ describe('board list cache', () => {
       expectedRevision: card.revision,
       destinationStage: 'plan',
       actorId: 'user-alice',
-      ingress: { identity: 'move-1', triggerType: 'human', transitionId: 'move-1' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'move-1', transitionId: 'move-1' },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });

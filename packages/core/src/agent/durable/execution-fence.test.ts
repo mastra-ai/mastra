@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { InMemoryServerCache } from '../../cache/inmemory';
+import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -8,6 +10,11 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
+import { PUBSUB_SYMBOL } from '../../workflows/constants';
+import { Agent } from '../agent';
+import { AGENT_STREAM_TOPIC } from '../streams/constants';
+import { ensureRemoteAbortListener, publishAbortRequest } from './abort-transport';
+import { createEventedAgent } from './create-evented-agent';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -21,14 +28,23 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   executionLeaseKey,
+  fencePubSub,
   getExecutionClaim,
+  getExecutionOwnershipGuard,
   getRunFence,
   isExecutionFenceError,
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
+import { ExecutionOwnershipGuard } from './execution-ownership-guard';
+import {
+  getExecutionStreamOwner,
+  getExecutionStreamProducer,
+  withExecutionStreamProducer,
+} from './execution-stream-publisher';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
-import type { RunRegistryEntry } from './run-registry';
+import { getRunStreamPublisher } from './run-stream-publisher';
+import type { RunRegistryEntry } from './types';
 
 const agentId = 'agent-1';
 const key = (runId: string) => executionLeaseKey(agentId, runId);
@@ -40,6 +56,305 @@ function claim(leaseProvider: LeaseProvider, runId: string, mode: 'acquire' | 't
 afterEach(() => {
   __resetExecutionFencesForTests();
   vi.useRealTimers();
+});
+
+describe('execution publisher transport boundaries (COR-1560)', () => {
+  it.each([false, true])(
+    'resolves worker publishers without touching the native bus (inner registered=%s)',
+    async registerInner => {
+      const nativePubsub = new EventEmitterPubSub();
+      const sharedPubsub = new EventEmitterPubSub();
+      const inner = new Agent({
+        id: agentId,
+        name: agentId,
+        instructions: 'Answer.',
+        model: 'openai/gpt-4o-mini',
+        durable: { pubsub: nativePubsub },
+      });
+      const agent = createEventedAgent({ agent: inner });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({
+        agents: registerInner ? { inner, agent } : { agent },
+        pubsub: sharedPubsub,
+        storage,
+        logger: false,
+      });
+      await storage.init();
+      const runId = crypto.randomUUID();
+      const fence = await ExecutionFence.claim({
+        leaseProvider: sharedPubsub,
+        workflowsStore: await storage.getStore('workflows'),
+        agentId,
+        runId,
+        mode: 'acquire',
+      });
+      const nativeEvents: string[] = [];
+      const sharedEvents: string[] = [];
+      await nativePubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+        nativeEvents.push(event.type);
+      });
+      await sharedPubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+        sharedEvents.push(event.type);
+      });
+      const options = { runId, agentId, mastra, claim: fence.claim };
+      const lifecycle = getExecutionStreamOwner({
+        ...options,
+        ...(registerInner ? { agent } : {}),
+      })!;
+      const producer = getExecutionStreamProducer(options)!;
+      try {
+        await lifecycle.ready;
+        await producer.publishEvent({ type: 'iteration-start', runId, data: {} });
+        expect(sharedEvents).toEqual(['iteration-start']);
+        expect(nativeEvents).toEqual([]);
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'running', publisherId: fence.executionId });
+        expect(await inner.__getRunRecord(runId)).toBeUndefined();
+        await lifecycle.settle('finished');
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'finished', publisherId: fence.executionId });
+        await lifecycle.cleanup();
+        expect(await agent.__getRunRecord(runId)).toBeUndefined();
+      } finally {
+        await producer.detach();
+        await lifecycle.detach();
+        deleteRunRegistryEntry(runId, mastra);
+      }
+    },
+  );
+
+  it.each([false, true])('keeps the same step guard across publisher nesting (lost=%s)', async lost => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const options = { runId, agentId, mastra, claim: fence.claim };
+    const publisher = getExecutionStreamProducer(options)!;
+    let reportLoss!: (error: DurableExecutionFenceError) => void;
+    const guard = new ExecutionOwnershipGuard({
+      observe: async () => {},
+      details: { runId, agentId, executionId: fence.executionId },
+      subscribe: listener => {
+        reportLoss = listener;
+        return () => {};
+      },
+    });
+    const received: string[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      received.push(event.type);
+    });
+    await pubsub.subscribe('other-topic', event => {
+      received.push(event.type);
+    });
+    const step = fencePubSub(withExecutionStreamProducer(pubsub, options), guard);
+    const nested = withExecutionStreamProducer(step, options);
+    const checks = vi.spyOn(guard, 'isLost');
+    const publications = vi.spyOn(publisher, 'publishEvent');
+    try {
+      if (lost) {
+        reportLoss(
+          new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+            runId,
+            agentId,
+            executionId: fence.executionId,
+          }),
+        );
+      }
+      expect(guard.isLost()).toBe(lost);
+      expect(fence.isLost()).toBe(false);
+      expect(await pubsub.getLeaseOwner(key(runId))).toBe(fence.executionId);
+      checks.mockClear();
+      await nested.publish(AGENT_STREAM_TOPIC(runId), { type: 'iteration-start', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start']);
+      expect(publications).toHaveBeenCalledTimes(1);
+      expect(checks).toHaveBeenCalledTimes(1);
+      await nested.publish('other-topic', { type: 'other', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start', 'other']);
+      // The fallback path must still delegate through the original fence.
+      const fallback = withExecutionStreamProducer(step, { runId: `${runId}-fallback`, agentId });
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(`${runId}-fallback`), event => {
+        received.push(event.type);
+      });
+      await fallback.publish(AGENT_STREAM_TOPIC(`${runId}-fallback`), { type: 'fallback', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start', 'other', 'fallback']);
+      expect(checks).toHaveBeenCalledTimes(3);
+    } finally {
+      guard.dispose();
+      await publisher.detach();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
+
+  it('handles publisher detachment failure during registry cleanup', async () => {
+    const runId = crypto.randomUUID();
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({ pubsub, logger: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    setRunRegistryEntry(runId, entry, mastra);
+    const coordinator = getRunStreamPublisher(runId, entry, mastra);
+    const error = new Error('Execution superseded');
+    const owner = coordinator.attachOwner({
+      pubsub,
+      cleanupTimeoutMs: 0,
+      listenForAbort: false,
+      record: { cache: new InMemoryServerCache(), agentId },
+      assertOwnership: async () => {
+        throw error;
+      },
+    });
+    await expect(owner.ready).rejects.toBe(error);
+    deleteRunRegistryEntry(runId, mastra);
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(`[AgentStream:${runId}] failed to detach publisher`, { error });
+    });
+    warn.mockRestore();
+    await pubsub.close();
+  });
+
+  it('drops queued direct-step events after their step guard is lost', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, runId, fence.claim);
+    const received: string[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      received.push(event.type);
+    });
+    const blocked = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const transport = new Proxy(pubsub, {
+      get(target, property) {
+        if (property === 'publish')
+          return async (...args: Parameters<EventEmitterPubSub['publish']>) => {
+            if (args[1].type === 'blocker') {
+              entered.resolve();
+              await blocked.promise;
+            }
+            return target.publish(...args);
+          };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const step = withExecutionFence({
+      id: 'queued-publication',
+      execute: async (params: object & { [PUBSUB_SYMBOL]: EventEmitterPubSub }) => {
+        const bus = params[PUBSUB_SYMBOL];
+        const first = bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'blocker', runId, data: {} });
+        await entered.promise;
+        const stale = bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'stale-step', runId, data: {} });
+        // Isolate step-observer loss from generation loss: the driver's claim remains current.
+        vi.spyOn(getExecutionOwnershipGuard(params)!, 'isLost').mockReturnValue(true);
+        blocked.resolve();
+        await Promise.all([first, stale]);
+      },
+    });
+    try {
+      await step.execute({
+        requestContext,
+        mastra,
+        getInitData: () => ({ runId, agentId }),
+        [PUBSUB_SYMBOL]: transport,
+      });
+      await pubsub.flush();
+      expect(received).toEqual(['blocker']);
+    } finally {
+      blocked.resolve();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
+
+  it('keeps local-only step events out of replay while recording ordinary events', async () => {
+    const source = new EventEmitterPubSub();
+    const pubsub = new CachingPubSub(source, new InMemoryServerCache());
+    const runId = crypto.randomUUID();
+    const fence = await claim(source, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub: source, logger: false });
+    const bus = withExecutionStreamProducer(pubsub, { runId, agentId, mastra, claim: fence.claim });
+    try {
+      await bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'local', runId, data: {} }, { localOnly: true });
+      await bus.publish(AGENT_STREAM_TOPIC(runId), { type: 'shared', runId, data: {} });
+      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+      expect(history.map(event => event.type)).toEqual(['shared']);
+    } finally {
+      deleteRunRegistryEntry(runId, mastra);
+      await source.close();
+    }
+  });
+
+  it('keeps one ordered queue when a step wrapper appears after producer creation', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const options = { runId, agentId, mastra, claim: fence.claim };
+    const publisher = getExecutionStreamProducer(options)!;
+    const received: string[] = [];
+    const ownerEvents: string[] = [];
+    const stepEvents: string[] = [];
+    const stepTransport = new EventEmitterPubSub();
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      ownerEvents.push(event.type);
+      received.push(event.type);
+    });
+    await stepTransport.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      stepEvents.push(event.type);
+      received.push(event.type);
+    });
+    const guard = new ExecutionOwnershipGuard({
+      observe: async () => {},
+      details: { runId, agentId, executionId: fence.executionId },
+      subscribe: () => () => {},
+    });
+    try {
+      const before = publisher.publishEvent({ type: 'before-wrapper', runId, data: {} }, pubsub);
+      const step = withExecutionStreamProducer(
+        fencePubSub(withExecutionStreamProducer(stepTransport, options), guard),
+        options,
+      );
+      const after = step.publish(AGENT_STREAM_TOPIC(runId), { type: 'after-wrapper', runId, data: {} });
+      const finish = step.publish(AGENT_STREAM_TOPIC(runId), { type: 'finish', runId, data: {} });
+      await Promise.all([before, after, finish]);
+      await publisher.detach();
+      expect(received).toEqual(['before-wrapper', 'after-wrapper', 'finish']);
+      expect(ownerEvents).toEqual(['before-wrapper']);
+      expect(stepEvents).toEqual(['after-wrapper', 'finish']);
+    } finally {
+      guard.dispose();
+      await publisher.detach();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
 });
 
 describe('ExecutionFence.claim', () => {
@@ -548,6 +863,192 @@ describe('storage-backed ExecutionFence', () => {
       live: true,
     });
     expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it('finishes a step whose ownership read outlasts the lease TTL while the claim keeps renewing', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    const read = workflowsStore.getRunOwnership.bind(workflowsStore);
+    vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementationOnce(async args => {
+      await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_TTL_MS + 1_000));
+      return read(args);
+    });
+    const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'output' });
+
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .catch(error => error);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1_000);
+
+    expect(await settled).toBe('output');
+    expect(fence.isLost()).toBe(false);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      generation: fence.generation,
+      live: true,
+    });
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it.each(['before', 'after'] as const)(
+    'ends a cancelled step whose ownership read %s its work never returns',
+    async boundary => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      const run = new AbortController();
+      setRunRegistryEntry(
+        'run-1',
+        { abortController: run, abortSignal: run.signal } as unknown as RunRegistryEntry,
+        undefined,
+      );
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const read = vi.spyOn(workflowsStore, 'getRunOwnership');
+      const hang = () => read.mockImplementationOnce(() => new Promise(() => {}));
+      if (boundary === 'before') hang();
+      const step = withExecutionFence({
+        id: 'llm',
+        // Durable steps read the run's signal from the registry and return their own abort output.
+        execute: async (_params: unknown) => {
+          if (run.signal.aborted) return 'aborted';
+          if (boundary === 'after') hang();
+          return 'output';
+        },
+      });
+
+      let outcome: unknown = 'pending';
+      const settled = step
+        .execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        })
+        .then(
+          value => (outcome = value),
+          error => (outcome = error),
+        );
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(outcome).toBe('pending');
+
+      run.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(outcome).toBe(boundary === 'before' ? 'aborted' : 'output');
+      await settled;
+      expect(fence.isLost()).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+        ownerId: fence.executionId,
+        generation: fence.generation,
+        live: true,
+      });
+      expect(await fence.settle(async () => {})).toBe('owned');
+    },
+  );
+
+  describe('a step of an already-cancelled run', () => {
+    async function cancelledStep() {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      const run = new AbortController();
+      run.abort();
+      setRunRegistryEntry(
+        'run-1',
+        { abortController: run, abortSignal: run.signal } as unknown as RunRegistryEntry,
+        undefined,
+      );
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'aborted' });
+      const execute = () =>
+        step.execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        });
+      return { workflowsStore, fence, execute };
+    }
+
+    it('returns its abort output without waiting for the ownership read it started', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      const read = vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementation(() => new Promise(() => {}));
+
+      await expect(execute()).resolves.toBe('aborted');
+      expect(read).toHaveBeenCalled();
+      expect(fence.isLost()).toBe(false);
+    });
+
+    it('notices a takeover from that read, before the next heartbeat', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      await workflowsStore.claimRunOwnership({
+        runId: 'run-1',
+        ownerId: 'successor',
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: fence.generation,
+      });
+
+      await execute().catch(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    });
+  });
+
+  it('ends a cancelled post-check on a worker whose step created the run registry entry', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+    const read = vi.spyOn(workflowsStore, 'getRunOwnership');
+    const step = withExecutionFence({
+      id: 'llm',
+      execute: async (_params: unknown) => {
+        // Durable steps give a worker without a registry entry its own run controller as they start.
+        await ensureRemoteAbortListener(pubsub, 'run-1');
+        read.mockImplementationOnce(() => new Promise(() => {}));
+        return 'output';
+      },
+    });
+
+    let outcome: unknown = 'pending';
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .then(
+        value => (outcome = value),
+        error => (outcome = error),
+      );
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(outcome).toBe('pending');
+
+    await publishAbortRequest(pubsub, 'run-1');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(outcome).toBe('output');
+    await settled;
+    expect(fence.isLost()).toBe(false);
   });
 
   it('marks the fence lost when a storage renewal never returns, so a recovered execution is not split-brain', async () => {
