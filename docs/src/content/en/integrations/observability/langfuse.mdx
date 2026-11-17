@@ -181,7 +181,7 @@ The trace name dropdown in Langfuse evaluator filters lists every distinct value
 
 If you set a custom `traceName` via `mastra.metadata.traceName`, your value takes precedence over the default agent name.
 
-A run started with `tracingOptions.nestUnderParent` doesn't own the trace, so the exporter doesn't write the trace name, input, output, metadata, user, or session from it. See [Nesting a run under an earlier Mastra run](/docs/observability/tracing/overview#nesting-a-run-under-an-earlier-mastra-run).
+A run started with `tracingOptions.nestUnderParent` doesn't own the trace, and the exporter doesn't write the trace name, input, output, metadata, user, or session from it. See [Nesting a run under an earlier run](/docs/observability/tracing/overview#nesting-a-run-under-an-earlier-mastra-run).
 
 ## Filtering observations by span attributes
 
@@ -210,7 +210,7 @@ const tracingOptions = {
 
 This example produces `langfuse.trace.metadata.customerId` and `langfuse.trace.metadata.tier`.
 
-Metadata on the root span is also forwarded. Mastra sets `runId` and `resourceId` on every agent and workflow root span, and you can add your own keys through `tracingOptions.metadata`. The exporter forwards each of these root span keys to `langfuse.trace.metadata.<key>`. Keys that map to a dedicated Langfuse field (`userId`, `sessionId`, `threadId`, `traceName`, and `version`) are not duplicated as trace metadata. Other metadata on child spans stays on the observation. Dedicated fields such as session IDs follow their own mapping rules.
+Metadata on the root span is also forwarded. Mastra sets `runId` and `resourceId` on every agent and workflow root span, and you can add your own keys through `tracingOptions.metadata`. The exporter forwards each of these root span keys to `langfuse.trace.metadata.<key>`. Keys that map to a dedicated Langfuse field (`userId`, `sessionId`, `threadId`, `traceName`, and `version`) aren't duplicated as trace metadata. Other metadata on child spans stays on the observation. Dedicated fields such as session IDs follow their own mapping rules.
 
 Notes:
 
@@ -225,7 +225,7 @@ The exporter maps span metadata to Langfuse sessions using `sessionId`, or `thre
 
 For [Observational Memory](/docs/memory/observational-memory), the Langfuse exporter keeps observer and reflector spans in the caller's session, even when child spans arrive before their parents. An explicit `sessionId`, including an empty string, takes precedence. Otherwise, the exporter uses the original caller thread carried by Observational Memory before falling back to the span's own `threadId`. Observational Memory captures that caller identity from the caller span's non-empty `threadId`, or the original request's thread ID. Nested observation preserves the outer caller identity.
 
-This thread-to-session fallback is specific to Langfuse. Observational Memory doesn't synthesize generic `sessionId` metadata from a thread ID for other exporters.
+This thread-to-session fallback is specific to Langfuse, and Observational Memory doesn't synthesize generic `sessionId` metadata from a thread ID for other exporters.
 
 Internal observer and reflector execution threads remain separate. Multi-thread observation uses the invoking caller's session, not the first thread in the batch. This session behavior applies regardless of the `bufferOnIdle` setting and doesn't change buffering or span parentage.
 

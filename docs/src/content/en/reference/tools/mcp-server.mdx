@@ -362,9 +362,9 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 
 - **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool with the name `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
-This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
+This lets MCP clients interact with your agents using natural language queries, like any other tool.
 
-### Agent-to-Tool Conversion
+### Agent-to-tool conversion
 
 When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
 

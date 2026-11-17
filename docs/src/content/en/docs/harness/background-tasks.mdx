@@ -20,7 +20,7 @@ Use background tasks when a tool call may take long enough that the user shouldn
 - Tool calls that hit slow external services, queues, or large data jobs.
 - Workflows triggered from a tool call that may take minutes to complete.
 
-For tool calls that return quickly, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
+For tool calls that return fast, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
 
 :::note
 

@@ -17,7 +17,7 @@ Build a tool-calling Mastra agent in TanStack Start, then mount the Mastra serve
 
 ## Create a new TanStack Start app (optional)
 
-You need a running TanStack Start app with a `src/routes` directory. If you don't already have one, follow the [TanStack Start quick start](https://tanstack.com/start/latest/docs/framework/react/getting-started) to create and run an app before continuing.
+This guide assumes a running TanStack Start app with a `src/routes` directory. If you need to create one, follow the [TanStack Start quick start](https://tanstack.com/start/latest/docs/framework/react/getting-started) and run the app before continuing.
 
 ## Initialize Mastra
 
@@ -55,9 +55,9 @@ Update `vite.config.ts` so Vite and Nitro leave DuckDB's and `@mastra/core`'s No
 +    }),
 ```
 
-The `optimizeDeps.exclude` setting prevents Vite's development optimizer from opening DuckDB's native `.node` binary as JavaScript. Excluding `execa` stops the optimizer from pre-bundling the server-only dependency `@mastra/core` uses for local process execution; its transitive `npm-run-path` and `unicorn-magic` packages use Node-only conditional exports that the optimizer cannot resolve in the browser build. Adding `/^@duckdb\//` to Nitro's `rollupConfig.external` keeps DuckDB's native Node packages out of the production bundle so Node.js can load them at runtime.
+The `optimizeDeps.exclude` setting prevents Vite's development optimizer from opening DuckDB's native `.node` binary as JavaScript. Excluding `execa` stops the optimizer from pre-bundling the server-only dependency `@mastra/core` uses for local process execution. Its transitive `npm-run-path` and `unicorn-magic` packages use Node-only conditional exports that the optimizer can't resolve in the browser build. Adding `/^@duckdb\//` to Nitro's `rollupConfig.external` keeps DuckDB's native Node packages out of the production bundle so Node.js can load them at runtime.
 
-These changes apply only to `vite.config.ts`; you don't need to change your application or Mastra source files.
+These changes apply only to `vite.config.ts`. You don't need to change your application or Mastra source files.
 
 ## Add the server adapter
 

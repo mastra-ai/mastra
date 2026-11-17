@@ -281,7 +281,7 @@ const vectorQueryTool = createVectorQueryTool({
 })
 ```
 
-When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
+When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search the documentation to find relevant information about X topic."
 
 This is particularly useful when:
 
@@ -660,7 +660,7 @@ The weights control how different factors influence the final ranking:
 - `position`: Higher values help maintain the original ordering of results
 
 :::note
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+For semantic scoring to work during re-ranking, each result must include the text content in its `metadata.text` field.
 :::
 
 You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:

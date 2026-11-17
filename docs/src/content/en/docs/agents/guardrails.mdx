@@ -205,7 +205,7 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 ### Enforce cost limits
 
-The `TokenCostControl()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
+The `TokenCostControl()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may exceed the configured limit before the guard triggers.
 
 ```typescript {8-12} title="src/mastra/agents/budgeted-agent.ts"
 import { TokenCostControl } from '@mastra/core/processors'

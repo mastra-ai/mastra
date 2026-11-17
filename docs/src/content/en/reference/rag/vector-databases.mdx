@@ -47,7 +47,7 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Hybrid Search (Vector + Full-Text)</h3>
 
-    MongoDB supports hybrid search that combines vector similarity with BM25 full-text search through server-side `$rankFusion`. It requires MongoDB 8.0 or later, is generally available from 8.1, and is enabled on MongoDB Atlas 8.0.x. Use it to combine semantic retrieval with keyword-based results:
+    MongoDB supports hybrid search that combines vector similarity with BM25 full-text search through server-side `$rankFusion`. It requires MongoDB 8.0 or later, is available from 8.1, and is enabled on MongoDB Atlas 8.0.x. Use it to combine semantic retrieval with keyword-based results:
 
     ```ts
     await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })

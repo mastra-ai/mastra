@@ -464,11 +464,11 @@ For long-audio Text-to-Speech operations:
 1. The default voice is set to `'en-US-Casual-K'`.
 1. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
 1. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
-1. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+1. The `listen()` method supports recognition configurations through the Google Cloud Speech-to-Text API.
 1. Available voices can be filtered by language code using the `getSpeakers()` method.
 1. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.
 
-## Gemini Live
+## Gemini live
 
 The GeminiLiveVoice class provides real-time voice interaction capabilities using Google's Gemini Live API. It supports bidirectional audio streaming, tool calling, session management, and both standard Google API and Vertex AI authentication methods.
 
@@ -933,7 +933,7 @@ Returns: `Promise<Array<{ voiceId: string; description?: string }>>`
 
 #### `disconnect()`
 
-Disconnects from the Gemini Live session and cleans up resources. This is the async method that properly handles cleanup.
+Disconnects from the Gemini Live session and cleans up resources. This is the async method that handles cleanup.
 
 Returns: `Promise<void>`
 
@@ -1181,7 +1181,7 @@ voice.on('toolCall', ({ name, args, id }) => {
 - The Gemini Live API uses WebSockets for real-time communication
 - Audio is processed as 16kHz PCM16 for input and 24kHz PCM16 for output
 - The voice instance must be connected with `connect()` before using other methods
-- Always call `close()` when done to properly clean up resources
+- Always call `close()` when done to clean up resources
 - Vertex AI authentication requires appropriate IAM permissions (`aiplatform.user` role)
 - Session resumption allows recovery from network interruptions
 - The API supports real-time interactions with text and audio

@@ -67,7 +67,7 @@ Each project runs one build at a time as its deploy transitions through **queued
 
 ## Idle behavior
 
-Server on Mastra platform can sleep a service after a period of inactivity to save resources. Inactivity is measured by outbound network traffic. A service is considered idle only after roughly 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
+Server on Mastra platform can sleep a service after a period of inactivity to save resources. Inactivity is measured by outbound network traffic. A service is considered idle only after about 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
 
 A server that never sleeps usually has a background task or a long-lived connection sending traffic on a timer. Check for the following common causes.
 

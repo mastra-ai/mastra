@@ -193,11 +193,11 @@ The flush is best-effort: dd-trace sends LLM Observability data from a backgroun
 async shutdown(): Promise<void>
 ```
 
-Force-finishes any APM spans that weren't properly closed and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
+Force-finishes any APM spans that weren't closed cleanly and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
 
 ## Usage examples
 
-### Basic Usage
+### Basic usage
 
 ```typescript
 import tracer from 'dd-trace'

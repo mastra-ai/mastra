@@ -13,7 +13,7 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, Traceloop, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Traces stay compatible with platforms such as Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, and Traceloop.
 
 ### Installation
 
@@ -557,9 +557,9 @@ The conventions cover the following span names and attributes:
 - **Agent Runs**: `invoke_agent {agent_id}`
 - **Workflow Runs**: `invoke_workflow {workflow_id}`
 
-Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution); neither carries usage.
+Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution). Neither carries usage.
 
-#### Key Attributes
+#### Key attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
 - `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
@@ -587,13 +587,13 @@ Choose the right protocol package based on your provider:
 
 :::warning
 
-Make sure to install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
+Ensure you install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
 
 :::
 
 ### Troubleshooting
 
-#### Missing Dependency Error
+#### Missing dependency error
 
 If you see an error like:
 
@@ -767,7 +767,7 @@ tsx --import ./instrumentation.ts ./src/index.ts
 
 #### Flushing before exit
 
-Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` isn't enough: it doesn't wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 

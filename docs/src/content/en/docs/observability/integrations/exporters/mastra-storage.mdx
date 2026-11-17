@@ -16,7 +16,7 @@ The `MastraStorageExporter` persists traces to your configured storage backend, 
 :::
 
 :::warning[Production Observability]
-Observability data can quickly overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/integrations/databases/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
+Observability data can overwhelm general-purpose databases in production. For high-traffic applications, route the observability storage domain to [ClickHouse](/integrations/databases/clickhouse) through [composite storage](/reference/storage/composite). See [Production Recommendations](#production-recommendations) for details.
 :::
 
 ## Configuration
@@ -209,9 +209,9 @@ The following storage providers **don't support** the observability domain. If y
 
 ## Production recommendations
 
-Observability data grows quickly in production environments. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day. Most general-purpose databases aren't optimized for this write-heavy, append-only workload.
+Observability data grows fast in production environments. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day. Most general-purpose databases aren't optimized for this write-heavy, append-only workload.
 
-### Recommended: ClickHouse for High-Volume Production
+### Recommended: ClickHouse for high-volume production
 
 [ClickHouse](/integrations/databases/clickhouse) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
 

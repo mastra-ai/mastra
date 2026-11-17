@@ -539,9 +539,9 @@ Converts the LLM's structured analysis into a numerical score.
 })
 ```
 
-The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so we use that boolean result: 1 for gluten-free, 0 for contains gluten.
+The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so the scorer uses that boolean result: 1 for gluten-free, 0 for contains gluten.
 
-### Reason Generation
+### Reason generation
 
 Provides human-readable explanations for the score using another LLM call.
 

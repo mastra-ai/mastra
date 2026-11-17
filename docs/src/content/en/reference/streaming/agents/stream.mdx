@@ -1044,9 +1044,9 @@ Exceeding a budget fails with a `MastraTimeoutError`, which carries a `timeoutTy
 
 Nested `timeout` settings are merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override keeps a call-time `firstChunkMs`.
 
-### AI SDK v5+ Format
+### AI SDK v5+ format
 
-To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
+To use the stream with AI SDK v5 (and later), you can convert it using the `toAISdkStream` utility.
 
 ```ts title="index.ts"
 import { stepCountIs, createUIMessageStreamResponse } from 'ai'
