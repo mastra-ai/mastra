@@ -49,6 +49,8 @@ export class FakeLinear {
   readonly legacy = new Map<string, FakeLinearWorkspace>();
   /** Replies for the next migrate calls, in place of migrating. */
   readonly nextMigrateReplies: FakeReply[] = [];
+  /** Workspaces the migrate endpoint reports as failed, leaving them on legacy tokens. */
+  readonly failingMigrations = new Set<string>();
   /** Replies for the next migration-status reads. */
   readonly nextStatusReplies: FakeReply[] = [];
   readonly migrateRequests: Array<{ linearWorkspaceIds?: string[] }> = [];
@@ -249,7 +251,12 @@ export class FakeLinear {
     const ids = linearWorkspaceIds ?? [...this.legacy.keys()];
     const connections = [];
     const skipped = [];
+    const failed = [];
     for (const id of ids) {
+      if (this.failingMigrations.has(id)) {
+        failed.push({ linearWorkspaceId: id });
+        continue;
+      }
       const workspace = this.legacy.get(id);
       if (!workspace) {
         skipped.push({ linearWorkspaceId: id, reason: 'not_connected' });
@@ -275,7 +282,7 @@ export class FakeLinear {
         migrated,
       });
     }
-    return { connections, skipped };
+    return { connections, skipped, failed };
   }
 }
 

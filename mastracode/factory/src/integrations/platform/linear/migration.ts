@@ -21,6 +21,8 @@ export interface LinearMigrateResponse {
     migrated: boolean;
   }>;
   skipped: Array<{ linearWorkspaceId: string; reason: string }>;
+  /** Workspaces the platform could not migrate this time; they stay on legacy tokens until a retry. */
+  failed?: Array<{ linearWorkspaceId: string }>;
 }
 
 export type LinearMigrationTrigger = 'boot' | 'schedule' | 'admin';
@@ -165,12 +167,16 @@ export class PlatformLinearMigration {
       if (response.connections.length > 0 || response.alreadyMigrated) this.#onMigrated();
       // Read back what is left rather than trusting the response alone.
       const { pending: remaining } = await this.#needed();
-      this.#succeeded({
-        required: remaining.length > 0,
-        pending: remaining,
-        skipped: response.skipped,
-        lastRunAt: at,
-      });
+      const state = { required: remaining.length > 0, pending: remaining, skipped: response.skipped, lastRunAt: at };
+      const failed = response.failed ?? [];
+      if (failed.length > 0) {
+        // The others moved; these are retried with backoff, like a failed call.
+        this.#state = { ...state, lastError: this.#state.lastError };
+        throw new Error(
+          `Linear workspaces ${failed.map(workspace => workspace.linearWorkspaceId).join(', ')} could not be migrated`,
+        );
+      }
+      this.#succeeded(state);
       if (response.skipped.length > 0) {
         logPlatformWarn('Platform Linear workspaces were not migrated', { trigger, skipped: response.skipped });
       }

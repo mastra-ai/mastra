@@ -475,6 +475,31 @@ describe('PlatformLinearIntegration', () => {
       expect(integration.migration.state).toMatchObject({ required: false, lastError: null });
     });
 
+    it('serves the workspaces that moved while retrying, with backoff, the ones the platform could not migrate', async () => {
+      fake.addLegacy(linearWorkspace());
+      fake.addLegacy(linearWorkspace('workspace-2', { name: 'Beta', urlKey: 'beta' }));
+      fake.failingMigrations.add('workspace-2');
+      const { integration } = await setup();
+      onTestFinished(() => integration.migration.stop());
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      const retry = vi.fn();
+
+      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 1 });
+      expect(timers.mock.calls.some(([, delay]) => delay === 60_000)).toBe(true);
+      expect(integration.migration.state).toMatchObject({
+        required: true,
+        pending: ['workspace-2'],
+        lastError: { message: expect.stringContaining('workspace-2') },
+      });
+      await expect(
+        integration.intake.getIssue({ connection: oauth, sourceId: project1SourceId, issueId: 'issue-1' }),
+      ).resolves.toMatchObject({ id: 'issue-1' });
+
+      fake.failingMigrations.delete('workspace-2');
+      await expect(integration.migration.sweep(retry)()).resolves.toMatchObject({ failed: 0, updated: 1 });
+      expect(integration.migration.state).toMatchObject({ required: false, pending: [], lastError: null });
+    });
+
     it('cancels a pending migration retry when its worker stops', async () => {
       fake.addLegacy(linearWorkspace());
       fake.nextMigrateReplies.push({ status: 500, body: { title: 'boom' } });
