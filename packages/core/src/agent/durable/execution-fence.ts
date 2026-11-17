@@ -45,10 +45,12 @@ import { getRunRegistryEntry } from './run-registry';
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 export const EXECUTION_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 /**
- * How long past its local lease deadline a storage-backed execution waits for a renewal still in flight. A renewal
- * queued behind other writes can still extend the lease; one that never returns must not keep the execution going.
+ * Heartbeat ticks a storage-backed execution goes without a confirmed renewal before it gives up the run: a TTL's
+ * worth while renewals fail, and one more TTL while a renewal is still in flight, since one queued behind other writes
+ * can still extend the lease. Ticks, not elapsed time, because a stalled process misses ticks without failing any.
  */
-const STORAGE_RENEWAL_GRACE_MS = EXECUTION_LEASE_TTL_MS;
+const STORAGE_FAILED_RENEWAL_TICKS = Math.ceil(EXECUTION_LEASE_TTL_MS / EXECUTION_LEASE_RENEW_INTERVAL_MS);
+const STORAGE_PENDING_RENEWAL_TICKS = 2 * STORAGE_FAILED_RENEWAL_TICKS;
 /** Allowance for the store's clock running ahead of this process when reading a renewed lease's expiry. */
 const STORE_CLOCK_SKEW_MS = EXECUTION_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
@@ -1132,44 +1134,22 @@ export class ExecutionFence implements RunFenceScope {
 
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
-   * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline.
-   *
-   * A storage claim is not given up on the local clock alone: the store's
-   * conditional renewal decides. Past the deadline the heartbeat still renews,
-   * so an execution whose timer was starved (a blocked event loop) keeps the
-   * run unless another execution claimed it meanwhile.
+   * fence lost, which notifies {@link onLost} listeners.
    */
   #startHeartbeat(): void {
-    let lastTickAt = Date.now();
-    // A stalled tick defers judging an in-flight renewal once; repeated stalls must not hold it off forever.
-    let deferredForStall = false;
+    if (this.generation === undefined) this.#startLeaseHeartbeat();
+    else this.#startStorageHeartbeat();
+  }
+
+  /** A pubsub lease has no generation to tell a late renewal from a later holder's, so it keeps the local deadline. */
+  #startLeaseHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
-      const now = Date.now();
-      // A tick far behind schedule means this process was stalled: a response that arrived meanwhile has not been
-      // read yet, because timers run before I/O. Let it land before judging the deadline.
-      const stalled = now - lastTickAt > 2 * EXECUTION_LEASE_RENEW_INTERVAL_MS;
-      lastTickAt = now;
       if (this.#settlement || this.#lossError) return;
-      const storage = this.generation !== undefined;
-      if (this.#renewalInFlight) {
-        // A storage renewal queued behind other writes can still extend this generation's lease, and a takeover
-        // makes it return false. Wait for its result, but only for a grace period past the deadline.
-        const deadline = storage ? this.#leaseExpiresAt + STORAGE_RENEWAL_GRACE_MS : this.#leaseExpiresAt;
-        if (now < deadline) return;
-        if (storage && stalled && !deferredForStall) {
-          deferredForStall = true;
-          return;
-        }
+      if (Date.now() >= this.#leaseExpiresAt) {
         this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
         return;
       }
-      // A lease has no generation to tell a late renewal from one by a later holder, so it keeps the local deadline.
-      if (!storage && now >= this.#leaseExpiresAt) {
-        this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
-        return;
-      }
-      deferredForStall = false;
+      if (this.#renewalInFlight) return;
       this.#renewalInFlight = true;
       void this.#renew()
         .catch(cause => {
@@ -1186,23 +1166,58 @@ export class ExecutionFence implements RunFenceScope {
     this.#heartbeat.unref?.();
   }
 
-  #renew(): Promise<void> {
-    const startedAt = Date.now();
-    return this.#backend.renew(this.claim).then(({ renewed, leaseExpiresAt }) => {
-      if (!renewed) {
-        this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
-        return this.#noteTakeover();
+  /**
+   * A storage claim is judged by the store's conditional renewal, not the local clock: a blocked event loop moves the
+   * clock without letting this process renew, so a stall alone must not lose the run. The heartbeat counts its ticks
+   * since the last confirmed renewal instead. Failed renewals are tolerated for a TTL's worth of ticks, and one still
+   * in flight, which may be queued behind other writes, for one more TTL.
+   */
+  #startStorageHeartbeat(): void {
+    let unconfirmedTicks = 0;
+    let lastFailure: unknown;
+    this.#heartbeat = setInterval(() => {
+      if (this.#settlement || this.#lossError) return;
+      unconfirmedTicks++;
+      const limit = this.#renewalInFlight ? STORAGE_PENDING_RENEWAL_TICKS : STORAGE_FAILED_RENEWAL_TICKS;
+      if (unconfirmedTicks >= limit) {
+        this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), lastFailure));
+        return;
       }
-      // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
-      // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
-      const reported = leaseExpiresAt
-        ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
-        : 0;
-      this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
-      // A response read after a stall can report a lease that has since run out, and another execution may have
-      // claimed the run meanwhile. Ask the store again rather than carry on from a stale answer.
-      if (this.generation !== undefined && Date.now() >= this.#leaseExpiresAt) return this.#renew();
-    });
+      if (this.#renewalInFlight) return;
+      this.#renewalInFlight = true;
+      void this.#renew()
+        .then(renewed => {
+          if (!renewed) return;
+          unconfirmedTicks = 0;
+          lastFailure = undefined;
+        })
+        .catch(cause => {
+          lastFailure = cause;
+          this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: execution lease renewal failed, retrying: ${cause}`);
+        })
+        .finally(() => {
+          this.#renewalInFlight = false;
+        });
+    }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    this.#heartbeat.unref?.();
+  }
+
+  /** Renew the claim once. Resolves `false` when another execution holds the run, after marking the fence lost. */
+  async #renew(): Promise<boolean> {
+    const startedAt = Date.now();
+    const { renewed, leaseExpiresAt } = await this.#backend.renew(this.claim);
+    if (!renewed) {
+      this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
+      await this.#noteTakeover();
+      return false;
+    }
+    // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
+    // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+    const reported = leaseExpiresAt
+      ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
+      : 0;
+    this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
+    return true;
   }
 }
 
