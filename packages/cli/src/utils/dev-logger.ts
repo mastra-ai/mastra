@@ -114,6 +114,7 @@ export class DevLogger {
   }
 
   bundling(): void {
+    this.stopStarting();
     const prefix = this.formatPrefix('◐', pc.magenta);
     console.info(`${prefix} ${pc.magenta('Bundling...')}`);
   }
@@ -152,6 +153,7 @@ export class DevLogger {
   }
 
   shutdown(): void {
+    this.stopStarting();
     console.info('');
     const prefix = this.formatPrefix('✓', pc.green);
     console.info(`${prefix} ${pc.green('Dev server stopped')}`);

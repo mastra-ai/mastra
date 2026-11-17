@@ -59,6 +59,30 @@ describe('DevLogger startup', () => {
     }
   });
 
+  it.each(['bundling', 'shutdown'] as const)('stops the spinner before %s output', method => {
+    vi.useFakeTimers();
+    const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const logger = new DevLogger();
+      logger.starting();
+      logger[method]();
+      expect(
+        infoSpy.mock.calls.some(([message]) =>
+          String(message).includes(method === 'bundling' ? 'Bundling...' : 'Dev server stopped'),
+        ),
+      ).toBe(true);
+      const writesAfterOutput = writeSpy.mock.calls.length;
+      vi.advanceTimersByTime(160);
+      expect(writeSpy).toHaveBeenCalledTimes(writesAfterOutput);
+    } finally {
+      if (originalIsTTY) Object.defineProperty(process.stdout, 'isTTY', originalIsTTY);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+    }
+  });
+
   it('logs startup and success without animation when stdout is redirected', () => {
     const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
     Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: false });
