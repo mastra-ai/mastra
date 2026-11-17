@@ -466,11 +466,13 @@ describe('ProjectRoutes', () => {
         listRunBindings: vi.fn().mockResolvedValue(bindings),
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
+      const setThreadModel = vi.fn().mockResolvedValue({ live: false });
       const controller = {
         getSession: vi.fn(async (sessionId: string) => {
           if (sessionId === 'session-thread-lookup-failed') throw new Error('gateway unavailable');
           return sessions.get(sessionId) ?? null;
         }),
+        setThreadModel,
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -490,11 +492,18 @@ describe('ProjectRoutes', () => {
           expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
             projectId: project.id,
             modelId: 'anthropic/claude-opus-4-6',
-            applied: 2,
-            skipped: 6,
+            applied: 3,
+            skipped: 5,
           }),
         );
         expect(warn).toHaveBeenCalledTimes(2);
+        // A bound session that is not loaded gets the model stored on its thread.
+        expect(setThreadModel).toHaveBeenCalledTimes(1);
+        expect(setThreadModel).toHaveBeenCalledWith({
+          resourceId: 'resource-not-running',
+          threadId: 'thread-not-running',
+          modelId: 'anthropic/claude-opus-4-6',
+        });
         expect(failingSetSettingOn).toHaveBeenCalledTimes(1);
         expect(setSettingOn).toHaveBeenCalledTimes(2);
         expect(setSettingOn).toHaveBeenNthCalledWith(1, {

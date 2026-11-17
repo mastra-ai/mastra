@@ -1663,6 +1663,11 @@ export class MastraFactory {
             workItems: workItemsStorage,
             controller: {
               getSession: async (sessionId: string) => this.#prepared?.base.controller.getSession(sessionId),
+              setThreadModel: async (args: { resourceId: string; threadId: string; modelId: string }) => {
+                const controller = this.#prepared?.base.controller;
+                if (!controller) throw new Error('Factory controller is not ready.');
+                return controller.setThreadModel(args);
+              },
             },
           }
         : {}),
