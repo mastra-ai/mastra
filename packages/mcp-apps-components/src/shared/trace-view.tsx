@@ -18,8 +18,7 @@ export function isLightTrace(value: unknown): value is LightTrace {
   return !!value && typeof value === 'object' && Array.isArray((value as LightTrace).spans);
 }
 
-/** Loads the rest of a trace that `get_trace` cut to fit the result size limit. */
-/** Every span of `trace`, page by page; on a failed page, the spans so far, marked incomplete. */
+/** Every span of `trace`, page by page, marked incomplete when it ends with fewer than `spanCount`. */
 async function loadRest(app: App, trace: LightTrace): Promise<{ spans: LightSpanRecord[]; incomplete?: true }> {
   const spans = [...trace.spans];
   let offset = trace.nextOffset;
@@ -28,13 +27,13 @@ async function loadRest(app: App, trace: LightTrace): Promise<{ spans: LightSpan
     try {
       page = await callTool(app, 'get_trace', { traceId: trace.traceId, offset });
     } catch {
-      return { spans, incomplete: true };
+      break;
     }
     if (!isLightTrace(page) || page.spans.length === 0) break;
     spans.push(...page.spans);
     offset = page.nextOffset;
   }
-  return { spans };
+  return spans.length < trace.spanCount ? { spans, incomplete: true } : { spans };
 }
 
 /** The app's card already frames the trace, so its panels drop their own edge and rounding inside it. */

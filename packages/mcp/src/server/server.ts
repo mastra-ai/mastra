@@ -153,6 +153,43 @@ function declaresUiExtension(capabilities: ClientCapabilities | undefined): bool
   return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
 }
 
+/**
+ * Largest body the apps probe reads. An `initialize` request is a few hundred bytes; anything bigger
+ * is left unread here for the SDK handler, which enforces `maxRequestBodySize`.
+ */
+const INITIALIZE_PROBE_LIMIT = 64 * 1024;
+
+/** Reads at most `limit` bytes of the request body, or `undefined` when it is larger. */
+async function readSmallBody(request: Request, limit: number): Promise<string | undefined> {
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) return undefined;
+  const reader = request.clone().body?.getReader();
+  if (!reader) return undefined;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return undefined;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 /** Whether the request is a 2025-era `initialize` whose client declares the UI extension. */
 async function initializesWithUi(request: Request, parsedBody: unknown): Promise<boolean> {
   // 2026-07-28 requests name their method in a header and never initialize, and `initialize` opens a
@@ -160,12 +197,16 @@ async function initializesWithUi(request: Request, parsedBody: unknown): Promise
   if (request.method !== 'POST' || request.headers.has('mcp-method') || request.headers.has('mcp-session-id')) {
     return false;
   }
-  const body =
-    parsedBody ??
-    (await request
-      .clone()
-      .json()
-      .catch(() => undefined));
+  let body = parsedBody;
+  if (body === undefined) {
+    const text = await readSmallBody(request, INITIALIZE_PROBE_LIMIT);
+    if (text === undefined) return false;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return false;
+    }
+  }
   return isInitializeRequest(body) && declaresUiExtension(body.params.capabilities);
 }
 
@@ -2323,8 +2364,11 @@ export class MCPServer extends MCPServerBase {
         maxRequestBodySize: this.maxRequestBodySize,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
+      // Without app resources there is nothing for a 2025-era client to opt into, so skip the probe.
       this.httpHandler =
-        this.appsRequireClientSupport && this.legacy === 'stateless' ? this.withAppsSession(handler) : handler;
+        this.appsRequireClientSupport && this.legacy === 'stateless' && this.appResourceList.length > 0
+          ? this.withAppsSession(handler)
+          : handler;
       this.nodeHandler = toNodeHandler(this.httpHandler, {
         maxRequestBodySize: this.maxRequestBodySize,
         onerror: error => this.logger.error('MCP Node handler adapter error', { error: error.toString() }),

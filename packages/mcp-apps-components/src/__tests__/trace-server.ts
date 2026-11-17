@@ -38,14 +38,21 @@ export const traceSpans = [
 /**
  * The tools the trace viewer uses, answering as the built-in server does: `get_trace` returns light spans,
  * `pageSize` at a time with a `nextOffset` while more remain, and `get_span` returns one span in full. Pages after
- * the first wait for `pagesHeld`, when given, and the page at `failAt` fails.
+ * the first wait for `pagesHeld`, when given, the page at `failAt` fails, and the page at `emptyAt` comes back empty.
  */
 export function traceServer({
   pageSize = traceSpans.length,
   appResources = {} as AppResources,
   pagesHeld,
   failAt,
-}: { pageSize?: number; appResources?: AppResources; pagesHeld?: Promise<void>; failAt?: number } = {}) {
+  emptyAt,
+}: {
+  pageSize?: number;
+  appResources?: AppResources;
+  pagesHeld?: Promise<void>;
+  failAt?: number;
+  emptyAt?: number;
+} = {}) {
   const calls: { tool: string; args: Record<string, unknown> }[] = [];
   const server = new MCPServer({
     id: 'traces',
@@ -64,6 +71,9 @@ export function traceServer({
           if (args.traceId !== 'trace-1') throw new Error(`Trace ${args.traceId} not found`);
           if (args.offset !== undefined && args.offset === failAt) throw new Error('Storage timed out');
           const offset = args.offset ?? 0;
+          if (args.offset !== undefined && args.offset === emptyAt) {
+            return { traceId: 'trace-1', spanCount: traceSpans.length, spans: [] };
+          }
           const spans = traceSpans.slice(offset, offset + pageSize);
           const next = offset + spans.length;
           return {
