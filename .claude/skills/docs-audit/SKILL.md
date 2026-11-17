@@ -138,7 +138,17 @@ bash .claude/skills/docs-audit/scripts/run-checks.sh \
   --docs <all-audited-files>
 ```
 
-Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `*-target=warn` as warning-level findings on the page, a skipped check, or (for `validate-target`) ambiguous attribution; it needs report context and is not a target failure or a clean pass. Read every Vale warning and suggestion on a changed line, not only errors. Report each one that a human reader would also notice as a prose-quality finding. Don't rerun Vale yourself with `--minAlertLevel=error` as a substitute for this checker. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
+Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `*-target=warn` as warning-level findings on the page, a skipped check, or (for `validate-target`) ambiguous attribution; it needs report context and is not a target failure or a clean pass.
+
+The checker reports Vale errors and warnings but drops suggestions. Run Vale once more at suggestion level on the same pages. Pass paths relative to `docs/`:
+
+```sh
+cd docs && scripts/vale/bin/vale --minAlertLevel=suggestion --output=line <audited-files-relative-to-docs>
+```
+
+If the Vale binary is missing, record that as a limitation rather than installing it.
+
+Read every Vale warning and suggestion on a changed line, not only errors. Report each one that a human reader would also notice as a prose-quality finding. Don't run Vale with `--minAlertLevel=error` as a substitute for either command. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
 
 ### 9. Report and stop
 

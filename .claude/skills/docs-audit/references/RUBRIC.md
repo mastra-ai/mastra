@@ -9,8 +9,8 @@ Every finding requires changed-doc `file:line` evidence. Accuracy findings also 
 Verdicts:
 
 - `pass`: No material issue in the audited scope.
-- `warn`: A minor issue or verification limitation reduces confidence without making the page misleading or unusable.
-- `fail`: The page is materially inaccurate, incomplete, unsafe, structurally wrong, or not followable.
+- `warn`: A minor issue, including localized prose violations, or a verification limitation reduces confidence without making the page misleading or unusable.
+- `fail`: The page is materially inaccurate, incomplete, unsafe, structurally wrong, or not followable, or its prose fails the Prose quality dimension.
 
 Severity:
 
