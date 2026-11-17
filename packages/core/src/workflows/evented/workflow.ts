@@ -2748,10 +2748,12 @@ export class EventedRun<
 
     // A worker in another process that suspends this segment has no live span to save, so
     // save the resumed root's context now; its next resume then continues this segment.
-    // A failed save only costs that next resume its link, so it never fails this one.
-    const resumeTracingContext = getWorkflowResumeTracingContext(workflowSpan);
+    // A failed or late save only costs that next resume its link, so this resume does not wait
+    // for it: the engine must listen for the run's end before another caller can cancel the run.
+    const resumeTracingContext =
+      this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan);
     if (resumeTracingContext) {
-      await this.runStorage
+      void this.runStorage
         .updateHeader({ status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext })
         .catch(error => {
           this.mastra
