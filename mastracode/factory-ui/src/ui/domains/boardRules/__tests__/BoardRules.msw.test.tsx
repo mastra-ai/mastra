@@ -702,7 +702,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await screen.findByRole('region', { name: 'Work item closed' }));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
@@ -822,7 +822,7 @@ describe('Board rules', () => {
     renderRules();
 
     const warning = 'Also matches pull requests from outside authors.';
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await screen.findByRole('region', { name: 'Work item closed' });
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
     expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));

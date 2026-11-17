@@ -150,9 +150,13 @@ export function combineUpdates(events: readonly BoardEventFacts[]): BoardEventFa
   });
   if (!combined) return undefined;
   const identified = first.pullRequest !== undefined ? { ...combined, pullRequest: first.pullRequest } : combined;
-  // The folded change stands for every pull request in it, so it is trusted only when each one is.
-  if (events.some(event => event.pullRequestTrusted === undefined)) return identified;
-  return { ...identified, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
+  // The folded change stands for every pull request and every actor in it, so each trust tag
+  // survives only when every event carries it, and holds only when each one holds.
+  const folded = events.some(event => event.actorTrusted === undefined)
+    ? identified
+    : { ...identified, actorTrusted: events.every(event => event.actorTrusted === true) };
+  if (events.some(event => event.pullRequestTrusted === undefined)) return folded;
+  return { ...folded, pullRequestTrusted: events.every(event => event.pullRequestTrusted === true) };
 }
 
 /**
@@ -254,6 +258,13 @@ export interface BoardEventFacts {
   pullRequest?: string;
   /** On a pull request event: whether that pull request's author has write access (or is Factory). */
   pullRequestTrusted?: boolean;
+  /**
+   * On a pull request event: whether the person who caused the event has write access (or is
+   * Factory). A maintainer acting on an outside author's pull request vouches for the work they
+   * trigger, so run approval reads this, never the author's trust. Unset means unknown — a polled
+   * or system delivery — which counts as untrusted.
+   */
+  actorTrusted?: boolean;
   /**
    * On the `pull_request.opened` a pull request linking to the card of the issue it closes brings:
    * that card as it was before the pull request joined it (see `closedIssueRuleFacts`).

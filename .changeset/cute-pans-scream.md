@@ -10,4 +10,4 @@ PATCH /web/factory/projects/:projectId/intake-routes/:routeId
 { "expectedRevision": 3, "outsiderPullRequestsGated": false }
 ```
 
-Seeded rules for pushes and review requests now carry the trusted condition explicitly, the intake dry-run tester reports the same skips dispatch would, and a run queued by a card move on an outside author's pull request event always waits for a person's approval, even in a phase that starts on its own.
+The intake dry-run tester reports the same skips dispatch would, and a run queued by a card move on a pull request event no trusted actor vouches for always waits for a person's approval, even in a phase that starts on its own. A maintainer pushing to or requesting review of an outside author's pull request is that vouch, so the review they ask for starts as before.

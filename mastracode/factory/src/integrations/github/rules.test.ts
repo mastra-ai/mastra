@@ -4492,11 +4492,12 @@ describe('GithubRules issue labels', () => {
       const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
         .filter(entry => entry.decision.type === 'routeEvent')
         .map(entry => entry.decision.event);
-      // On an issue card the event names the pull request that changed and that pull request's trust.
+      // On an issue card the event names the pull request that changed and that pull request's
+      // trust; the maintainer who made the change is the event's actor either way.
       const pullRequest =
         where === 'own card'
-          ? { pullRequestTrusted: false }
-          : { pullRequest: 'pull-request:github:10:pull-request:17', pullRequestTrusted: true };
+          ? { pullRequestTrusted: false, actorTrusted: true }
+          : { pullRequest: 'pull-request:github:10:pull-request:17', pullRequestTrusted: true, actorTrusted: true };
       expect(events).toEqual([
         { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, ...pullRequest },
         { type: 'pull_request.updated', assignees: { added: [], removed: ['ada'] }, ...pullRequest },
@@ -5183,12 +5184,44 @@ describe('GithubRules with outside work in Intake', () => {
       const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
       expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'work', stage: 'pr-review' } });
       expect(item?.stages).toEqual(['pr-review']);
-      // The pusher is a maintainer, but the routes' `pullRequest.trusted` is the pull request's author.
+      // The routes' `pullRequest.trusted` is the pull request's author; the pusher is a
+      // maintainer, and run approval reads the pusher.
       expect(transition?.decision.event).toEqual({
         type: 'pull_request.synchronized',
         pullRequestTrusted: 'authorTrusted' in metadata && metadata.authorTrusted,
+        actorTrusted: true,
       });
+      // The maintainer's push vouches for the re-review: it is released, never parked for a
+      // second approval, whoever wrote the pull request.
+      const reviews = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]!.status).not.toBe('proposed');
     });
+
+    // A maintainer asking Factory to review is the same vouch: the review they ask for starts,
+    // whoever wrote the pull request and wherever its card sits.
+    it.each(['intake', 'done'] as const)(
+      `reviews ${author}'s pull request from %s when a maintainer asks`,
+      async stage => {
+        const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage, metadata });
+        const { decisions, item } = await deliver({
+          event: 'pull_request',
+          deliveryId: 'delivery-review-request',
+          payload: {
+            action: 'review_requested',
+            installation: { id: 7 },
+            repository: { id: 10, full_name: 'acme/repo' },
+            sender: { login: 'maintainer' },
+            requested_reviewer: { login: 'factory-app[bot]' },
+            pull_request: { number: 17, title: 'PR 17', html_url: 'https://github.com/acme/repo/pull/17' },
+          },
+        });
+        expect(item?.stages).toEqual(['pr-review']);
+        const reviews = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+        expect(reviews).toHaveLength(1);
+        expect(reviews[0]!.status).not.toBe('proposed');
+      },
+    );
 
     // Triage runs once: a comment on a card a person moved to Triage starts nothing, whoever wrote it.
     it(`does not re-triage ${author}'s issue a person moved to Triage when someone comments`, async () => {

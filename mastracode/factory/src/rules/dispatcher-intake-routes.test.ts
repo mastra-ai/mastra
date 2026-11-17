@@ -1277,8 +1277,9 @@ describe('intake routes moving existing cards on status events', () => {
       const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
       await putAt(card.id, 'execute');
 
-      const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true }))
-        .card!;
+      const moved = (
+        await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: true, actorTrusted: true })
+      ).card!;
 
       expect(moved.id).toBe(card.id);
       expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
@@ -1313,8 +1314,13 @@ describe('intake routes moving existing cards on status events', () => {
           metadata: { authorTrusted: trusted, state: 'open' },
         }))!;
 
-        const moved = (await deliverEvent(card.id, { type: 'pull_request.synchronized', pullRequestTrusted: trusted }))
-          .card!;
+        const moved = (
+          await deliverEvent(card.id, {
+            type: 'pull_request.synchronized',
+            pullRequestTrusted: trusted,
+            actorTrusted: trusted,
+          })
+        ).card!;
 
         expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
         const started = await runs(card.id);
@@ -1323,6 +1329,30 @@ describe('intake routes moving existing cards on status events', () => {
         else expect(started).toEqual(['proposed']);
       },
     );
+
+    // Reopening is no settling event either: the outside author's say-so still waits for a person.
+    it('parks the run when an outside author reopens their pull request and a rule moves its card into an auto-starting phase', async () => {
+      const { boards, scope, route, deliver, deliverEvent, runs } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      await route({
+        name: 'Reopened pull requests ship',
+        on: ['pull_request.reopened'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({
+        sourceKey: 'github-pr:17',
+        source: 'github-pr',
+        title: 'PR 17',
+        metadata: { authorTrusted: false, state: 'open' },
+      }))!;
+
+      const moved = (
+        await deliverEvent(card.id, { type: 'pull_request.reopened', pullRequestTrusted: false, actorTrusted: false })
+      ).card!;
+
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(await runs(card.id)).toEqual(['proposed']);
+    });
 
     // With no stored rule handling the event, the provider's default move answers it instead.
     // That move stands too, but the run its auto-starting destination queues on an outside
@@ -1347,7 +1377,7 @@ describe('intake routes moving existing cards on status events', () => {
             idempotencyKey: 'push:re-review-updated',
             board: 'work',
             stage: 'pr-review',
-            event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted },
+            event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted, actorTrusted: trusted },
           })
         ).card!;
 
@@ -1381,7 +1411,7 @@ describe('intake routes moving existing cards on status events', () => {
           board: 'work',
           stage: 'pr-review',
           message: { text: 'New commits on pull request #17.' },
-          event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted },
+          event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted, actorTrusted: trusted },
         })
       ).card!;
       expect(placed(moved)).toEqual({ board: 'work', stages: ['pr-review'] });

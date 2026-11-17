@@ -2408,6 +2408,8 @@ export class FactoryDecisionDispatcher {
           event: {
             type: 'pull_request.opened',
             pullRequestTrusted: link.trusted,
+            // The author opened it, so the opener's trust is the author's.
+            actorTrusted: link.trusted,
             closedIssue: { phase: link.phase, hasPullRequest: link.hasPullRequest },
           },
         },

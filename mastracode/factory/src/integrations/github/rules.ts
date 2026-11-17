@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
+import { closeReason, isPullRequestEvent, listChange, updateEventFacts } from '../../boards/board-events.js';
 import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
@@ -673,7 +673,11 @@ export class GithubRules {
       item,
       ingress: { identity: `${installationId}:${parsed.deliveryId}` },
       actor: { ...actor },
-      event,
+      // A pull request update carries who made it: run approval reads the actor, not the author.
+      event:
+        isPullRequestEvent(event.type) ?
+          { ...event, actorTrusted: actor.type === 'github' && actor.trusted }
+        : event,
       fromCardSession,
     });
     return status;
@@ -1398,7 +1402,9 @@ export class GithubRules {
       }
       if (context.pullRequest) {
         const trusted = githubPullRequestTrusted(context);
-        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
+        // An unknown actor — a polled or system delivery — vouches for nothing.
+        const actorTrusted = context.actor.type === 'github' && context.actor.trusted;
+        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({
