@@ -69,7 +69,9 @@ function minLeaseOverride(): number | undefined {
  * - Loss: a failed renewal aborts the local run's signal when another owner
  *   holds the task or it was cancelled.
  *
- * Guarantee: at most one owner can commit a task's state at a time. The tool
+ * Guarantee: at most one owner can commit a task's state at a time, except
+ * for the shutdown rollback of an interrupted resume in `handleResume`, which is
+ * conditional on status only. The tool
  * itself may still run more than once (stalled owner past its lease, crash
  * before the result is saved, explicit restart), so external side effects need
  * idempotency. Assumes storage applies `updateTask` conditions atomically and
