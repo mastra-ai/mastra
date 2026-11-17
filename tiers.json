@@ -33969,9 +33969,9 @@
     },
     "job:e2e/experiments": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-13",
-      "reason": "pr-job-fail",
+      "since": "2026-11-17",
+      "last_failure": "2026-11-17",
+      "reason": "versioning-fail",
       "pr_failures": {
         "132232636595": {
           "date": "2026-11-13",
