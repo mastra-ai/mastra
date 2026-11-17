@@ -67,6 +67,7 @@ import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { BoardPhasesResponse } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { WorkItemRoutesDeps } from './work-items.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ function buildApp(
   requestContext?: RequestContext,
   // Work as projects stored before new projects' Work dropped Triage: these tests walk its lanes.
   boardRegistry: BoardRegistry = createTriageWorkRegistry(),
+  sessionRepository?: WorkItemRoutesDeps['sessionRepository'],
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -102,6 +104,7 @@ function buildApp(
         audit: auditRecorder,
       }),
       startCoordinator,
+      sessionRepository,
       liveSessions: { parked: () => undefined, parkedIn: () => [] },
     }).routes(),
   );
@@ -3830,5 +3833,71 @@ describe('parseUpdateWorkItem', () => {
     expect(parseUpdateWorkItem({})).toBeNull();
     expect(parseUpdateWorkItem({ stages: ['done'] })).toEqual({ stages: ['done'] });
     expect(parseUpdateWorkItem({ url: null })).toBeNull();
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/:workItemId/session-repository', () => {
+  async function createItem() {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    return (await res.json()).workItem as { id: string };
+  }
+
+  const ask = (
+    sessionRepository: WorkItemRoutesDeps['sessionRepository'],
+    path: string,
+    user: typeof orgUser = orgUser,
+  ) => buildApp(user, undefined, undefined, undefined, sessionRepository).request(path);
+
+  it('sends the repository the server files a session under, without the unnamed candidates', async () => {
+    const item = await createItem();
+    const sessionRepository = vi.fn(async () => ({
+      status: 'resolved' as const,
+      projectRepositoryId: 'link-1',
+      slug: 'acme/app',
+      unnamed: { repositories: ['acme/app', 'acme/web'] },
+    }));
+    const res = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'resolved', projectRepositoryId: 'link-1', slug: 'acme/app' });
+    expect(sessionRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        item: expect.objectContaining({ id: item.id }),
+      }),
+    );
+  });
+
+  it('sends why a card has no repository', async () => {
+    const item = await createItem();
+    const hint = 'Source-control repository 1 is not linked to this Factory.';
+    const res = await ask(
+      async () => ({ status: 'unlinked', hint }),
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'unlinked', hint });
+  });
+
+  it('404s for a card of another project or org without resolving it', async () => {
+    const item = await createItem();
+    const homeProject = PROJECT_ID;
+    const sessionRepository = vi.fn();
+    await seedProject('org1');
+    const otherProject = await ask(
+      sessionRepository,
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/session-repository`,
+    );
+    expect(otherProject.status).toBe(404);
+    const otherOrg = await ask(
+      sessionRepository,
+      `/web/factory/projects/${homeProject}/work-items/${item.id}/session-repository`,
+      { workosId: 'u9', organizationId: 'org2' },
+    );
+    expect(otherOrg.status).toBe(404);
+    expect(sessionRepository).not.toHaveBeenCalled();
   });
 });

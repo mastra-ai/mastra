@@ -47,6 +47,7 @@ export interface RunReach {
   viewerUserId: string;
   factoryProjectId: string;
   visibleSessionIds: Pick<ReadonlySet<string>, 'has'>;
+  sessionOnThread(threadId: string): string | undefined;
 }
 
 type SessionRowFields = Omit<SessionRow, 'childRows'>;
@@ -55,7 +56,7 @@ type SessionActivityStatus = SessionRow['status'];
 /** A card's status as its sidebar row shows it, and whether one of its sessions holds it. */
 export interface CardSessionStatus {
   status: SessionActivityStatus;
-  /** One of its sessions is coming up, running, or parked on a person, so no rival run may start. */
+  /** One of its sessions is running or parked on a person, so no rival run may start. */
   held: boolean;
 }
 
@@ -236,14 +237,16 @@ function indexSession(
   };
 }
 
-function factoryStatus(entry: IndexedSession, viewer: SessionStatusViewer): SessionActivityStatus {
-  const { session, card } = entry;
+function sessionStatus(entry: IndexedSession, viewer: SessionStatusViewer): SessionActivityStatus {
+  const { session, card, person } = entry;
+  const running = viewer.runningSessionIds.has(session.sessionId);
   return activityStatus({
-    initializing: session.materializedAt === null,
-    running: viewer.runningSessionIds.has(session.sessionId),
+    initializing: running && session.materializedAt === null,
+    running,
     attention:
-      viewer.parkedSessionIds.has(session.sessionId) || (card !== undefined && viewer.awaitingPerson.has(card.id)),
-    settled: entry.settled,
+      viewer.parkedSessionIds.has(session.sessionId) ||
+      (!person && card !== undefined && viewer.awaitingPerson.has(card.id)),
+    settled: !person && entry.settled,
   });
 }
 
@@ -252,7 +255,7 @@ function factoryRow(entry: IndexedSession, viewer: SessionRowViewer): SessionRow
     session: entry.wire,
     origin: 'factory',
     board: entry.board,
-    status: factoryStatus(entry, viewer),
+    status: sessionStatus(entry, viewer),
     pinned: viewer.pinnedSessionIds.has(entry.session.sessionId),
     updatedAt: entry.updatedAt,
     ...entry.cardFields,
@@ -264,12 +267,7 @@ function userRow(entry: IndexedSession, viewer: SessionRowViewer): SessionRowFie
   return {
     session: entry.wire,
     origin: 'user',
-    status: activityStatus({
-      initializing: session.materializedAt === null,
-      running: viewer.runningSessionIds.has(session.sessionId),
-      attention: false,
-      settled: false,
-    }),
+    status: sessionStatus(entry, viewer),
     pinned: viewer.pinnedSessionIds.has(session.sessionId),
     updatedAt: entry.updatedAt,
     ...entry.cardFields,
@@ -405,7 +403,7 @@ export class SessionRowIndex {
     const sessions = this.#sessions.flatMap(entry =>
       entry.person || !isSeenBy(entry.session, viewer.viewerUserId)
         ? []
-        : [{ entry, status: factoryStatus(entry, viewer), held: isInFlight(factoryStatus(entry, sessionsAlone)) }],
+        : [{ entry, status: sessionStatus(entry, viewer), held: isInFlight(sessionStatus(entry, sessionsAlone)) }],
     );
     return new Map(
       Array.from(rowsByCard(sessions), ([itemId, cardSessions]) => {
@@ -442,8 +440,8 @@ export function runningSessionIds(
     reach.visibleSessionIds.has(resourceId);
   return new Set(
     runs.flatMap(run => {
-      if (run.resourceId === undefined) return [run.threadId];
-      return reachable(run.resourceId) ? [run.threadId, run.resourceId] : [];
+      if (run.resourceId !== undefined && !reachable(run.resourceId)) return [];
+      return [run.threadId, run.resourceId, reach.sessionOnThread(run.threadId)].filter(id => id !== undefined);
     }),
   );
 }

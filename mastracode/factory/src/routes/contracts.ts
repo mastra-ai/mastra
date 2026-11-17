@@ -939,6 +939,11 @@ const workItemListQuerySchema = z
 
 const countSchema = z.number().int().nonnegative();
 
+export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
+  z.object({ status: z.literal('unlinked'), hint: z.string() }),
+]);
+
 /** What the draft page's starter buttons count on the project's default board. */
 export const workItemStartersResponseSchema = z.object({
   failed: countSchema,
@@ -1227,11 +1232,11 @@ export const sessionRowsResponseSchema = z.object({
 
 export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
-  /** Sessions of a card whose run waits on a person's answer. */
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
   /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
   cardStatuses: z.record(z.string(), sessionRowStatusSchema),
-  /** Cards one of whose sessions is coming up, running, or parked on a person: no rival run may start on them. */
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
   sessionHeldCardIds: z.array(z.string()),
   /** Cards in `cardStatuses` working, and waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),
@@ -1952,6 +1957,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
       expectedRevision: z.number().int().nonnegative(),
     }),
     responseSchema: workItemResponseSchema,
+  },
+  workItemSessionRepository: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/session-repository',
+    description: "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemSessionRepositoryResponseSchema,
   },
   workItemStart: {
     method: 'POST',

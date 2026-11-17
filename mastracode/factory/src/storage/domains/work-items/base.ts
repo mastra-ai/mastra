@@ -1156,6 +1156,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_run_bindings_org_thread_idx',
         columns: ['org_id', 'thread_id', 'resource_id', 'session_id'],
       },
+      // Prompt-time checkout trust reads a session's whole binding history, on any thread.
+      { name: 'factory_run_bindings_org_session_idx', columns: ['org_id', 'session_id'] },
       // Restart reconciler enumerates active bindings across all tenants.
       { name: 'factory_run_bindings_status_idx', columns: ['status'] },
     ],
@@ -3558,6 +3560,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: input.sessionId,
     });
     return row !== null;
+  }
+
+  /** Every binding a session ever held, revoked ones included, oldest first; never grants agent authority. */
+  async listRunBindingsForSession(input: { orgId: string; sessionId: string }): Promise<FactoryRunBindingRecord[]> {
+    return (
+      await this.#db.findMany<GovernanceDbRow>(
+        'factory_run_bindings',
+        { org_id: input.orgId, session_id: input.sessionId },
+        { orderBy: [['created_at', 'asc']] },
+      )
+    ).map(toBinding);
   }
 
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
