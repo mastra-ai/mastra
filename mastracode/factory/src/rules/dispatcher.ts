@@ -1393,6 +1393,23 @@ export class FactoryDecisionDispatcher {
     return phase?.kind !== 'working' || phase.runner.skill !== run.skillName;
   }
 
+  /**
+   * When a re-entered review's head was already reviewed while this decision waited for the
+   * pass in flight: that pass read the pushed commit, so its verdict is the one this decision
+   * was queued to produce. A verdict from before the decision does not count, so a person
+   * asking for another pass on the same commit still gets one.
+   */
+  async #headReviewedSince(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<Date | undefined> {
+    if (!record.workItemId || (decision as { resume?: unknown }).resume !== true) return undefined;
+    if (!(await this.#isReviewRun(record, decision))) return undefined;
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+    const { pullRequestHeadSha: head, reviewedHeadSha: reviewed, reviewedAt } = item?.metadata ?? {};
+    if (typeof head !== 'string' || typeof reviewed !== 'string' || typeof reviewedAt !== 'string') return undefined;
+    if (head.toLowerCase() !== reviewed.toLowerCase()) return undefined;
+    const at = new Date(reviewedAt);
+    return at.getTime() >= record.createdAt.getTime() ? at : undefined;
+  }
+
   async #reviewQueuedOnce(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<void> {
     if (this.#reviewQueued.has(record)) return;
     this.#reviewQueued.add(record);
@@ -1627,6 +1644,16 @@ export class FactoryDecisionDispatcher {
             return this.#replayLanded(record, decision, session, runStillActive);
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
+          const coveredAt = await this.#headReviewedSince(record, decision);
+          if (coveredAt) {
+            // The verdict this pass was queued for exists; its status reports that verdict, not a cancelled run.
+            await this.#reviewStatus(record, decision, {
+              phase: 'completed',
+              startedAt: record.createdAt,
+              endedAt: coveredAt,
+            });
+            return;
+          }
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           // Re-read: the description may have been edited while the open run drained.
           const current = record.workItemId

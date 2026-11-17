@@ -9766,6 +9766,88 @@ describe('review status comment lifecycle', () => {
     expect(conversation.comments()[0]!.body).toContain('Review cancelled');
     expect(conversation.comments()[0]!.body).not.toContain('Review finished');
   });
+
+  describe('a push that arrives while a review is running', () => {
+    const HEAD = '4dab505b024aeec72011b015149f1060ee696f24';
+    const EARLIER_HEAD = '00113230108aeec72011b015149f1060ee696f24';
+
+    /** The re-review a push queues, dispatched once the pass that was in flight has ended. */
+    async function queuedReReview(key: string, verdict: (requestedAt: Date) => Record<string, unknown>) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const queued = await queueDecision(
+        storage,
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          arguments: 'PR 7',
+          idempotencyKey: key,
+          resume: true,
+          cancelInFlight: true,
+        },
+        { armed: true },
+      );
+      await bindReviewRun(storage, queued.item.id);
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      await storage.update({
+        orgId: 'org-1',
+        id: queued.item.id,
+        userId: 'user-1',
+        patch: { metadata: { pullRequestHeadSha: HEAD, ...verdict(record!.createdAt) } },
+      });
+      const conversation = pullRequestConversation();
+      const { controller, session } = createSession(undefined, { agentEndReason: 'complete' });
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        ownerId: 'worker-1',
+        boards: autoStartingBoards(),
+        primeCredentials: vi.fn(async () => {}),
+        reportReviewStatus: conversation.reportReviewStatus,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+      return { storage, session, ...conversation };
+    }
+
+    // Technical: the queued re-review waits for the open run; that run had fetched the pushed
+    // head and recorded its verdict on it, so a second pass repeated the same review (#30676).
+    it('does not review the commit a second time when the running pass already covered it', async () => {
+      const { storage, session, events, comments } = await queuedReReview('re-review-covered', requestedAt => ({
+        reviewVerdict: 'request changes',
+        reviewedHeadSha: HEAD,
+        reviewedAt: new Date(requestedAt.getTime() + 60_000).toISOString(),
+      }));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      expect(events.map(event => event.phase)).toEqual(['queued', 'completed']);
+      expect(comments()).toHaveLength(1);
+      expect(comments()[0]!.body).not.toContain('Review cancelled');
+      expect(comments()[0]!.body).not.toContain('Review queued');
+    });
+
+    it('reviews again when the running pass ended on the commit before the push', async () => {
+      const { session, events } = await queuedReReview('re-review-head-moved', requestedAt => ({
+        reviewVerdict: 'request changes',
+        reviewedHeadSha: EARLIER_HEAD,
+        reviewedAt: new Date(requestedAt.getTime() + 60_000).toISOString(),
+      }));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+    });
+
+    it('reviews the same commit again when a person asks after the verdict', async () => {
+      const { session, events } = await queuedReReview('re-review-requested', requestedAt => ({
+        reviewVerdict: 'request changes',
+        reviewedHeadSha: HEAD,
+        reviewedAt: new Date(requestedAt.getTime() - 60_000).toISOString(),
+      }));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+    });
+  });
 });
 
 describe('phase goals', () => {
