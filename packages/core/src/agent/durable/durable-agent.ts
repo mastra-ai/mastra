@@ -147,7 +147,6 @@ import type {
   DurableAgentStepFinishResult,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
-  DurableToolCallInput,
   RegistryModelListEntry,
   RunRegistryEntry,
   SerializableModelListEntry,
@@ -158,7 +157,6 @@ import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import type { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './workflows/finalize-run';
-import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -1085,41 +1083,7 @@ export class DurableAgent<
     runId: string,
   ): Promise<{ toolCalls: ToolCallChunk[]; resumedText?: { priorText: string; stepText: string } }> {
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const outerRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-    if (!outerRun) return { toolCalls: [] };
-    const outerSnapshot: WorkflowRunState =
-      typeof outerRun.snapshot === 'string' ? JSON.parse(outerRun.snapshot) : outerRun.snapshot;
-    const iteration = outerSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION];
-    const nestedRunId = iteration?.metadata?.nestedRunId ?? runId;
-    const persisted = await workflowsStore?.getWorkflowRunById({
-      runId: nestedRunId,
-      workflowName: DurableStepIds.AGENTIC_EXECUTION,
-    });
-    if (!persisted) return { toolCalls: [] };
-
-    const snapshot =
-      typeof persisted.snapshot === 'string'
-        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-        : persisted.snapshot;
-    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
-    if (llmStep?.status !== 'success') return { toolCalls: [] };
-    // The step records hold completed iterations (in workflow state, or in the
-    // nested input on runs that never seeded them); the LLM output holds the
-    // current iteration, which has not reached the accumulator yet.
-    const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
-      readAccumulatedSteps(snapshot.value, snapshot.context.input);
-    const toolCalls: DurableToolCallInput[] = [
-      ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
-      ...(llmStep.output.toolCalls ?? []),
-    ];
-    // The text streamed before the suspension belongs to the resumed run's text, as on the
-    // plain Agent, which restores it from its own snapshot (#27504).
-    const stepText: string = llmStep.output.text ?? '';
-    const priorText = accumulatedSteps
-      .filter(step => step.finishReason !== 'retry')
-      .map(step => step.text ?? '')
-      .join('');
-
+    const { toolCalls, resumedText } = await this.executionEngine.loadSuspendedIteration(workflowsStore, runId);
     const toolCallChunks: ToolCallChunk[] = toolCalls.map(toolCall => ({
       type: 'tool-call',
       runId,
@@ -1133,7 +1097,7 @@ export class DurableAgent<
         output: toolCall.output,
       },
     }));
-    return { toolCalls: toolCallChunks, resumedText: { priorText, stepText } };
+    return { toolCalls: toolCallChunks, resumedText };
   }
 
   /**
@@ -4671,31 +4635,9 @@ export class DurableAgent<
     parentSnapshot: WorkflowRunState,
   ): Promise<number | undefined> {
     try {
-      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
-      const nested = await workflowsStore.getWorkflowRunById({
-        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
-        workflowName: DurableStepIds.AGENTIC_EXECUTION,
-      });
-      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
-      const stepIndex = snapshot.context?.input?.iterationCount;
-      if (typeof stepIndex !== 'number') return;
-      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const starts = history.filter(
-        event =>
-          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
-          event.stepIndex === stepIndex,
-      );
-      const latestGeneration = starts.reduce<number | undefined>(
-        (latest, event) =>
-          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
-        undefined,
-      );
-      return (
-        starts.find(
-          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
-        ) ?? starts.find(event => event.generation === latestGeneration)
-      )?.index;
+      const stepIndex = await this.executionEngine.loadUncheckpointedStepIndex(workflowsStore, runId, parentSnapshot);
+      if (stepIndex === undefined) return;
+      return await this.executionEngine.supersededFrom(this.pubsub, runId, stepIndex);
     } catch (error) {
       this.logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
     }
@@ -5451,16 +5393,7 @@ export class DurableAgent<
    * (notably the SUSPENDED chunk that paused it) from a persistent transport.
    */
   async #getPubsubOffset(runId: string): Promise<number | 'latest'> {
-    const pubsub = this.pubsub as PubSub & {
-      getHistory?: (topic: string) => Promise<unknown[]>;
-    };
-    if (typeof pubsub.getHistory !== 'function') return 'latest';
-    try {
-      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
-    } catch {
-      return 'latest';
-    }
+    return this.executionEngine.getPubsubOffset(this.pubsub, runId);
   }
 
   /**
