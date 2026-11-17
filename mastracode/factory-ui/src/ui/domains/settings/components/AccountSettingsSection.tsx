@@ -111,12 +111,12 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
         </SettingsItem>
         {user?.userId && (
           <SettingsItem title="Account ID" description="Useful when contacting support.">
-            <CopyInput value={user.userId} label="account ID" className="w-55" />
+            <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
           </SettingsItem>
         )}
         {user?.organizationId && (
           <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
-            <CopyInput value={user.organizationId} label="organization ID" className="w-55" />
+            <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
           </SettingsItem>
         )}
       </SettingsContainer>

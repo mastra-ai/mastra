@@ -90,7 +90,13 @@ export type SettingsItemProps = Omit<ComponentProps<'div'>, 'title'> & {
  */
 export function SettingsItem({ media, title, description, children, className, ...props }: SettingsItemProps) {
   return (
-    <div data-slot="settings-item" className={cn('flex min-w-0 items-center gap-3', className)} {...props}>
+    <div
+      data-slot="settings-item"
+      // Below `sm` the item's value or actions wrap onto their own full-width line under the title, as a
+      // `SettingsRow`'s control does, so a long value (an email, a type) never squeezes the title out.
+      className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap', className)}
+      {...props}
+    >
       {media}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
         {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
@@ -99,7 +105,9 @@ export function SettingsItem({ media, title, description, children, className, .
         </div>
         {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
       </div>
-      {children != null && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children != null && (
+        <div className="flex min-w-0 basis-full items-center gap-2 sm:shrink-0 sm:basis-auto">{children}</div>
+      )}
     </div>
   );
 }
