@@ -765,12 +765,13 @@ describe('GithubRules', () => {
   });
 
   it('ingests an event only into the projects of the orgs it was delivered for', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, intake, project } = await setup('write');
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
+      intake,
       storage: workItems,
       boards: createTriageWorkRegistry(),
       configVersion: 'factory-config-v1',
