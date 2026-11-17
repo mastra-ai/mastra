@@ -1,6 +1,6 @@
 extends: existence
 message: "Avoid first-person singular ('%s'). Mastra docs are not about the author."
-level: warning
+level: error
 ignorecase: false
 tokens:
   - '\bI\b[^/]'
