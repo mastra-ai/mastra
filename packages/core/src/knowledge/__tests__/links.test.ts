@@ -208,6 +208,17 @@ describe('Knowledge page link index', () => {
     for (const id of sources) expect(await out(id)).toEqual([target.id]);
   });
 
+  it('resolves a link by name to the page left once one of two namesakes is removed', async () => {
+    const { knowledge, out } = setup();
+    const kept = (await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'Target' })).page;
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'b', name: 'Target' });
+    const hub = (await knowledge.upsertPage({ scope: 'org:acme', path: 'hub', name: 'Hub', body: 'See [[Target]].' }))
+      .page;
+    expect(await out(hub.id)).toEqual([]);
+    await knowledge.removePage({ scope: 'org:acme', path: 'b' });
+    expect(await out(hub.id)).toEqual([kept.id]);
+  });
+
   it('reports when more than 99 pages share the name a write checks, and leaves the rest to reindexLinks', async () => {
     const { knowledge, out, warnings } = setup();
     const first = (await knowledge.upsertPage({ scope: 'org:acme', path: 'old', name: 'Target' })).page;

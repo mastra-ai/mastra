@@ -206,9 +206,9 @@ export async function refreshKnowledgeLinksTo(
   const targets = new Set(affected.map(page => page.id));
   const names = new Set<string>();
   for (const page of affected) {
-    if (page.deletedAt) continue;
+    // A removed page still frees its name: a link left unresolved by the tie may now resolve.
     for (const key of await pageRefKeys(storage, page)) refs.add(key);
-    names.add(page.name);
+    if (!page.deletedAt) names.add(page.name);
   }
   // A page that now answers to a name can make a link by that name to another page ambiguous, or
   // claim it from another scope. Those links are stored resolved, so find them by their target.
