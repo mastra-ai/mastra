@@ -34,6 +34,10 @@ export interface ProviderConnection {
   retrying: boolean;
   authEnabled: boolean;
   orgKeyAdmin: boolean;
+  /** The scope new connections are saved at. Absent without sign-in, where there is one store. */
+  credentialScope?: ProviderCredentialScope;
+  /** Whether the caller may add connections at this scope: always, except organization ones for non-admins. */
+  canWriteAtScope: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
   gatewayProvider?: ProviderInfo;
@@ -78,7 +82,6 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (provider.custom) return 'api_key';
   const serverKey = hasServerGatewayKey(provider) ? ('api_key' as const) : undefined;
   if (scope === 'user') return credentialAt(provider, 'user') ?? serverKey;
   if (provider.source === 'deployment') return 'api_key';
@@ -186,8 +189,14 @@ export function useProviderConnection({
     }
   };
 
+  const canWriteAtScope = scope !== 'org' || orgKeyAdmin;
   const canConfigure = (chosen: ProviderInfo, method?: ProviderConnectionMethod) =>
-    scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen, method);
+    canWriteAtScope || isConfigured(chosen, method);
+  // A custom endpoint is set up in its own form, never by pasting a key, so it
+  // is only offered where it is already saved.
+  const offeredForKey = (candidate: ProviderInfo) =>
+    !(hidesDeploymentKeys && candidate.source === 'deployment' && !hasServerGatewayKey(candidate)) &&
+    (candidate.custom ? isConfigured(candidate) : offersApiKey(candidate));
 
   const connectGateway = async (gateway: ProviderInfo) => {
     if (!canConfigure(gateway, 'api_key')) return;
@@ -212,12 +221,10 @@ export function useProviderConnection({
     retrying: providersQuery.isFetching || (scope !== undefined && authQuery.isFetching),
     authEnabled,
     orgKeyAdmin,
+    credentialScope,
+    canWriteAtScope,
     signInProviders: providerChoices.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providerChoices.filter(
-      candidate =>
-        !(hidesDeploymentKeys && candidate.source === 'deployment' && !hasServerGatewayKey(candidate)) &&
-        offersApiKey(candidate),
-    ),
+    keyProviders: providerChoices.filter(offeredForKey),
     provider,
     selectedProviderId: selection?.providerId,
     connected: provider ? isConfigured(provider, selection?.method) : false,
