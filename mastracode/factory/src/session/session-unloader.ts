@@ -196,6 +196,8 @@ export class SessionUnloader {
     const tracked = this.#byId.get(sessionId);
     if (!tracked) return 'not-loaded';
     const idleSince = tracked.lastActiveAt;
+    // Marked before the unload awaits, so a run starting meanwhile still cancels the release.
+    tracked.unloadWhenIdle = true;
     if (!this.#inUse(tracked)) {
       // Anything that touched the session since, such as its run's end, leaves it to the sweep.
       if (await this.#unload(tracked, () => !this.#inUse(tracked) && tracked.lastActiveAt === idleSince)) {
@@ -203,7 +205,6 @@ export class SessionUnloader {
       }
       if (this.#byId.get(sessionId) !== tracked) return 'not-loaded';
     }
-    tracked.unloadWhenIdle = true;
     return 'deferred';
   }
 

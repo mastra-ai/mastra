@@ -257,6 +257,33 @@ describe('SessionUnloader on a real controller', () => {
     expect(await loaded(mounted.controller, 'reused')).toBe(true);
   });
 
+  it('forgets a release when a run starts while the unload is still settling', async () => {
+    const mounted = await mountController();
+    let tick = 0;
+    let session: Session<any> | undefined;
+    let settled = false;
+    const unloader = new SessionUnloader({
+      controller: mounted.controller,
+      idleMs: 0,
+      now: () => ++tick,
+      warn: () => {},
+      // The session is picked up again while the unload waits for its writes.
+      settle: async () => {
+        if (settled) return;
+        settled = true;
+        await session!.sendMessage({ content: 'Back to work.' });
+      },
+    });
+    onTestFinished(() => unloader.stop());
+    session = await mounted.controller.createSession({ id: 'raced', resourceId: 'p', ownerId: 'user-1' });
+    await session.thread.create({ id: 'raced' });
+
+    expect(await unloader.unloadReleased('raced')).toBe('deferred');
+
+    expect(await unloader.sweep()).toBe(0);
+    expect(await loaded(mounted.controller, 'raced')).toBe(true);
+  });
+
   it('sweeps on its own timer once started', async () => {
     const mounted = await mountController();
     const unloader = new SessionUnloader({ controller: mounted.controller, idleMs: 20, sweepIntervalMs: 10 });
