@@ -753,7 +753,7 @@ A loaded session holds its conversation, tool results, workspace and process out
 
 A session stays loaded while a run is in flight, while it waits on an approval or an `ask_user` / `submit_plan` answer, and while a browser tab follows its stream. A released session that is busy is unloaded once its work ends.
 
-Unloading keeps the thread, its messages, the session row and the sandbox. The sandbox is not stopped, so background processes keep running. The next message, run, wake or opened tab loads the session again on its thread and reattaches to the sandbox. Without `auth`, a deferred wake for an unloaded session waits until something else loads it, as it does after a restart. What lives only in memory is lost: session state not stored on the thread, auto-approvals granted in the session, and events from before the reload.
+Unloading keeps the thread, its messages, the session row and the sandbox. Unloading does not stop the sandbox, so an idle session's background processes keep running; a released session's sandbox was already stopped by the release. The next message, run, wake or opened tab loads the session again on its thread and reattaches to the sandbox. Without `auth`, a deferred wake for an unloaded session waits until something else loads it, as it does after a restart. What lives only in memory is lost: session state not stored on the thread, auto-approvals granted in the session, and events from before the reload.
 
 Change the timeout and check interval with `idleSessionUnload`. `idleMs: 0` turns off the idle check but still unloads released sessions, and `false` keeps every session loaded until it is deleted:
 
