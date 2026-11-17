@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { placesArrival, resolveIntakePlacement } from '../../../boards/intake-routing.js';
 import { createTriageWorkRegistry } from '../../../boards/test-utils.js';
@@ -85,8 +85,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
 
   /** A project with no routes: the default routes it starts with, deleted. */
   async function emptyProject(boards: StoredBoardsStorage, scope: StoredBoardScope) {
-    // Last first, so no delete moves (and re-revisions) a route still to delete.
-    for (const seeded of (await boards.listIntakeRoutes(scope)).reverse()) {
+    for (const seeded of await boards.listIntakeRoutes(scope)) {
       await boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
     }
   }
@@ -107,7 +106,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
 
   async function names(boards: StoredBoardsStorage, scope: StoredBoardScope) {
     const routes = await boards.listIntakeRoutes(scope);
-    expect(routes.map(row => row.position)).toEqual(routes.map((_, index) => index));
+    // Positions stay strictly increasing; a delete may leave a gap, which every reader sorts over.
+    expect(routes.map(row => row.position)).toEqual([...routes.map(row => row.position)].sort((a, b) => a - b));
+    expect(new Set(routes.map(row => row.position)).size).toBe(routes.length);
     return routes.map(row => row.name);
   }
 
@@ -1026,31 +1027,54 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     });
   });
 
-  it('appends new routes, closes the gap a delete leaves, and reorders', async () => {
-    const { boards, scope } = await setup();
+  it('deletes a rule near the top without touching the rules after it, so open edits still save', async () => {
+    const { storage, boards, scope } = await setup();
     const created = [];
-    for (const name of ['a', 'b', 'c', 'd']) created.push(await boards.createIntakeRoute(scope, labelled(name), 'u'));
-    expect(await names(boards, scope)).toEqual(['a', 'b', 'c', 'd']);
+    // Rules spread over two boards, as a project that routes work and docs separately has.
+    for (const [index, name] of ['a', 'b', 'c', 'd', 'e', 'f'].entries()) {
+      created.push(
+        await boards.createIntakeRoute(
+          scope,
+          route(name, {
+            when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: name }] },
+            target: { boardKey: index % 2 ? 'docs' : 'work' },
+          }),
+          'u',
+        ),
+      );
+    }
+    const before = await boards.listIntakeRoutes(scope);
 
+    // Count route-table writes: on a remote database, rewriting every later rule made the delete
+    // take seconds and bumped revisions other open editors held.
+    const prototype = Object.getPrototypeOf(storage.ops) as { updateMany: (...args: unknown[]) => Promise<number> };
+    const original = prototype.updateMany;
+    let routeWrites = 0;
+    vi.spyOn(prototype, 'updateMany').mockImplementation(function (this: unknown, ...args: unknown[]) {
+      if (args[0] === 'factory_intake_routes') routeWrites += 1;
+      return original.apply(this, args as Parameters<typeof original>);
+    });
     await boards.deleteIntakeRoute(scope, created[1]!.id, { expectedRevision: 1 });
-    expect(await names(boards, scope)).toEqual(['a', 'c', 'd']);
+    vi.restoreAllMocks();
+    expect(routeWrites).toBe(0);
 
-    await boards.createIntakeRoute(scope, labelled('e'), 'u');
+    // The other rules keep their order, revisions and fields exactly.
+    expect(await boards.listIntakeRoutes(scope)).toEqual(before.filter(row => row.id !== created[1]!.id));
+
+    // An edit loaded before the delete still saves against the revision it read.
+    await boards.updateIntakeRoute(scope, created[4]!.id, { name: 'e2' }, { expectedRevision: 1, actor: 'u' });
+
+    // Later inserts land after the gap, and a reorder still puts the rules where it is told.
+    await boards.createIntakeRoute(scope, labelled('g'), 'u');
+    expect(await names(boards, scope)).toEqual(['a', 'c', 'd', 'e2', 'f', 'g']);
     const current = await boards.listIntakeRoutes(scope);
     const reordered = await boards.reorderIntakeRoutes(
       scope,
-      [current[3]!.id, current[0]!.id, current[2]!.id, current[1]!.id],
+      [current.at(-1)!.id, ...current.slice(0, -1).map(row => row.id)],
       'admin',
     );
-
-    expect(reordered.map(row => row.name)).toEqual(['e', 'a', 'd', 'c']);
-    expect(await names(boards, scope)).toEqual(['e', 'a', 'd', 'c']);
-    // Only routes that moved were written: d moved up once when b was deleted and kept its place here.
-    const byName = Object.fromEntries(reordered.map(row => [row.name, row]));
-    expect(byName.d).toMatchObject({ revision: 2, updatedBy: 'u' });
-    expect(byName.a).toMatchObject({ updatedBy: 'admin' });
-    expect(byName.e).toMatchObject({ updatedBy: 'admin' });
-    expect(byName.e!.revision).toBeGreaterThan(1);
+    expect(reordered.map(row => row.name)).toEqual(['g', 'a', 'c', 'd', 'e2', 'f']);
+    expect(await names(boards, scope)).toEqual(['g', 'a', 'c', 'd', 'e2', 'f']);
   });
 
   it('refuses an order that misses, repeats or invents a route, and changes nothing', async () => {
@@ -1117,7 +1141,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       boards.updateIntakeRoute(scope, a!.id, { name: 'a2' }, { expectedRevision: 1, actor: 'u' }),
     ]);
 
-    // `names` checks the positions run 0..n-1.
+    // `names` checks the positions stay distinct and ordered.
     expect((await names(boards, scope)).sort()).toEqual(['a2', 'c', 'w', 'x', 'y', 'z']);
   });
 

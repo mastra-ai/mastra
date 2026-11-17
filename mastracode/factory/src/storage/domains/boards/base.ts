@@ -810,11 +810,8 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       await ops.deleteMany(PHASES, { ...scopeWhere(scope), board_key: key });
       const deleted = routes.filter(route => route.board_key === key);
       if (deleted.length > 0) {
+        // The surviving routes keep their positions; readers sort over the gaps.
         await ops.deleteMany(INTAKE_ROUTES, { ...scopeWhere(scope), board_key: key });
-        await placeIntakeRoutes(
-          ops,
-          routes.filter(route => route.board_key !== key),
-        );
         await forgetDerivedIntakeOrder(ops, scope);
       }
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
@@ -1182,7 +1179,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return (await this.getIntakeRoute(scope, id))!;
   }
 
-  /** Deletes a route; the routes after it move up one place. */
+  /** Deletes a route; the others keep their positions, and readers sort over the gap. */
   async deleteIntakeRoute(scope: StoredBoardScope, id: string, options: { expectedRevision: number }): Promise<void> {
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
@@ -1193,10 +1190,6 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       if ((await ops.deleteMany(INTAKE_ROUTES, { id: row.id, revision: row.revision })) === 0) {
         throw new ConcurrentBoardWrite();
       }
-      await placeIntakeRoutes(
-        ops,
-        rows.filter(route => route.id !== row.id),
-      );
       await forgetDerivedIntakeOrder(ops, scope);
     });
   }
