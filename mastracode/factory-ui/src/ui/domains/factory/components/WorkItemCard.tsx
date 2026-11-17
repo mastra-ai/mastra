@@ -85,7 +85,8 @@ export function WorkItemCard({
   sessionHolds?: boolean;
   /**
    * Whether the board read everything that says who holds the card. When it has not, the card
-   * refuses no move up front and the server, which holds the rule too, decides.
+   * refuses no move up front and the server, which holds the rule too, decides. A suggested run
+   * skips that rule on the server, so the card holds it back instead.
    */
   ownerCurrent?: boolean;
   onMove: (toStage: string) => void;
@@ -97,7 +98,12 @@ export function WorkItemCard({
   const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
-  const { moves, proposedRunLabel, state, actions } = cardControls({
+  const {
+    moves,
+    proposedRunLabel,
+    state,
+    actions: offered,
+  } = cardControls({
     item,
     definition,
     columnStage,
@@ -123,6 +129,8 @@ export function WorkItemCard({
   const busy = lockedByYou || owner.kind === 'automation';
   // Your own move in flight is known here for certain; anyone else's hold only once the board read it.
   const movesOwner: BoardCardOwner = ownerCurrent || lockedByYou ? owner : { kind: 'free' };
+  const actions =
+    ownerCurrent || status.kind !== 'waiting' ? offered : offered.map(action => ({ ...action, disabled: true }));
   const dragPayload: DragPayload | undefined = lockedByYou
     ? undefined
     : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: movesOwner.kind };
@@ -135,6 +143,7 @@ export function WorkItemCard({
     proposedRunLabel,
     approvingDecisionId,
     owner: movesOwner,
+    ownerCurrent,
     onApproveProposal,
     onDismissProposal,
     onMove,

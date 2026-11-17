@@ -25,6 +25,8 @@ export interface WorkItemMenuProps {
   proposedRunLabel?: string;
   approvingDecisionId?: string;
   owner: BoardCardOwner;
+  /** Whether `owner` is what the board read, not a guess: a suggested run starts only then. */
+  ownerCurrent?: boolean;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
@@ -49,6 +51,7 @@ export function WorkItemMenuItems({
   proposedRunLabel,
   approvingDecisionId,
   owner,
+  ownerCurrent = true,
   onApproveProposal,
   onDismissProposal,
   onMove,
@@ -88,7 +91,10 @@ export function WorkItemMenuItems({
         ))}
       {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
       {suggestionForThisBoard !== undefined && !awaitsTriage && (
-        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
+        <DropdownMenu.Item
+          disabled={runsBlocked || !ownerCurrent}
+          onClick={() => onApproveProposal(suggestionForThisBoard.id)}
+        >
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
