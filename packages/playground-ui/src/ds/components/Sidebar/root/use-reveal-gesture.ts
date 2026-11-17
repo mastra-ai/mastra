@@ -5,9 +5,6 @@ const EASE = [0.32, 0.72, 0, 1] as const;
 const EASE_START_SLOPE = EASE[1] / EASE[0];
 export const REVEAL_EASE = `cubic-bezier(${EASE.join(', ')})`;
 
-/** Marks which reveal holds the shared scope, so a drawer's swipes can't start the drawer on the other edge. */
-const OWNER_ATTR = 'data-reveal-owner';
-
 const LOCK_DISTANCE_PX = 8;
 const TURN_DISTANCE_PX = 8;
 const COMMIT_DISTANCE_PX = 40;
@@ -35,10 +32,18 @@ type Track = {
 
 export type RevealSide = 'left' | 'right';
 
+/** The two edge drawers that share a scope. */
+export type RevealName = 'sidebar' | 'aside';
+
 type RevealGestureOptions = {
   scopeRef: RefObject<HTMLElement | null>;
+  /**
+   * The drawer holding the scope while open, dragged, or settling closed. Shared by both drawers so only one is ever
+   * out: a swipe that would start one is ignored while the other holds it.
+   */
+  ownerRef: RefObject<RevealName | null>;
   /** Namespaces the layer attribute (`data-<name>-reveal-layer`) and the drag variables (`--<name>-reveal-*`). */
-  name: string;
+  name: RevealName;
   /** The screen edge the panel sits on. A left panel opens on a rightward swipe, a right panel on a leftward one. */
   side: RevealSide;
   open: boolean;
@@ -47,7 +52,16 @@ type RevealGestureOptions = {
   onSettled: () => void;
 };
 
-export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease, onSettled }: RevealGestureOptions) {
+export function useRevealGesture({
+  scopeRef,
+  ownerRef,
+  name,
+  side,
+  open,
+  onGrab,
+  onRelease,
+  onSettled,
+}: RevealGestureOptions) {
   const settleRef = useRef(0);
   const layerAttr = `data-${name}-reveal-layer`;
   const dragVar = `--${name}-reveal-drag`;
@@ -68,17 +82,16 @@ export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease
       void Promise.allSettled(running.map(animation => animation.finished)).then(() => {
         if (token !== settleRef.current) return;
         clearRevealVar(revealLayers(scope, layerAttr), durationVar);
-        if (!isOpen()) releaseOwner(scope, name);
+        if (!isOpen()) releaseOwner(ownerRef, name);
         handleSettled();
       });
     });
   });
 
   useEffect(() => {
-    const scope = scopeRef.current;
-    if (open && scope) scope.setAttribute(OWNER_ATTR, name);
+    if (open) ownerRef.current = name;
     settle();
-  }, [open, scopeRef, name]);
+  }, [open, ownerRef, name]);
 
   useEffect(() => {
     const scope = scopeRef.current;
@@ -102,7 +115,7 @@ export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease
       const dy = touch.clientY - current.startY;
       if (Math.hypot(dx, dy) < LOCK_DISTANCE_PX) return 'pending';
 
-      if (revealOwnedByOther(scope, name)) return 'ignored';
+      if (ownerRef.current && ownerRef.current !== name) return 'ignored';
       const layers = revealLayers(scope, layerAttr);
       const width = layerNamed(layers, layerAttr, 'panel')?.offsetWidth ?? 0;
       const opening = !isOpen();
@@ -120,7 +133,7 @@ export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease
       current.layers = layers;
       setRevealVar(layers, durationVar, '0ms');
       settleRef.current++;
-      scope.setAttribute(OWNER_ATTR, name);
+      ownerRef.current = name;
       handleGrab();
       return 'locked';
     };
@@ -192,9 +205,9 @@ export function useRevealGesture({ scopeRef, name, side, open, onGrab, onRelease
       const layers = revealLayers(scope, layerAttr);
       clearRevealVar(layers, dragVar);
       clearRevealVar(layers, durationVar);
-      releaseOwner(scope, name);
+      releaseOwner(ownerRef, name);
     };
-  }, [scopeRef, layerAttr, dragVar, durationVar, name, toward]);
+  }, [scopeRef, ownerRef, layerAttr, dragVar, durationVar, name, toward]);
 }
 
 function revealLayers(scope: ParentNode, layerAttr: string) {
@@ -205,14 +218,8 @@ function layerNamed(layers: readonly HTMLElement[], layerAttr: string, name: 'pa
   return layers.find(layer => layer.getAttribute(layerAttr) === name);
 }
 
-/** Whether another edge drawer is out, so this one must stay shut. */
-export function revealOwnedByOther(scope: HTMLElement | null, name: string) {
-  const owner = scope?.getAttribute(OWNER_ATTR);
-  return Boolean(owner && owner !== name);
-}
-
-function releaseOwner(scope: Element, name: string) {
-  if (scope.getAttribute(OWNER_ATTR) === name) scope.removeAttribute(OWNER_ATTR);
+function releaseOwner(ownerRef: RefObject<RevealName | null>, name: RevealName) {
+  if (ownerRef.current === name) ownerRef.current = null;
 }
 
 function setRevealVar(layers: readonly HTMLElement[], name: string, value: string) {

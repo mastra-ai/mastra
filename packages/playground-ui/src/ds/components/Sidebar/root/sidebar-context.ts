@@ -1,4 +1,5 @@
 import React from 'react';
+import type { RevealName } from './use-reveal-gesture';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export type SidebarState = 'default' | 'collapsed';
@@ -26,6 +27,8 @@ type SidebarContextValue = {
   scopeRef: React.RefObject<HTMLDivElement | null>;
   /** The scope element once mounted, for drawers that portal into it. */
   scope: HTMLDivElement | null;
+  /** The edge drawer that holds the scope, so the other one stays shut. */
+  drawerOwnerRef: React.RefObject<RevealName | null>;
   panelRef: React.RefObject<HTMLDivElement | null>;
   LinkComponent?: LinkComponent;
 };

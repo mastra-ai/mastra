@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { RevealDrawer } from './reveal-drawer';
@@ -23,23 +23,19 @@ export type AsideRevealProps = {
 /**
  * The right-edge counterpart of the sidebar's mobile drawer: a leftward swipe anywhere in the shell
  * (or `open`) slides the page left to uncover the panel, and a rightward swipe, Escape, or a tap on the
- * page puts it back. Shares the sidebar's gesture and scope, so only one of the two drawers is out at a time.
+ * page puts it back. Shares the sidebar's gesture and scope, so only one of the two drawers is out at a time:
+ * an `open` set while navigation is out waits for navigation to close.
  * Render it inside `SidebarProvider` and `AppShell`; it portals beside the shell, not inside the page that moves.
  */
 export function AsideReveal({ open, onOpenChange, label, triggerRef, children, className }: AsideRevealProps) {
   const sidebar = useMaybeSidebar();
   if (!sidebar) throw new Error('AsideReveal must be used within a SidebarProvider.');
-  const { scopeRef, scope, openMobile, setOpenMobile } = sidebar;
-  // Waits for navigation to go first, so the two drawers never overlap and its inert marks are gone.
+  const { scopeRef, scope, drawerOwnerRef, openMobile } = sidebar;
+  // Navigation keeps the edge while it is out; the panel follows once it closes.
   const out = open && !openMobile;
   // Held out past `out` while a drag or the closing slide is still on screen.
   const [held, setHeld] = useState(false);
   const present = out || held;
-
-  // An `open` set from outside while navigation is out sends navigation back; `out` follows once it has.
-  useEffect(() => {
-    if (open) setOpenMobile(false);
-  }, [open, setOpenMobile]);
 
   const close = () => {
     setHeld(true);
@@ -48,6 +44,7 @@ export function AsideReveal({ open, onOpenChange, label, triggerRef, children, c
 
   useRevealGesture({
     scopeRef,
+    ownerRef: drawerOwnerRef,
     name: 'aside',
     side: 'right',
     open: out,

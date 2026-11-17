@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { RevealDrawer } from './reveal-drawer';
 import { useSidebar } from './sidebar-context';
 import { useRevealGesture } from './use-reveal-gesture';
@@ -14,11 +14,20 @@ type SidebarRevealProps = {
 };
 
 export function SidebarReveal({ children, className, onClick }: SidebarRevealProps) {
-  const { scopeRef, openMobile, mobileDrawerPresent, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent } =
-    useSidebar();
+  const {
+    scopeRef,
+    scope,
+    drawerOwnerRef,
+    openMobile,
+    mobileDrawerPresent,
+    mobileTriggerRef,
+    setOpenMobile,
+    setMobileDrawerPresent,
+  } = useSidebar();
 
   useRevealGesture({
     scopeRef,
+    ownerRef: drawerOwnerRef,
     name: 'sidebar',
     side: 'left',
     open: openMobile,
@@ -29,7 +38,10 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
     },
   });
 
-  return (
+  if (!scope) return null;
+
+  // A direct child of the scope, like the aside, so the stylesheets' `:has(> …)` checks stay one level deep.
+  return createPortal(
     <RevealDrawer
       name="sidebar"
       open={openMobile}
@@ -42,6 +54,7 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
       onPanelClick={onClick}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-2">{children}</div>
-    </RevealDrawer>
+    </RevealDrawer>,
+    scope,
   );
 }

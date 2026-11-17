@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode, RefObject } from 'react';
+import type { RevealName } from './use-reveal-gesture';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -7,7 +8,7 @@ const TABBABLE = 'a[href], button, input, select, textarea, summary, [tabindex]'
 
 type RevealDrawerProps = {
   /** Namespaces the layer attributes the reveal gesture and stylesheet drive: `data-<name>-reveal-layer`. */
-  name: 'sidebar' | 'aside';
+  name: RevealName;
   open: boolean;
   /** Out at all: open, dragged, or settling closed. Hidden when false. */
   present: boolean;

@@ -3,7 +3,8 @@ import type { CSSProperties } from 'react';
 import { SidebarContext, MobileDrawerContext } from './sidebar-context';
 import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
 import { SIDEBAR_WIDTHS } from './sidebar-widths';
-import { REVEAL_EASE, revealOwnedByOther } from './use-reveal-gesture';
+import { REVEAL_EASE } from './use-reveal-gesture';
+import type { RevealName } from './use-reveal-gesture';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
@@ -116,6 +117,7 @@ export function SidebarProvider({
     setScope(node);
   });
   const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const drawerOwnerRef = React.useRef<RevealName | null>(null);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -128,7 +130,7 @@ export function SidebarProvider({
 
   const setOpenMobile = React.useCallback((open: boolean) => {
     // One drawer at a time: a shortcut must not open navigation over an open aside.
-    if (open && revealOwnedByOther(scopeRef.current, 'sidebar')) return;
+    if (open && drawerOwnerRef.current === 'aside') return;
     openMobileRef.current = open;
     if (open) setMobileDrawerPresent(true);
     setOpenMobileState(open);
@@ -251,6 +253,7 @@ export function SidebarProvider({
       setGestureActive,
       scopeRef,
       scope,
+      drawerOwnerRef,
       panelRef,
       LinkComponent,
     }),

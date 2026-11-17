@@ -6,6 +6,6 @@ html:has([data-slot='app-shell']) {
   overscroll-behavior-y: none;
 }
 
-[data-sidebar-scope]:has([data-reveal-drawer='sidebar'][data-present='true']) [data-slot='app-shell'] {
+[data-sidebar-scope]:has(> [data-reveal-drawer='sidebar'][data-present='true']) [data-slot='app-shell'] {
   overflow-x: clip;
 }

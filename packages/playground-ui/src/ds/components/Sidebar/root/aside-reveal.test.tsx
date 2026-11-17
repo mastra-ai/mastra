@@ -189,12 +189,17 @@ describe('AsideReveal', () => {
       expect(sessionPanel()).toBeNull();
     });
 
-    it('closes navigation when the panel is opened from outside, so only the panel is out', async () => {
+    it('holds a panel opened from outside until navigation closes, so only one drawer is out', async () => {
       renderApp();
       await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
       expect(navigation()).not.toBeNull();
 
       act(() => openPanel());
+
+      expect(navigation()).not.toBeNull();
+      expect(sessionPanel()).toBeNull();
+
+      await userEvent.keyboard('{Escape}');
 
       expect(navigation()).toBeNull();
       expect(sessionPanel()).not.toBeNull();
