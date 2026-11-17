@@ -118,6 +118,10 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
   /**
    * Streams the run and answers every pause: approvals are approved, suspensions resumed with
    * an answer. `log` records each pause next to the tool executions, in the order they happened.
+   * A durable `stream()` stays open while the run is suspended, so it is read until the
+   * `firstStreamPauses` pauses of the first response have all arrived, in whatever order. Every
+   * later stream is read to its end: durable `approveToolCall()` and `resumeStream()` close it
+   * when the run suspends again, so pauses it announces after another are still collected.
    */
   async function drive({
     toolCalls,
@@ -132,9 +136,9 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
     streamOptions,
     firstStreamPauses = 1,
   }: {
-    /** Pauses the first stream announces together; a durable stream is read until all arrive. */
-    firstStreamPauses?: number;
     toolCalls: ToolCall[];
+    /** How many pauses the first response produces before the run suspends. */
+    firstStreamPauses?: number;
     /** Replaces the default responses (the calls, then "done"). */
     fixtures?: (llm: LLMock) => void;
     agents?: Record<string, Agent>;
@@ -194,8 +198,7 @@ describeForAllEngines('AIMock loop scenario: approval of a tool call started aft
         seen.add(`${kind}:${toolCallId}`);
         log.push(`${kind}:${toolCallId}`);
         pending.push({ kind, toolCallId });
-        // Durable streams stay open while the run is suspended.
-        if (isDurableEngineVariant(engine) && pending.length >= (resumes === 0 ? firstStreamPauses : 1)) break;
+        if (resumes === 0 && isDurableEngineVariant(engine) && pending.length === firstStreamPauses) break;
       }
       const pause = pending.shift();
       if (!pause) break;
