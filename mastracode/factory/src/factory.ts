@@ -692,6 +692,12 @@ export class MastraFactory {
           'rules on the owning board (`tools`).',
       );
     }
+    if ('intake' in config) {
+      throw new Error(
+        "MastraFactory: 'intake' was removed. New projects use the intake order; to force an evaluator on every " +
+          'project set FACTORY_INTAKE_EVALUATOR (`intake-order` or `route-list`) on every replica.',
+      );
+    }
     this.#skills = assertFactorySkills(config.skills);
     this.#forcedIntake = intakeEvaluatorFrom(process.env);
     for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
