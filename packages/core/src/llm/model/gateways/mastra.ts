@@ -86,7 +86,9 @@ export class MastraGateway extends MastraModelGateway {
     let models = openrouterConfig?.models ?? [];
     if (isV2) {
       const apiKey = await this.getApiKey();
-      const fetchImpl = this.config?.customFetch ?? fetch;
+      // Gateway v2 reads the key only from Authorization or x-api-key. A custom fetch is a v1
+      // pass-through that owns Authorization, so the catalogue request uses the plain global fetch.
+      const fetchImpl = globalThis.fetch;
       models = await loadCachedV2Catalog(fetchImpl, `${this.getBaseUrl()}\n${hashApiKey(apiKey)}`, () =>
         this.fetchV2Catalog(fetchImpl, apiKey),
       );
@@ -110,7 +112,7 @@ export class MastraGateway extends MastraModelGateway {
 
   private async fetchV2Catalog(fetchImpl: typeof fetch, apiKey: string): Promise<string[]> {
     const response = await fetchImpl(`${this.getBaseUrl()}/v1/models`, {
-      headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
@@ -230,9 +232,9 @@ interface V2CatalogEntry {
 }
 
 /**
- * v2 model catalogues, first by the fetch implementation, then by base URL and API key hash.
- * A custom fetch can authenticate or route the request differently, so it gets its own entries.
- * The raw key is never stored.
+ * v2 model catalogues, first by the global fetch in effect when the request was made, then by
+ * base URL and API key hash. A replaced global fetch (instrumentation, test doubles) gets its own
+ * entries, so a list from one is never served through another. The raw key is never stored.
  */
 let v2CatalogCaches = new WeakMap<typeof fetch, Map<string, V2CatalogEntry>>();
 

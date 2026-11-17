@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_PERSISTED_RESPONSE_BODY_LENGTH, describeProviderError } from './provider-error-details';
+import { MAX_PERSISTED_RESPONSE_BODY_LENGTH, describeProviderError, readRequestOrigin } from './provider-error-details';
 
 function providerError(responseBody: string, requestId = 'req_123') {
   return Object.assign(new Error('Bad Request'), {
@@ -43,4 +43,22 @@ describe('describeProviderError', () => {
   it('returns undefined for errors without HTTP details', () => {
     expect(describeProviderError('boom', new Error('boom'), 1000)).toBeUndefined();
   });
+});
+
+describe('readRequestOrigin', () => {
+  it.each([
+    ['https://gateway-api.mastra.ai/v1/chat/completions', 'https://gateway-api.mastra.ai'],
+    ['http://127.0.0.1:4180/v1/chat/completions?x=1', 'http://127.0.0.1:4180'],
+    ['https://user:pass@api.example.com:443/path', 'https://api.example.com'],
+    ['  https://api.example.com/v1  ', 'https://api.example.com'],
+  ])('keeps only the origin of %s', (url, origin) => {
+    expect(readRequestOrigin(url)).toBe(origin);
+  });
+
+  it.each([undefined, null, 42, '', '   ', 'not a url', '/relative', 'file:///etc/passwd', 'data:text/plain,hi'])(
+    'gives undefined for %s',
+    url => {
+      expect(readRequestOrigin(url)).toBeUndefined();
+    },
+  );
 });

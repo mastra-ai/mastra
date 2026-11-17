@@ -40,7 +40,7 @@ export type MastraStepStartPart = {
 // surfaces (stream chunk, onError, result.error) and are never written to
 // thread history. Provider HTTP failures (AI SDK `APICallError`) also keep the
 // status code, a bounded copy of the response body, the provider request id,
-// the model the request named and the provider facts a reload classifies by
+// the model the request named, the origin it was sent to and the provider facts a reload classifies by
 // (every code, the provider's own reason sentence), because their `message` is
 // often just the HTTP status text.
 export type MastraErrorPart = {
@@ -51,6 +51,12 @@ export type MastraErrorPart = {
     responseBody?: string;
     requestId?: string;
     modelId?: string;
+    /**
+     * Origin (scheme, host and port, e.g. `https://gateway-api.mastra.ai`) the failed model
+     * request was sent to, so a reader can tell which service answered. Never the path, query
+     * string or credentials. Absent on messages saved before it was recorded.
+     */
+    requestOrigin?: string;
   } & ProviderErrorFacts;
 } & MastraPartExtensions;
 

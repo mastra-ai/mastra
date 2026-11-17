@@ -1,4 +1,9 @@
-import { capPersistedText, readRequestedModel, readRequestId } from '../loop/shared/provider-error-details';
+import {
+  capPersistedText,
+  readRequestedModel,
+  readRequestId,
+  readRequestOrigin,
+} from '../loop/shared/provider-error-details';
 
 export type ProviderFailureKind =
   | 'auth'
@@ -235,6 +240,15 @@ export function providerModelId(error: unknown): string | undefined {
   return firstAlongCauses(error, modelIdOf, 0);
 }
 
+/**
+ * The origin (scheme, host and port) a failed model request was sent to, so a reader can tell
+ * which service answered. Read only from an AI SDK API call error, whose `url` is the request it
+ * made; a `url` on any other error may name some other resource.
+ */
+export function providerRequestOrigin(error: unknown): string | undefined {
+  return firstAlongCauses(error, requestOriginOf, 0);
+}
+
 function firstAlongCauses(
   error: unknown,
   read: (error: object) => string | undefined,
@@ -246,6 +260,12 @@ function firstAlongCauses(
 
 function requestIdOf(error: object): string | undefined {
   return nonBlank(readField(error, 'requestId')) ?? readRequestId(readField(error, 'responseHeaders'));
+}
+
+function requestOriginOf(error: object): string | undefined {
+  const isApiCallError =
+    readField(error, 'name') === 'AI_APICallError' || readField(error, 'requestBodyValues') !== undefined;
+  return isApiCallError ? readRequestOrigin(readField(error, 'url')) : undefined;
 }
 
 function modelIdOf(error: object): string | undefined {
