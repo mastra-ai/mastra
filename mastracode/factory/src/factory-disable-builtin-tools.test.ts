@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from './factory.js';
 
 const prepareMock = vi.fn(async (_config: Record<string, unknown>) => ({
-  base: { controller: { onSessionCreated: vi.fn(), setChannels: vi.fn() } },
+  base: {
+    controller: {
+      onSessionCreated: vi.fn(() => () => {}),
+      onSessionDeleted: vi.fn(() => () => {}),
+      setChannels: vi.fn(),
+    },
+  },
   mastraArgs: {},
   finalize: vi.fn(async () => {}),
 }));

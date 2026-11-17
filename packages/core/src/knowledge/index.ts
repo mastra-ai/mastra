@@ -18,6 +18,7 @@ import type {
 } from './declarations';
 import {
   addKnowledgeNote,
+  moveKnowledgePage,
   removeKnowledgeNote,
   removeKnowledgePage,
   updateKnowledgeNote,
@@ -25,6 +26,7 @@ import {
 } from './host-writes';
 import type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
@@ -37,6 +39,8 @@ import { buildKnowledgePageTools } from './page-tools';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
+import { reembedKnowledge } from './reembed';
+import type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';
 import { KnowledgeScopeRuntime } from './scope-runtime';
@@ -259,6 +263,21 @@ export class Knowledge extends MastraBase {
   }
 
   /**
+   * Moves the page at `scope#path`, with its subtree, under the page at `parent` (a key path; left
+   * out, the top of the scope), in `toScope` when given. The page keeps its id, notes, pins and
+   * vectors; paths below it change, and links by path are re-resolved. Throws
+   * `KnowledgeNotFoundError` for a missing page or parent, and refuses a page declared in config, a
+   * move into its own subtree, a key the new parent already has, and a move past the depth limit.
+   * Host-only, like {@link Knowledge.upsertPage}. Not retried: a concurrent write to the page
+   * between the read and the move throws.
+   *
+   * @experimental
+   */
+  movePage(input: KnowledgeMovePageInput): Promise<KnowledgePage> {
+    return moveKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
    * Adds a note to the page at `scope#path`; throws when there is no page there. Readers of the
    * `stamps` scopes (default: the page's scope) see it. Keep the returned id to edit or remove it.
    * Host-only, like {@link Knowledge.upsertPage}.
@@ -306,6 +325,24 @@ export class Knowledge extends MastraBase {
    */
   async reindexLinks(): Promise<number> {
     return reindexKnowledgeLinks(await this.getStorage());
+  }
+
+  /**
+   * Embeds pages and notes that already exist, without changing them: content written before a
+   * `vector` and `embedder` were configured, or before switching embedders. Each call handles up to
+   * `limit` pages (default 50, at most 500) with their notes and returns `nextCursor`; pass it to the
+   * next call until it's absent. Handling a page again overwrites its vectors, so a run can stop and
+   * resume. Failures are listed, not thrown; if the embedder keeps rate limiting, the call stops
+   * early with `rateLimited: true` and a cursor that resumes where it stopped, mid-page if need be; wait before resuming. The
+   * cursor is not a snapshot: pages added or removed during a run can be missed or handled twice, and
+   * a page read before a concurrent edit can overwrite the vectors that edit wrote, so rerun after
+   * concurrent writes finish. Throws without `vector` and `embedder`.
+   *
+   * @experimental
+   */
+  async reembed(options?: KnowledgeReembedOptions): Promise<KnowledgeReembedResult> {
+    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to embed into.');
+    return reembedKnowledge(await this.getStorage(), this.#semantic, options);
   }
 
   /** The usage block that goes with `createTools(options)`. */
@@ -514,8 +551,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeRole;
 }
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
+export type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 export type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,

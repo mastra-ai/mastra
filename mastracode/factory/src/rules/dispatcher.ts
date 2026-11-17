@@ -50,6 +50,7 @@ import {
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
+import { sessionHoldsWork } from '../session/session-unloader.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
@@ -1163,7 +1164,7 @@ export class FactoryDecisionDispatcher {
           try {
             const session = await this.#controller.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
-            return session.suspensions.hasPending() || session.run.isRunning();
+            return sessionHoldsWork(session);
           } catch {
             return false;
           }
