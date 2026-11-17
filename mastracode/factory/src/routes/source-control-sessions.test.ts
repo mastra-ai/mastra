@@ -1732,7 +1732,12 @@ describe('scenario: a finished pull request run reopened from the browser', () =
     const coordinator = new FactoryStartCoordinator(controller, seed.workItems, undefined, sourceControl);
     const finishCard = createTerminalStageCleanup({ workItems: seed.workItems });
 
-    const runToCompletion = async (role: string, source: 'pull-request' | 'issue', externalId: string) => {
+    const runToCompletion = async (
+      role: string,
+      source: 'pull-request' | 'issue',
+      externalId: string,
+      { finish = true } = {},
+    ) => {
       const run = await coordinator.prepare({
         orgId: 'org-1',
         userId: 'user-1',
@@ -1752,7 +1757,7 @@ describe('scenario: a finished pull request run reopened from the browser', () =
           },
         },
       });
-      await finishCard({ orgId: 'org-1', factoryProjectId: project.id, workItemId: run.workItemId });
+      if (finish) await finishCard({ orgId: 'org-1', factoryProjectId: project.id, workItemId: run.workItemId });
       return run;
     };
 
@@ -1806,5 +1811,39 @@ describe('scenario: a finished pull request run reopened from the browser', () =
 
     expect(prompt).not.toContain(pullRequestInstruction);
     expect(prompt).not.toContain(trustedInstruction);
+  });
+
+  it('keeps the checkout untrusted while a trusted card is still running in the session after the pull request', async () => {
+    const checkout = pullRequestCheckout();
+    const { runToCompletion, reopenAndPrompt } = await setup();
+    await runToCompletion('review', 'pull-request', 'gitlab-mr:17');
+    await runToCompletion('work', 'issue', 'gitlab-issue:18', { finish: false });
+
+    const prompt = await reopenAndPrompt(checkout);
+
+    expect(prompt).not.toContain(pullRequestInstruction);
+    expect(prompt).toContain(trustedInstruction);
+  });
+
+  it('keeps the checkout untrusted when the running pull request card cannot be read', async () => {
+    const checkout = pullRequestCheckout();
+    const { seed, runToCompletion, reopenAndPrompt } = await setup();
+    await runToCompletion('work', 'pull-request', 'gitlab-mr:19', { finish: false });
+    vi.spyOn(seed.workItems, 'get').mockRejectedValue(new Error('storage unavailable'));
+
+    const prompt = await reopenAndPrompt(checkout);
+
+    expect(prompt).not.toContain(pullRequestInstruction);
+  });
+
+  it('keeps the checkout untrusted when the running pull request card is deleted', async () => {
+    const checkout = pullRequestCheckout();
+    const { seed, runToCompletion, reopenAndPrompt } = await setup();
+    const run = await runToCompletion('work', 'pull-request', 'gitlab-mr:19', { finish: false });
+    await seed.workItems.delete({ orgId: 'org-1', id: run.workItemId });
+
+    const prompt = await reopenAndPrompt(checkout);
+
+    expect(prompt).not.toContain(pullRequestInstruction);
   });
 });

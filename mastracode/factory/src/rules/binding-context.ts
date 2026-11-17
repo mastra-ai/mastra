@@ -221,7 +221,10 @@ export async function restorePromptCheckoutTrust(options: {
   const current = context.getState();
   if (current.factoryProjectId && current.factoryOrgId && typeof current.untrustedCheckout === 'boolean') return;
   const binding = (await resolveFactorySessionAddress({ ...options, forceBindingLookup: true }))?.binding;
-  const untrusted = binding ? isUntrustedRun(binding) : await restoreHistoricalCheckoutPosture(context, options);
+  // History is read even with an active binding: an earlier pull request run, or a card that
+  // can no longer be read, keeps the checkout untrusted whatever the active role is.
+  const untrusted =
+    (binding !== undefined && isUntrustedRun(binding)) || (await restoreHistoricalCheckoutPosture(context, options));
   const state = context.getState();
   if ((binding && state.factoryProjectId !== binding.factoryProjectId) || (untrusted && !state.untrustedCheckout)) {
     throw new Error('Factory review session security state could not be restored before prompt creation.');
