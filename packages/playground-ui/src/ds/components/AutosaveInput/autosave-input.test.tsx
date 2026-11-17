@@ -131,4 +131,41 @@ describe('AutosaveInput', () => {
 
     expect(input().value).toBe('Acme Corp');
   });
+
+  it('keeps the saving name when Escape is pressed mid-save', async () => {
+    const user = userEvent.setup();
+    let finish = () => {};
+    render(
+      <AutosaveInput
+        label="Organization name"
+        value="Acme"
+        onSave={() => new Promise<void>(resolve => (finish = resolve))}
+      />,
+    );
+
+    await user.type(input(), ' Labs{Enter}{Escape}');
+    expect(input().value).toBe('Acme Labs');
+    finish();
+
+    await waitFor(() => expect(screen.getByText('Organization name saved')).toBeDefined());
+    expect(input().value).toBe('Acme Labs');
+  });
+
+  it("keeps the caller's description next to the error", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <p id="name-help">Shown in invitations.</p>
+        <OrganizationName aria-describedby="name-help" />
+      </>,
+    );
+
+    expect(input().getAttribute('aria-describedby')).toBe('name-help');
+    await user.clear(input());
+    await user.keyboard('{Enter}');
+
+    const ids = input().getAttribute('aria-describedby')?.split(' ') ?? [];
+    expect(ids[0]).toBe('name-help');
+    expect(ids.map(id => document.getElementById(id)?.textContent)).toContain("Name can't be empty.");
+  });
 });

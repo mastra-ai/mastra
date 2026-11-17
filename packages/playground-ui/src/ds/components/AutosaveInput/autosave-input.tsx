@@ -34,6 +34,10 @@ function current<T>(stamped: Stamped<T> | undefined, value: string): T | undefin
   return stamped?.value === value ? stamped.data : undefined;
 }
 
+function joinIds(...ids: (string | undefined)[]) {
+  return ids.filter(Boolean).join(' ') || undefined;
+}
+
 function statusOf(saving: boolean, error: string | undefined, justSaved: boolean): AutosaveInputStatusValue {
   if (saving) return 'saving';
   if (error) return 'error';
@@ -54,6 +58,7 @@ export function AutosaveInput({
   className,
   onBlur,
   onKeyDown,
+  'aria-describedby': describedBy,
   ...props
 }: AutosaveInputProps) {
   // What this field last saved, until the parent's `value` changes (usually to that same value).
@@ -115,8 +120,9 @@ export function AutosaveInput({
     if (event.key === 'Enter') {
       event.preventDefault();
       void save();
-    } else if (event.key === 'Escape' && (dirty || error)) {
-      // Revert, and stay in the field. A clean field lets Escape through (to blur it or close a dialog).
+    } else if (event.key === 'Escape' && !savingRef.current && (dirty || error)) {
+      // Revert, and stay in the field. A clean field lets Escape through (to blur it or close a dialog), and so does
+      // a field mid-save: the save already started, so there's nothing to revert yet.
       event.preventDefault();
       revert();
     }
@@ -138,7 +144,7 @@ export function AutosaveInput({
         value={draft}
         readOnly={saving}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={joinIds(describedBy, error ? errorId : undefined)}
         onChange={event => edit(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
