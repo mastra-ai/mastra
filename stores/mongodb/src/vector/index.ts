@@ -1524,6 +1524,23 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
+   * Whether `own` (read inside a delete transaction) is a newer lifetime than `entry` (the call's
+   * first read): true means the registration to delete is finished and `own` replaced it. An entry
+   * read without a generation can't tell a backfill from a replacement, so that refuses retryably.
+   */
+  private replacedSince(entry: RegistryDoc, own: RegistryDoc): boolean {
+    if (entry.generation) return own.generation !== entry.generation;
+    if (!own.generation) return false;
+    throw new MastraError({
+      id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'CONFLICT'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      details: { indexName: entry._id },
+      text: `Index "${entry._id}" changed while deleteIndex ran, so nothing was dropped. Retry deleteIndex({ indexName: "${entry._id}" }).`,
+    });
+  }
+
+  /**
    * Delete a registration whose collection stays (BYO, or managed with `ownsCollection: false`).
    * Step 1 decides, in one transaction, which Mastra-created search indexes to drop and which to
    * hand to a sibling still using them; steps 2 and 3 drop the rest and remove the entry. A
@@ -1553,6 +1570,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // to delete is already finished, and the replacement is not ours to touch.
         if (!own || own.collectionName !== entry.collectionName || !(own.isByo || own.ownsCollection === false))
           return 'gone' as const;
+        if (this.replacedSince(entry, own)) return 'gone' as const;
         // Another call committed this delete's decision since our first read: continue its attempt.
         if (own.deleting && own.deleteToken) return { drop: recordedDropSet(own), deleteToken: own.deleteToken };
         const live = { collectionName: own.collectionName, _id: { $ne: indexName }, deleting: { $ne: true } };
@@ -2053,6 +2071,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // Missing, or recreated as something else since our first read: not ours to touch.
         if (!own || own.collectionName !== collectionName || own.isByo || own.ownsCollection !== true)
           return 'gone' as const;
+        if (this.replacedSince(entry, own)) return 'gone' as const;
         if (own.deleting && own.deleteToken) return { deleteToken: own.deleteToken };
         const others = await registry.find(othersFilter, { session }).toArray();
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
@@ -2463,10 +2482,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...(resolvedAutoEmbed
           ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
           : { autoEmbed: null }),
-        // Nothing was registered when this call read the entry. Every entry current code writes
-        // carries a claimToken, so one written since (a claim, another createIndex) fails the
-        // filter, and the upsert's insert hits 11000 instead of overwriting it.
-        ...(existingEntry ? {} : { claimToken: { $exists: false } }),
+        // A refresh is pinned on the lifetime it read, so it never writes this call's policy into
+        // a replacement (or resurrects a deleted entry). Of concurrent first refreshes of an entry
+        // without a generation only one matches; the rest re-run once from a fresh read (below).
+        // Otherwise nothing was registered when this call read the entry. Every entry current code
+        // writes carries a claimToken, so one written since (a claim, another createIndex) fails
+        // the filter, and the upsert's insert hits 11000 instead of overwriting it.
+        ...(existingEntry
+          ? { generation: existingEntry.generation ?? { $exists: false } }
+          : { claimToken: { $exists: false } }),
         // The name-collision guards above read `existingEntry`; a concurrent createSearchIndex
         // renaming the text index to this name since fails the filter (11000, CONFLICT).
         textSearchIndexName: { $ne: targetSearchIndex },
@@ -2519,25 +2543,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ],
         },
       };
-      let pin: P0Pin;
-      let p0Before: RegistryDoc | null;
+      let p0: P0Result | null;
       try {
-        // Upsert, so a result always comes back.
-        ({ pin, before: p0Before } = (await this.writeRegistryEntry(
+        // Upsert only when nothing was registered; a refresh updates the entry it read or nothing.
+        p0 = await this.writeRegistryEntry(
           indexName,
           { ...p0Fields, claimToken },
           registryClaim,
-          true,
+          !existingEntry,
           vectorRename,
-        ))!);
+        );
       } catch (error: any) {
         if (error?.code !== 11000) throw error;
+        p0 = null;
+      }
+      if (!p0) {
+        // The cached target may be the lifetime that just changed; the next call re-reads it.
+        this.indexTargets.delete(indexName);
         const winner = await this.readRegistryEntry(indexName);
         this.assertNotDeleting(winner, 'CREATE_INDEX');
         const sameCollection = winner?.collectionName === targetCollection;
-        // Another call registered the same target first (e.g. replicas creating it at boot): run
-        // once more as an ordinary refresh, which keeps the winner's classification and ownership.
-        if (!existingEntry && !refresh && winner && sameCollection && sameEmbedding(winner.autoEmbed)) {
+        // Another call registered the same target first (e.g. replicas creating it at boot), or
+        // backfilled the generation of the entry without one this call read: run once more as an
+        // ordinary refresh, which re-reads the entry and keeps its classification and ownership.
+        if (!existingEntry?.generation && !refresh && winner && sameCollection && sameEmbedding(winner.autoEmbed)) {
           return await this.createIndexAttempt(params, true);
         }
         const differs = winner
@@ -2560,6 +2589,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             : `Index "${indexName}" was registered or removed concurrently by another call while this one ran. Nothing was changed. Retry createIndex.`,
         });
       }
+      const { pin, before: p0Before } = p0;
       await this.tofuIndexIds(
         indexName,
         pin,

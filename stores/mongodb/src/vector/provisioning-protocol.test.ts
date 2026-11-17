@@ -303,6 +303,190 @@ describe('provisioning protocol', () => {
       }
     });
 
+    describe('stale delete and refresh across a delete and recreate', () => {
+      /** Park `store`'s delete inside its first transaction attempt, after it read the entry. */
+      function parkDelete(store: MongoDBVector) {
+        const p = pause();
+        hooks(store, {
+          insideDeleteTransaction: async (_: string, attempt: number) => {
+            if (attempt === 1) await p.hook();
+          },
+        });
+        return p;
+      }
+
+      it('P-STALE-DEL-managed: a delete that read the old lifetime leaves a recreated managed index and its documents alone', async () => {
+        const name = uniqueName('psdm');
+        colls.push(name);
+        await a.createIndex({ indexName: name, dimension: 4 });
+        const original = (await entry(name))?.generation;
+        const p = parkDelete(a);
+        try {
+          const del = a.deleteIndex({ indexName: name }).catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: name });
+          // Atlas Local can briefly list the dropped collection's indexes as DOES_NOT_EXIST, a
+          // retryable CONFLICT; retry as the error says.
+          const stuck = createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT');
+          await waitFor(() =>
+            b.createIndex({ indexName: name, dimension: 4 }).then(
+              () => true,
+              e => (e?.id === stuck ? false : Promise.reject(e)),
+            ),
+          );
+          await b.upsert({ indexName: name, vectors: [[1, 0, 0, 0]], ids: ['kept'] });
+          p.release.resolve();
+          expect(await del).toBeUndefined();
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+        const replacement = await entry(name);
+        expect(replacement?.deleting).toBeUndefined();
+        expect(typeof replacement?.generation).toBe('string');
+        expect(replacement?.generation).not.toBe(original);
+        expect(await db.collection(name).countDocuments({ _id: 'kept' as any })).toBe(1);
+        expect(await searchIndexNames(db, name)).toContain(`${name}_vector_index`);
+        // Atlas Local revives a dropped collection's search indexes when it is recreated, so the
+        // replacement attaches them without recording ownership; a real cluster drops them.
+        clean.opts = { expectedLeaks: [`${name}_vector_index`, `${name}_search_index`] };
+      });
+
+      it('P-STALE-DEL-byo: a delete that read the old lifetime leaves a recreated BYO registration and its search index alone', async () => {
+        const coll = await byoColl('psdb');
+        const vec = `${coll}_vector_index`;
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        const original = (await entry(coll))?.generation;
+        const p = parkDelete(a);
+        try {
+          const del = a.deleteIndex({ indexName: coll }).catch(e => e);
+          await reached(p);
+          await b.deleteIndex({ indexName: coll });
+          await waitFor(async () => (await listedId(db, coll, vec)) === undefined);
+          await b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+          p.release.resolve();
+          expect(await del).toBeUndefined();
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+        const replacement = await entry(coll);
+        expect(replacement?.deleting).toBeUndefined();
+        expect(replacement?.generation).not.toBe(original);
+        expect(replacement?.ownsVectorIndex).toBe(true);
+        const id = await listedId(db, coll, vec);
+        expect(id).toBeDefined();
+        expect(replacement?.indexIds).toEqual([{ name: vec, id }]);
+      });
+
+      it('a delete that read an entry without a generation refuses retryably when the entry gains one, dropping nothing', async () => {
+        const name = uniqueName('psdl');
+        colls.push(name);
+        await a.createIndex({ indexName: name, dimension: 4 });
+        await a.upsert({ indexName: name, vectors: [[1, 0, 0, 0]], ids: ['kept'] });
+        // What a pre-generation instance left.
+        await db.collection(REGISTRY).updateOne({ _id: name as any }, { $unset: { generation: '' } });
+        const p = parkDelete(a);
+        try {
+          const del = a.deleteIndex({ indexName: name }).catch(e => e);
+          await reached(p);
+          // A backfill and a delete-and-recreate look the same from here.
+          await db.collection(REGISTRY).updateOne({ _id: name as any }, { $set: { generation: 'other' } });
+          p.release.resolve();
+          const err = await del;
+          expect(err?.id).toBe(createVectorErrorId('MONGODB', 'DELETE_INDEX', 'CONFLICT'));
+          expect(err?.message).toBe(
+            `Index "${name}" changed while deleteIndex ran, so nothing was dropped. Retry deleteIndex({ indexName: "${name}" }).`,
+          );
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+        expect((await entry(name))?.deleting).toBeUndefined();
+        expect(await db.collection(name).countDocuments({ _id: 'kept' as any })).toBe(1);
+        await a.deleteIndex({ indexName: name });
+        expect(await entry(name)).toBeNull();
+      });
+
+      /** Park `a`'s refresh of the writable BYO index `coll` after its read; run `between`; return its result. */
+      async function staleRefresh(coll: string, between: () => Promise<unknown>) {
+        const p = pause();
+        hooks(a, { afterCreateIndexRead: p.hook });
+        try {
+          const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
+          await reached(p);
+          await between();
+          p.release.resolve();
+          return await refresh;
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+      }
+      const retryText = (name: string) =>
+        `Index "${name}" was registered or removed concurrently by another call while this one ran. Nothing was changed. Retry createIndex.`;
+
+      it('P-STALE-REFRESH: a refresh that read a writable registration does not make its read-only replacement writable', async () => {
+        const coll = await byoColl('psr');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll, allowWrites: true });
+        const err = await staleRefresh(coll, async () => {
+          await b.deleteIndex({ indexName: coll });
+          await waitFor(async () => (await listedId(db, coll, `${coll}_vector_index`)) === undefined);
+          await b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        });
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(retryText(coll));
+        expect((await entry(coll))?.allowWrites).toBe(false);
+        const refused = await a.upsert({ indexName: coll, vectors: [[0, 1, 0, 0]], ids: ['w'] }).catch(e => e);
+        expect(refused?.id).toBe(createVectorErrorId('MONGODB', 'UPSERT', 'READ_ONLY_INDEX'));
+        expect(await db.collection(coll).countDocuments({ _id: 'w' as any })).toBe(0);
+      });
+
+      it('P-STALE-REFRESH-gone: a refresh that read a registration deleted meanwhile does not bring it back', async () => {
+        const coll = await byoColl('psrg');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll, allowWrites: true });
+        const err = await staleRefresh(coll, () => b.deleteIndex({ indexName: coll }));
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(err?.message).toBe(retryText(coll));
+        expect(await entry(coll)).toBeNull();
+        await waitFor(async () => (await searchIndexNames(db, coll)).length === 0);
+      });
+
+      it('a refresh that read an entry without a generation re-reads a replacement instead of writing its stale policy', async () => {
+        const coll = await byoColl('psrl');
+        const legacy = {
+          _id: coll,
+          indexName: coll,
+          collectionName: coll,
+          searchIndexName: `${coll}_vector_index`,
+          isByo: true,
+          allowWrites: true,
+          dimension: 4,
+          metric: 'cosine',
+        };
+        await seedRegistry(db, legacy);
+        const result = await staleRefresh(coll, async () => {
+          await db.collection(REGISTRY).deleteOne({ _id: coll as any });
+          await seedRegistry(db, { ...legacy, allowWrites: false, generation: 'replacement', claimToken: 'r', rev: 1 });
+        });
+        expect(result).toBeUndefined();
+        const e = await entry(coll);
+        expect(e?.generation).toBe('replacement');
+        expect(e?.allowWrites).toBe(false);
+      });
+
+      it('identical concurrent refreshes of a registration all succeed on its generation', async () => {
+        const coll = await byoColl('psrs');
+        await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        const before = await entry(coll);
+        const refresh = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+        await Promise.all([refresh(a), refresh(b), refresh(a), refresh(b), refresh(a)]);
+        const after = await entry(coll);
+        expect(after?.generation).toBe(before?.generation);
+        expect(after?.rev).toBeGreaterThanOrEqual((before?.rev ?? 0) + 5);
+      });
+    });
+
     describe('P-ROLLBACK', () => {
       /**
        * a's rename to B fails after its P0 write; just before, `concurrent` writes to the entry.
@@ -446,11 +630,12 @@ describe('provisioning protocol', () => {
         expect(after).toEqual({ ...legacy, generation: after?.generation, rev: 2, claimToken: after?.claimToken });
       });
 
-      it('(vi) an entry P0 re-inserted after a delete is removed by the rollback', async () => {
+      it('(vi) an entry deleted between the read and P0 is not re-inserted, so nothing needs rolling back', async () => {
         const coll = await byoColl('prb6');
         await a.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
         const err = await failAfterInterleavedWrite(coll, {}, () => b.deleteIndex({ indexName: coll }));
-        expect(err?.message).toMatch(/provision failed/);
+        // P0 of a refresh is pinned on the generation it read and never upserts.
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
         expect(await entry(coll)).toBeNull();
         expect(await searchIndexNames(db, coll)).toEqual([]);
       });

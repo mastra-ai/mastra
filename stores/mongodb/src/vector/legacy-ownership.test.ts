@@ -353,6 +353,10 @@ describe('legacy ownership', () => {
 
     it('T14d: overlapping delete transactions conflict, one retries, and the result matches the sequential one', async () => {
       const { coll, X, Y } = await t14();
+      // Entries with a generation: a delete that read an entry without one and finds one on its
+      // retry (here X's transfer backfills Y's) cannot tell a backfill from a replacement, and
+      // refuses with a retryable CONFLICT instead (provisioning-protocol.test.ts).
+      await db.collection(REGISTRY).updateMany({ collectionName: coll }, [{ $set: { generation: '$_id' } }]);
       const release = deferred();
       let arrived = 0;
       const attempts: number[] = [];
