@@ -27,7 +27,11 @@ type ToolInputValidator = (input: unknown) => { data?: unknown; error?: unknown 
  */
 export const REQUIRE_TOOL_APPROVAL_FALLBACK_KEY = '__mastra_requireToolApprovalFallback';
 
-const INTERNAL_APPROVAL_KEYS = new Set(['__mastra_requireToolApproval', REQUIRE_TOOL_APPROVAL_FALLBACK_KEY]);
+/** Request-context keys that carry the run's approval policy; approval policies never see them. */
+export const INTERNAL_APPROVAL_KEYS: ReadonlySet<string> = new Set([
+  '__mastra_requireToolApproval',
+  REQUIRE_TOOL_APPROVAL_FALLBACK_KEY,
+]);
 
 /** The run's approval policy: the live option, else what the request context carries for it. */
 export function resolveRunToolApprovalPolicy(

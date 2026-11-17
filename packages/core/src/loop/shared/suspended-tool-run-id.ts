@@ -27,7 +27,7 @@ export type ResolvedSuspendedToolIdentity = SuspendedToolCandidate;
  * `undefined`. A foreach item can be handed a sibling call's payload, which would make a fresh
  * call look resumed (skipping its approval) or route it into the sibling's delegated run.
  * Every payload a tool-call step suspends with names its call, as `toolCallId` or as
- * `requireToolApproval.toolCallId`. Suspensions stored before they named it are kept.
+ * `requireToolApproval.toolCallId`.
  */
 export function ownToolCallSuspendData(suspendData: unknown, toolCallId: string): unknown {
   if (!suspendData || typeof suspendData !== 'object') return undefined;
@@ -39,8 +39,7 @@ export function ownToolCallSuspendData(suspendData: unknown, toolCallId: string)
       : approval && typeof approval === 'object' && typeof approval.toolCallId === 'string'
         ? approval.toolCallId
         : undefined;
-  if (ownerId !== undefined) return ownerId === toolCallId ? suspendData : undefined;
-  return 'toolCallSuspended' in payload ? suspendData : undefined;
+  return ownerId === toolCallId ? suspendData : undefined;
 }
 
 function candidateFromEntry(

@@ -564,19 +564,28 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
         const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+        // A fresh call handed a sibling's approval payload while no policy resolves asks too: a
+        // run stored before function policies left a stand-in resumes with no policy, and that
+        // payload is the only sign left that the run's calls need approval.
+        const siblingApprovalWithoutPolicy =
+          requireToolApproval === undefined &&
+          suspendData === undefined &&
+          typeof (executionContext.suspendData as { requireToolApproval?: unknown } | undefined)
+            ?.requireToolApproval === 'object';
         const toolRequiresApproval =
-          cachedApprovalVerdict ??
-          (await resolveToolApprovalVerdict({
-            tool,
-            requireToolApproval,
-            context: buildToolApprovalContext({
-              toolName: inputData.toolName,
-              args,
-              requestContext,
-              workspace: approvalWorkspace,
-            }),
-            logger,
-          }));
+          (cachedApprovalVerdict ??
+            (await resolveToolApprovalVerdict({
+              tool,
+              requireToolApproval,
+              context: buildToolApprovalContext({
+                toolName: inputData.toolName,
+                args,
+                requestContext,
+                workspace: approvalWorkspace,
+              }),
+              logger,
+            }))) ||
+          siblingApprovalWithoutPolicy;
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve
