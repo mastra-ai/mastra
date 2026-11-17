@@ -346,6 +346,76 @@ describe('Knowledge reembed()', () => {
     expect(Math.max(...cursorSizes)).toBeLessThan(200);
   });
 
+  it('a page with more notes than one rate-limit window still finishes: each call resumes where the last stopped', async () => {
+    await plain.upsertPage({ scope: 'org:busy', path: 'b1', name: 'Busy', body: 'Busy body' });
+    for (let n = 1; n <= 7; n++) await plain.addNote({ scope: 'org:busy', path: 'b1', text: `Busy note ${n}` });
+    const store = (await storage.getStore('knowledge'))!;
+    const [busy] = await pageIds('org:busy');
+    const { notes } = await store.listNotes({ pageId: busy!.id, read: 'all' });
+
+    // The provider allows three calls per window; a window resets between reembed() calls.
+    let cursor: string | undefined;
+    let calls = 0;
+    const results = [];
+    do {
+      state.rateLimitAfter = state.calls + 3;
+      const result = await knowledge.reembed({ scope: 'org:busy', cursor });
+      results.push(result);
+      cursor = result.nextCursor;
+    } while (cursor && ++calls < 10);
+
+    expect(cursor).toBeUndefined();
+    // The first call embeds the page and two notes before the window runs out, and says so.
+    expect(results[0]).toMatchObject({ rateLimited: true, embedded: { pages: 1, notes: 2 } });
+    expect(results.reduce((sum, r) => sum + r.embedded.notes, 0)).toBe(7);
+    expect(results.reduce((sum, r) => sum + r.embedded.pages, 0)).toBe(1);
+    expect(vector.ids()).toEqual([`page:${busy!.id}`, ...notes.map(n => `note:${n.id}`)].sort());
+  });
+
+  it('a scope page with more notes than one rate-limit window still finishes', async () => {
+    await plain.upsertPage({ scope: 'org:busy', path: 'b1', name: 'Busy', body: 'Busy body' });
+    const store = (await storage.getStore('knowledge'))!;
+    const [scope] = await store.getScopesByAddress(['org:busy']);
+    for (let n = 1; n <= 7; n++) {
+      await store.addNote({
+        pageId: scope!.id,
+        text: `Busy scope note ${n}`,
+        stampScopeIds: [scope!.id],
+        mentions: [],
+        provenance: { author: 'host' },
+      });
+    }
+
+    let cursor: string | undefined;
+    let calls = 0;
+    let notes = 0;
+    do {
+      state.rateLimitAfter = state.calls + 3;
+      const result = await knowledge.reembed({ scope: 'org:busy', cursor });
+      notes += result.embedded.notes;
+      cursor = result.nextCursor;
+    } while (cursor && ++calls < 10);
+
+    expect(cursor).toBeUndefined();
+    expect(notes).toBe(7);
+  });
+
+  it('stops with a cursor when the 429 arrives wrapped in the AI SDK retry error', async () => {
+    const wrapped = new Knowledge({
+      storage,
+      scopes: knowledgeMemoryScopes(),
+      vector,
+      embedder: embedder(state),
+      embedderOptions: { maxRetries: 1 },
+    });
+    state.rateLimited = Infinity;
+    const result = await wrapped.reembed({ scope: 'org:acme' });
+
+    expect(result.rateLimited).toBe(true);
+    expect(result.failed).toEqual([]);
+    expect(result.nextCursor).toBeDefined();
+  });
+
   it('retries a passing 429 and carries on', async () => {
     state.rateLimited = 1;
     const result = await knowledge.reembed({ scope: 'org:acme' });

@@ -24,7 +24,7 @@ export interface KnowledgeReembedResult {
   failed: Array<{ kind: 'page' | 'note'; id: string; error: string }>;
   /** Pages longer than the chunk cap: embedded up to it, the rest is found by keyword search only. */
   overChunkCap: Array<{ pageId: string; chunks: number }>;
-  /** The embedder kept rate limiting, so the call stopped early. Wait before passing `nextCursor`, which retries from that page. */
+  /** The embedder kept rate limiting, so the call stopped early. Wait before passing `nextCursor`, which resumes where it stopped, mid-page if need be. `embedded` and `failed` still count what this call got done. */
   rateLimited?: true;
   /** Pass it to the next call to go on. Absent when everything has been handled. */
   nextCursor?: string;
@@ -38,10 +38,18 @@ export interface KnowledgeReembedResult {
  */
 type ScopePath = Array<{ p: string | null; c?: string }>;
 
-type Position =
+/**
+ * Progress inside the page (or scope page) the position points at, kept when a 429 stops a call
+ * part way through it: `body` once the page itself is embedded, then notes from listing cursor `nc`
+ * with `ns` of that listing already handled.
+ */
+type Progress = { body: boolean; nc?: string; ns: number };
+
+type Position = (
   | { scope?: string; phase: 'scope-notes' }
   | { scope?: string; phase: 'pages'; c?: string; skip: number }
-  | { scope?: undefined; phase: 'scopes'; path: ScopePath };
+  | { scope?: undefined; phase: 'scopes'; path: ScopePath }
+) & { item?: Progress };
 
 function encode(position: Position): string {
   return Buffer.from(JSON.stringify({ v: 2, ...position })).toString('base64url');
@@ -97,66 +105,66 @@ export async function reembedKnowledge(
     if (!scope) throw new Error(`Knowledge reembed: no scope "${options.scope}".`);
     scopeId = scope.id;
   }
-  let position: Position | undefined = options.cursor
+  const { item: resumeItem, ...start }: Position = options.cursor
     ? decode(options.cursor, options.scope)
     : options.scope
       ? { scope: options.scope, phase: 'scope-notes' }
       : { phase: 'pages', skip: 0 };
+  let position: Position | undefined = start as Position;
 
   const result: KnowledgeReembedResult = { embedded: { pages: 0, notes: 0 }, failed: [], overChunkCap: [] };
   let handled = 0;
+  // How far into the current page or scope page this call got, so a 429 resumes mid-way instead of
+  // starting the page over: a page with more notes than one quota window would never finish.
+  let item: Progress = resumeItem ?? { body: false, ns: 0 };
 
-  /** Notes on one page; throws RateLimited, leaving nothing counted, so the page is redone whole. */
+  /** Notes on one page, from where `item` says the last call stopped. */
   const notesOn = async (pageId: string) => {
-    let embedded = 0;
-    const failed: KnowledgeReembedResult['failed'] = [];
-    let cursor: string | undefined;
     do {
-      const page = await storage.listNotes({ pageId, read: 'all', cursor, limit: NOTE_PAGE });
-      for (const note of page.notes) {
+      const page = await storage.listNotes({ pageId, read: 'all', cursor: item.nc, limit: NOTE_PAGE });
+      for (const note of page.notes.slice(item.ns)) {
         try {
           await index.indexNote(note);
-          embedded++;
+          result.embedded.notes++;
         } catch (error) {
           if (isRateLimit(error)) throw new RateLimited();
-          failed.push({ kind: 'note', id: note.id, error: message(error) });
+          result.failed.push({ kind: 'note', id: note.id, error: message(error) });
         }
+        item = { ...item, ns: item.ns + 1 };
       }
-      cursor = page.nextCursor;
-    } while (cursor);
-    return { embedded, failed };
+      if (!page.nextCursor) break;
+      item = { ...item, nc: page.nextCursor, ns: 0 };
+    } while (true);
   };
 
-  /** One ordinary page with its notes, counted only once all of it is done. */
+  /** One ordinary page with its notes. */
   const handlePage = async (page: KnowledgePage) => {
-    let chunks: number | undefined;
-    let pageFailure: KnowledgeReembedResult['failed'][number] | undefined;
-    try {
-      chunks = await index.indexPage(page);
-    } catch (error) {
-      if (isRateLimit(error)) throw new RateLimited();
-      pageFailure = { kind: 'page', id: page.id, error: message(error) };
+    if (!item.body) {
+      try {
+        const chunks = await index.indexPage(page);
+        result.embedded.pages++;
+        if (chunks > KNOWLEDGE_MAX_PAGE_CHUNKS) result.overChunkCap.push({ pageId: page.id, chunks });
+      } catch (error) {
+        if (isRateLimit(error)) throw new RateLimited();
+        result.failed.push({ kind: 'page', id: page.id, error: message(error) });
+      }
+      item = { ...item, body: true };
     }
-    const notes = await notesOn(page.id);
-    if (pageFailure) result.failed.push(pageFailure);
-    else result.embedded.pages++;
-    if (chunks !== undefined && chunks > KNOWLEDGE_MAX_PAGE_CHUNKS)
-      result.overChunkCap.push({ pageId: page.id, chunks });
-    result.embedded.notes += notes.embedded;
-    result.failed.push(...notes.failed);
+    await notesOn(page.id);
   };
 
   /** Notes on a scope page (scope pages themselves aren't embedded). */
-  const handleScope = async (scopePageId: string) => {
-    const notes = await notesOn(scopePageId);
-    result.embedded.notes += notes.embedded;
-    result.failed.push(...notes.failed);
+  const handleScope = (scopePageId: string) => notesOn(scopePageId);
+
+  const done = () => {
+    item = { body: false, ns: 0 };
   };
 
   try {
     while (position && handled < limit) {
       if (position.phase === 'scope-notes') {
         await handleScope(scopeId!);
+        done();
         position = { scope: options.scope, phase: 'pages', skip: 0 };
         continue;
       }
@@ -171,6 +179,7 @@ export async function reembedKnowledge(
         for (const page of pages) {
           if (handled >= limit) break;
           await handlePage(page);
+          done();
           handled++;
           position = { ...position, skip: position.skip + 1 };
         }
@@ -192,6 +201,7 @@ export async function reembedKnowledge(
       const rest: ScopePath = path.slice(0, -1);
       if (child) {
         await handleScope(child.id);
+        done();
         const next: ScopePath = listing.nextCursor ? [{ p, c: listing.nextCursor }] : [];
         position = { phase: 'scopes', path: [...rest, ...next, { p: child.id }] };
       } else {
@@ -202,6 +212,7 @@ export async function reembedKnowledge(
   } catch (error) {
     if (!(error instanceof RateLimited)) throw error;
     result.rateLimited = true;
+    if (position && (item.body || item.ns > 0 || item.nc)) position = { ...position, item };
   }
 
   if (position) result.nextCursor = encode(position);
