@@ -8,9 +8,10 @@
  * does when a model streams at typical token rates.
  *
  * Reports CPU time, time spent synchronously inside `session.emit` (event-loop
- * blocking), GC (medians over --repeat runs), bytes allocated (heap sampling profiler, including
- * objects already collected) and a hash of each client's wire bytes, so runs
- * before and after a change can be compared for both cost and output.
+ * blocking) and GC as medians over --repeat runs, bytes allocated in one
+ * profiled run (heap sampling profiler, including objects already collected),
+ * and a hash of each client's wire bytes, so runs before and after a change can
+ * be compared for both cost and output.
  *
  * Run from packages/server after building @mastra/core:
  *   pnpm tsx scripts/bench-agent-controller-stream.ts [--deltas 500] [--clients 0,1,5] [--result-kb 100] [--repeat 5]
@@ -84,8 +85,8 @@ async function playTurn(target: { emit(event: any): void }, timing: { emitMs: nu
       timing.emitMs += performance.now() - start;
     },
   };
-  const messageId = `assistant-${run}`;
-  const toolCallId = `call-${run}`;
+  const messageId = 'assistant-1';
+  const toolCallId = 'call-1';
   const result = { content: 'x'.repeat(RESULT_BYTES), truncated: false };
   const delta = 'lorem ipsum dolor sit amet, consectetur ';
   const half = Math.floor(DELTAS / 2);

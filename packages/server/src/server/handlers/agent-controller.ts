@@ -618,11 +618,12 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 
 /**
  * Copy a display-state value as `JSON.stringify` would read it now: `toJSON` is
- * resolved and every object and array is copied, so later in-place mutation
- * (by the reducer, or by the run engine on message parts it still owns) cannot
- * reach a queued frame. Primitives are immutable and shared, so message text and
- * large tool results are not duplicated per snapshot the way `structuredClone`
- * duplicates them. `copies` preserves shared and circular references.
+ * resolved and every object and array is copied, so the reducer's in-place
+ * updates (tool status and results, input buffers, file operations, subagent
+ * progress) cannot reach a queued frame. Primitives are immutable and shared, so
+ * message text and large tool results are not duplicated per snapshot the way
+ * `structuredClone` duplicates them. `copies` preserves shared and circular
+ * references.
  */
 function snapshotForWire(value: unknown, key: string, copies: Map<object, unknown>): unknown {
   if (value === null || typeof value !== 'object') return value;
@@ -649,7 +650,14 @@ function snapshotForWire(value: unknown, key: string, copies: Map<object, unknow
   const copy: Record<string, unknown> = {};
   copies.set(value, copy);
   for (const field of Object.keys(source)) {
-    copy[field] = snapshotForWire((source as Record<string, unknown>)[field], field, copies);
+    const fieldCopy = snapshotForWire((source as Record<string, unknown>)[field], field, copies);
+    if (field === '__proto__') {
+      // Parsed JSON can hold an own `__proto__` key; assigning it would set the
+      // copy's prototype and drop the key from the wire.
+      Object.defineProperty(copy, field, { value: fieldCopy, enumerable: true, writable: true, configurable: true });
+    } else {
+      copy[field] = fieldCopy;
+    }
   }
   return copy;
 }

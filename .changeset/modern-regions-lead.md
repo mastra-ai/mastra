@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Reduced memory and CPU use when streaming agent controller sessions. Each display-state update is now copied once per update instead of once per connected client, large strings such as message text and tool results are no longer duplicated in every copy, and the update is serialized once and shared by all clients of the session. Clients receive the same events as before. A display state containing a value that cannot be cloned, such as a function, no longer closes the stream.
+Reduced memory and CPU use when clients stream agent controller sessions. Each display-state update is now copied and serialized once and shared by every client of the session, instead of once per client, and the copy no longer duplicates message text or tool results. Clients receive the same bytes as before. A display state holding a value that cannot be cloned, such as a function, no longer closes the stream.

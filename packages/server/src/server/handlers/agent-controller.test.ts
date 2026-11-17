@@ -1605,16 +1605,15 @@ describe('agent-controller routes', () => {
       }
 
       // A client that reads slower than the session emits has frames queued in
-      // its stream. The reducer, and the run engine on message parts it still
-      // owns, keep mutating the live display state in place, so a queued frame
-      // must carry the state from when it was emitted rather than a later one.
+      // its stream. The reducer keeps updating the live display state in place
+      // (tool status and results, input buffers, file operations), so a queued
+      // frame must carry the state from when it was emitted, not a later one.
       it('a slow client still sees each step of a turn, not the state from after later steps', async () => {
         const controller = mastra.getAgentController('code')!;
         await controller.init();
         const session = await controller.createSession({ resourceId: 'user-slow', id: 'user-slow', ownerId: 'code' });
         const reader = await openStream('user-slow');
 
-        const toolInvocation = { state: 'call', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } };
         session.emit({ type: 'agent_start' });
         session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'write_file', args: { path: 'a.ts' } });
         session.emit({
@@ -1627,13 +1626,19 @@ describe('agent-controller routes', () => {
               format: 2,
               parts: [
                 { type: 'text', text: '' },
-                { type: 'tool-invocation', toolInvocation },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'call',
+                    toolCallId: 'call-1',
+                    toolName: 'write_file',
+                    args: { path: 'a.ts' },
+                  },
+                },
               ],
             },
           } as any,
         });
-        // The run engine settles the invocation part in place before announcing the result.
-        Object.assign(toolInvocation, { state: 'result', result: { written: true } });
         session.emit({ type: 'tool_end', toolCallId: 'call-1', result: { written: true }, isError: false });
         session.emit({ type: 'tool_input_start', toolCallId: 'call-2', toolName: 'write_file' });
         session.emit({ type: 'tool_input_delta', toolCallId: 'call-2', argsTextDelta: '{"path":' });
@@ -1679,7 +1684,7 @@ describe('agent-controller routes', () => {
         expect(displayAfter(frames, 'agent_end').isRunning).toBe(false);
       });
 
-      it('every client of a session gets the same frames, and only its own session’s state', async () => {
+      it('every client of a session gets the same frames, and only that session state', async () => {
         const controller = mastra.getAgentController('code')!;
         await controller.init();
         const sessionA = await controller.createSession({
@@ -1716,6 +1721,27 @@ describe('agent-controller routes', () => {
           name: 'grep',
           result: 'grep output',
         });
+      });
+
+      // Tool results are often parsed JSON from files or web pages, which can
+      // carry an own `__proto__` key; the client must still receive it.
+      it('a tool result with a __proto__ key reaches the client unchanged', async () => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-proto', id: 'user-proto', ownerId: 'code' });
+        const reader = await openStream('user-proto');
+
+        const resultJson = '{"before":1,"__proto__":{"injected":true},"after":2}';
+        session.emit({ type: 'agent_start' });
+        session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read_json', args: { path: 'a.json' } });
+        session.emit({ type: 'tool_end', toolCallId: 'call-1', result: JSON.parse(resultJson), isError: false });
+        session.emit({ type: 'agent_end', reason: 'complete' });
+
+        const frames = await readWire(reader);
+        const toolEnd = frames.findIndex(frame => frame.type === 'tool_end');
+        const snapshot = frames.slice(toolEnd + 1).find(frame => frame.type === 'display_state_changed')!;
+        const wire = serializeStreamChunk(snapshot);
+        expect(wire.ok && wire.json).toContain(`"result":${resultJson}`);
       });
 
       it('re-emitting a held display_state_changed event sends the state as it is now', async () => {
