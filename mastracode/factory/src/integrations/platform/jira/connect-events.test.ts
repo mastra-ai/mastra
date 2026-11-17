@@ -99,7 +99,7 @@ async function setup(options: { issueId?: string; issueResponse?: () => Response
     'fetch',
     vi.fn<typeof fetch>(async input => {
       const target = String(input);
-      if (target.endsWith('/v2/projects/proj_factory/connections')) {
+      if (target.endsWith('/v2/connections') || target.endsWith('/v2/projects/proj_factory/connections')) {
         return json({
           connections: [
             { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
@@ -122,7 +122,8 @@ async function setup(options: { issueId?: string; issueResponse?: () => Response
     connect: { baseUrl: PLATFORM_BASE, projectId: 'proj_factory', accessToken: 'platform-token' },
   });
   const route = jira.connectEventRoute(context)!;
-  return { route, card, issueRequests };
+  const discovery = vi.spyOn(jira, 'requestDiscovery');
+  return { route, card, issueRequests, jira, context, discovery };
 }
 
 afterEach(() => {
@@ -161,16 +162,45 @@ describe('PlatformJiraIntegration events', () => {
     expect((await card()).workItem.metadata).toMatchObject({ state: 'To Do', stateType: 'unstarted' });
   });
 
-  it('does nothing for an issue no card tracks, or the same key on another Jira site', async () => {
-    const { route, card, issueRequests } = await setup();
+  it('asks for a reconcile to file an issue no card tracks, including the same key on another Jira site', async () => {
+    const { route, card, issueRequests, discovery } = await setup();
     const before = await card();
 
     await route.handle(delivery(webhook('ENG-99', '10099')));
     await route.handle(delivery(webhook(), { connectionId: 'a1b_beta' }));
-    await route.handle(delivery({ webhookEvent: 'jira:worklog_updated', worklog: { issueId: '10042' } }));
 
+    expect(discovery).toHaveBeenCalledTimes(2);
     expect(issueRequests).toEqual([]);
     expect((await card()).workItem.metadata).toEqual(before.workItem.metadata);
+  });
+
+  it('asks for no reconcile when the event names a tracked issue, or no issue at all', async () => {
+    const { route, discovery } = await setup();
+
+    await route.handle(delivery(webhook()));
+    await route.handle(delivery({ webhookEvent: 'jira:worklog_updated', worklog: { issueId: '10042' } }));
+
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
+  it("runs the reconcile worker's sweep when an event names an issue with no card", async () => {
+    const { route, issueRequests, jira, context } = await setup();
+    const [worker] = jira.workers(context);
+    await worker!.init({
+      pubsub: {},
+      storage: {},
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    } as unknown as WorkerDeps);
+    await worker!.start();
+    onTestFinished(() => worker!.stop());
+    // The worker sweeps once at start; wait for that, then only an event can cause another before the hour is up.
+    await vi.waitFor(() => expect(issueRequests.some(url => url.includes('/issue/ENG-42?'))).toBe(true));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    issueRequests.length = 0;
+
+    await route.handle(delivery(webhook('ENG-99', '10099')));
+
+    await vi.waitFor(() => expect(issueRequests.some(url => url.includes('/issue/ENG-42?'))).toBe(true));
   });
 
   it('fails the delivery when Jira cannot be read, so the events worker retries it', async () => {

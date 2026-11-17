@@ -106,13 +106,13 @@ import {
   projectConnectTools,
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
-import { logIntegrationSummary } from './integrations/startup-summary.js';
 import {
   PLATFORM_EVENTS_STORAGE_ID,
   PlatformEventsWorker,
   isPlatformConnectEventSource,
 } from './integrations/platform/foundation/events-worker.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
+import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -260,7 +260,8 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 /** Tools for every Factory session, or a resolver called per run. */
 export type FactoryTools =
-  IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+  | IntegrationTools
+  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -1353,7 +1354,8 @@ export class MastraFactory {
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     ) as GitLabIntegrationBase | undefined;

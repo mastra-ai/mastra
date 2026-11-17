@@ -117,11 +117,12 @@ async function setup(options: { tracked?: string[]; incidentResponse?: () => Res
     runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
   } as unknown as IntegrationContext;
   const route = incidentio.connectEventRoute(context)!;
+  const discovery = vi.spyOn(incidentio, 'requestDiscovery');
   const card = async (externalId: string) =>
     (await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })).find(
       item => item.externalSource?.externalId === externalId,
     )!;
-  return { route, card, itemRequests };
+  return { route, card, itemRequests, discovery };
 }
 
 afterEach(() => {
@@ -195,16 +196,25 @@ describe('PlatformIncidentioIntegration events', () => {
     expect(JSON.stringify(metadata)).not.toContain('Forged');
   });
 
-  it('ignores an incident Factory does not track', async () => {
-    const { route, itemRequests } = await setup({ tracked: ['incidentio:incident:incident-1'] });
+  it('asks for a reconcile to file an incident Factory does not track yet', async () => {
+    const { route, itemRequests, discovery } = await setup({ tracked: ['incidentio:incident:incident-1'] });
 
     await route.handle(delivery(incidentWebhook('incident-9')));
 
+    expect(discovery).toHaveBeenCalledTimes(1);
     expect(itemRequests).toEqual([]);
   });
 
+  it('asks for no reconcile when the event names a tracked incident', async () => {
+    const { route, discovery } = await setup();
+
+    await route.handle(delivery(incidentWebhook()));
+
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
   it('ignores events that name no incident or follow-up', async () => {
-    const { route, itemRequests } = await setup();
+    const { route, itemRequests, discovery } = await setup();
 
     await route.handle(
       delivery(
@@ -214,6 +224,7 @@ describe('PlatformIncidentioIntegration events', () => {
     );
 
     expect(itemRequests).toEqual([]);
+    expect(discovery).not.toHaveBeenCalled();
   });
 
   it('fails the delivery when incident.io cannot be read, so the worker retries it', async () => {

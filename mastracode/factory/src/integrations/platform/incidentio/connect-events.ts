@@ -41,11 +41,13 @@ export function incidentioItemFromPayload(payload: unknown): string | null {
  * reconciles its cards. Item references carry no connection id (incident.io
  * ids are globally unique), so the reconcile resolves the owning connection
  * the same way a sweep does. An unverified event can at most cause a
- * re-fetch of an item Factory already tracks.
+ * re-fetch of an item Factory already tracks, or a reconcile. An item with no
+ * card yet calls `onUntracked`, whose reconcile files it.
  */
 export async function handleIncidentioConnectEvent(
   event: PlatformConnectEventDelivery,
   reconcileOne: IssueReconcileOne | null,
+  onUntracked: () => void,
 ): Promise<void> {
   const itemRef = incidentioItemFromPayload(event.payload);
   if (!itemRef || !reconcileOne) return;
@@ -53,4 +55,5 @@ export async function handleIncidentioConnectEvent(
   if (summary.failed > 0) {
     throw new Error(`incident.io ${itemRef} could not be reconciled: ${summary.errors[0]?.error ?? 'unknown error'}`);
   }
+  if (summary.checked === 0) onUntracked();
 }

@@ -20,11 +20,13 @@ export function jiraIssueFromPayload(payload: unknown): string[] {
 /**
  * Re-fetches the issue a Jira event names and reconciles its cards. The
  * payload only names the issue, so an unverified event is safe here: at worst
- * it causes a re-fetch of an issue Factory already tracks.
+ * it causes a re-fetch of an issue Factory already tracks, or a reconcile.
+ * An issue with no card yet calls `onUntracked`, whose reconcile files it.
  */
 export async function handleJiraConnectEvent(
   event: PlatformConnectEventDelivery,
   reconcileOne: IssueReconcileOne | null,
+  onUntracked: () => void,
 ): Promise<void> {
   const issue = jiraIssueFromPayload(event.payload);
   if (issue.length === 0 || !reconcileOne) return;
@@ -35,4 +37,5 @@ export async function handleJiraConnectEvent(
   if (summary.failed > 0) {
     throw new Error(`Jira issue ${issue[0]} could not be reconciled: ${summary.errors[0]?.error ?? 'unknown error'}`);
   }
+  if (summary.checked === 0) onUntracked();
 }

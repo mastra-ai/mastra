@@ -18,6 +18,9 @@ import type {
 /** Reconciles run hourly unless an integration says otherwise. */
 export const DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS = 60 * 60_000;
 
+/** The shortest gap between two reconciles requested by events for items with no card yet. */
+export const PLATFORM_DISCOVERY_MIN_GAP_MS = 60_000;
+
 /** A provider the integration registers with the platform connect routes. */
 export interface PlatformConnectProvider {
   /** SPA-facing provider slug, the `:provider` path segment. */
@@ -64,6 +67,8 @@ export abstract class PlatformConnectIntegration
   readonly #connectProviders: readonly PlatformConnectProvider[];
   readonly #reconcileIntervalMs: number;
   #reconcileWorker: IssueReconcileWorker | undefined;
+  #discoveryRequestedAt = Number.NEGATIVE_INFINITY;
+  #discoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: PlatformConnectIntegrationOptions) {
     this.id = options.id;
@@ -165,6 +170,29 @@ export abstract class PlatformConnectIntegration
   /** Runs the reconcile now, if the integration has one running. */
   requestReconcile(): void {
     this.#reconcileWorker?.requestRun();
+  }
+
+  /**
+   * Runs the reconcile so it files an item an event named that has no card
+   * yet. Requests are throttled to one per `PLATFORM_DISCOVERY_MIN_GAP_MS`:
+   * one inside the gap runs once at its end, so a burst of events, or events
+   * for items no binding takes, costs at most one reconcile a minute.
+   */
+  requestDiscovery(): void {
+    if (this.#discoveryTimer) return;
+    const now = Date.now();
+    const wait = this.#discoveryRequestedAt + PLATFORM_DISCOVERY_MIN_GAP_MS - now;
+    if (wait <= 0) {
+      this.#discoveryRequestedAt = now;
+      this.requestReconcile();
+      return;
+    }
+    this.#discoveryTimer = setTimeout(() => {
+      this.#discoveryTimer = undefined;
+      this.#discoveryRequestedAt = Date.now();
+      this.requestReconcile();
+    }, wait);
+    this.#discoveryTimer.unref?.();
   }
 
   /**
