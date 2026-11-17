@@ -641,7 +641,7 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
-  /** The evaluator forced on every project, if any; see `MastraFactoryConfig.intake`. */
+  /** The evaluator forced on every project by `FACTORY_INTAKE_EVALUATOR`, if set. */
   readonly #forcedIntake: IntakeEvaluator | undefined;
   /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
   #boardStore:
