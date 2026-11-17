@@ -1,10 +1,11 @@
 import { createVectorErrorId } from '@mastra/core/storage';
-import { MongoNetworkError, MongoServerError, ObjectId } from 'mongodb';
-import type { CommandStartedEvent, Db, Document, MongoClient, MongoClientOptions } from 'mongodb';
+import { MongoClient, MongoNetworkError, MongoServerError, ObjectId } from 'mongodb';
+import type { CommandStartedEvent, Db, Document, MongoClientOptions } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ATLAS_LOCAL_URI,
   DB_NAME,
+  JOURNAL,
   REGISTRY,
   captureCommands,
   captureLogs,
@@ -190,6 +191,7 @@ describe('provisioning protocol', () => {
     afterAll(async () => {
       for (const c of colls) {
         await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
+        await db.collection(JOURNAL).deleteMany({ collectionName: c });
         await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
@@ -517,12 +519,13 @@ describe('provisioning protocol', () => {
       const { coll, result } = await createWithRefusal(
         new MongoServerError({ code: 50, codeName: 'MaxTimeMSExpired', errmsg: 'operation exceeded time limit' }),
       );
-      // S2 interim: `unknown` + a listed row is uncertain (I9): attached and logged, not owned.
+      // `unknown` + a listed row is uncertain (I9): attached and logged, not owned.
       expect(result).toBeUndefined();
       expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
       expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
-      // S2 has no journal: an uncertain index stays unrecorded.
-      clean.opts = { expectedLeaks: [`${coll}_vector_index`] };
+      // The uncertain journal record holds it.
+      expect(await db.collection(JOURNAL).findOne({ collectionName: coll })).toMatchObject({ state: 'uncertain' });
+      clean.opts = { journalExpected: true };
     });
   });
   describe('provisioning with ids (S2)', () => {
@@ -553,6 +556,7 @@ describe('provisioning protocol', () => {
     afterAll(async () => {
       for (const c of colls) {
         await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
+        await db.collection(JOURNAL).deleteMany({ collectionName: c });
         await dropCollectionWithSearchIndexes(db, c).catch(() => {});
       }
       await a.disconnect();
@@ -662,7 +666,7 @@ describe('provisioning protocol', () => {
         [a],
         {
           listSearchIndexesStub: (name: string, phase: string) =>
-            phase === 'P3a' ? [] : phase === 'P5' ? [{ name, id: OLD, status: 'READY' }] : undefined,
+            phase === 'P1' || phase === 'P3a' ? [] : phase === 'P5' ? [{ name, id: OLD, status: 'READY' }] : undefined,
           createSearchIndexesCommand: async () => ({ ok: 1, indexesCreated: [{ id: OLD, name: vec }] }),
         },
         () => createByo(a, coll),
@@ -706,33 +710,6 @@ describe('provisioning protocol', () => {
         expect(c.command.maxTimeMS).toBeGreaterThan(0);
         expect(c.command.maxTimeMS).toBeLessThanOrEqual(60_000);
       }
-    });
-
-    describe('S2-UNKNOWN', () => {
-      it('(a) a lost response with nothing listed fails as pending and keeps the registration', async () => {
-        const coll = await byoColl('sunk_a');
-        const vec = `${coll}_vector_index`;
-        const err = await withHooks([a], { createSearchIndexesCommand: unknownCreateMode({ perform: false }) }, () =>
-          createByo(a, coll).catch(e => e),
-        );
-        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'));
-        expect(err?.message).toBe(
-          `The create of search index "${vec}" on "${coll}" may or may not have reached Atlas. Retry.`,
-        );
-        expect(await entry(coll)).not.toBeNull();
-        expect(await searchIndexNames(db, coll)).toEqual([]);
-      });
-
-      it('(b) a lost response with the index listed attaches, not owned, with a warning', async () => {
-        const coll = await byoColl('sunk_b');
-        const logs = captureLogs(a);
-        await withHooks([a], { createSearchIndexesCommand: unknownCreateMode({ perform: true }) }, () =>
-          createByo(a, coll),
-        );
-        expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
-        expect(logs.warn.some(m => m.includes('may have been created by Mastra'))).toBe(true);
-        clean.opts = { expectedLeaks: [`${coll}_vector_index`] };
-      });
     });
 
     it('P-STUCKROW: a dying row at the decisive pre-list refuses with CONFLICT and rolls back', async () => {
@@ -1112,6 +1089,227 @@ describe('provisioning protocol', () => {
           expect(await entry(toId)).toEqual(before);
         }
       });
+    });
+  });
+
+  describe('journal (S3)', () => {
+    let a: MongoDBVector;
+    let b: MongoDBVector;
+    let checker: Checker;
+    const colls: string[] = [];
+    const entry = (name: string) => db.collection(REGISTRY).findOne({ _id: name as any });
+    const docsOn = (coll: string) => db.collection(JOURNAL).find({ collectionName: coll }).toArray();
+    const uncertainText = (name: string, coll: string, id: string) =>
+      `search index "${name}" on "${coll}" (id ${id}) may have been created by Mastra; kept; drop it manually if unused`;
+
+    beforeAll(async () => {
+      a = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'j-a', options: { monitorCommands: true } });
+      b = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'j-b' });
+      await a.connect();
+      await b.connect();
+      checker = installInvariantChecker(db, [a, b]);
+    });
+    const clean = checkEachTest(colls, () => checker);
+
+    afterAll(async () => {
+      for (const c of colls) {
+        await db.collection(REGISTRY).deleteMany({ $or: [{ _id: c as any }, { collectionName: c }] });
+        await db.collection(JOURNAL).deleteMany({ collectionName: c });
+        await dropCollectionWithSearchIndexes(db, c).catch(() => {});
+      }
+      await a.disconnect();
+      await b.disconnect();
+    });
+
+    async function byoColl(prefix: string) {
+      const coll = uniqueName(prefix);
+      colls.push(coll);
+      await seedCollection(db, coll, [{ title: 'a', embedding: [1, 0, 0, 0] }]);
+      return coll;
+    }
+    const createByo = (s: MongoDBVector, coll: string) =>
+      s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+    const reconcile = (s: MongoDBVector, coll: string): Promise<void> => (s as any).reconcile(coll);
+
+    /** A crash: a throwaway store parks forever in `seam` (lease 0), then its client is closed. */
+    async function crashAt(coll: string, seam: string) {
+      const c = new MongoDBVector({ uri: ATLAS_LOCAL_URI, dbName: DB_NAME, id: 'j-crash' });
+      await c.connect();
+      const p = pause();
+      hooks(c, { leaseMs: 0, [seam]: p.hook });
+      void createByo(c, coll).catch(() => {});
+      await reached(p);
+      await c.disconnect();
+    }
+
+    it('P-LOST-a: a lost response with the index listed records it uncertain; deleteIndex keeps it and removes the record', async () => {
+      const coll = await byoColl('plosta');
+      const vec = `${coll}_vector_index`;
+      const logs = captureLogs(a);
+      hooks(a, { createSearchIndexesCommand: unknownCreateMode({ perform: true }) });
+      await createByo(a, coll);
+      checker.restoreHooks();
+      const id = await listedId(db, coll, vec);
+      expect(id).toBeDefined();
+      const [doc] = await docsOn(coll);
+      expect(doc).toMatchObject({ state: 'uncertain', candidateId: id, name: vec });
+      expect(logs.warn).toContain(uncertainText(vec, coll, id!));
+      expect((await entry(coll))?.ownsVectorIndex).not.toBe(true);
+      logs.warn.length = 0;
+      await a.deleteIndex({ indexName: coll });
+      expect(await searchIndexNames(db, coll)).toEqual([vec]);
+      expect(await docsOn(coll)).toEqual([]);
+      expect(logs.warn).toContain(uncertainText(vec, coll, id!));
+      clean.opts = { expectedLeaks: [vec] };
+    });
+
+    it('P-LOST-b: a lost response with nothing listed fails, stays creating, and the reconciler removes it', async () => {
+      const coll = await byoColl('plostb');
+      const vec = `${coll}_vector_index`;
+      hooks(a, { leaseMs: 0, createSearchIndexesCommand: unknownCreateMode({ perform: false }) });
+      const err = await createByo(a, coll).catch(e => e);
+      checker.restoreHooks();
+      expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'));
+      expect(err?.message).toBe(
+        `The create of search index "${vec}" on "${coll}" may or may not have reached Atlas. Retry.`,
+      );
+      expect(await docsOn(coll)).toMatchObject([{ state: 'creating', preListAbsent: true }]);
+      expect(await entry(coll)).not.toBeNull();
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toEqual([]);
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+    });
+
+    it('P-LOST-c: a create landing late after a lost response makes the reconciler record it uncertain', async () => {
+      const coll = await byoColl('plostc');
+      const vec = `${coll}_vector_index`;
+      const logs = captureLogs(b);
+      hooks(a, { leaseMs: 0, createSearchIndexesCommand: unknownCreateMode({ perform: false }) });
+      await createByo(a, coll).catch(() => {});
+      checker.restoreHooks();
+      await createRawSearchIndex(db, coll, vec, {
+        fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }],
+      });
+      const id = (await listedId(db, coll, vec))!;
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toMatchObject([{ state: 'uncertain', candidateId: id }]);
+      expect(logs.warn).toContain(uncertainText(vec, coll, id));
+      clean.opts = { journalExpected: true };
+    });
+
+    it('P-FENCE-1: an intent the reconciler removed fails its fence: no create, rolled back', async () => {
+      const coll = await byoColl('pfence1');
+      const p = pause();
+      hooks(a, { leaseMs: 0, beforeAtlasCreate: p.hook });
+      const events = captureCommands(a);
+      const call = createByo(a, coll).catch(e => e);
+      try {
+        await reached(p);
+        expect(await docsOn(coll)).toMatchObject([{ state: 'intent' }]);
+        await reconcile(b, coll);
+        expect(await docsOn(coll)).toEqual([]);
+      } finally {
+        p.release.resolve();
+      }
+      const err = await call;
+      checker.restoreHooks();
+      expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+      expect(err?.message).toBe(
+        `Index "${coll}" was removed or recreated by another call while this one ran, so nothing was provisioned. Retry.`,
+      );
+      expect(events.filter(e => e.commandName === 'createSearchIndexes')).toEqual([]);
+      expect(await entry(coll)).toBeNull();
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+    });
+
+    it('P-FENCE-2: a crash after the create leaves creating, which the reconciler records uncertain', async () => {
+      const coll = await byoColl('pfence2');
+      const vec = `${coll}_vector_index`;
+      const logs = captureLogs(b);
+      await crashAt(coll, 'afterAtlasCreate');
+      const id = (await listedId(db, coll, vec))!;
+      expect(id).toBeDefined();
+      expect(await docsOn(coll)).toMatchObject([{ state: 'creating' }]);
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toMatchObject([{ state: 'uncertain', candidateId: id }]);
+      expect(logs.warn).toContain(uncertainText(vec, coll, id));
+      clean.opts = { journalExpected: true };
+    });
+
+    it('P-FENCE-3: a proof after the reconciler removed the creating doc restores it and records ownership', async () => {
+      const coll = await byoColl('pfence3');
+      const vec = `${coll}_vector_index`;
+      const p = pause();
+      hooks(a, { leaseMs: 0, beforeProof: p.hook });
+      hooks(b, { listSearchIndexesStub: (_n: string, phase: string) => (phase === 'reconciler' ? [] : undefined) });
+      const call = createByo(a, coll);
+      try {
+        await reached(p);
+        await reconcile(b, coll);
+        expect(await docsOn(coll)).toEqual([]);
+      } finally {
+        p.release.resolve();
+      }
+      await call;
+      checker.restoreHooks();
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
+      expect(await docsOn(coll)).toEqual([]);
+    });
+
+    it('P-CRASH-a: a crash before the P3 check is resolved, and a later refresh owns the index', async () => {
+      const coll = await byoColl('pcrasha');
+      await crashAt(coll, 'beforePendingDropCheck');
+      await createByo(b, coll);
+      expect(await docsOn(coll)).toEqual([]);
+      const e = await entry(coll);
+      expect(e?.ownsVectorIndex).toBe(true);
+      expect(e?.indexIds).toEqual([
+        { name: `${coll}_vector_index`, id: await listedId(db, coll, `${coll}_vector_index`) },
+      ]);
+    });
+
+    it('P-CRASH-b: a crash at intent is removed by the reconciler, idempotently', async () => {
+      const coll = await byoColl('pcrashb');
+      await crashAt(coll, 'afterProvisionIntent');
+      expect(await docsOn(coll)).toMatchObject([{ state: 'intent' }]);
+      await reconcile(b, coll);
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toEqual([]);
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+    });
+
+    it('P-CRASH-c: a crash in creating before the create is removed by the reconciler, idempotently', async () => {
+      const coll = await byoColl('pcrashc');
+      await crashAt(coll, 'createSearchIndexesCommand');
+      expect(await docsOn(coll)).toMatchObject([{ state: 'creating' }]);
+      await reconcile(b, coll);
+      await reconcile(b, coll);
+      expect(await docsOn(coll)).toEqual([]);
+      expect(await searchIndexNames(db, coll)).toEqual([]);
+    });
+
+    it('RF-STANDALONE: provisioning on a standalone server fails, rolls back and leaves no journal doc', async () => {
+      const uri = 'mongodb://localhost:27017';
+      const dbName = uniqueName('standalone');
+      const s = new MongoDBVector({ uri, dbName, id: 'j-standalone' });
+      await s.connect();
+      const raw = await new MongoClient(uri).connect();
+      try {
+        const name = uniqueName('rfstd');
+        await expect(s.createIndex({ indexName: name, dimension: 4 })).rejects.toThrow();
+        const sdb = raw.db(dbName);
+        expect(await sdb.collection(REGISTRY).findOne({ _id: name as any })).toBeNull();
+        expect(await sdb.collection(JOURNAL).findOne({ indexName: name })).toBeNull();
+      } finally {
+        await raw
+          .db(dbName)
+          .dropDatabase()
+          .catch(() => {});
+        await raw.close();
+        await s.disconnect();
+      }
     });
   });
 });

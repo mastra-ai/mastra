@@ -38,6 +38,10 @@ export async function seedRegistry(db: Db, doc: Document): Promise<void> {
   await db.collection(REGISTRY).insertOne(doc);
 }
 
+export async function seedJournal(db: Db, doc: Document): Promise<void> {
+  await db.collection(JOURNAL).insertOne(doc);
+}
+
 let counter = 0;
 export function uniqueName(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${counter++}`;

@@ -1,6 +1,6 @@
 import { MongoNetworkError, MongoServerError } from 'mongodb';
 import { describe, expect, it } from 'vitest';
-import { classify, idTimestampMs, isLiveRow, isNewerId, p4OutcomeOf } from './provisioning';
+import { classify, idTimestampMs, isLiveRow, isNewerId, p4OutcomeOf, resolveCreating } from './provisioning';
 
 const at = new Date('2026-11-17T12:00:00Z');
 const idAt = (d: Date) =>
@@ -99,5 +99,28 @@ describe('helpers', () => {
   it('p4OutcomeOf', () => {
     expect(p4OutcomeOf(new MongoServerError({ code: 68, codeName: 'IndexAlreadyExists' })).kind).toBe('refused');
     expect(p4OutcomeOf(new MongoNetworkError('x')).kind).toBe('unknown');
+  });
+});
+
+describe('resolveCreating', () => {
+  const recent = idAt(new Date(at.getTime() - 5000));
+  it('absent, held or older than the margin: delete', () => {
+    expect(resolveCreating(undefined, at, new Set())).toEqual({ action: 'delete', byTimestamp: false });
+    expect(resolveCreating({ name: 'n', id: recent }, at, new Set([recent]))).toEqual({
+      action: 'delete',
+      byTimestamp: false,
+    });
+    const old = idAt(new Date(at.getTime() - 31_000));
+    expect(resolveCreating({ name: 'n', id: old }, at, new Set())).toEqual({ action: 'delete', byTimestamp: true });
+  });
+  it('a recent unheld id, of any status, is uncertain', () => {
+    expect(resolveCreating({ name: 'n', id: recent }, at, new Set())).toEqual({
+      action: 'uncertain',
+      candidateId: recent,
+    });
+    expect(resolveCreating({ name: 'n', id: recent, status: 'DELETING' }, at, new Set([X]))).toEqual({
+      action: 'uncertain',
+      candidateId: recent,
+    });
   });
 });

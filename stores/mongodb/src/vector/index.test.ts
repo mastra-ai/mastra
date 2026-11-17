@@ -155,10 +155,28 @@ const literalsOf = (update: any): Record<string, unknown> =>
       )
     : update.$set;
 
+/**
+ * A mocked provisioning journal, where every write succeeds and nothing is left to reconcile, and a
+ * P7 transaction that runs its callback directly, since there is no server.
+ */
+const stubJournal = (v: MongoDBVector) => {
+  vi.spyOn(v as any, 'inTransaction').mockImplementation((fn: any) => fn(undefined));
+  return {
+    createIndexes: async () => [],
+    find: () => ({ limit: () => ({ toArray: async () => [] }), toArray: async () => [] }),
+    updateOne: async () => ({ matchedCount: 1 }),
+    // The fence (P3b) returns the fenced doc.
+    findOneAndUpdate: async ({ _id }: { _id: string }) => ({ _id, creatingAt: new Date() }),
+    findOneAndDelete: async () => null,
+    deleteOne: async () => ({ deletedCount: 1 }),
+  };
+};
+
 const stubDb = (v: MongoDBVector) => {
   // The pre-provision check reads the call's own entry back and expects the targets it is about
   // to provision, so the fake registry returns the cached target plus the fields last written.
   const written: Record<string, unknown> = {};
+  const journal = stubJournal(v);
   (v as any).db = {
     listCollections: () => ({ hasNext: async () => true }),
     // The primary's clock, read before each create.
@@ -173,24 +191,27 @@ const stubDb = (v: MongoDBVector) => {
           }
         : { ok: 1 },
     ),
-    collection: () => ({
-      findOne: async ({ _id }: { _id: string }) => ({
-        _id,
-        ...(v as any).indexTargets.get(_id),
-        ...written,
-        generation: 'g0',
-      }),
-      find: () => ({ toArray: async () => [] }),
-      // Pipeline updates wrap written values in $literal; anything else is an expression.
-      updateOne: async (_filter: unknown, update: any) => {
-        Object.assign(written, literalsOf(update));
-        return { matchedCount: 1 };
-      },
-      findOneAndUpdate: async ({ _id }: { _id: string }, update: any) => {
-        Object.assign(written, literalsOf(update));
-        return { ...P0_RAW, value: { _id, ...P0_RAW.value } };
-      },
-    }),
+    collection: (name: string) =>
+      name === '__mastra_vector_ops__'
+        ? journal
+        : {
+            findOne: async ({ _id }: { _id: string }) => ({
+              _id,
+              ...(v as any).indexTargets.get(_id),
+              ...written,
+              generation: 'g0',
+            }),
+            find: () => ({ toArray: async () => [] }),
+            // Pipeline updates wrap written values in $literal; anything else is an expression.
+            updateOne: async (_filter: unknown, update: any) => {
+              Object.assign(written, literalsOf(update));
+              return { matchedCount: 1 };
+            },
+            findOneAndUpdate: async ({ _id }: { _id: string }, update: any) => {
+              Object.assign(written, literalsOf(update));
+              return { ...P0_RAW, value: { _id, ...P0_RAW.value } };
+            },
+          },
   };
 };
 
@@ -2693,6 +2714,7 @@ describe('MongoDBVector autoEmbed', () => {
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
+      const journal = stubJournal(v);
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
         admin: () => ({ command: async () => ({ localTime: new Date() }) }),
@@ -2700,7 +2722,7 @@ describe('MongoDBVector autoEmbed', () => {
           ok: 1,
           indexesCreated: cmd.indexes?.map((i: any) => ({ id: new ObjectId().toHexString(), name: i.name })),
         })),
-        collection: () => registry,
+        collection: (name: string) => (name === '__mastra_vector_ops__' ? journal : registry),
       };
 
       await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4', path: 'fullplot' } });
@@ -2732,6 +2754,7 @@ describe('MongoDBVector autoEmbed', () => {
         updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
         find: () => ({ toArray: async () => [] }),
       };
+      const journal = stubJournal(v);
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
         admin: () => ({ command: async () => ({ localTime: new Date() }) }),
@@ -2739,7 +2762,7 @@ describe('MongoDBVector autoEmbed', () => {
           ok: 1,
           indexesCreated: cmd.indexes?.map((i: any) => ({ id: new ObjectId().toHexString(), name: i.name })),
         })),
-        collection: () => registry,
+        collection: (name: string) => (name === '__mastra_vector_ops__' ? journal : registry),
       };
 
       await v.createIndex({ indexName: 'movies', dimension: 1024 });

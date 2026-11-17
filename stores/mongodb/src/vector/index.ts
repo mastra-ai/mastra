@@ -33,14 +33,17 @@ import type { DeleteCleanupPlan } from './ownership';
 import {
   CREATE_TIMEOUT_MS,
   ID_TIMESTAMP_MARGIN_MS,
+  LEASE_MS,
+  RECONCILE_BATCH,
   classify,
   idTimestampMs,
   isLiveRow,
   isNewerId,
   p4OutcomeOf,
+  resolveCreating,
   rollbackRestore,
 } from './provisioning';
-import type { ListPhase, P0Pin, P4Outcome, SearchIndexRow } from './provisioning';
+import type { JournalDoc, ListPhase, P0Pin, P4Outcome, SearchIndexRow } from './provisioning';
 import { searchDefinitionsEquivalent } from './search-definition';
 
 // Define necessary types and interfaces
@@ -519,8 +522,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     beforeDecisivePreList?: (indexName: string, name: string) => Promise<void>;
     /** Replaces a listing's result for a phase; undefined means the real listing. May throw. */
     listSearchIndexesStub?: (name: string, phase: ListPhase) => SearchIndexRow[] | undefined;
-    /** Called after the decisive pre-list found the name absent, right before the create. */
+    /** Called right after the P2 intent insert. */
+    afterProvisionIntent?: (indexName: string, name: string) => Promise<void>;
+    /** Called after the decisive pre-list found the name absent, right before the P3b fence and the create. */
     beforeAtlasCreate?: (indexName: string, name: string) => Promise<void>;
+    /** Called after a proven verdict, right before the P6 proof write. */
+    beforeProof?: (indexName: string, name: string) => Promise<void>;
+    /** Overrides the journal lease (LEASE_MS). */
+    leaseMs?: number;
     /** Called after the create returned or failed. May throw. */
     afterAtlasCreate?: (indexName: string, name: string) => Promise<void>;
     /** Called by refresh-time TOFU after listing a name, right before recording its id. */
@@ -534,6 +543,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * collection is never polluted with mastra bookkeeping. Excluded from `listIndexes`.
    */
   private static readonly REGISTRY_COLLECTION = '__mastra_vector_indexes__';
+  /** The provisioning journal (§2.2): one doc per search-index create attempt. Excluded from `listIndexes`. */
+  private static readonly JOURNAL_COLLECTION = '__mastra_vector_ops__';
+  /** The journal's indexes, ensured once per instance; reset on failure so a later call retries. */
+  private journalIndexes?: Promise<unknown>;
   /**
    * Registry reads and writes, and their transactions, never inherit the client's read preference
    * or concerns (I7a): a read from a lagging secondary would miss a committed registration.
@@ -738,6 +751,99 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION, MongoDBVector.TXN_OPTIONS);
   }
 
+  /** The journal handle, with the registry's I7a options. */
+  private journal(): Collection<JournalDoc> {
+    const journal = this.db.collection<JournalDoc>(MongoDBVector.JOURNAL_COLLECTION, MongoDBVector.TXN_OPTIONS);
+    this.journalIndexes ??= journal
+      .createIndexes([{ key: { collectionName: 1, name: 1, state: 1 } }, { key: { indexName: 1, generation: 1 } }])
+      .catch(() => (this.journalIndexes = undefined));
+    return journal;
+  }
+
+  /** Run `fn` in a transaction with the I7a options. */
+  private async inTransaction<T>(fn: (session: ClientSession) => Promise<T>): Promise<T> {
+    const session = this.client.startSession();
+    try {
+      let result!: T;
+      await session.withTransaction(async () => {
+        result = await fn(session);
+      }, MongoDBVector.TXN_OPTIONS);
+      return result;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
+   * The lazy reconciler (§4): resolves this collection's journal docs whose lease expired. An
+   * `intent` never reached Atlas and goes; a `creating` one goes when its name is absent or its
+   * row is explained, and otherwise becomes `uncertain` (I9). Every write is conditioned on the
+   * observed state, so concurrent reconcilers and a live op never double-apply. Never throws.
+   */
+  private async reconcile(collectionName: string): Promise<void> {
+    try {
+      const journal = this.journal();
+      const expired = { $expr: { $lt: ['$leaseUntil', '$$NOW'] } };
+      // `uncertain` docs are never resolved here; selecting them could starve the rest of the batch.
+      const docs = await journal
+        .find({ collectionName, state: { $ne: 'uncertain' }, ...expired })
+        .limit(RECONCILE_BATCH)
+        .toArray();
+      for (const doc of docs) {
+        try {
+          if (doc.state === 'intent') await journal.findOneAndDelete({ _id: doc._id, state: 'intent', ...expired });
+          else if (doc.state === 'creating') await this.reconcileCreating(doc);
+          // `created` and `orphaned` are resolved by a later stage.
+        } catch (error) {
+          this.logger.warn(`could not reconcile provisioning record ${doc._id} on "${collectionName}": ${error}`);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`could not reconcile the provisioning records of "${collectionName}": ${error}`);
+    }
+  }
+
+  /** §4.2 `creating`: list the name, then delete the doc or mark it `uncertain`. */
+  private async reconcileCreating(doc: JournalDoc): Promise<void> {
+    const { _id, collectionName, name } = doc;
+    const [row] = await this.listSearchIndexRows(this.db.collection(collectionName), name, 'reconciler');
+    const heldIds = new Set<string>();
+    if (row) {
+      for (const e of await this.registry().find({ collectionName }).toArray())
+        for (const x of e.indexIds ?? []) heldIds.add(x.id);
+      for (const j of await this.journal()
+        .find({ collectionName, _id: { $ne: _id } })
+        .toArray()) {
+        if (j.indexId) heldIds.add(j.indexId);
+        if (j.candidateId) heldIds.add(j.candidateId);
+      }
+    }
+    const creatingAt = doc.creatingAt ?? new Date(0);
+    const resolution = resolveCreating(row, creatingAt, heldIds);
+    if (resolution.action === 'delete') {
+      const deleted = await this.journal().findOneAndDelete({ _id, state: 'creating' });
+      if (deleted && resolution.byTimestamp) this.warnForeignByTimestamp(name, collectionName, row!.id!, creatingAt);
+      return;
+    }
+    const marked = await this.journal().updateOne(
+      { _id, state: 'creating' },
+      { $set: { state: 'uncertain', candidateId: resolution.candidateId } },
+    );
+    if (marked.modifiedCount === 1) this.warnUncertain(name, collectionName, resolution.candidateId);
+  }
+
+  private warnUncertain(name: string, collectionName: string, candidateId: string | undefined): void {
+    this.logger.warn(
+      `search index "${name}" on "${collectionName}" (id ${candidateId}) may have been created by Mastra; kept; drop it manually if unused`,
+    );
+  }
+
+  private warnForeignByTimestamp(name: string, collectionName: string, id: string, creatingAt: Date): void {
+    this.logger.warn(
+      `search index "${name}" on "${collectionName}" (id ${id}) is not recorded as created by Mastra: its id time ${new Date(idTimestampMs(id)!).toISOString()} is more than ${ID_TIMESTAMP_MARGIN_MS / 1000} s before the pre-list at ${creatingAt.toISOString()}`,
+    );
+  }
+
   /**
    * The only path for `createSearchIndexes`, `dropSearchIndex` and `updateSearchIndex` (I7a): on the
    * primary, with no read or write concern, which the server rejects for these commands.
@@ -910,9 +1016,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     name: string,
     generation: string,
     id: string,
+    session?: ClientSession,
   ): Promise<string | undefined> {
     const registry = this.registry();
-    const recorded = (await registry.findOne({ _id: indexName }))?.indexIds?.find(e => e.name === name)?.id;
+    const recorded = (await registry.findOne({ _id: indexName }, { session }))?.indexIds?.find(
+      e => e.name === name,
+    )?.id;
     let keep = id;
     if (recorded && recorded !== id && isNewerId(recorded, id)) {
       keep = recorded;
@@ -940,15 +1049,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           },
         },
       ],
+      { session },
     );
     return written.matchedCount === 1 ? keep : undefined;
   }
 
   /**
-   * Provision one search index (§3.1, S2 interim semantics): the P3 check, the decisive pre-list
-   * (P3a), the create by raw command (P4), the verdict (P5) and recording the proven id (P7).
-   * Never rolls back itself; every failure is a {@link ProvisionAbort} telling the caller whether
-   * it still may.
+   * Provision one search index (§3.1): the attach fast path (P1), the journal intent (P2), the P3
+   * check, the decisive pre-list (P3a), the fence (P3b), the create by raw command (P4), the
+   * verdict (P5), the durable proof (P6) and recording the proven id (P7). Never rolls back itself;
+   * every failure is a {@link ProvisionAbort} telling the caller whether it still may.
    */
   private async provisionSearchIndex(args: {
     indexName: string;
@@ -960,8 +1070,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     check: () => Promise<void>;
   }): Promise<{ outcome: 'owned'; id: string } | { outcome: 'attached'; row: SearchIndexRow | undefined }> {
     const { indexName, collection, role, op, description, pin, check } = args;
-    const { name } = description;
+    const { name, type } = description;
     const collectionName = collection.collectionName;
+    const leaseMs = this.testHooks?.leaseMs ?? LEASE_MS;
+    const journal = this.journal();
+    const _id = `${pin.claimToken}:${role}`;
+    const identity = { indexName, generation: pin.generation, collectionName, name, type, role };
     const stuck = (row: SearchIndexRow) =>
       new MastraError({
         id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
@@ -970,18 +1084,72 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         details: { indexName, collectionName },
         text: `search index "${name}" on "${collectionName}" is in status ${row.status} (id ${row.id}); the previous index under this name is still being removed. Retry. If it persists, drop it manually.`,
       });
+    // A reconciler may have removed it already; then this matches nothing.
+    const dropIntent = () => journal.findOneAndDelete({ _id, state: 'intent' });
+    let hasIntent = false;
     let p4: P4Outcome | undefined;
     try {
+      // P1: an existing live row is attached without a journal doc.
+      const [listed] = await this.listSearchIndexRows(collection, name, 'P1');
+      if (listed) {
+        if (!isLiveRow(listed)) throw stuck(listed);
+        await check();
+        return { outcome: 'attached', row: listed };
+      }
+      // P2. An upsert only so the lease is on the server's clock, as the reconciler compares it there;
+      // `_id` is this call's own, so it always inserts.
+      await journal.updateOne(
+        { _id },
+        [
+          {
+            $set: {
+              ...literals({ ...identity, state: 'intent' }),
+              leaseUntil: { $add: ['$$NOW', leaseMs] },
+              createdAt: '$$NOW',
+            },
+          },
+        ],
+        { upsert: true },
+      );
+      hasIntent = true;
+      await this.testHooks?.afterProvisionIntent?.(indexName, name);
       await check();
       await this.testHooks?.beforeDecisivePreList?.(indexName, name);
       const [pre] = await this.listSearchIndexRows(collection, name, 'P3a');
       if (pre) {
+        await dropIntent();
+        hasIntent = false;
         if (!isLiveRow(pre)) throw stuck(pre);
         return { outcome: 'attached', row: pre };
       }
-      // The primary's clock, so client skew cannot trip the id-timestamp rule.
-      const creatingAt: Date = (await this.db.admin().command({ hello: 1 })).localTime;
       await this.testHooks?.beforeAtlasCreate?.(indexName, name);
+      // P3b: the server's clock, so client skew can't trip the id-timestamp rule.
+      const fenced = await journal.findOneAndUpdate(
+        { _id, state: 'intent' },
+        [
+          {
+            $set: {
+              state: { $literal: 'creating' },
+              preListAbsent: { $literal: true },
+              creatingAt: '$$NOW',
+              leaseUntil: { $add: ['$$NOW', leaseMs] },
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
+      hasIntent = false;
+      if (!fenced) {
+        // A reconciler removed the intent: this call outlived its lease and must not call Atlas.
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, collectionName },
+          text: `Index "${indexName}" was removed or recreated by another call while this one ran, so nothing was provisioned. Retry.`,
+        });
+      }
+      const creatingAt = fenced.creatingAt!;
       try {
         const reply = await this.runSearchIndexCommand(
           { createSearchIndexes: collectionName, indexes: [description] },
@@ -997,7 +1165,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const [row] = await this.listSearchIndexRows(collection, name, 'P5').catch(() => []);
       const verdict = classify(p4, row, creatingAt);
       if (verdict.kind === 'proven') {
-        const recorded = await this.recordOwnership(indexName, role, name, pin.generation, verdict.id);
+        await this.testHooks?.beforeProof?.(indexName, name);
+        // P6: restores a complete doc even if a reconciler removed it meanwhile.
+        await journal.updateOne(
+          { _id },
+          {
+            $set: { state: 'created', indexId: verdict.id },
+            $setOnInsert: { ...identity, createdAt: new Date(), leaseUntil: new Date(Date.now() + leaseMs) },
+          },
+          { upsert: true },
+        );
+        // P7. A miss leaves the doc `created`, still recording the index.
+        const recorded = await this.inTransaction(async session => {
+          const kept = await this.recordOwnership(indexName, role, name, pin.generation, verdict.id, session);
+          if (kept) await journal.deleteOne({ _id }, { session });
+          return kept;
+        });
         if (!recorded) {
           throw new ProvisionAbort(
             new MastraError({
@@ -1012,22 +1195,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         }
         return { outcome: 'owned', id: recorded };
       }
-      if (row && !isLiveRow(row)) throw new ProvisionAbort(stuck(row), true);
       switch (verdict.kind) {
-        case 'foreign':
-          if (verdict.byTimestamp) {
-            const id = (p4 as { id: string }).id;
-            this.logger.warn(
-              `search index "${name}" on "${collectionName}" (id ${id}) is not recorded as created by Mastra: its id time ${new Date(idTimestampMs(id)!).toISOString()} is more than ${ID_TIMESTAMP_MARGIN_MS / 1000} s before the pre-list at ${creatingAt.toISOString()}`,
-            );
-          }
-          return { outcome: 'attached', row };
         case 'uncertain':
-          this.logger.warn(
-            `search index "${name}" on "${collectionName}" (id ${verdict.candidateId}) may have been created by Mastra; kept; drop it manually if unused`,
+          // Kept, never owned or dropped (I9); upserted in case a reconciler removed the doc meanwhile.
+          await journal.updateOne(
+            { _id },
+            {
+              $set: { state: 'uncertain', candidateId: verdict.candidateId },
+              $setOnInsert: { ...identity, createdAt: new Date(), leaseUntil: new Date(Date.now() + leaseMs) },
+            },
+            { upsert: true },
           );
+          this.warnUncertain(name, collectionName, verdict.candidateId);
+          if (!isLiveRow(row)) throw new ProvisionAbort(stuck(row!), false);
           return { outcome: 'attached', row };
         case 'pending':
+          // The doc stays `creating`: the reconciler deletes it, or marks a late create uncertain.
           throw new ProvisionAbort(
             new MastraError(
               {
@@ -1041,22 +1224,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             ),
             false,
           );
-        case 'not-created': {
-          const error = (p4 as { error: any }).error;
-          // Atlas Local refuses a create racing an identical one as a duplicate name: the listed
-          // row is the winner's, never this call's, so attach (I6).
-          if (error?.code === 2 && /duplicate index name/i.test(String(error?.message)) && isLiveRow(row)) {
-            // debug, not warn: the expected outcome of identical concurrent calls, nothing to act on.
-            this.logger.debug(
-              `search index "${name}" on "${collectionName}": a concurrent identical create won (id ${row!.id}); attached, not recorded as created by this call`,
-            );
-            return { outcome: 'attached', row };
-          }
-          throw new ProvisionAbort(error, true);
-        }
       }
+      // Foreign or not created: nothing of this attempt to record.
+      await journal.deleteOne({ _id });
+      if (row && !isLiveRow(row)) throw new ProvisionAbort(stuck(row), true);
+      if (verdict.kind === 'foreign') {
+        if (verdict.byTimestamp)
+          this.warnForeignByTimestamp(name, collectionName, (p4 as { id: string }).id, creatingAt);
+        return { outcome: 'attached', row };
+      }
+      const error = (p4 as { error: any }).error;
+      // Atlas Local refuses a create racing an identical one as a duplicate name: the listed
+      // row is the winner's, never this call's, so attach (I6).
+      if (error?.code === 2 && /duplicate index name/i.test(String(error?.message)) && isLiveRow(row)) {
+        // debug, not warn: the expected outcome of identical concurrent calls, nothing to act on.
+        this.logger.debug(
+          `search index "${name}" on "${collectionName}": a concurrent identical create won (id ${row!.id}); attached, not recorded as created by this call`,
+        );
+        return { outcome: 'attached', row };
+      }
+      throw new ProvisionAbort(error, true);
     } catch (error) {
       if (error instanceof ProvisionAbort) throw error;
+      // P3 failure: the intent goes (best effort; the reconciler removes it otherwise).
+      if (hasIntent) await dropIntent().catch(() => {});
       // Before the create every failure is rollback-eligible; after it, nothing is known.
       throw new ProvisionAbort(error, !p4 || p4.kind === 'refused');
     }
@@ -1195,8 +1386,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       for (const name of collection ? recordedDropSet(entry) : [])
         observed[name] = await this.liveIdOf(collection!, name, 'delete');
       let attempt = 0;
+      let uncertain: JournalDoc[] = [];
       work = await this.runDeleteTransaction(indexName, async session => {
         attempt++;
+        uncertain = [];
         const own = await registry.findOne({ _id: indexName }, { session });
         // Missing, or recreated elsewhere since our first read: the registration we were asked
         // to delete is already finished, and the replacement is not ours to touch.
@@ -1220,6 +1413,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             text: `Registrations using the search indexes of index "${indexName}" changed while deleteIndex ran, so nothing was dropped. Retry deleteIndex({ indexName: "${indexName}" }).`,
           });
         }
+        // Uncertain records of this lifetime, and of lifetimes no registration on the collection holds.
+        const held = (
+          await registry.find({ collectionName: own.collectionName, _id: { $ne: indexName } }, { session }).toArray()
+        ).flatMap(d => (d.generation ? [d.generation] : []));
+        uncertain = await this.journal()
+          .find(
+            {
+              collectionName: own.collectionName,
+              state: 'uncertain',
+              $or: [...(own.generation ? [{ generation: own.generation }] : []), { generation: { $nin: held } }],
+            },
+            { session },
+          )
+          .toArray();
+        if (uncertain.length) await this.journal().deleteMany({ _id: { $in: uncertain.map(d => d._id) } }, { session });
         // Every concurrent delete transaction on this collection writes these documents, so they conflict.
         await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
         if (!drop.length) {
@@ -1246,6 +1454,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         );
         return { drop, deleteToken };
       });
+      // Logged after the commit, so a retried transaction logs each once.
+      for (const d of uncertain) this.warnUncertain(d.name, d.collectionName, d.candidateId);
     }
     if (typeof work === 'string') return;
 
@@ -1764,6 +1974,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // (The effective values are finalized after reading any existing registry entry:
     // classification is sticky and the write policy is preserved on refresh.)
 
+    await this.reconcile(targetCollection);
     let collection;
     let collectionCreated = false;
     try {
@@ -2253,6 +2464,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.indexTargets.delete(indexName);
     const target = await this.resolveIndexTarget(indexName);
     const { collectionName } = target;
+    await this.reconcile(collectionName);
     // A field-mapped index must not collide with the auto-created dynamic index (which would
     // no-op the field mapping), and two logical indexes on the SAME collection must not collide
     // with each other (FIX 6), so the default name includes the logical indexName.
@@ -3352,7 +3564,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collections = await this.db.listCollections().toArray();
       for (const col of collections) {
         const name = col.name;
-        if (name === MongoDBVector.REGISTRY_COLLECTION) continue;
+        if (name === MongoDBVector.REGISTRY_COLLECTION || name === MongoDBVector.JOURNAL_COLLECTION) continue;
         if (names.has(name) || registeredCollections.has(name)) continue;
         try {
           const searchIndexes = await this.db.collection(name).listSearchIndexes().toArray();
@@ -3477,6 +3689,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.indexTargets.delete(indexName);
     try {
       const entry = await this.readRegistryEntry(indexName);
+      if (entry) await this.reconcile(entry.collectionName);
       // A managed index that adopted an existing collection is handled like BYO: the collection stays.
       if (entry && (entry.isByo || entry.ownsCollection === false)) {
         // A lagging secondary could report the collection missing and leak the indexes Mastra created.
@@ -3536,6 +3749,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * One-time upgrade helper for managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15–1.27 without ownership records. Calling it asserts that Mastra created the collection and its recorded search indexes; `deleteIndex()` will then drop the collection and all its data.
    */
   async claimLegacyIndex({ indexName }: { indexName: string }): Promise<void> {
+    await this.reconcile(indexName);
     const registry = this.registry();
     const vectorIndex = `${indexName}_vector_index`;
     const refuse = (

@@ -85,3 +85,41 @@ export function classify(p4: P4Outcome, row: SearchIndexRow | undefined, creatin
     return { kind: 'foreign', byTimestamp: true };
   return { kind: 'proven', id: p4.id };
 }
+
+export type JournalState = 'intent' | 'creating' | 'created' | 'orphaned' | 'uncertain';
+
+/** One physical-index provisioning attempt in `__mastra_vector_ops__` (§2.2). */
+export interface JournalDoc {
+  /** `${opToken}:${role}`, where `opToken` is the op's P0 `claimToken`. */
+  _id: string;
+  indexName: string;
+  generation: string;
+  collectionName: string;
+  name: string;
+  type: 'vectorSearch' | 'search';
+  role: 'vector' | 'text';
+  state: JournalState;
+  preListAbsent?: true;
+  creatingAt?: Date;
+  indexId?: string;
+  candidateId?: string;
+  leaseUntil: Date;
+  createdAt: Date;
+}
+
+/**
+ * §4.2 for an abandoned `creating` doc: an absent name, or a row whose id another record holds or
+ * whose id time is more than the margin before `creatingAt`, is not this attempt's, so the doc goes.
+ * Anything else may be ours and is kept as uncertain. Rows of any status count as present.
+ */
+export function resolveCreating(
+  row: SearchIndexRow | undefined,
+  creatingAt: Date,
+  heldIds: Set<string>,
+): { action: 'delete'; byTimestamp: boolean } | { action: 'uncertain'; candidateId: string } {
+  if (!row?.id || heldIds.has(row.id)) return { action: 'delete', byTimestamp: false };
+  const ts = idTimestampMs(row.id);
+  if (ts !== undefined && ts < creatingAt.getTime() - ID_TIMESTAMP_MARGIN_MS)
+    return { action: 'delete', byTimestamp: true };
+  return { action: 'uncertain', candidateId: row.id };
+}
