@@ -115,13 +115,17 @@ export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ c
 ));
 CardFooter.displayName = 'CardFooter';
 
-export type CardInsetProps = React.HTMLAttributes<HTMLDivElement>;
+export type CardInsetProps = React.HTMLAttributes<HTMLElement> & {
+  as?: React.ElementType;
+};
 
-export const CardInset = React.forwardRef<HTMLDivElement, CardInsetProps>(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('divide-y divide-border overflow-hidden rounded-lg border border-border bg-background', className)}
-    {...props}
-  />
-));
+export const CardInset = React.forwardRef<HTMLElement, CardInsetProps>(
+  ({ className, as: Component = 'div', ...props }, ref) => (
+    <Component
+      ref={ref}
+      className={cn('divide-y divide-border overflow-hidden rounded-lg border border-border bg-sidebar', className)}
+      {...props}
+    />
+  ),
+);
 CardInset.displayName = 'CardInset';

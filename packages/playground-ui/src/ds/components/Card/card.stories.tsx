@@ -2,7 +2,18 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { Badge } from '../Badge';
 import { Button } from '../Button';
-import { SectionCard } from '../SectionCard';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../Dialog';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardInset, CardLink, CardTitle } from './Card';
 
 const meta: Meta<typeof Card> = {
@@ -106,21 +117,37 @@ function InsetRows() {
 
 export const Inset: Story = {
   render: args => (
-    <div className="grid w-[min(32rem,calc(100vw-2rem))] gap-6">
-      <Card {...args}>
-        <CardHeader className="pt-3">
-          <CardTitle>Add importer</CardTitle>
-          <CardDescription>
-            Syncs a connection's documents into Knowledge as pages your agents can read.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <InsetRows />
-        </CardContent>
-      </Card>
-      <SectionCard title="Importer" description="Settings for the Acme Linear importer">
+    <Card {...args} className="w-[min(32rem,calc(100vw-2rem))]">
+      <CardHeader className="pt-3">
+        <CardTitle>Importer</CardTitle>
+        <CardDescription>Syncs a connection's documents into Knowledge as pages your agents can read.</CardDescription>
+      </CardHeader>
+      <CardContent>
         <InsetRows />
-      </SectionCard>
-    </div>
+      </CardContent>
+    </Card>
+  ),
+};
+
+export const InsetInDialog: Story = {
+  render: () => (
+    <Dialog defaultOpen>
+      <DialogTrigger render={<Button>Add importer</Button>} />
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>Add importer</DialogTitle>
+          <DialogDescription>
+            Syncs a connection's documents into Knowledge as pages your agents can read.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <InsetRows />
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={() => {}}>Add importer</DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   ),
 };
