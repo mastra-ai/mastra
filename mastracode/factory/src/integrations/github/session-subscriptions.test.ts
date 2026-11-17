@@ -287,6 +287,36 @@ describe('parsePushedBranches', () => {
     expect(parsePushedBranches({ toolName: 'view', input: { command: 'git push' }, output })).toEqual([]);
   });
 
+  it.each(['git push --dry-run origin a', 'git push -n origin a', 'cd x && git push -fn origin a'])(
+    'ignores dry runs, which report updates without making them: %s',
+    command => {
+      const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+      expect(parsePushedBranches(push(output, command))).toEqual([]);
+    },
+  );
+
+  it('still reads a real push that follows a dry run', () => {
+    const output = 'To https://github.com/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n';
+    expect(parsePushedBranches(push(output, 'git push -n origin a && git push --no-verify origin a'))).toEqual([
+      { repository: 'mastra-ai/mastra', branch: 'a' },
+    ]);
+  });
+
+  it.each([
+    'https://notgithub.com/mastra-ai/mastra.git',
+    'https://github.com.evil.dev/mastra-ai/mastra.git',
+    'https://evil.dev/github.com/mastra-ai/mastra.git',
+    'git@notgithub.com:mastra-ai/mastra.git',
+  ])('ignores remotes whose host only looks like GitHub: %s', remote => {
+    expect(parsePushedBranches(push(`To ${remote}\n   1a2b3c4..5d6e7f8  a -> a\n`))).toEqual([]);
+  });
+
+  it('accepts ssh:// GitHub remotes', () => {
+    expect(
+      parsePushedBranches(push('To ssh://git@github.com:22/mastra-ai/mastra.git\n   1a2b3c4..5d6e7f8  a -> a\n')),
+    ).toEqual([{ repository: 'mastra-ai/mastra', branch: 'a' }]);
+  });
+
   it('reads the shared push tool result', () => {
     expect(
       parsePushedBranches({

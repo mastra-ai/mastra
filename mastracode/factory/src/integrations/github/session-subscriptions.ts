@@ -466,7 +466,9 @@ export interface PushedBranch {
 }
 
 const PUSH_REMOTE_LINE = /^To\s+(\S+)\s*$/;
-const GITHUB_REMOTE = /github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
+/** `https://[creds@]github.com/o/r`, `ssh://git@github.com[:port]/o/r` or `git@github.com:o/r`; the host must be exactly github.com. */
+const GITHUB_REMOTE =
+  /^(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?github\.com(?::\d+)?\/|(?:[^@/\s:]+@)?github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
 /**
  * A `git push` ref line that moved an existing branch: ` abc..def src -> dst`
  * or `+ abc...def src -> dst (forced update)`. New branches, deletions,
