@@ -547,7 +547,7 @@ Make tools that change external systems safe to repeat, for example by passing t
 ### Deployment requirements
 
 - Every manager must use the same storage backend, and its `updateTask` must apply the write conditions atomically. Mastra's storage adapters do. In-memory storage is only shared within one process.
-- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with NTP, to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. Recovery waits about one second past the expiry to absorb small differences.
+- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with NTP, to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. The startup scan recovers a task as soon as its lease has expired by the reader's clock. Follow-up scans wait about one second past the expiry to absorb small differences.
 - A longer `leaseDurationMs` delays recovery after a crash. A shorter one adds storage writes and makes it more likely that a stalled owner loses its lease while still running. The minimum is 3000 ms.
 
 ## Non-agent owners
