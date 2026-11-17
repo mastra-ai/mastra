@@ -3391,7 +3391,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"
@@ -13076,7 +13075,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "evaluatorSource": {
           "type": "string",
           "enum": [
-            "option",
             "env",
             "project",
             "legacy"

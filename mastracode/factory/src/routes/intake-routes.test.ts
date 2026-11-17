@@ -91,7 +91,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     options: {
       auth?: RouteAuth;
       evaluator?: 'route-list' | 'intake-order';
-      evaluatorSource?: 'option' | 'env';
     } = {},
   ) {
     const cache = new ProjectBoardCache({
@@ -119,7 +118,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         storage: domains.boards,
         boards: cache,
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
-        ...(options.evaluatorSource ? { intakeEvaluatorSource: options.evaluatorSource } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -1118,8 +1116,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         evaluatorSource: 'project',
         projectEvaluator: 'intake-order',
       });
-      // A replica with FACTORY_INTAKE_EVALUATOR (or the option) set forces its evaluator on every project.
-      const forced = replica(a, orgId, { evaluator: 'route-list', evaluatorSource: 'env' });
+      // A replica with FACTORY_INTAKE_EVALUATOR set forces its evaluator on every project.
+      const forced = replica(a, orgId, { evaluator: 'route-list' });
       expect(await read(forced.send)).toMatchObject({
         evaluator: 'route-list',
         evaluatorSource: 'env',
