@@ -1,5 +1,4 @@
 export * from './base';
-export * from './text-search';
 export * from './discovery';
 export * from './feedback';
 export * from './inmemory';
@@ -67,6 +66,10 @@ export {
   TraceQueryCursorError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceQueryUnsupportedError,
+  TRACE_QUERY_TOKEN_FIELDS,
+  TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH,
+  hasTraceQueryTokenPredicate,
   resolveTraceQueryTimeoutMs,
   findPredicateComplexityIssue,
   isTraceQueryMetadataPath,
@@ -93,6 +96,7 @@ export {
   getTraceQueryDeltaWatermark,
 } from './trace-query-plan';
 export type {
+  TraceQueryTokenField,
   TraceQueryLiteral,
   TraceQueryPathOrLiteral,
   TraceQueryScalarPredicate,
