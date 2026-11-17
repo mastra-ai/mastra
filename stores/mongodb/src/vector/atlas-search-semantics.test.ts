@@ -85,6 +85,8 @@ describe('Atlas search-index semantics (§0)', () => {
     const coll = await throwaway('s0recreate');
     const stale = createdId(await create(coll, 'n'))!;
     await dropById(coll, stale);
+    // No listing lag after a drop: R12 relies on the dropped name being absent right away.
+    expect(await listedId(db, coll, 'n')).toBeUndefined();
     const fresh = createdId(await create(coll, 'n'));
     expect(fresh).toMatch(/^[0-9a-f]{24}$/);
     expect(fresh).not.toBe(stale);

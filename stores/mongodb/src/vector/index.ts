@@ -523,6 +523,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     afterCreateIndexRead?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex right after it reads the existing registry entry. */
     afterCreateSearchIndexRead?: (indexName: string) => Promise<void>;
+    /** Called by createSearchIndex after it resolves the target and before it reads the registry entry. */
+    afterCreateSearchIndexTarget?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex after the registry write and before provisioning; a throw simulates a provisioning failure. */
     beforeSearchIndexProvision?: (indexName: string) => Promise<void>;
     /** Wraps every `createSearchIndexes` command; `run` sends the real one. */
@@ -563,6 +565,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private static readonly JOURNAL_COLLECTION = '__mastra_vector_ops__';
   /** The journal's indexes, ensured once per instance; reset on failure so a later call retries. */
   private journalIndexes?: Promise<unknown>;
+  /** Set once the journal-index failure was logged, so a persistent failure warns once per instance. */
+  private journalIndexWarned = false;
   /**
    * Registry reads and writes, and their transactions, never inherit the client's read preference
    * or concerns (I7a): a read from a lagging secondary would miss a committed registration.
@@ -773,9 +777,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.journalIndexes ??= journal
       .createIndexes([{ key: { collectionName: 1, name: 1, state: 1 } }, { key: { indexName: 1, generation: 1 } }])
       .catch(error => {
-        this.logger.warn(
-          `could not create the indexes of ${MongoDBVector.JOURNAL_COLLECTION}; retrying on the next call: ${error}`,
-        );
+        if (!this.journalIndexWarned) {
+          this.journalIndexWarned = true;
+          this.logger.warn(
+            `could not create the indexes of ${MongoDBVector.JOURNAL_COLLECTION}; retrying on the next call: ${error}`,
+          );
+        }
         this.journalIndexes = undefined;
       });
     return journal;
@@ -1285,13 +1292,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           { upsert: true },
         );
         await this.testHooks?.beforeRecordOwnership?.(indexName, name);
-        const conflict = (text: string) =>
+        const conflict = (text: string, cleanup?: string) =>
           new ProvisionAbort(
             new MastraError({
               id: createVectorErrorId('MONGODB', op, 'CONFLICT'),
               domain: ErrorDomain.STORAGE,
               category: ErrorCategory.USER,
-              details: { indexName, collectionName, searchIndexName: name },
+              details: { indexName, collectionName, searchIndexName: name, ...(cleanup ? { cleanup } : {}) },
               text,
             }),
             false,
@@ -1311,13 +1318,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           if (!current || current.generation !== pin.generation || current.deleting) {
             // P7c: no registration of this lifetime is left to hold the index.
             const now = new Date();
-            await this.cleanupOrphan(
+            // details.cleanup says what actually happened, e.g. `failed` when the drop did not go through.
+            const cleanup = await this.cleanupOrphan(
               { _id, ...identity, state: 'created', indexId: verdict.id, leaseUntil: now, createdAt: now },
               1,
               op,
             );
             throw conflict(
               'the registration was removed or recreated while this call ran; what it created was handed over or removed',
+              cleanup,
             );
           }
           // P7b: kept as a retired index of this registration, dropped by deleteIndex (Q4).
@@ -1371,14 +1380,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         return { outcome: 'attached', row };
       }
       const error = (p4 as { error: any }).error;
-      // Atlas Local refuses a create racing an identical one as a duplicate name: the listed
-      // row is the winner's, never this call's, so attach (I6).
-      if (error?.code === 2 && /duplicate index name/i.test(String(error?.message)) && isLiveRow(row)) {
-        // debug, not warn: the expected outcome of identical concurrent calls, nothing to act on.
-        this.logger.debug(
-          `search index "${name}" on "${collectionName}": a concurrent identical create won (id ${row!.id}); attached, not recorded as created by this call`,
-        );
-        return { outcome: 'attached', row };
+      // A create racing another one under the same name is refused as a duplicate: Atlas Local
+      // says BadValue "duplicate index names", a cluster IndexAlreadyExists (68) "is already
+      // defined". The name is the winner's, never this call's: attach it like P1 (I6), with the
+      // check re-run and a re-list after it (R12).
+      const message = String(error?.message);
+      if (
+        (error?.code === 2 && /duplicate index name/i.test(message)) ||
+        error?.code === 68 ||
+        /is already defined for collection/i.test(message)
+      ) {
+        await check();
+        const [again] = await this.listSearchIndexRows(collection, name, 'P5');
+        if (again && !isLiveRow(again)) throw new ProvisionAbort(stuck(again), true);
+        if (again) {
+          // debug, not warn: the expected outcome of identical concurrent calls, nothing to act on.
+          this.logger.debug(
+            `search index "${name}" on "${collectionName}": a concurrent create won (id ${again.id}); attached, not recorded as created by this call`,
+          );
+          return { outcome: 'attached', row: again };
+        }
       }
       throw new ProvisionAbort(error, true);
     } catch (error) {
@@ -2446,6 +2467,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // carries a claimToken, so one written since (a claim, another createIndex) fails the
         // filter, and the upsert's insert hits 11000 instead of overwriting it.
         ...(existingEntry ? {} : { claimToken: { $exists: false } }),
+        // The name-collision guards above read `existingEntry`; a concurrent createSearchIndex
+        // renaming the text index to this name since fails the filter (11000, CONFLICT).
+        textSearchIndexName: { $ne: targetSearchIndex },
+        retiredTextIndexNames: { $ne: targetSearchIndex },
       };
       const claimToken = uuidv4();
       // A managed index adopts an existing collection when one already has its name; record
@@ -2802,10 +2827,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const name =
       searchIndexName ??
       (fields?.length ? `${collectionName}_${indexName}_search_fields_index` : `${collectionName}_search_index`);
+    await this.testHooks?.afterCreateSearchIndexTarget?.(indexName);
+    const previous = await this.readRegistryEntry(indexName);
+    this.assertNotDeleting(previous, 'CREATE_SEARCH_INDEX');
     // A text index must not squat the vector index's name: the creation below would hit
     // IndexAlreadyExists, and the subsequent updateSearchIndex would overwrite the
-    // vectorSearch definition with a text mapping, breaking query().
-    if (name === target.searchIndexName) {
+    // vectorSearch definition with a text mapping, breaking query(). `previous` is the
+    // document the registry write below is conditioned on, so a concurrent rename is caught.
+    if (name === target.searchIndexName || name === previous?.searchIndexName) {
       throw new MastraError({
         id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
         domain: ErrorDomain.STORAGE,
@@ -2814,8 +2843,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         text: `searchIndexName "${name}" collides with the vectorSearch index name for index "${indexName}". Choose a different full-text searchIndexName.`,
       });
     }
-    const previous = await this.readRegistryEntry(indexName);
-    this.assertNotDeleting(previous, 'CREATE_SEARCH_INDEX');
     // A retired name keeps its role until deleteIndex drops it (§3.3).
     if (previous?.retiredVectorIndexNames?.includes(name)) {
       throw new MastraError({

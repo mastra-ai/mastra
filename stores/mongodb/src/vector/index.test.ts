@@ -2737,6 +2737,9 @@ describe('MongoDBVector autoEmbed', () => {
         'autoEmbed.model': 'voyage-4',
         // No entry was read, so the write must not land on one registered since.
         claimToken: { $exists: false },
+        // Nor on one whose text index took the vector name since.
+        textSearchIndexName: { $ne: 'movies_vector_index' },
+        retiredTextIndexNames: { $ne: 'movies_vector_index' },
       });
     });
 
@@ -2779,6 +2782,9 @@ describe('MongoDBVector autoEmbed', () => {
         autoEmbed: null,
         // No entry was read, so the write must not land on one registered since.
         claimToken: { $exists: false },
+        // Nor on one whose text index took the vector name since.
+        textSearchIndexName: { $ne: 'movies_vector_index' },
+        retiredTextIndexNames: { $ne: 'movies_vector_index' },
       });
     });
 

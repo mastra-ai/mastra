@@ -645,6 +645,45 @@ describe('provisioning protocol', () => {
       );
     });
 
+    describe.each<[string, 'vector' | 'text']>([
+      ['createIndex', 'vector'],
+      ['createSearchIndex', 'text'],
+    ])('P-ID-68 (%s)', (_label, role) => {
+      it('a create refused as the cluster refuses a concurrent duplicate (68) attaches, and the winner owns the index', async () => {
+        const coll = await byoColl('pid68');
+        const vec = `${coll}_vector_index`;
+        const run = (s: MongoDBVector) =>
+          role === 'vector' ? createByo(s, coll) : s.createSearchIndex({ indexName: coll, searchIndexName: 'N' });
+        if (role === 'text') await createByo(a, coll);
+        const name = role === 'vector' ? vec : 'N';
+        let raced = false;
+        await withHooks(
+          [a],
+          {
+            // The other call's real create lands first; this one is then refused the way an Atlas cluster refuses it.
+            createSearchIndexesCommand: async (command: Document, send: () => Promise<Document>) => {
+              if (raced) return send();
+              raced = true;
+              await run(b);
+              throw new MongoServerError({
+                ok: 0,
+                code: 68,
+                codeName: 'IndexAlreadyExists',
+                errmsg: `An index named "${command.indexes[0].name}" is already defined for collection ${coll}. Index names must be unique for a source collection and all its views.`,
+              });
+            },
+          },
+          () => run(a),
+        );
+        expect(raced).toBe(true);
+        const e = await entry(coll);
+        expect(role === 'vector' ? e?.ownsVectorIndex : e?.ownsTextIndex).toBe(true);
+        expect(idOf(e, name)).toBe(await listedId(db, coll, name));
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+    });
+
     it('P-NOROW: a successful create the P5 listing does not show is proven and recorded', async () => {
       const coll = await byoColl('pnorow');
       const vec = `${coll}_vector_index`;
@@ -873,6 +912,74 @@ describe('provisioning protocol', () => {
         expect(drops).toEqual([{ collectionName: coll, name: 'B', id: bId }]);
         expect(await searchIndexNames(db, coll)).toEqual(['A']);
         clean.opts = { userIndexes: ['A'] };
+      });
+
+      /** `call` on `a` parks at `seam` while `between` runs; returns its error and the entry `between` left. */
+      async function raceAt(coll: string, seam: string, call: () => Promise<unknown>, between: () => Promise<unknown>) {
+        const p = pause();
+        hooks(a, { [seam]: p.hook });
+        try {
+          const running = call().catch(e => e);
+          await reached(p);
+          await between();
+          const left = await entry(coll);
+          p.release.resolve();
+          return { err: (await running) as any, left };
+        } finally {
+          p.release.resolve();
+          checker.restoreHooks();
+        }
+      }
+
+      it('P-XROLE-race (i): createIndex refuses a vector name a concurrent createSearchIndex took for text', async () => {
+        const coll = await byoColl('pxrole1');
+        await createByo(a, coll, { searchIndexName: 'V0' });
+        const { err, left } = await raceAt(
+          coll,
+          'afterCreateIndexRead',
+          () => createByo(a, coll, { searchIndexName: 'foo' }),
+          () => b.createSearchIndex({ indexName: coll, searchIndexName: 'foo' }),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(left?.textSearchIndexName).toBe('foo');
+        expect(await entry(coll)).toEqual(left);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-XROLE-race (ii): createIndex refuses a vector name a concurrent createSearchIndex retired as text', async () => {
+        const coll = await byoColl('pxrole2');
+        await createByo(a, coll, { searchIndexName: 'V0' });
+        const { err, left } = await raceAt(
+          coll,
+          'afterCreateIndexRead',
+          () => createByo(a, coll, { searchIndexName: 'foo' }),
+          async () => {
+            await b.createSearchIndex({ indexName: coll, searchIndexName: 'foo' });
+            await b.createSearchIndex({ indexName: coll, searchIndexName: 'N2' });
+          },
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
+        expect(left?.retiredTextIndexNames).toEqual(['foo']);
+        expect(await entry(coll)).toEqual(left);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      it('P-XROLE-race (iii): createSearchIndex refuses a text name a concurrent createIndex took for the vector', async () => {
+        const coll = await byoColl('pxrole3');
+        await createByo(a, coll, { searchIndexName: 'V0' });
+        const { err, left } = await raceAt(
+          coll,
+          'afterCreateSearchIndexTarget',
+          () => a.createSearchIndex({ indexName: coll, searchIndexName: 'foo' }),
+          () => createByo(b, coll, { searchIndexName: 'foo' }),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+        expect(left?.searchIndexName).toBe('foo');
+        expect(await entry(coll)).toEqual(left);
+        await a.deleteIndex({ indexName: coll });
+        expect(await searchIndexNames(db, coll)).toEqual([]);
       });
     });
 
@@ -1548,6 +1655,7 @@ describe('provisioning protocol', () => {
         );
         expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
         expect(err?.message).toBe(P7C);
+        expect(err?.details?.cleanup).toBe('dropped');
         await waitFor(async () => (await searchIndexNames(db, x)).length === 0);
         const e = await entry(name);
         expect(e?.collectionName).toBe(y);
@@ -1599,6 +1707,8 @@ describe('provisioning protocol', () => {
             );
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err?.message).toBe(P7C);
+            // On a cluster the new generation may itself prove R, so the orphan is released rather than transferred.
+            expect(['transferred', 'released']).toContain(err?.details?.cleanup);
             const e = await entry(coll);
             expect(e?.ownsVectorIndex).toBe(true);
             expect(e?.indexIds).toEqual([{ name: vec, id: await listedId(db, coll, vec) }]);
