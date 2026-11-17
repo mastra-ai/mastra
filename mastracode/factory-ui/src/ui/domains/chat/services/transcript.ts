@@ -230,7 +230,7 @@ function applyEvent(
       return { ...state, pending: false };
 
     case 'message_start':
-      if (opensStream) return followLiveRow(state, event.message, viewerId);
+      if (opensStream && event.message.role === 'assistant') return followLiveRow(state, event.message, viewerId);
       return upsertMessage(state, event.message, true, viewerId);
 
     case 'message_update': {

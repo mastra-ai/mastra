@@ -109,14 +109,12 @@ export function useAgentControllerConnection({
       queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
       predicate: query => reconnected || query.state.status === 'error',
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
-    if (reconnected) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
-        exact: true,
-      });
-    }
+    // The gap, or the moment before a first stream opened, can also hold agent_start/agent_end,
+    // which the stream does not replay, so the state snapshot is refetched on every connect.
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
+      exact: true,
+    });
   };
 
   const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {

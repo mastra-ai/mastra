@@ -18,6 +18,10 @@ interface SharedSubscription {
   state: SseConnectionState;
   /** A subscribe attempt is in flight — do not start another. */
   connecting: boolean;
+  /** Id of the latest stream attempt; ids are unique across subscriptions. */
+  stream: number;
+  /** The latest stream has delivered its first event. */
+  opened: boolean;
   eventListeners: Set<(event: AgentControllerEvent, opensStream: boolean) => void>;
   stateListeners: Set<(state: SseConnectionState) => void>;
   unsubscribe?: () => void;
@@ -26,6 +30,7 @@ interface SharedSubscription {
 }
 
 const subscriptions = new WeakMap<AgentControllerSession, SharedSubscription>();
+let lastStream = 0;
 
 function setState(subscription: SharedSubscription, state: SseConnectionState) {
   if (subscription.state === state) return;
@@ -51,14 +56,17 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe?.();
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
-  let opened = false;
+  const stream = ++lastStream;
+  subscription.stream = stream;
+  subscription.opened = false;
 
   void session
     .subscribe({
       displayState: false,
       onEvent: event => {
-        const opensStream = !opened;
-        opened = true;
+        if (subscription.stream !== stream) return;
+        const opensStream = !subscription.opened;
+        subscription.opened = true;
         for (const listener of subscription.eventListeners) listener(event, opensStream);
       },
       onError: () => {
@@ -88,6 +96,8 @@ function getSubscription(session: AgentControllerSession) {
     subscription = {
       state: 'never',
       connecting: false,
+      stream: 0,
+      opened: false,
       eventListeners: new Set(),
       stateListeners: new Set(),
     };
@@ -118,6 +128,8 @@ export function useAgentControllerEvents({
   const visible = useRecentlyVisible();
   const onEventRef = useRef(onEvent);
   const onConnectedChangeRef = useRef(onConnectedChange);
+  // Initial state (the reply in flight) arrives once per stream; a remount attached past it reopens the stream.
+  const seenOpening = useRef(0);
 
   onEventRef.current = onEvent;
   onConnectedChangeRef.current = onConnectedChange;
@@ -126,7 +138,12 @@ export function useAgentControllerEvents({
     if (!enabled || !session || !epoch || !visible) return;
 
     const subscription = getSubscription(session);
-    const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => onEventRef.current(event, opensStream);
+    const missedOpening =
+      subscription.state === 'connected' && subscription.opened && seenOpening.current !== subscription.stream;
+    const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {
+      if (opensStream) seenOpening.current = subscription.stream;
+      onEventRef.current(event, opensStream);
+    };
     const handleState = (state: SseConnectionState) => {
       onConnectedChangeRef.current(state === 'connected');
       setConnectionState(state);
@@ -134,7 +151,8 @@ export function useAgentControllerEvents({
 
     subscription.eventListeners.add(handleEvent);
     subscription.stateListeners.add(handleState);
-    handleState(subscription.state);
+    if (missedOpening) setState(subscription, 'dropped');
+    else handleState(subscription.state);
     ensureConnected(session, subscription);
 
     return () => {
