@@ -655,8 +655,14 @@ const observabilityPool = new Pool({
 })
 
 // The store only handles errors on pools it creates, so handle them here.
+// The pool listener covers idle clients. The client listener covers checked-out ones.
 observabilityPool.on('error', err => {
   console.error('Observability pool error', err)
+})
+observabilityPool.on('connect', client => {
+  client.on('error', err => {
+    console.error('Observability client error', err)
+  })
 })
 
 const storage = new PostgresStoreVNext({
