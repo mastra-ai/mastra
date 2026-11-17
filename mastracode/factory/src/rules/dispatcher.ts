@@ -2595,6 +2595,10 @@ export class FactoryDecisionDispatcher {
       cause: 'rule_decision',
       causalChain: nextChain,
       ...(decision.reenter ? { reenter: true } : {}),
+      // A default rule's own move (no stored rule handled the event, or none exists) answers the
+      // event too: when it is an outside author's pull request event, the run the destination
+      // queues waits for a person just as a rule's move does.
+      ...(decision.event && untrustedPullRequestEvent(decision.event) ? { untrustedPullRequestEvent: true } : {}),
     });
     if (result.status === 'rejected') throw new FactoryRuleRejectedError(result.code, result.reason);
     const transitionMessage = decision.message;
@@ -2705,13 +2709,11 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity },
       cause: 'event_route',
       causalChain,
-      eventRoute: {
-        routeId: route.routeId,
-        // The rule owns the move; a run the destination queues on an outside author's pull
-        // request event still waits for a person, whether the card is the pull request's own
-        // or an issue's it links to.
-        ...(untrustedPullRequestEvent(event) ? { untrustedPullRequest: true } : {}),
-      },
+      eventRoute: { routeId: route.routeId },
+      // The rule owns the move; a run the destination queues on an outside author's pull
+      // request event still waits for a person, whether the card is the pull request's own
+      // or an issue's it links to.
+      ...(untrustedPullRequestEvent(event) ? { untrustedPullRequestEvent: true } : {}),
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale')

@@ -1324,6 +1324,41 @@ describe('intake routes moving existing cards on status events', () => {
       },
     );
 
+    // With no stored rule handling the event, the provider's default move answers it instead.
+    // That move stands too, but the run its auto-starting destination queues on an outside
+    // author's pull request event parks for a person all the same.
+    it.each([
+      ['parks the run', "an outside author's", false],
+      ['starts the run', "a trusted author's", true],
+    ] as const)(
+      '%s when %s push moves the card by the default move, no rule handling the event',
+      async (_what, _whose, trusted) => {
+        const { deliver, deliverDecision, runs } = await setup({ autoStart: true });
+        const card = (await deliver({
+          sourceKey: 'github-pr:17',
+          source: 'github-pr',
+          title: 'PR 17',
+          metadata: { authorTrusted: trusted, state: 'open' },
+        }))!;
+
+        const moved = (
+          await deliverDecision(card.id, {
+            type: 'transition',
+            idempotencyKey: 'push:re-review-updated',
+            board: 'work',
+            stage: 'pr-review',
+            event: { type: 'pull_request.synchronized', pullRequestTrusted: trusted },
+          })
+        ).card!;
+
+        expect(placed(moved)).toEqual({ board: 'work', stages: ['pr-review'] });
+        const started = await runs(card.id);
+        expect(started).toHaveLength(1);
+        if (trusted) expect(started).not.toContain('proposed');
+        else expect(started).toEqual(['proposed']);
+      },
+    );
+
     it("keeps the run the new board asks for, even when another worker parks it before the old board's work is dropped", async () => {
       const { boards, scope, route, deliver, deliverEvent, putAt, runs, workItems, otherWorker } = await setup();
       // Ship's run waits for a person's approval: a worker parks it as a proposal.

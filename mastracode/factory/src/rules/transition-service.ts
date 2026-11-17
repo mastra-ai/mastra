@@ -70,13 +70,13 @@ export interface FactoryTransitionRequest {
    */
   eventRoute?: {
     routeId: string;
-    /**
-     * The route moved the card on an outside author's pull request event. The move stands — the
-     * rule decided it — but any run the destination phase queues must wait for a person, however
-     * the phase starts.
-     */
-    untrustedPullRequest?: boolean;
   };
+  /**
+   * The move answers an outside author's pull request event. The move stands — a rule or a
+   * provider's default decided it — but any run the destination phase queues is compute and code
+   * execution on that author's say-so: it must wait for a person, however the phase starts.
+   */
+  untrustedPullRequestEvent?: boolean;
   /**
    * Internal, with `eventRoute` only: the installed board the route moves the card to, at `stage`.
    * `board` stays the card's current board. The target board's next phases don't restrict the
@@ -652,7 +652,7 @@ export class FactoryTransitionService {
           // An outside author's pull request event may move the card, but the run it queues is
           // compute and code execution on that author's say-so: it waits for a person, even in a
           // phase that starts on its own.
-          if (request.eventRoute?.untrustedPullRequest) {
+          if (request.untrustedPullRequestEvent) {
             for (const decision of validated) {
               if (decision.type === 'invokeSkill') decision.untrustedPullRequestEvent = true;
             }
