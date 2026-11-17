@@ -772,6 +772,7 @@ A phase's `runner.skill` runs a skill when a card enters the phase. Use a built-
 1. **Code skills** — passed to `new MastraFactory({ skills })`, created with `createSkill()` from `@mastra/core/skills`.
 2. **Folder skills** — `src/mastra/factory-skills/<name>/SKILL.md` in your app. `mastra build` copies the folder into the build output. The older `src/mastra/public/factory-skills` still works; when both exist, `src/mastra/factory-skills` wins. Factory also looks in `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
 3. **Built-in skills** shipped with `@mastra/factory`.
+4. **Factory skills** — skills an organization admin created for one Factory in Settings › Skills (see [Create skills for one Factory](#create-skills-for-one-factory)). They only fill names the first three don't use.
 
 A skill with the same name as a built-in skill replaces it, for the built-in boards too. A code skill replaces the whole folder skill of the same name, including its supporting files. Repository skills in a project's own repository never replace these.
 
@@ -833,6 +834,20 @@ An edit applies to that Factory only and takes precedence over the code, folder 
 An edited skill shows an **Edited** badge. When the original changes after the edit, for example in a new release of `@mastra/factory` or of your app, the editor says so; the edit stays in place until you choose **Revert to original**. If the original skill is removed from your app, its edit stops applying.
 
 Saves and reverts are recorded in the audit log as `factory.skill.updated` and `factory.skill.reverted`. The API is `PUT` and `DELETE` on `/web/factory/projects/:id/skills/:name`, and `GET /web/factory/skills?projectId=<id>` lists a Factory's skills with its edits.
+
+### Create skills for one Factory
+
+Organization admins can also add a skill to one Factory without changing the app. Open Settings › Skills, choose **New skill**, enter a name, a description and instructions, and choose **Create**. The name uses 1–64 lowercase letters, digits and single hyphens, such as `release-notes`, and can't be one an app or built-in skill already uses; edit that skill instead.
+
+A created skill belongs to that Factory only and shows a **Custom** badge. Its sessions can load it from their next start, like any other skill, and a phase of its boards can run it as `runner.skill`. `factory.upsertBoard()` accepts a board that runs a created skill only when `projects` lists the projects, and each of them must have created it; a board for `'all'` projects may only run the app's skills. Choose **Edit** to change it, and **Delete** to remove it; a phase that runs a deleted skill shows it as missing, and cards entering that phase fail to start until you pick another skill. A repository skill with the same name is hidden in that Factory's sessions, as it is for app skills.
+
+If your app later ships a skill under the same name, the app's skill takes over the name and the Factory's text becomes an edit of it: it keeps applying, the editor notes that the original changed, and **Revert to original** switches to the app's skill.
+
+Creating and deleting are recorded in the audit log as `factory.skill.created` and `factory.skill.deleted`; changes to a created skill as `factory.skill.updated`. The API is `POST /web/factory/projects/:id/skills` with `{ "name", "content" }`, where `content` is the full `SKILL.md` whose frontmatter `name` matches; `PUT` and `DELETE` on `/web/factory/projects/:id/skills/:name` update and delete it. `GET /web/factory/skills?projectId=<id>` lists created skills with `origin: "project"`. From the CLI:
+
+```bash
+mastra api factory skill create <project-id> '{"name":"release-notes","content":"---\nname: release-notes\ndescription: Write release notes for a merged change\n---\n\n# Release notes\n"}'
+```
 
 ### Execute a custom board
 

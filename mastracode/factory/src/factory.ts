@@ -194,6 +194,7 @@ import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
 import { shareSessionListChanges } from './session-list-changes.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
+import { projectSkillNamesOf } from './skills/catalog.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -735,7 +736,9 @@ export class MastraFactory {
    * project gets none. This lasts for the process, so run it at every startup. A Work or app
    * board's key keeps that board's code behaviour,
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
-   * event rules). The board is validated once, as the boards API does, and each write is audited
+   * event rules). The board is validated as the boards API validates it; a runner may name a skill a
+   * project created in Settings › Skills only when `projects` lists the projects, and each listed
+   * project must have it, while a board for `'all'` projects may only run the app's skills. Each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
    * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use` when cards
    * sit in a phase it removes, `board_in_use` when the key is `review` and the retired Review board
@@ -773,7 +776,8 @@ export class MastraFactory {
       );
     }
     const { writes, boards, projects, audit } = store;
-    const input = writes.validate(board);
+    // Named projects may have created the skills their runners name, so those are checked per project below.
+    const input = writes.validate(board, options.projects === 'all' ? undefined : null);
     // Work and app boards are stored per project like any other.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
@@ -791,6 +795,7 @@ export class MastraFactory {
             message: `Project "${scope.factoryProjectId}" does not exist.`,
           });
         }
+        writes.validate(input, await boards.projectSkillNames(scope));
       }
     }
     const result: { inserted: StoredBoardScope[]; updated: StoredBoardScope[]; unchanged: StoredBoardScope[] } = {
@@ -1121,6 +1126,10 @@ export class MastraFactory {
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         codeSkills: this.#skills,
+        // Runners may also name the skills a project created in Settings › Skills.
+        ...(storage.isDomainReady('skill-overrides')
+          ? { projectSkills: projectSkillNamesOf(skillOverridesStorage) }
+          : {}),
         // A project still using the retired Review board keeps it; work items are read once they're ready.
         ...(storage.isDomainReady('work-items')
           ? {

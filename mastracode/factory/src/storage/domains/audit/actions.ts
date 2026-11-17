@@ -11,7 +11,7 @@ export const AUDIT_ACTIONS = {
   intake_order: ['updated', 'evaluator_updated'],
   session: ['owner_transferred'],
   board: ['created', 'updated', 'deleted', 'reset'],
-  skill: ['updated', 'reverted'],
+  skill: ['created', 'updated', 'reverted', 'deleted'],
   intake_route: ['created', 'updated', 'deleted', 'reordered', 'rerouted'],
   sandbox_env: ['set', 'updated', 'deleted'],
 } as const;
