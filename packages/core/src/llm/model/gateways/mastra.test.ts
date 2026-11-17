@@ -304,13 +304,108 @@ describe('MastraGateway', () => {
       expect(gatewayFetch).toHaveBeenCalledTimes(102);
     });
 
-    it('fetches again after a failure with no previous catalog', async () => {
+    it('remembers a failure with no earlier catalog for 15 seconds', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const gatewayFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+      expect(gatewayFetch).toHaveBeenCalledOnce();
+
+      now.mockReturnValue(1_000_000 + 14_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+      expect(gatewayFetch).toHaveBeenCalledOnce();
+
+      now.mockReturnValue(1_000_000 + 16_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('remembers a network error with no earlier catalog', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const gatewayFetch = vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      });
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+
+      await expect(gateway.fetchProviders()).rejects.toThrow('fetch failed');
+      now.mockReturnValue(1_000_000 + 5_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('fetch failed');
+      expect(gatewayFetch).toHaveBeenCalledOnce();
+    });
+
+    it('clears a remembered failure on success, and the next failure starts a new window', async () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
       const gatewayFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
       const gateway = gatewayWith('deployment-key', gatewayFetch);
       await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
 
       gatewayFetch.mockImplementation(async () => catalog(['openai/chat-model']));
+      now.mockReturnValue(1_000_000 + 16_000);
       expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+      expect(gatewayFetch).toHaveBeenCalledTimes(2);
+
+      // Past the stale window there is no list to fall back on, so a failure is remembered again.
+      gatewayFetch.mockImplementation(async () => new Response('unavailable', { status: 503 }));
+      now.mockReturnValue(1_000_000 + 16_000 + 11 * 60_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(3);
+      now.mockReturnValue(1_000_000 + 16_000 + 11 * 60_000 + 14_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(3);
+      now.mockReturnValue(1_000_000 + 16_000 + 11 * 60_000 + 16_000);
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it.each([401, 403])('asks the gateway again on every call after a %i', async status => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const gatewayFetch = vi.fn(async () => new Response('rejected', { status }));
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+
+      await expect(gateway.fetchProviders()).rejects.toThrow(`(${status})`);
+      await expect(gateway.fetchProviders()).rejects.toThrow(`(${status})`);
+      expect(gatewayFetch).toHaveBeenCalledTimes(2);
+
+      gatewayFetch.mockImplementation(async () => catalog(['openai/chat-model']));
+      expect((await gateway.fetchProviders()).mastra?.models).toEqual(['openai/chat-model']);
+    });
+
+    it('shares one failing request between concurrent callers', async () => {
+      let respond!: (response: Response) => void;
+      const gatewayFetch = vi.fn(() => new Promise<Response>(resolve => (respond = resolve)));
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+
+      const first = gateway.fetchProviders();
+      const second = gateway.fetchProviders();
+      await vi.waitFor(() => expect(gatewayFetch).toHaveBeenCalledOnce());
+      respond(new Response('unavailable', { status: 503 }));
+
+      await expect(first).rejects.toThrow('(503)');
+      await expect(second).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledOnce();
+    });
+
+    it('counts remembered failures toward the 100 catalog limit', async () => {
+      const gatewayFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
+      for (let i = 0; i <= 100; i++) {
+        await expect(gatewayWith(`key-${i}`, gatewayFetch).fetchProviders()).rejects.toThrow('(503)');
+      }
+      expect(gatewayFetch).toHaveBeenCalledTimes(101);
+
+      await expect(gatewayWith('key-100', gatewayFetch).fetchProviders()).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(101);
+      await expect(gatewayWith('key-0', gatewayFetch).fetchProviders()).rejects.toThrow('(503)');
+      expect(gatewayFetch).toHaveBeenCalledTimes(102);
+    });
+
+    it('forgets remembered failures when the cache is reset', async () => {
+      const gatewayFetch = vi.fn(async () => new Response('unavailable', { status: 503 }));
+      const gateway = gatewayWith('deployment-key', gatewayFetch);
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
+
+      _resetMastraGatewayCatalogCache();
+      await expect(gateway.fetchProviders()).rejects.toThrow('(503)');
       expect(gatewayFetch).toHaveBeenCalledTimes(2);
     });
   });

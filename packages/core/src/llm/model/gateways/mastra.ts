@@ -209,7 +209,10 @@ export class MastraGateway extends MastraModelGateway {
 const V2_CATALOG_TTL_MS = 60_000;
 /** How long the last good v2 catalogue is still served while refreshes fail. */
 const V2_CATALOG_STALE_IF_ERROR_MS = 10 * 60_000;
-/** How long to serve the last good catalogue after a failed refresh before trying again. */
+/**
+ * How long to wait after a failed request before trying again: the last good catalogue is served
+ * meanwhile, or, when there is none, the failure is thrown again.
+ */
 const V2_CATALOG_RETRY_AFTER_ERROR_MS = 15_000;
 /** Most catalogues kept per fetch implementation. */
 const V2_CATALOG_MAX_ENTRIES = 100;
@@ -230,6 +233,9 @@ interface V2CatalogEntry {
   fetchedAt?: number;
   retryAt?: number;
   pending?: Promise<string[]>;
+  /** A failure with no list to fall back on, rethrown until `failedUntil` without a new request. */
+  failure?: unknown;
+  failedUntil?: number;
 }
 
 /**
@@ -249,12 +255,15 @@ function isRejectedKey(error: unknown): boolean {
   return error instanceof GatewayCatalogError && (error.status === 401 || error.status === 403);
 }
 
-/** Drops settled entries past the stale window, then the oldest settled ones over the size cap. */
+/**
+ * Drops settled entries past the stale window (keeping a failure that is still remembered), then
+ * the oldest settled ones over the size cap.
+ */
 function pruneV2Catalogs(cache: Map<string, V2CatalogEntry>, now: number): void {
   for (const [key, entry] of cache) {
-    if (!entry.pending && (entry.fetchedAt === undefined || now - entry.fetchedAt >= V2_CATALOG_STALE_IF_ERROR_MS)) {
-      cache.delete(key);
-    }
+    const failureRemembered = entry.failedUntil !== undefined && now < entry.failedUntil;
+    const listExpired = entry.fetchedAt === undefined || now - entry.fetchedAt >= V2_CATALOG_STALE_IF_ERROR_MS;
+    if (!entry.pending && !failureRemembered && listExpired) cache.delete(key);
   }
   for (const [key, entry] of cache) {
     if (cache.size <= V2_CATALOG_MAX_ENTRIES) break;
@@ -266,8 +275,10 @@ function pruneV2Catalogs(cache: Map<string, V2CatalogEntry>, now: number): void 
  * Returns the cached v2 catalogue for `cacheKey`, fetching it when it is missing or older than
  * the TTL. Concurrent callers share one request. When a refresh fails with a timeout, a network
  * error or a server error, the last good catalogue is returned for a bounded time, and the next
- * attempt waits a short while. A rejected key (401 or 403) drops the cached catalogue. Without a
- * catalogue to fall back on, the error is thrown.
+ * attempt waits a short while. Without a catalogue to fall back on, the error is thrown, and the
+ * same error is thrown again without a new request for that short while, so callers during an
+ * outage do not each wait for the request timeout. A rejected key (401 or 403) drops the cached
+ * catalogue and is never remembered, so every call asks the gateway again.
  */
 function loadCachedV2Catalog(
   fetchImpl: typeof fetch,
@@ -288,6 +299,7 @@ function loadCachedV2Catalog(
     const backingOff = entry.retryAt !== undefined && now < entry.retryAt && age < V2_CATALOG_STALE_IF_ERROR_MS;
     if (fresh || backingOff) return Promise.resolve(entry.models);
   }
+  if (entry?.failedUntil !== undefined && now < entry.failedUntil) return Promise.reject(entry.failure);
   if (entry?.pending) return entry.pending;
 
   const pending = load().then(
@@ -315,6 +327,10 @@ function loadCachedV2Catalog(
         return previous.models;
       }
       entries.delete(cacheKey);
+      if (!isRejectedKey(error)) {
+        entries.set(cacheKey, { failure: error, failedUntil: settledAt + V2_CATALOG_RETRY_AFTER_ERROR_MS });
+        pruneV2Catalogs(entries, settledAt);
+      }
       throw error;
     },
   );
