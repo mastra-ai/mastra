@@ -202,6 +202,9 @@ async function appearsOnRegistry(registry, pkg, lagMs) {
 async function publishPackage(pkg, options, registry) {
   const id = `${pkg.name}@${pkg.version}`;
   const started = Date.now();
+  // Once a signing failure has been seen, the package gets the signing budget and
+  // backoff for the rest of its attempts, whatever the later failures are.
+  let signingSeen = false;
   let attempts = PUBLISH_ATTEMPTS;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const { code, output } = await runPublish(pkg, options);
@@ -211,7 +214,10 @@ async function publishPackage(pkg, options, registry) {
       return true;
     }
     const signing = isSigningFailure(output);
-    if (signing) attempts = SIGNING_PUBLISH_ATTEMPTS;
+    if (signing && !signingSeen) {
+      signingSeen = true;
+      attempts = SIGNING_PUBLISH_ATTEMPTS;
+    }
     // The publish can reach npm and still exit non-zero (e.g. a dropped
     // connection after the upload). The registry is the source of truth.
     if (await appearsOnRegistry(registry, pkg, signing ? REGISTRY_LAG_MS : 0)) {
@@ -221,7 +227,7 @@ async function publishPackage(pkg, options, registry) {
       return true;
     }
     if (attempt < attempts) {
-      const delay = RETRY_DELAY_MS * (signing ? SIGNING_RETRY_STEPS : RETRY_STEPS)[attempt - 1];
+      const delay = RETRY_DELAY_MS * (signingSeen ? SIGNING_RETRY_STEPS : RETRY_STEPS)[attempt - 1];
       const why = signing ? ', provenance signing' : '';
       console.log(
         `::group::Retrying ${id} (attempt ${attempt} of ${attempts} failed${why}; next in ${delay / 1000}s)\n${output.trimEnd()}\n::endgroup::`,

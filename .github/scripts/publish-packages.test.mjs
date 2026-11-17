@@ -259,6 +259,23 @@ test('a transparency-log 409 for a version npm does not have is retried with a l
   assert.match(output, /attempt 4 of 6 failed, provenance signing; next in 0\.16s/);
 });
 
+test('ordinary failures after a signing failure keep the signing backoff and attempt budget', async t => {
+  const registry = await startRegistry(t, {
+    tlogConflict: { '@fx/voice': 1 },
+    failPut: { '@fx/voice': 4 },
+    dependencies: releaseDependencies,
+  });
+  const cwd = makeWorkspace(t, registry.url, releasePackages);
+
+  const { status, output } = await run(cwd, registry.url, [], { PUBLISH_REGISTRY_LAG_MS: '0' });
+
+  assert.equal(status, 0, output);
+  assert.equal(registry.state.puts.filter(put => put.name === '@fx/voice').length, 6);
+  assert.match(output, /attempt 3 of 6 failed; next in 0\.08s/);
+  assert.match(output, /attempt 5 of 6 failed; next in 0\.2s/);
+  assert.doesNotMatch(output, /NaN/);
+});
+
 test('a package that fails does not stop packages that do not depend on it', async t => {
   // core ← memory ← server, and core ← tools ← cli: cli is a level after memory but doesn't need it.
   const packages = [
