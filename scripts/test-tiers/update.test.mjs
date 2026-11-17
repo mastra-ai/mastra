@@ -335,6 +335,27 @@ test('maps CI job names to tier keys', () => {
   assert.deepEqual(key('Prebuild', 'Unit and E2E Tests / Affected UNIT Test'), []);
 });
 
+test('a grouped container-store job fails only the store whose step failed', () => {
+  const steps = [
+    { name: 'Build grouped storage packages', conclusion: 'success' },
+    { name: 'Run opensearch tests', conclusion: 'success' },
+    { name: 'Stop opensearch containers', conclusion: 'success' },
+    { name: 'Run mssql tests', conclusion: 'failure' },
+    { name: 'Stop mssql containers', conclusion: 'success' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Stop chroma containers', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'success' },
+    { name: 'Stop mysql containers', conclusion: 'failure' },
+  ];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: ['job:store/mssql', 'job:store/mysql', 'job:store/opensearch'],
+      failed: ['job:store/mssql'],
+    },
+  );
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [
