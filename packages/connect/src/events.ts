@@ -21,6 +21,8 @@ const DEFAULT_IDLE_TIMEOUT_MS = 45_000;
 const MIN_SERVER_RETRY_MS = 100;
 /** Longest line the parser buffers; well above the largest provider webhook. */
 const MAX_LINE_LENGTH = 32 * 1024 * 1024;
+/** Most `data` lines one frame may hold, so a run of empty `data:` lines can't grow without bound. */
+const MAX_DATA_LINES = 100_000;
 
 export interface EventsClientOptions extends ConnectClientOptions {
   /**
@@ -713,7 +715,8 @@ export interface ServerSentEvent {
  *
  * One deliberate difference from the spec: a block dispatches when it has any
  * field (`event`, `data`, `id` or `retry`), not only when it has `data`, so a
- * `retry`-only block still reaches the caller. Lines longer than 32 MiB throw
+ * `retry`-only block still reaches the caller. Lines longer than 32 MiB, and
+ * frames with more than 32 MiB of data or more than 100,000 `data` lines, throw
  * `invalid_response`.
  */
 export async function* parseServerSentEvents(
@@ -799,11 +802,18 @@ export async function* parseServerSentEvents(
           event = fieldValue;
           hasField = true;
         } else if (field === 'data') {
-          dataLength += fieldValue.length;
+          // Count the '\n' each extra line adds when joined.
+          dataLength += fieldValue.length + (data.length > 0 ? 1 : 0);
           if (dataLength > MAX_LINE_LENGTH) {
             throw new MastraConnectError(
               'invalid_response',
               'The events service sent a frame with more than 32 MiB of data.',
+            );
+          }
+          if (data.length >= MAX_DATA_LINES) {
+            throw new MastraConnectError(
+              'invalid_response',
+              `The events service sent a frame with more than ${MAX_DATA_LINES} data lines.`,
             );
           }
           data.push(fieldValue);

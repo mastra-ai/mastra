@@ -780,22 +780,31 @@ describe('EventsClient.subscribe gaps and planned closes', () => {
   });
 
   it('delivers nothing after the subscription closes while a gap is being handled', async () => {
-    const s = await server([
-      (_req, res) => {
-        startStream(res);
-        // One write, so the event after the gap is already parsed when onGap runs.
-        res.write(
-          ready('90') + `event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n` + event('91', {}),
-        );
-      },
-    ]);
+    // One chunk holding all three frames, so the event after the gap is already parsed when onGap runs.
+    const chunk = new TextEncoder().encode(
+      ready('90') + `event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n` + event('91', {}),
+    );
+    const fetch = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(chunk);
+              // Stay open like a live stream until the subscription aborts.
+              init?.signal?.addEventListener('abort', () => controller.error(init.signal!.reason), { once: true });
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        ),
+    );
     const { saved, store } = memoryStore();
-    const subscription = client(s.url).subscribe('connect', {
+    const subscription = client('http://events.test', { fetch }).subscribe('connect', {
       after: '5',
       cursorStore: store,
       onGap: () => subscription.close(),
     });
     await expect(take(subscription, 1)).resolves.toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(saved).toEqual([{ eventId: '90' }]);
   });
 
@@ -1239,5 +1248,23 @@ describe('parseServerSentEvents', () => {
     const line = `data: ${'x'.repeat(1024 * 1024)}\n`;
     const error = await failure(parse([...Array.from({ length: 33 }, () => line), '\n']));
     expect(error.code).toBe('invalid_response');
+  });
+
+  it('counts the line breaks between data lines toward the 32 MiB frame limit', async () => {
+    // 32 MiB of text exactly, split over two lines: only the joining '\n' goes over.
+    const half = 'x'.repeat(16 * 1024 * 1024);
+    const error = await failure(parse([`data: ${half}\n`, `data: ${half}\n`, '\n']));
+    expect(error.code).toBe('invalid_response');
+  });
+
+  it('rejects a frame of endless empty data lines', async () => {
+    const error = await failure(parse([...Array.from({ length: 100_001 }, () => 'data:\n'), '\n']));
+    expect(error.code).toBe('invalid_response');
+    expect(error.message).toContain('100000 data lines');
+  });
+
+  it('keeps small frames with empty data lines', async () => {
+    const frames = await parse(['data:\ndata:\ndata: x\n\n']);
+    expect(frames).toEqual([{ event: 'message', data: '\n\nx' }]);
   });
 });
