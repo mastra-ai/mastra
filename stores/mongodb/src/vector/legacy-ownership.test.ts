@@ -1363,7 +1363,8 @@ describe('legacy ownership', () => {
           await b.claimLegacyIndex({ indexName: coll });
           expect((await entry(coll))?.ownsCollection).toBe(true);
           pa.release.resolve();
-          expect((await search).message).toMatch(/provision failed/);
+          // The claim sets a fresh claimToken, so the search call's compare-and-set misses.
+          expect((await search).id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
           expect(await entry(coll)).toMatchObject({ ownsCollection: true, ownsVectorIndex: true });
         });
 
@@ -1715,8 +1716,8 @@ describe('legacy ownership', () => {
         await store.claimLegacyIndex({ indexName: X });
         const first = await reg(X);
         await store.claimLegacyIndex({ indexName: X });
-        // Only the concurrency counter moves; every recorded field stays the same.
-        expect({ ...(await reg(X)), rev: 0 }).toEqual({ ...first, rev: 0 });
+        // Only the concurrency fields move (rev, and the claim's fresh claimToken); every recorded field stays the same.
+        expect({ ...(await reg(X)), rev: 0, claimToken: '' }).toEqual({ ...first, rev: 0, claimToken: '' });
       });
     });
 

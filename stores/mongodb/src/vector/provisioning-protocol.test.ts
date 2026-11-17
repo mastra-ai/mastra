@@ -2015,6 +2015,188 @@ describe('provisioning protocol', () => {
           expect(checker.violations).toEqual([]);
         });
       });
+
+      describe('P-CLAIM-ORPHAN', () => {
+        const claimErr = (code: string) => createVectorErrorId('MONGODB', 'CLAIM_LEGACY_INDEX', code);
+        const RELIST = 'index changed while it was being claimed; nothing was claimed; retry';
+
+        /**
+         * Unregistered collection X with `${X}_vector_index` = N (id R), and, unless `state` is null,
+         * a cleanup record J for N of a gone lifetime (expired lease by default).
+         */
+        async function legacyWithRecord(
+          prefix: string,
+          state: 'orphaned' | 'created' | null,
+          leaseUntil = new Date(0),
+        ) {
+          const coll = await byoColl(prefix);
+          const n = `${coll}_vector_index`;
+          await createRawSearchIndex(db, coll, n, {
+            fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }],
+          });
+          await waitFor(async () => (await listedId(db, coll, n)) !== undefined);
+          const r = (await listedId(db, coll, n))!;
+          const doc = {
+            _id: `orphan-${coll}:vector`,
+            indexName: `${coll}_gone`,
+            generation: 'gone',
+            collectionName: coll,
+            name: n,
+            type: 'vectorSearch',
+            role: 'vector',
+            state,
+            indexId: r,
+            leaseUntil,
+            createdAt: new Date(),
+          };
+          if (state) await seedJournal(db, doc);
+          return { coll, n, r, doc };
+        }
+        const claim = (coll: string) => a.claimLegacyIndex({ indexName: coll }).catch(e => e);
+
+        it('P-CLAIM-ORPHAN: a claim of a name pending orphan removal refuses with INDEX_DELETING, and the orphan is dropped', async () => {
+          const { coll, n, r, doc } = await legacyWithRecord('pclaim', 'orphaned');
+          const pB = pause();
+          hooks(b, { beforeOrphanDrop: pB.hook });
+          const { drops } = recordDrops(b);
+          const cleaner = reconcile(b, coll);
+          let err: any;
+          try {
+            // B decided to drop, which renewed the lease.
+            await reached(pB);
+            err = await claim(coll);
+          } finally {
+            pB.release.resolve();
+          }
+          await cleaner;
+          expect(err?.id).toBe(claimErr('INDEX_DELETING'));
+          expect(err?.message).toBe(
+            `search index "${n}" on "${coll}" is pending removal of an index Mastra created (cleanup record ${doc._id}). Retry: retrying runs the cleanup. If the drop keeps failing, the block remains and the failure is logged at error level.`,
+          );
+          expect(await entry(coll)).toBeNull();
+          expect(drops).toEqual([{ collectionName: coll, name: n, id: r }]);
+          expect(await docsOn(coll)).toEqual([]);
+        });
+
+        // Spec variant (1) is "a claim committed before the mark", so J is still `created` here: an
+        // `orphaned` J with a live lease would refuse the claim (I7).
+        it('P-CLAIM-ORPHAN (1): a claim committed before the mark is seen by the cleanup, which keeps R', async () => {
+          const { coll, n, r } = await legacyWithRecord('pclaim1', 'created', new Date(Date.now() + 2000));
+          const { drops } = recordDrops(b);
+          await a.claimLegacyIndex({ indexName: coll });
+          expect((await entry(coll))?.indexIds).toEqual([{ name: n, id: r }]);
+          await waitFor(async () => (await docsOn(coll))[0]!.leaseUntil.getTime() < Date.now() - 500, 10_000);
+          await reconcile(b, coll);
+          expect(drops).toEqual([]);
+          expect(await docsOn(coll)).toEqual([]);
+          expect(await entry(coll)).toMatchObject({ ownsVectorIndex: true, indexIds: [{ name: n, id: r }] });
+          expect(await listedId(db, coll, n)).toBe(r);
+        });
+
+        it('P-CLAIM-ORPHAN (2): a cleanup releasing to the claim entry after its handshake saw J makes the undo miss', async () => {
+          const { coll, n, r } = await legacyWithRecord('pclaim2', 'created');
+          const pB = pause();
+          const pA = pause();
+          hooks(b, { afterOrphanMarked: pB.hook });
+          hooks(a, { beforeClaimUndo: pA.hook });
+          const { drops } = recordDrops(b);
+          const cleaner = reconcile(b, coll);
+          let claimed: Promise<any> | undefined;
+          try {
+            await reached(pB);
+            claimed = claim(coll);
+            await reached(pA);
+            pB.release.resolve();
+            await cleaner;
+            expect(await docsOn(coll)).toEqual([]);
+          } finally {
+            pB.release.resolve();
+            pA.release.resolve();
+          }
+          const result = await claimed;
+          if (result !== undefined) expect(result?.id).toBe(claimErr('CONFLICT'));
+          expect(await entry(coll)).toMatchObject({ ownsVectorIndex: true, indexIds: [{ name: n, id: r }] });
+          expect(drops).toEqual([]);
+          expect(await listedId(db, coll, n)).toBe(r);
+        });
+
+        it('P-CLAIM-ORPHAN (3): a drop decided before the claim wrote makes the re-list undo the claim with CONFLICT', async () => {
+          const { coll, n, r } = await legacyWithRecord('pclaim3', 'orphaned');
+          const pB = pause();
+          const pA = pause();
+          hooks(b, { beforeOrphanDrop: pB.hook });
+          hooks(a, { afterClaimWrite: pA.hook });
+          const { drops } = recordDrops(b);
+          const cleaner = reconcile(b, coll);
+          let claimed: Promise<any> | undefined;
+          try {
+            await reached(pB);
+            claimed = claim(coll);
+            await reached(pA);
+            pB.release.resolve();
+            await cleaner;
+          } finally {
+            pB.release.resolve();
+            pA.release.resolve();
+          }
+          const err = await claimed;
+          expect(err?.id).toBe(claimErr('CONFLICT'));
+          expect(err?.message).toBe(RELIST);
+          expect(await entry(coll)).toBeNull();
+          expect(drops).toEqual([{ collectionName: coll, name: n, id: r }]);
+          expect(await docsOn(coll)).toEqual([]);
+          // The claim's insert recorded R after the decision and before the drop; its re-list undid it.
+          expect(checker.violations.splice(0)).toEqual([`dropped "${n}" (id ${r}) on "${coll}" recorded by ${coll}`]);
+        });
+
+        it('P-CLAIM-ORPHAN (4): a delete handing N over to the claim entry after its handshake makes the undo miss', async () => {
+          const { coll, n, r } = await legacyWithRecord('pclaim4', null);
+          const y = `${coll}_y`;
+          const pI = pause();
+          const pU = pause();
+          const pD = pause();
+          hooks(a, { beforeClaimInsert: pI.hook, beforeClaimUndo: pU.hook });
+          hooks(b, { beforeDeleteDrop: pD.hook });
+          const { drops } = recordDrops(b);
+          let claimed: Promise<any> | undefined;
+          let deleted: Promise<any> | undefined;
+          try {
+            claimed = claim(coll);
+            await reached(pI);
+            await seedRegistry(db, {
+              _id: y,
+              indexName: y,
+              collectionName: coll,
+              searchIndexName: n,
+              isByo: true,
+              allowWrites: true,
+              ownsVectorIndex: true,
+              indexIds: [{ name: n, id: r }],
+              generation: 'gy',
+              rev: 1,
+              claimToken: 'ty',
+            });
+            // T1 commits N in Y's drop set.
+            deleted = b.deleteIndex({ indexName: y }).catch(e => e);
+            await reached(pD);
+            pI.release.resolve();
+            // The claim's handshake saw the drop set.
+            await reached(pU);
+            pD.release.resolve();
+            expect(await deleted).toBeUndefined();
+          } finally {
+            pI.release.resolve();
+            pD.release.resolve();
+            pU.release.resolve();
+          }
+          const result = await claimed;
+          if (result !== undefined) expect(result?.id).toBe(claimErr('CONFLICT'));
+          expect(await listedId(db, coll, n)).toBe(r);
+          expect(await entry(coll)).toMatchObject({ ownsVectorIndex: true, indexIds: [{ name: n, id: r }] });
+          expect(await entry(y)).toBeNull();
+          expect(drops).toEqual([]);
+        });
+      });
     });
   });
 });

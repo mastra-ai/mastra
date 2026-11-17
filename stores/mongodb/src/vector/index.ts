@@ -28,7 +28,7 @@ import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBFieldCondition, MongoDBVectorFilter } from './filter';
-import { idFor, planDeleteCleanup } from './ownership';
+import { idFor, owns, planDeleteCleanup } from './ownership';
 import type { DeleteCleanupPlan, OwnershipView } from './ownership';
 import {
   CREATE_TIMEOUT_MS,
@@ -515,6 +515,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     afterClaimRead?: (indexName: string) => Promise<void>; // called by claimLegacyIndex after its first registry read
     /** Called by claimLegacyIndex after its IN_USE pre-check, right before it inserts a new entry. */
     beforeClaimInsert?: (indexName: string) => Promise<void>;
+    /** Called by claimLegacyIndex right after its registry write, before the handshake and the re-list. */
+    afterClaimWrite?: (indexName: string) => Promise<void>;
+    /** Called by claimLegacyIndex after it decided to undo its write, right before the pinned undo. */
+    beforeClaimUndo?: (indexName: string) => Promise<void>;
     /** Called by createIndex right after it reads the existing registry entry. */
     afterCreateIndexRead?: (indexName: string) => Promise<void>;
     /** Called by createSearchIndex right after it reads the existing registry entry. */
@@ -1535,7 +1539,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
         const plan = planDeleteCleanup(own, siblings, observed);
         const { drop } = plan;
-        if (!(await this.applyCleanupWrites(indexName, own.collectionName, plan, session))) {
+        if (!(await this.applyCleanupWrites(indexName, own.collectionName, plan, siblings, session))) {
           // Only a deployment without transactions sees this; there the plan's earlier writes stay,
           // and the retry plans from them.
           throw new MastraError({
@@ -1561,8 +1565,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           )
           .toArray();
         if (uncertain.length) await this.journal().deleteMany({ _id: { $in: uncertain.map(d => d._id) } }, { session });
-        // Every concurrent delete transaction on this collection writes these documents, so they conflict.
-        await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
         if (!drop.length) {
           await registry.deleteOne({ _id: indexName }, { session });
           return 'handed-off' as const;
@@ -1611,14 +1613,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
   /**
    * Write a delete plan's transfers (the owns flag, plus the id when the plan carries one) and id
-   * rewrites, and log its kept names. False when a recipient no longer uses the name it was planned
-   * for, or an owner no longer owns the name it was to rewrite, which only a deployment without
-   * transactions can see.
+   * rewrites, and log its kept names. Every user the plan chose (a recipient, or an owner of a
+   * released name among `siblings`) gets `rev + 1` and a fresh `claimToken` (R4-2, R5-2), so a
+   * pinned undo by its own op misses; the other live siblings get `rev + 1`. False when a recipient
+   * no longer uses the name it was planned for, or an owner no longer owns the name it was to
+   * rewrite, which only a deployment without transactions can see.
    */
   private async applyCleanupWrites(
     indexName: string,
     collectionName: string,
     plan: DeleteCleanupPlan,
+    siblings: OwnershipView[],
     session?: ClientSession,
   ): Promise<boolean> {
     const registry = this.registry();
@@ -1649,6 +1654,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       );
       if (rewritten.matchedCount === 0) return false;
     }
+    const chosen = [
+      ...new Set([
+        ...plan.transfers.map(t => t.toId),
+        ...siblings.filter(s => !s.deleting && plan.released.some(n => owns(s, n))).map(s => s._id),
+      ]),
+    ];
+    for (const _id of chosen)
+      await registry.updateOne({ _id, deleting: { $ne: true } }, [{ $set: mutationFields() }], { session });
+    // Every concurrent delete transaction on this collection writes these documents, so they conflict.
+    await registry.updateMany(
+      { collectionName, _id: { $nin: [indexName, ...chosen] }, deleting: { $ne: true } },
+      { $inc: { rev: 1 } },
+      { session },
+    );
     for (const name of plan.kept) {
       this.logger.warn(
         `search index "${name}" on "${collectionName}": the incarnation index "${indexName}" recorded is gone or was replaced, and other registrations still reference the name; neither dropped nor handed over. Drop it manually if unused`,
@@ -1701,9 +1720,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           observed,
         );
         if (plan.drop.length) return 'drop' as const;
-        if (!(await this.applyCleanupWrites(indexName, collectionName, plan, session))) return 'recheck' as const;
         // Same conflict rule as the delete decision: concurrent delete transactions on the collection serialize.
-        await registry.updateMany(live, { $inc: { rev: 1 } }, { session });
+        if (!(await this.applyCleanupWrites(indexName, collectionName, plan, current, session)))
+          return 'recheck' as const;
         await registry.updateOne(
           { _id: indexName, deleteToken },
           {
@@ -1743,7 +1762,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private async cleanupOrphan(
     doc: JournalDoc,
     fromStep: 1 | 2,
-    op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX' = 'CREATE_INDEX',
+    op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX' | 'CLAIM_LEGACY_INDEX' = 'CREATE_INDEX',
   ): Promise<'dropped' | 'released' | 'transferred' | 'kept' | 'failed'> {
     const { _id, indexName, collectionName, name } = doc;
     const R = doc.indexId!;
@@ -1928,13 +1947,29 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         text: `Index "${indexName}" was removed or recreated by another call while this one ran, so nothing was provisioned. Retry.`,
       });
     }
+    const pending = await this.pendingDropError(collectionName, indexName, names, op, reconciled);
+    if (pending) throw pending;
+  }
+
+  /**
+   * The read half of the I7 handshake: the `INDEX_DELETING` error for the first of `names` an
+   * `orphaned` journal doc or another registration's `deleting` drop set covers, if any. A stale
+   * orphan block is cleaned once per call (the call's own reconcile counts), then re-checked (P3).
+   */
+  private async pendingDropError(
+    collectionName: string,
+    indexName: string,
+    names: (string | undefined)[],
+    op: 'CREATE_INDEX' | 'CREATE_SEARCH_INDEX' | 'CLAIM_LEGACY_INDEX',
+    reconciled: Set<string>,
+  ): Promise<MastraError | undefined> {
+    const registry = this.registry();
     // M8: a name whose orphan cleanup (§3.8) is pending; its step 1 wrote before reading users (I7).
     const pending = {
       collectionName,
       name: { $in: names.filter((n): n is string => !!n) },
       state: 'orphaned' as const,
     };
-    // A stale block is cleaned once per call (the call's own reconcile counts), then re-checked (P3).
     const stale = await this.journal().findOne({ ...pending, _id: { $nin: [...reconciled] }, ...LEASE_EXPIRED });
     if (stale) {
       reconciled.add(stale._id);
@@ -1944,7 +1979,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
     const orphan = await this.journal().findOne(pending);
     if (orphan) {
-      throw new MastraError({
+      return new MastraError({
         id: createVectorErrorId('MONGODB', op, 'INDEX_DELETING'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1959,7 +1994,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ? names.find(Boolean)
           : names.find(n => n && recordedDropSet(other).includes(n));
       if (!name) continue;
-      throw new MastraError({
+      return new MastraError({
         id: createVectorErrorId('MONGODB', op, 'INDEX_DELETING'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1967,6 +2002,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         text: `The search index "${name}" is being dropped by a deleteIndex in progress (index "${other._id}"). Retry after it finishes; retrying is safe. If that delete was interrupted, retry deleteIndex({ indexName: "${other._id}" }) first. The delete may already have handed the index to this registration, in which case the registration was kept.`,
       });
     }
+    return undefined;
   }
 
   /**
@@ -4045,7 +4081,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * One-time upgrade helper for managed indexes created before `@mastra/mongodb@1.15.0`, or registered by 1.15–1.27 without ownership records. Calling it asserts that Mastra created the collection and its recorded search indexes; `deleteIndex()` will then drop the collection and all its data.
    */
   async claimLegacyIndex({ indexName }: { indexName: string }): Promise<void> {
-    await this.reconcile(indexName);
+    const reconciled = await this.reconcile(indexName);
     const registry = this.registry();
     const vectorIndex = `${indexName}_vector_index`;
     const refuse = (
@@ -4083,37 +4119,138 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         { collectionName: indexName, usedBy: others.map(o => o._id).join(', ') },
       );
 
-    // Claim exactly the observed target, so a claim never applies to a replacement registration.
-    const claimRegistered = async (seen: RegistryDoc) => {
-      const { collectionName, searchIndexName } = seen;
-      const { matchedCount } = await registry.updateOne(
-        { _id: indexName, isByo: { $ne: true }, collectionName, searchIndexName, deleting: { $ne: true } },
-        [
-          {
-            $set: {
-              ownsCollection: true,
-              // An explicit false records that the index existed before registration; keep it.
-              ownsVectorIndex: { $ifNull: ['$ownsVectorIndex', true] },
-              ...(seen.textSearchIndexName ? { ownsTextIndex: { $ifNull: ['$ownsTextIndex', true] } } : {}),
-              // Ownership changed, so a concurrent call's rollback must not restore its older snapshot.
-              rev: { $add: [{ $ifNull: ['$rev', 0] }, 1] },
-            },
-          },
-        ],
-      );
+    const relistConflict = () =>
+      refuse('CONFLICT', 'index changed while it was being claimed; nothing was claimed; retry');
+    /** The live id listed for each name, on the primary (I7a). */
+    const listIds = async (collectionName: string, names: string[]) => {
+      const ids: Record<string, string | undefined> = {};
+      for (const name of names) ids[name] = await this.liveIdOf(this.db.collection(collectionName), name, 'claim');
+      return ids;
+    };
+    /** Every id recorded for a claimed name is the one the re-list shows (§3.10 step 4). */
+    const idsMatch = (
+      indexIds: RegistryDoc['indexIds'],
+      names: string[],
+      relisted: Record<string, string | undefined>,
+    ) => (indexIds ?? []).every(e => !names.includes(e.name) || relisted[e.name] === e.id);
+    /**
+     * §3.10 step 5, after an undo missed (or another write landed first): a cleaner may have handed
+     * responsibility to the entry (R4-2, R5-2), so it stays; the claim succeeds only if the entry is
+     * still on the claimed target and records what the re-list shows.
+     */
+    const settle = async (
+      collectionName: string,
+      searchIndexName: string,
+      names: string[],
+      relisted: Record<string, string | undefined>,
+    ) => {
       this.indexTargets.delete(indexName);
-      if (matchedCount === 1) return;
       const current = await this.readRegistryEntry(indexName);
-      this.assertNotDeleting(current, 'CLAIM_LEGACY_INDEX');
       if (
         current &&
+        current.deleting !== true &&
         current.isByo !== true &&
         current.collectionName === collectionName &&
         current.searchIndexName === searchIndexName &&
-        current.ownsCollection === true
+        current.ownsCollection === true &&
+        idsMatch(current.indexIds, names, relisted)
       )
         return;
-      throw conflict(current);
+      throw relistConflict();
+    };
+
+    // Claim exactly the observed target, so a claim never applies to a replacement registration.
+    const claimRegistered = async (seen: RegistryDoc) => {
+      const { collectionName, searchIndexName, textSearchIndexName } = seen;
+      const names = [searchIndexName, ...(textSearchIndexName ? [textSearchIndexName] : [])];
+      // TOFU (Q5): the listing before the write; an id is recorded only for an owned name with none.
+      const listed = await listIds(collectionName, names);
+      const tofu = (name: string, owned: Document) => ({
+        $set: {
+          indexIds: {
+            $cond: [
+              { $and: [owned, { $not: [{ $in: [{ $literal: name }, { $ifNull: ['$indexIds.name', []] }] }] }] },
+              indexIdsWith(name, listed[name]!),
+              '$indexIds',
+            ],
+          },
+        },
+      });
+      const claimToken = uuidv4();
+      const before = await registry.findOneAndUpdate(
+        {
+          _id: indexName,
+          isByo: { $ne: true },
+          collectionName,
+          searchIndexName,
+          deleting: { $ne: true },
+          ...(seen.generation ? { generation: seen.generation } : {}),
+        },
+        [
+          {
+            $set: {
+              ownsCollection: { $literal: true },
+              // An explicit false records that the index existed before registration; keep it.
+              ownsVectorIndex: { $ifNull: ['$ownsVectorIndex', true] },
+              ...(textSearchIndexName ? { ownsTextIndex: { $ifNull: ['$ownsTextIndex', true] } } : {}),
+              ...mutationFields(claimToken),
+            },
+          },
+          ...(listed[searchIndexName] ? [tofu(searchIndexName, { $eq: ['$ownsVectorIndex', true] })] : []),
+          ...(textSearchIndexName && listed[textSearchIndexName]
+            ? [
+                tofu(textSearchIndexName, {
+                  $and: [
+                    { $eq: ['$textSearchIndexName', { $literal: textSearchIndexName }] },
+                    { $eq: ['$ownsTextIndex', true] },
+                  ],
+                }),
+              ]
+            : []),
+        ],
+        { returnDocument: 'before' },
+      );
+      this.indexTargets.delete(indexName);
+      if (!before) {
+        const current = await this.readRegistryEntry(indexName);
+        this.assertNotDeleting(current, 'CLAIM_LEGACY_INDEX');
+        if (
+          current &&
+          current.isByo !== true &&
+          current.collectionName === collectionName &&
+          current.searchIndexName === searchIndexName &&
+          current.ownsCollection === true
+        )
+          return;
+        throw conflict(current);
+      }
+      await this.testHooks?.afterClaimWrite?.(indexName);
+      // No handshake here: the names were referenced before this write, which already blocks a drop (I11a).
+      const relisted = await listIds(collectionName, names);
+      const after = await this.readRegistryEntry(indexName);
+      if (after?.claimToken === claimToken) {
+        // The expected ids are the ones recorded after the write.
+        if (idsMatch(after.indexIds, names, relisted)) return;
+        await this.testHooks?.beforeClaimUndo?.(indexName);
+        const restore = (v: unknown) => (v === undefined ? '$$REMOVE' : { $literal: v });
+        const undone = await registry.updateOne(
+          { _id: indexName, generation: after.generation, claimToken, rev: after.rev },
+          [
+            {
+              $set: {
+                ownsCollection: restore(before.ownsCollection),
+                ownsVectorIndex: restore(before.ownsVectorIndex),
+                ownsTextIndex: restore(before.ownsTextIndex),
+                indexIds: restore(before.indexIds),
+                ...mutationFields(),
+              },
+            },
+          ],
+        );
+        this.indexTargets.delete(indexName);
+        if (undone.matchedCount === 1) throw relistConflict();
+      }
+      await settle(collectionName, searchIndexName, names, relisted);
     };
 
     try {
@@ -4126,10 +4263,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       const claimed = this.db.collection<MongoDBDocument>(indexName);
+      const textIndex = `${indexName}_search_index`;
       const searchIndexes: string[] = [];
-      for (const name of [vectorIndex, `${indexName}_search_index`]) {
+      // TOFU (Q5): the ids listed before the insert are the ones it records.
+      const indexIds: { name: string; id: string }[] = [];
+      for (const name of [vectorIndex, textIndex]) {
         const rows = await this.listSearchIndexRows(claimed, name, 'claim');
         if (rows.length) searchIndexes.push(name);
+        const id = rows.find(isLiveRow)?.id;
+        if (id) indexIds.push({ name, id });
       }
       if (!searchIndexes.includes(vectorIndex)) {
         throw refuse(
@@ -4141,8 +4283,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const before = await otherUsers();
       if (before.length) throw inUse(before);
 
-      const textIndex = `${indexName}_search_index`;
+      const names = searchIndexes;
       const claimToken = uuidv4();
+      const generation = uuidv4();
       await this.testHooks?.beforeClaimInsert?.(indexName);
       try {
         // insertOne, never an upsert: a registration written meanwhile must win, not be overwritten.
@@ -4156,6 +4299,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ownsCollection: true,
           ownsVectorIndex: true,
           ...(searchIndexes.includes(textIndex) ? { textSearchIndexName: textIndex, ownsTextIndex: true } : {}),
+          indexIds,
+          generation,
+          rev: 1,
           claimToken,
         });
       } catch (error: any) {
@@ -4171,12 +4317,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         return await claimRegistered(winner);
       }
       this.indexTargets.delete(indexName);
+      await this.testHooks?.afterClaimWrite?.(indexName);
+      // The claim adds references, so it runs the attach handshake (R3-3) after its write, then re-lists (R4-3).
+      const pending = await this.pendingDropError(indexName, indexName, names, 'CLAIM_LEGACY_INDEX', reconciled);
       const after = await otherUsers();
-      if (after.length) {
-        await registry.deleteOne({ _id: indexName, claimToken });
-        this.indexTargets.delete(indexName);
-        throw inUse(after);
-      }
+      const relisted = await listIds(indexName, names);
+      const refusal = after.length
+        ? inUse(after)
+        : (pending ?? (idsMatch(indexIds, names, relisted) ? undefined : relistConflict()));
+      if (!refusal) return;
+      await this.testHooks?.beforeClaimUndo?.(indexName);
+      // Pinned on rev too (R5-2): a cleaner's release or transfer to this entry makes it miss.
+      const undone = await registry.deleteOne({ _id: indexName, generation, claimToken, rev: 1 });
+      this.indexTargets.delete(indexName);
+      if (undone.deletedCount === 1) throw refusal;
+      await settle(indexName, vectorIndex, names, relisted);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
