@@ -55,6 +55,9 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
+          # A pull_request run would otherwise build GitHub's merge with main, but publishes
+          # under the PR's head SHA.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Setup pnpm and Node.js

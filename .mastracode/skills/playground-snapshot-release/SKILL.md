@@ -7,7 +7,7 @@ description: Get a Playground UI snapshot (`@mastra/playground-ui`, `@mastra/obs
 
 `.github/workflows/playground-snapshot.yml` publishes `@mastra/playground-ui`, `@mastra/observability`, `@mastra/mcp-apps-components`, `@mastra/ai-sdk`, `@mastra/client-js`, `@mastra/react`, `@mastra/core` and `@mastra/schema-compat` to pkg.pr.new. It runs by itself on every push that changes `packages/playground-ui` or `packages/mcp-apps-components` (pull requests and `main`), and can be dispatched for any branch. Each package is installable at `https://pkg.pr.new/@mastra/<name>@<short sha>` as soon as the run finishes; nothing goes to npm.
 
-pkg.pr.new deletes a build a month after its last download, and every build after six months. Rerun or dispatch the workflow on that commit to republish it.
+pkg.pr.new deletes a build a month after its last download, and every build after six months. To republish an old commit, push a temporary branch at it (`git push origin <sha>:refs/heads/snapshot/<short sha>`), dispatch the workflow on that branch (step 3), and delete the branch afterwards. The URL is the same as before.
 
 ## 1. Ask which branch
 
@@ -66,7 +66,14 @@ If there's none (the commit didn't touch the UI, e.g. a `core`-only change Platf
 gh workflow run playground-snapshot.yml --repo mastra-ai/mastra --ref "$branch"
 ```
 
-Then find that run with the same `gh run list` command (`--event workflow_dispatch`).
+The dispatch builds the branch's tip at that moment, which may have moved since step 2. Find the run and take its SHA as the one to pin:
+
+```bash
+gh run list --repo mastra-ai/mastra --workflow playground-snapshot.yml --branch "$branch" \
+  --event workflow_dispatch --limit 1 --json databaseId,headSha,status,url
+head_sha=<headSha from that run>
+short_sha=${head_sha:0:7}
+```
 
 ## 4. Wait for completion
 
