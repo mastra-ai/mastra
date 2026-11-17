@@ -364,10 +364,30 @@ export class FactoryTransitionService {
       await this.#recordTransition(request, undefined, rejection);
       return rejection;
     }
+    // A person naming another board moves the card there: the same cross-board commit a
+    // card-move rule makes, under the caller's own name.
+    let manualBoardMove = false;
+    if (isHumanTransition(request) && !request.eventRoute && request.toBoard === undefined) {
+      const itemBoard = boardForWorkItem(item);
+      if (request.board !== itemBoard) {
+        request = { ...request, board: itemBoard, toBoard: request.board };
+        manualBoardMove = true;
+      }
+    }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
       if (current) result = staleRejection(result, current);
+    }
+    // Runs the old board queued for the card mean nothing on the new one; what this move queued stays.
+    if (manualBoardMove && result.status === 'accepted') {
+      await this.#storage.supersedeDecisionsForWorkItem({
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        workItemId: item.id,
+        except: result.decisions.map(decision => String(decision.idempotencyKey)),
+        supersededAt: new Date(),
+      });
     }
     await this.#recordTransition(request, item, result);
     this.#notifyCommitted(request, item, result);
@@ -433,6 +453,9 @@ export class FactoryTransitionService {
           cause: request.cause,
           configVersion: this.#configVersion,
           ...(from ? { from } : {}),
+          ...(request.toBoard !== undefined && request.toBoard !== request.board
+            ? { fromBoard: request.board, toBoard: request.toBoard }
+            : {}),
           ...(request.reenter ? { reenter: true } : {}),
           ...detail,
         },
@@ -486,12 +509,12 @@ export class FactoryTransitionService {
         `Board "${request.board}" is not installed.`,
       );
     }
-    if (request.toBoard !== undefined && !request.eventRoute) {
+    if (request.toBoard !== undefined && !request.eventRoute && !isHumanTransition(request)) {
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
-        'Only a card-move rule can move a card to another board.',
+        'Only a card-move rule or a person can move a card to another board.',
       );
     }
     const targetBoard = request.toBoard ?? request.board;
@@ -531,7 +554,10 @@ export class FactoryTransitionService {
     const filesPastEdges = request.routeFiling === true && fromStage === fromBoard.initialPhase;
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
-      (!request.eventRoute && !filesPastEdges && !board.allowsTransition(fromStage, request.stage))
+      (!request.eventRoute &&
+        board === fromBoard &&
+        !filesPastEdges &&
+        !board.allowsTransition(fromStage, request.stage))
     ) {
       if (board !== fromBoard) {
         return this.#commitRejection(
@@ -554,12 +580,35 @@ export class FactoryTransitionService {
       );
     }
 
+    // A person's cross-board move takes live work, not finished cards, and lands it where work can
+    // continue: a finished card stays where it finished, and finishing belongs to the card's own board.
+    if (board !== fromBoard && !request.eventRoute) {
+      if (fromBoard.isTerminal(fromStage)) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `The work item is finished on the ${fromBoard.name} board and stays there.`,
+        );
+      }
+      if (board.isTerminal(request.stage)) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `A card finishes on its own board; move it to a non-terminal ${board.name} phase instead.`,
+        );
+      }
+    }
+
     if (
       isHumanTransition(request) &&
       request.cause !== 'run_start' &&
       !request.initialEntry &&
       (fromStage !== request.stage || request.reenter === true) &&
-      phaseMayStartRun(board.phaseKind(request.stage)) &&
+      // Leaving the board strands whatever run is queued or underway, so a busy card stays put
+      // even when the destination phase itself starts nothing.
+      (phaseMayStartRun(board.phaseKind(request.stage)) || board !== fromBoard) &&
       (await this.#cardBusy(request))
     ) {
       return this.#commitRejection(request, transitionId, 'card_busy', BUSY_CARD_MOVE_REFUSAL);

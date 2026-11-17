@@ -1818,7 +1818,8 @@ describe('FactoryTransitionService', () => {
     ).resolves.toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'The work item belongs to board "release", not "work".',
+      // A person naming another board asks for a cross-board move; here the board does not exist.
+      reason: 'Board "work" is not installed.',
     });
   });
 });

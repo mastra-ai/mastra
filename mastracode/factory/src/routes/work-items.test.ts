@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -958,6 +958,161 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item, { board: 'review' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('POST transition moving a card to another board', () => {
+  // On live projects, Work cards that belong on another board (e.g. OSS Features) had no manual
+  // path off their board: the transition endpoint rejected any `board` other than the card's.
+  const registry = () => boardRegistryOf([triageWorkBoard, createTestBoard()]);
+
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody(overrides)),
+      },
+    );
+    return (await res.json()).workItem;
+  }
+
+  const move = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
+    buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          board: 'release',
+          stage: 'queued',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
+          cause: 'move_to_board',
+          ...overrides,
+        }),
+      },
+    );
+
+  it("a person moves a Work card to another board's phase, keeping its id, sessions and history", async () => {
+    const created = await createItem();
+    // A triage session from an earlier run stays on the card; only its board placement changes.
+    await seed.workItems.update({ orgId: 'org1', id: created.id, userId: 'u1', patch: { sessions: run } });
+    const item = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    auditRecorded = [];
+
+    const res = await move(item);
+
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result).toMatchObject({ status: 'accepted', itemId: created.id, stage: 'queued' });
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('release');
+    expect(stored.stages).toEqual(['queued']);
+    expect(stored.sessions).toEqual(item.sessions);
+    expect(stored.sessions.execute).toMatchObject(run.execute);
+    expect(stored.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
+      ['intake', true],
+      ['queued', false],
+    ]);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        actorType: 'human',
+        actorId: 'u1',
+        metadata: expect.objectContaining({ ingressType: 'human', fromBoard: 'work', toBoard: 'release' }),
+      }),
+    );
+  });
+
+  it('holds a busy card, then supersedes the run the old board proposed once it moves', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: moving the card away would strand it mid-flight.
+    const busy = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab2' },
+    );
+    expect(busy.status).toBe(422);
+    expect(await busy.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+
+    // A dispatcher parks the run for a person's approval; the proposal is not a live run.
+    const ownerId = 'dispatcher-1';
+    const now = new Date();
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId,
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 10,
+    });
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed!.id, orgId: claimed!.orgId, factoryProjectId: claimed!.factoryProjectId, ownerId },
+      now,
+    );
+
+    const moved = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab5' },
+    );
+
+    expect(moved.status).toBe(200);
+    // The old board's proposed run means nothing on the new board.
+    const proposals = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID, { statuses: ['proposed'] });
+    expect(proposals).toHaveLength(0);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('release');
+  });
+
+  it('returns typed stale on a lost revision race without moving the card', async () => {
+    const item = await createItem();
+    const res = await move({ id: item.id, revision: item.revision + 5 });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses a board that is not installed and a phase the target board does not declare', async () => {
+    const item = await createItem();
+
+    const unknownBoard = await move(item, { board: 'oss-features' });
+    expect(unknownBoard.status).toBe(422);
+    expect(await unknownBoard.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: 'Board "oss-features" is not installed.' },
+    });
+
+    const unknownPhase = await move(item, { stage: 'missing', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab3' });
+    expect(unknownPhase.status).toBe(422);
+    expect(await unknownPhase.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: expect.stringContaining('no phase missing') },
+    });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it("refuses the target board's terminal phase: a card finishes on its own board", async () => {
+    const item = await createItem();
+    const res = await move(item, { stage: 'shipped' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses to move a finished card off its board', async () => {
+    const item = await createItem();
+    const canceled = await move(item, { board: 'work', stage: 'canceled' });
+    expect(canceled.status).toBe(200);
+    const { result } = await canceled.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab4' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.stages).toEqual(['canceled']);
   });
 });
 
