@@ -1273,6 +1273,20 @@ describeForAllEngines(
       };
     }
 
+    // Waits until a held memory save is on its way to storage. A regression that fails the task
+    // before it saves would otherwise leave the test waiting until its 30 s timeout.
+    async function untilSaveHeld(saveStarted: Promise<void>): Promise<void> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('save never reached storage')), 2_000);
+      });
+      try {
+        await Promise.race([saveStarted, timedOut]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     // Technical: a finished run releases its claim, then retires its memory fence. Until that
     // retirement resolves, the execution stays registered in this process, and the late suspend's
     // check asked it to prove it still held the claim it had just released, so the task failed
@@ -1368,7 +1382,7 @@ describeForAllEngines(
         try {
           run.release();
           // The suspension passed its ownership check; its save is on the way to storage.
-          await saveStarted;
+          await untilSaveHeld(saveStarted);
           // The finished run completes its cleanup. Then a successor claims the run and raises
           // the memory fence, as recovery or a new turn does before it touches memory.
           run.finishCleanup();
@@ -1683,7 +1697,7 @@ describeForAllEngines(
         const save = holdMemorySave(run.memoryStore, 2);
         try {
           run.release();
-          await save.saveStarted;
+          await untilSaveHeld(save.saveStarted);
           const successor = await takeOverAfterCleanup(run);
           // The successor works on the thread: here it drops the open request.
           const { messages } = await run.memoryStore.listMessages({ ...run.thread, perPage: false });
@@ -1715,7 +1729,7 @@ describeForAllEngines(
         const save = holdMemorySave(run.memoryStore, 1);
         try {
           run.release();
-          await save.saveStarted;
+          await untilSaveHeld(save.saveStarted);
           const successor = await takeOverAfterCleanup(run);
 
           save.finishSave();
