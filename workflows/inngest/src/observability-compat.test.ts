@@ -10,18 +10,9 @@ import { describe, expect, it } from 'vitest';
 // core lacks fails at link time, before any runtime guard runs, so the whole package entry is
 // built and loaded against a core missing the helper this package's workflows save at suspend.
 describe('workflow resume tracing compatibility', () => {
-  it.each([
-    {
-      core: 'with the lineage helper (1.81)',
-      missing: ['getWorkflowResumeTracingContext'],
-      saved: { traceId: 'trace-1', spanId: 'span-1', parentSpanId: 'parent-1', resumedFromSpanId: 'span-1' },
-    },
-    {
-      core: 'without any resume helper (1.80)',
-      missing: ['getWorkflowResumeTracingContext', 'getResumeTracingContext'],
-      saved: { traceId: 'trace-1', spanId: 'span-1' },
-    },
-  ])('loads on a core $core and saves the lineage it knows', async ({ missing, saved }) => {
+  it('loads on a core without the workflow helper and saves the lineage it knows', async () => {
+    const missing = ['getWorkflowResumeTracingContext'];
+    const saved = { traceId: 'trace-1', spanId: 'span-1', parentSpanId: 'parent-1', resumedFromSpanId: 'span-1' };
     const directory = await mkdtemp(join(import.meta.dirname, '.resume-compat-'));
     try {
       const observability = join(directory, 'older-observability.mjs');

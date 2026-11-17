@@ -216,9 +216,10 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
   const resumed = resumeInSavedTrace(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
-  // The saved decision holds when the resume continues the saved trace, or when the original saved none because
-  // it was unsampled. An explicit caller decision wins, as it does for resumed agent runs.
-  const saved = resumeFrom && (resumed || resumeFrom.sampled === false) ? resumeFrom : undefined;
+  // The saved decision holds when the resume continues the saved trace, or when the original was unsampled and
+  // the resume names no trace of its own. An explicit caller decision wins, as it does for resumed agent runs.
+  const staysUnsampled = resumeFrom?.sampled === false && !tracingOptions?.traceId;
+  const saved = resumeFrom && (resumed || staysUnsampled) ? resumeFrom : undefined;
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {

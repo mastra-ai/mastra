@@ -356,6 +356,25 @@ describe('workflow resume span linkage', () => {
     }
   });
 
+  it('default resume of an unsampled run joins the trace its caller names', async () => {
+    const sampler = scriptedSampler([false, true]);
+    const { workflow, host } = buildSampledHost('default', sampler.sampling);
+    try {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      const traceId = 'a'.repeat(32);
+      const tracingOptions = { traceId, parentSpanId: 'b'.repeat(16) };
+      expect((await resumed.resume({ resumeData: { approved: true }, tracingOptions })).status).toBe('success');
+
+      const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(roots.map(span => span.traceId)).toEqual([traceId]);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
   // Only the default engine's start() takes tracingOptions, so only it can hide a run's input.
   it("default resume keeps the original run's hidden input", async () => {
     const { workflow, host } = buildSampledHost('default', { type: SamplingStrategyType.ALWAYS });
@@ -425,13 +444,16 @@ describe('workflow resume span linkage', () => {
       storage,
       workflows: { [workflow.id]: workflow },
       observability: new Observability({
-        configs: { default: { serviceName: 'workflow-resume-keys', exporters: [exporter] } },
+        configs: {
+          default: { serviceName: 'workflow-resume-keys', exporters: [exporter], requestContextKeys: ['region'] },
+        },
       }),
     });
     try {
       const requestContext = new RequestContext([
         ['userId', 'u1'],
         ['tenant', 'acme'],
+        ['region', 'eu'],
       ]);
       const run = await workflow.createRun();
       expect(
@@ -443,7 +465,7 @@ describe('workflow resume span linkage', () => {
         'suspended',
       );
       const saved = (await readTracingContext(storage, run.runId)) as { traceState?: { requestContextKeys: string[] } };
-      expect(saved.traceState?.requestContextKeys).toEqual(['userId']);
+      expect(saved.traceState?.requestContextKeys).toEqual(['region', 'userId']);
 
       const second = await workflow.createRun({ runId: run.runId });
       expect(

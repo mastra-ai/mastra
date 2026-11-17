@@ -38,12 +38,11 @@ export function generationUsage(usage: LanguageModelUsage, steps: Array<{ usage?
 
 /**
  * The context a suspending workflow run saves for its resume. A core without the helper saves the
- * lineage it knows: `getResumeTracingContext` from core 1.81, the span's own ids before that.
+ * lineage alone, and its resume samples again.
  */
 export function workflowResumeTracingContext(
   span: Parameters<typeof coreObservability.getWorkflowResumeTracingContext>[0],
 ): ResumeTracingContext | undefined {
   if (coreFeatures.has('workflow-resume-sampling')) return coreObservability.getWorkflowResumeTracingContext?.(span);
-  if (coreObservability.getResumeTracingContext) return coreObservability.getResumeTracingContext(span);
-  return span ? { traceId: span.traceId, spanId: span.id } : undefined;
+  return coreObservability.getResumeTracingContext(span);
 }
