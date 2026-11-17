@@ -735,6 +735,15 @@ function SelectedPage({
   );
 }
 
+const SNIPPET_LEAD = 30;
+
+function aroundMatch(text: string, query: string) {
+  const at = query.trim() ? text.toLowerCase().indexOf(query.trim().toLowerCase()) : -1;
+  if (at <= SNIPPET_LEAD) return text;
+  const start = text.lastIndexOf(' ', at - SNIPPET_LEAD) + 1;
+  return `…${text.slice(start)}`;
+}
+
 function Highlighted({ text, query }: { text: string; query: string }) {
   const needle = query.trim().toLowerCase();
   const at = needle ? text.toLowerCase().indexOf(needle) : -1;
@@ -786,7 +795,7 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
                       </span>
                       {page.description ? (
                         <Txt as="span" variant="caption" tone="muted" className="line-clamp-1 wrap-anywhere">
-                          <Highlighted text={page.description} query={query} />
+                          <Highlighted text={aroundMatch(page.description, query)} query={query} />
                         </Txt>
                       ) : null}
                     </span>
