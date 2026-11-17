@@ -405,6 +405,7 @@ export class GithubIntegration implements FactoryIntegration {
     createReviewComment: input => this.#createReviewComment(input),
     updateReviewComment: input => this.#updateReviewComment(input),
     deleteReviewComment: input => this.#deleteReviewComment(input),
+    resolveReviewThread: input => this.#resolveReviewThread(input),
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
@@ -1133,6 +1134,32 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  async #resolveReviewThread(input: InputOf<'resolveReviewThread'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const commentId = requirePositiveId(input.commentId, 'review comment');
+    let pullRequestUrl: string;
+    try {
+      const { data } = await octokit.pulls.getReviewComment({ ...parts, comment_id: commentId });
+      pullRequestUrl = data.pull_request_url;
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        throw new Error(
+          `GitHub review comment ${commentId} was not found in ${input.sourceId}. List the pull request's diff comments and pass the id of one of them.`,
+        );
+      }
+      throw err;
+    }
+    const pullNumber = requirePullRequestNumber(pullRequestUrl.slice(pullRequestUrl.lastIndexOf('/') + 1));
+    const threadId = await findReviewThreadId(octokit, parts, pullNumber, commentId);
+    if (!threadId) {
+      throw new Error(
+        `GitHub review comment ${commentId} on pull request #${pullNumber} is not part of a published review thread, so there is no thread to resolve. Comments in a pending review join a thread once that review is submitted; submit the review first, or pass the id of a published diff comment.`,
+      );
+    }
+    const mutation = input.resolved ? RESOLVE_REVIEW_THREAD_MUTATION : UNRESOLVE_REVIEW_THREAD_MUTATION;
+    await octokit.graphql(mutation, { threadId });
+  }
+
   async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.listRequestedReviewers({
@@ -1720,6 +1747,123 @@ function requirePositiveId(value: string, resource: string): number {
   const parsed = parsePositiveInteger(value);
   if (parsed === null) throw new Error(`GitHub ${resource} id must be a positive integer.`);
   return parsed;
+}
+
+const REVIEW_THREAD_PAGE_SIZE = 100;
+
+const REVIEW_THREADS_QUERY = `
+  query ($owner: String!, $repo: String!, $number: Int!, $cursor: String, $pageSize: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: $pageSize, after: $cursor) {
+          nodes {
+            id
+            comments(first: $pageSize) {
+              nodes { databaseId }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const REVIEW_THREAD_COMMENTS_QUERY = `
+  query ($threadId: ID!, $cursor: String, $pageSize: Int!) {
+    node(id: $threadId) {
+      ... on PullRequestReviewThread {
+        comments(first: $pageSize, after: $cursor) {
+          nodes { databaseId }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const RESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    resolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+const UNRESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    unresolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+interface GraphqlPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface GraphqlReviewThreadComments {
+  nodes: Array<{ databaseId: number | null } | null> | null;
+  pageInfo: GraphqlPageInfo;
+}
+
+interface ReviewThreadsResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: Array<{ id: string; comments: GraphqlReviewThreadComments } | null> | null;
+        pageInfo: GraphqlPageInfo;
+      };
+    } | null;
+  } | null;
+}
+
+interface ReviewThreadCommentsResponse {
+  node: { comments?: GraphqlReviewThreadComments } | null;
+}
+
+function containsComment(comments: GraphqlReviewThreadComments, commentId: number): boolean {
+  return (comments.nodes ?? []).some(comment => comment?.databaseId === commentId);
+}
+
+/**
+ * GitHub exposes review threads only through GraphQL, keyed by node id, while
+ * Factory tools carry REST comment ids. Walk every thread (and every comment of
+ * long threads) until one holds the comment; replies match their own thread.
+ */
+async function findReviewThreadId(
+  octokit: Octokit,
+  parts: { owner: string; repo: string },
+  pullNumber: number,
+  commentId: number,
+): Promise<string | null> {
+  let cursor: string | null = null;
+  do {
+    const response: ReviewThreadsResponse = await octokit.graphql<ReviewThreadsResponse>(REVIEW_THREADS_QUERY, {
+      ...parts,
+      number: pullNumber,
+      cursor,
+      pageSize: REVIEW_THREAD_PAGE_SIZE,
+    });
+    const threads = response.repository?.pullRequest?.reviewThreads;
+    if (!threads) return null;
+    const threadNodes = (threads.nodes ?? []).filter(thread => thread !== null);
+    const match = threadNodes.find(thread => containsComment(thread.comments, commentId));
+    if (match) return match.id;
+    // Only threads longer than one page can still hide the comment.
+    for (const thread of threadNodes) {
+      let comments = thread.comments;
+      while (comments.pageInfo.hasNextPage) {
+        const page: ReviewThreadCommentsResponse = await octokit.graphql<ReviewThreadCommentsResponse>(
+          REVIEW_THREAD_COMMENTS_QUERY,
+          { threadId: thread.id, cursor: comments.pageInfo.endCursor, pageSize: REVIEW_THREAD_PAGE_SIZE },
+        );
+        if (!page.node?.comments) break;
+        comments = page.node.comments;
+        if (containsComment(comments, commentId)) return thread.id;
+      }
+    }
+    cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+  } while (cursor);
+  return null;
 }
 
 function getGithubInstallationId(connection: IntegrationConnection): number {
