@@ -1045,7 +1045,7 @@ async function pushAuthenticatedBranch(
   // Porcelain lines read `<flag>\t<src>:<dst>\t<summary>`; `=` marks a ref the remote already had.
   const upToDate = push.stdout
     .split('\n')
-    .some(line => line.startsWith('=\t') && line.split('\t')[1]?.endsWith(`:refs/heads/${branch}`));
+    .some(line => line.startsWith('=\t') && line.split('\t')[1]?.startsWith(`refs/heads/${branch}:`));
   return { commit: tip.stdout.trim(), upToDate };
 }
 

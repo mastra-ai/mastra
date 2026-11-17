@@ -1177,6 +1177,24 @@ describe('pushRepositoryBranch', () => {
     ).resolves.toEqual({ commit: 'abc123', upToDate: true });
   });
 
+  it('reports an up-to-date push whose configured destination has another name', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse')
+        ? { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+        : script.includes('push --porcelain')
+          ? {
+              exitCode: 0,
+              stdout:
+                'To https://gitlab.com/acme/hello.git\n=\trefs/heads/feat/gitlab:refs/heads/review\t[up to date]\nDone\n',
+              stderr: '',
+            }
+          : OK,
+    );
+    await expect(
+      pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello'),
+    ).resolves.toEqual({ commit: 'abc123', upToDate: true });
+  });
+
   it('keeps a failed push credential-free in argv and persistent config', async () => {
     const sandbox = new FakeSandbox(script =>
       script.includes('push --porcelain -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
