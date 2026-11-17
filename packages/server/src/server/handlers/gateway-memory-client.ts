@@ -293,24 +293,29 @@ function isV2GatewayKey(key: string): boolean {
 }
 
 /**
- * Whether this deployment targets Gateway v2. Signaled either by the
- * MASTRA_GATEWAY_VERSION=v2 runtime env var (set by the platform), by a v2
- * (organization) API key prefix (which predates the env var signal), or by a
- * registered Mastra gateway instance that carries a v2 key via config.apiKey
- * (pass `mastra` so instance-level config is consulted too).
+ * Whether this deployment targets Gateway v2. Signaled by the MASTRA_GATEWAY_VERSION=v2 runtime
+ * env var (set by the platform) or by a v2 (organization) API key prefix, which predates the env
+ * var signal. A v1 project key (`msk_`) is always served by v1, so it wins over the env var.
+ *
+ * Pass `mastra` so the registered Mastra gateway answers: it holds the key model calls use, which
+ * may be set in its config rather than the environment, and its `isV2()` applies the same rules.
+ * Keep the environment rules below in sync with `MastraGateway.isV2` in `@mastra/core`.
  */
 export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unknown> | undefined }): boolean {
-  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
-  const key = process.env.MASTRA_GATEWAY_API_KEY;
-  if (!!key && isV2GatewayKey(key)) return true;
-  // A user-registered MastraGateway can hold a v2 key in its config rather
-  // than the environment; ask the instance for its effective v2 state.
   const gateways = mastra?.listGateways?.() ?? {};
   for (const gateway of Object.values(gateways)) {
     const candidate = gateway as { id?: string; isV2?: () => boolean };
-    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function' && candidate.isV2()) return true;
+    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function') return candidate.isV2();
   }
-  return false;
+  return isGatewayV2ByEnvironment();
+}
+
+/** Whether the environment alone (MASTRA_GATEWAY_API_KEY and MASTRA_GATEWAY_VERSION) says v2. */
+function isGatewayV2ByEnvironment(): boolean {
+  const key = process.env.MASTRA_GATEWAY_API_KEY;
+  if (key?.startsWith('msk_')) return false;
+  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
+  return !!key && isV2GatewayKey(key);
 }
 
 // Singleton-ish lazy instance
@@ -320,10 +325,14 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
  * Get a GatewayMemoryClient instance, or null if gateway is not configured.
  * Pass `mastra` so a registered v2 gateway configuration takes precedence
  * over a v1 environment key.
+ *
+ * The client is built from MASTRA_GATEWAY_API_KEY and MASTRA_GATEWAY_URL, so it is built only when
+ * the environment itself says v1. A registered gateway that is v1 only because of a key in its own
+ * config, which the server cannot use here, does not make the environment key a v1 key.
  */
 export function getGatewayClient(mastra?: Parameters<typeof isGatewayV2>[0]): GatewayMemoryClient | null {
   // Gateway v2 has no memory REST API; Studio must use the agent's own memory configuration.
-  if (isGatewayV2(mastra)) return null;
+  if (isGatewayV2(mastra) || isGatewayV2ByEnvironment()) return null;
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;

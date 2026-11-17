@@ -526,7 +526,7 @@ describe('getProvidersHandler', () => {
       expect(result.providers.find(provider => provider.id === 'mastra')?.models).toEqual(['live-chat-model']);
     });
 
-    it('does not fall back to cached Mastra models when the v2 catalog fails', async () => {
+    it('keeps the Mastra gateway listed with no models when the v2 catalog fails', async () => {
       process.env.MASTRA_GATEWAY_VERSION = 'v2';
       process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
       Object.assign(globalThis, {
@@ -552,7 +552,9 @@ describe('getProvidersHandler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(result.providers.find(provider => provider.id === 'mastra')).toBeUndefined();
+      const gateway = result.providers.find(provider => provider.id === 'mastra');
+      expect(gateway).toMatchObject({ name: 'Gateway', envVar: 'MASTRA_GATEWAY_API_KEY', connected: true });
+      expect(gateway?.models).toEqual([]);
       expect(result.providers.find(provider => provider.id === 'openai')).toBeDefined();
     });
   });

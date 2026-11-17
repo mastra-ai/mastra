@@ -474,6 +474,7 @@ describe('toPersistedErrorIdentity', () => {
       message: 'Model call failed',
       statusCode: 400,
       reason: 'prompt is too long: 1 > 0 maximum',
+      requestOrigin: 'https://api.example.com',
     });
   });
 

@@ -866,8 +866,13 @@ export class GatewayRegistry {
         ...(writeToSrc ? [] : [new MastraGateway()]),
       ];
 
-      // Combine default and custom gateways
-      const gateways = [...defaultGateways, ...this.customGateways];
+      // Combine default and custom gateways. A Mastra gateway in v2 mode, default or registered,
+      // lists models for one organization's key, so it is not written to the machine-wide cache,
+      // and its failures cannot stop the rest of the refresh.
+      const gateways = [...defaultGateways, ...this.customGateways].filter(gateway => {
+        const candidate = gateway as { id?: string; isV2?: () => boolean };
+        return !(candidate.id === 'mastra' && typeof candidate.isV2 === 'function' && candidate.isV2());
+      });
 
       // Fetch provider data
       const {

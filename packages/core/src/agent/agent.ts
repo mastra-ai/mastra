@@ -9281,14 +9281,31 @@ export class Agent<
     // Only warn for ids the caller passed in `memory` args. Reserved request-context ids are set
     // per request (auth middleware, AgentController) and inherited by every agent in that request,
     // including internal memory-less agents such as the OM Observer and Reflector.
-    if (
-      options.memory?.resource &&
-      options.memory?.thread &&
-      !this.hasOwnMemory() &&
-      !this.#knowledge &&
-      !isGatewayModel
-    ) {
-      this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
+    if (options.memory?.resource && options.memory?.thread && !this.hasOwnMemory() && !this.#knowledge) {
+      const warnMissingMemory = () =>
+        this.logger.warn('No memory is configured but resourceId and threadId were passed in args', {
+          agent: this.name,
+        });
+      const gatewayModel = resolvedModel as unknown as { isGatewayMemoryManaged?: () => Promise<boolean> };
+      if (!isGatewayModel) {
+        warnMissingMemory();
+      } else if (typeof gatewayModel.isGatewayMemoryManaged === 'function') {
+        // The gateway keeps memory only for some credentials, so ask the model. The check may
+        // resolve a credential, so it runs in the background and never delays or fails the run.
+        // A check that fails leaves the warning out, as it was before the model could answer.
+        void Promise.resolve()
+          .then(() => gatewayModel.isGatewayMemoryManaged!())
+          .then(
+            managed => {
+              if (!managed) warnMissingMemory();
+            },
+            error =>
+              this.logger.debug('Could not tell whether the gateway manages memory for this model', {
+                agent: this.name,
+                error,
+              }),
+          );
+      }
     }
 
     // Apply null→undefined transform for OpenAI structured output validation.
