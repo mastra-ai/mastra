@@ -99,9 +99,14 @@ describe('model spans when onStepFinish is slow', () => {
   it('records a failed model call once', async () => {
     const steps = await run(['tool-call', 'error']);
 
-    expect(steps.map(({ step, inferences }) => [Boolean(step.errorInfo), inferences.length])).toEqual([
-      [false, 1],
-      [true, 1],
+    expect(
+      steps.map(({ step, inferences }) => [
+        Boolean(step.errorInfo),
+        inferences.map(inference => Boolean(inference.errorInfo)),
+      ]),
+    ).toEqual([
+      [false, [false]],
+      [true, [true]],
     ]);
   });
 });
