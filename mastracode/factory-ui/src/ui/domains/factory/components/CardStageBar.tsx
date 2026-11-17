@@ -47,7 +47,8 @@ export function CardStageBar({
   const { session, links } = useSessionSubscriptions();
   const repository = session.repository;
   const subscriptions = links.subscriptions;
-  const sessionHolds = useCardSessions(factory.id).held.has(item.id);
+  const cardSessions = useCardSessions(factory.id);
+  const sessionHolds = cardSessions.current && cardSessions.held.has(item.id);
   const { owner } = boardCardState({ decision: effectByItem.get(item.id), sessionHolds });
   const stages = cardStages(item, board);
   const enteredAt = stages?.current.kind === 'working' ? enteredCurrentStageAt(item, stages.current.id) : undefined;

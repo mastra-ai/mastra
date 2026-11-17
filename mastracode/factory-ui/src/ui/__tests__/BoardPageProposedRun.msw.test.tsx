@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -338,6 +338,26 @@ describe('Board card with a proposed run', () => {
     await waitForMutationsIdle(client);
     expect(card.querySelector('[data-live-session-indicator="working"]')).toBeNull();
     expect(within(card).getByRole('button', { name: 'Start suggested run: Plan' })).toBeDisabled();
+  });
+
+  it('holds the suggested run back until the board knows whether a session holds the card', async () => {
+    stubBoardEndpoints({ withLiveSession: true });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-activity`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    expect(await within(card).findByRole('button', { name: 'Start suggested run: Plan' })).toBeDisabled();
+    await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
+    expect(await screen.findByRole('menuitem', { name: 'Start suggested run' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('asks for the maintainer decision on a held card, not the run parked on it', async () => {

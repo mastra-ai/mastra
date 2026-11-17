@@ -157,7 +157,7 @@ export function BoardContent({
   const targetListed = targetStages.length > 0;
   const viewAnswered = phasesRead.data !== undefined && !phasesRead.isPlaceholderData;
   // Only with every read that says who holds a card answered does the board refuse a move itself.
-  const ownerCurrent = viewAnswered && decisions.isCurrent && runQueue.isSuccess;
+  const ownerCurrent = viewAnswered && decisions.isCurrent && runQueue.isSuccess && cardSessions.current;
   const targetReady = !phasesRead.isPending && (!targetItemId || targetListed);
   const loadingStages = boardLoadingStages({
     board: definition,

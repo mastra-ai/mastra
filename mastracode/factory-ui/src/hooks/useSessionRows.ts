@@ -55,10 +55,12 @@ export interface CardSessions {
   statuses: ReadonlyMap<string, SessionRowStatus>;
   /** The cards one of whose sessions is coming up, running, or parked on a person. */
   held: ReadonlySet<string>;
+  /** Whether the last read of them answered: until then, a card missing from `held` may still be held. */
+  current: boolean;
 }
 
 export function useCardSessions(factoryProjectId: string | undefined): CardSessions {
-  const activity = useSessionActivityQuery(factoryProjectId).data;
+  const { data: activity, isSuccess: current } = useSessionActivityQuery(factoryProjectId);
   return useMemo(
     () => ({
       statuses: new Map(
@@ -68,7 +70,8 @@ export function useCardSessions(factoryProjectId: string | undefined): CardSessi
         }),
       ),
       held: new Set(activity?.sessionHeldCardIds),
+      current,
     }),
-    [activity],
+    [activity, current],
   );
 }
