@@ -9,7 +9,7 @@ export function GoalStatus() {
 
   return (
     <span className="text-badge-pink-indicator [&_svg]:text-badge-pink-indicator inline-flex items-center gap-1">
-      <IconTarget size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
+      <IconTarget className="size-icon-sm" /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
     </span>
   );
 }

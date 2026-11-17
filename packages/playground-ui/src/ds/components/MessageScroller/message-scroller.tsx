@@ -903,7 +903,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
       >
         {children ?? (
           <>
-            <IconArrowDown className="size-4" aria-hidden />
+            <IconArrowDown className="size-icon-md" aria-hidden />
             <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
           </>
         )}

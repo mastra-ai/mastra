@@ -17,6 +17,7 @@ import { FactorySkillEditorDialog } from '../../settings/components/FactorySkill
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /** Skills some board's settings already show: the ones its phases run. None while the boards are unknown. */
 function boardSkillNames(boards: InstalledBoardInfo[] | undefined): Set<string> {
@@ -67,6 +68,7 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
                 {skill.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && (
                   <Badge>Overridden by app</Badge>
                 )}
+                {skill.origin === 'project' && <Badge>Custom</Badge>}
                 {skill.edited && <Badge>Edited</Badge>}
               </span>
               {skill.error ? (
@@ -106,6 +108,20 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
   );
 }
 
+/** Opens the editor on a new skill; admins of an open Factory only. */
+function NewSkillButton({ factoryId }: { factoryId: string }) {
+  const [creating, setCreating] = useState(false);
+
+  return (
+    <div className="flex justify-end">
+      <Button size="sm" icon={<IconPlusMedium />} onClick={() => setCreating(true)}>
+        New skill
+      </Button>
+      {creating && <FactorySkillEditorDialog factoryId={factoryId} canEdit onClose={() => setCreating(false)} />}
+    </div>
+  );
+}
+
 /**
  * The skills no board phase runs. A skill a phase runs lives on that phase's page, so it isn't listed twice.
  */
@@ -120,6 +136,7 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {factoryId !== undefined && canEdit && <NewSkillButton factoryId={factoryId} />}
       {loading && (
         <Txt tone="muted" as="p" variant="caption" role="status">
           Loading skills…

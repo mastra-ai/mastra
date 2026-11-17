@@ -558,6 +558,42 @@ async function ruleDecisionKeys(storage: WorkItemsStorage, orgId: string) {
   return rows.map(row => row.idempotencyKey).filter(key => !key.startsWith('factory-stage:'));
 }
 
+describe('route filing past the first phase', () => {
+  it("jumps the first phase's declared moves only from the first phase", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'yard',
+      title: 'Yard',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'doing' },
+        doing: { title: 'Doing', kind: 'resting', next: 'backlog' },
+        review: { title: 'Review', kind: 'resting' },
+      },
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'route-filing-test',
+      boards: boardRegistryOf([board]),
+    });
+
+    // Filing lands the card the route's way: Backlog declares no move to Review, yet the filing goes.
+    const filed = await createItem(storage, { board: board.id, stages: ['backlog'] });
+    expect(await service.transition({ ...request(filed, { stage: 'review' }), routeFiling: true })).toMatchObject({
+      status: 'accepted',
+      stage: 'review',
+    });
+
+    // A card another actor already moved on follows the board's graph again, filing flag or not —
+    // a stale filing retry must not teleport it from wherever it sits now.
+    const moved = await createItem(storage, { board: board.id, stages: ['doing'], sourceKey: '2' });
+    expect(
+      await service.transition({ ...request(moved, { stage: 'review', identity: 'request-2' }), routeFiling: true }),
+    ).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(await storage.get({ orgId: 'org-1', id: moved.id })).toMatchObject({ stages: ['doing'] });
+  });
+});
+
 describe('FactoryTransitionService', () => {
   it.each(['github-issue', 'slack-thread'] as const)(
     'does not auto-start %s on manual intake entry even with candidate metadata',

@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const DeploymentIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="14.625"
+    height="15.75"
+    viewBox="-0.8125 -0.875 14.625 15.75"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       d="M6.83531 7.0062C6.64515 7.35069 6.15 7.35069 5.95984 7.0062L2.99029 1.62664C2.7855 1.25565 3.10614 0.814077 3.5223 0.893977L6.30195 1.42765C6.36421 1.43961 6.42818 1.43961 6.49044 1.42766L9.27301 0.893806C9.68915 0.813965 10.0097 1.25552 9.80495 1.62648L6.83531 7.0062Z"
       fill="currentColor"

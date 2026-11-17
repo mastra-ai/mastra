@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { isStubbedProjectRead } from '../../../../../../e2e/ui/board-reads';
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -13,7 +14,6 @@ import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import {
   closeSessionProperties,
-  groupSessionsByBoard,
   openNestedSessionProperty,
   openSessionProperties,
   openSessionProperty,
@@ -85,7 +85,6 @@ const releaseItems = [releaseOld, releaseNew].map(release => ({
 }));
 
 beforeEach(() => {
-  groupSessionsByBoard();
   stubSessionsFactory(factoryId, [projectRepositoryId]);
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, () =>
@@ -192,12 +191,12 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Release Preview sessions' })).toBeNull());
     expect(groupRegions()).toEqual(['Work sessions', 'User sessions']);
-    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
     await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
-    await waitFor(() => expect(groupRegions()).toEqual(['All sessions']));
+    await waitFor(() => expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']));
     expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
@@ -266,7 +265,7 @@ describe('Sessions sidebar groups', () => {
     await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
     await closeSessionProperties(user);
 
-    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
   it("never lists a custom board's terminal-phase session as Idle while the board catalog loads", async () => {
@@ -276,8 +275,8 @@ describe('Sessions sidebar groups', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
         HttpResponse.json({ workItems: releaseItems.map(item => ({ ...item, stages: ['shipped'] })) }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async () => {
-        await catalogLoaded;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async ({ request }) => {
+        if (!isStubbedProjectRead(request)) await catalogLoaded;
         return HttpResponse.json({
           boards: [...builtinBoardCatalog.boards, releaseBoard],
         } satisfies BoardCatalogResponse);
@@ -289,7 +288,10 @@ describe('Sessions sidebar groups', () => {
 
     await pickSessionProperty(user, 'Status', 'Idle');
 
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Work old' })).not.toBeInTheDocument());
+    expect(screen.getByRole('link', { name: 'Work new' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Release new' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Release old' })).not.toBeInTheDocument();
     releaseCatalog();
   });
 });

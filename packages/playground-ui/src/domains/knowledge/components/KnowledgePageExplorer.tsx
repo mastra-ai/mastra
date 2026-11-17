@@ -49,7 +49,7 @@ import { IconSidebarWideLeftArrow } from '@/ds/icons/central/IconSidebarWideLeft
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { menuItemButtonClass } from '@/ds/primitives/menu-item';
-import { frameSurfaceStyle, overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
@@ -633,7 +633,7 @@ function MentionPopup({
           className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
           onClick={onClose}
         >
-          <IconCrossMedium size={14} aria-hidden />
+          <IconCrossMedium className="size-icon-sm" aria-hidden />
         </button>
       </div>
       <div className="min-h-0 overflow-y-auto">
@@ -672,6 +672,7 @@ function SelectedPage({
   onSelect,
   highlightMentionOf,
   compact,
+  onOpenPage,
 }: {
   source: KnowledgeExplorerSource;
   pageId: string;
@@ -679,6 +680,7 @@ function SelectedPage({
   onSelect: (pageId: string) => void;
   highlightMentionOf?: string;
   compact?: boolean;
+  onOpenPage?: () => void;
 }) {
   const detail = source.usePage(pageId);
   const activity = (source.useActivity ?? noActivity)(pageId);
@@ -705,6 +707,7 @@ function SelectedPage({
   return (
     <KnowledgePageDetail
       compact={compact}
+      onOpenPage={onOpenPage}
       page={detail.data.page}
       notes={detail.data.notes}
       pin={detail.data.pin ?? undefined}
@@ -1208,6 +1211,7 @@ export function KnowledgePageExplorer({
   ];
 
   const tabValue = explorerTab(view, showPage);
+  const pageOverGraph = overlay && showPage;
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
   if (drawerPageId && drawerPageId !== drawerLastId) setDrawerLastId(drawerPageId);
@@ -1382,34 +1386,26 @@ export function KnowledgePageExplorer({
               <IconSidebarLeftArrow />
             </Button>
           ) : null}
-          {showPage ? (
+          {showPage && !overlay ? (
             <section
               ref={focusPageTabOnMount}
               aria-label="Selected page"
-              className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-hidden rounded-lg border border-border bg-card'}`}
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
-              <div
-                className={
-                  overlay
-                    ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-studio-frame ${frameSurfaceStyle}`
-                    : 'contents'
-                }
-              >
-                <SelectedPage
-                  source={source}
-                  pageId={selectedPageId}
-                  pagesById={pagesById}
-                  onSelect={openAnywhere}
-                  highlightMentionOf={highlightMentionOf}
-                />
-              </div>
+              <SelectedPage
+                source={source}
+                pageId={selectedPageId}
+                pagesById={pagesById}
+                onSelect={openAnywhere}
+                highlightMentionOf={highlightMentionOf}
+              />
             </section>
           ) : (
             <div
-              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background lg:block lg:h-full ${flush ? '' : 'rounded-xl border border-border'} ${view === 'graph' ? 'block' : 'hidden'}`}
+              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-sidebar lg:block lg:h-full ${flush ? '' : 'rounded-xl border border-border'} ${view === 'graph' || pageOverGraph ? 'block' : 'hidden'}`}
               data-testid="knowledge-graph-container"
             >
-              {graphShown ? (
+              {graphShown && !pageOverGraph ? (
                 <div className="absolute top-3 right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
                   <ButtonsGroup
                     orientation="vertical"
@@ -1455,7 +1451,7 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown ? (
+              {graphShown && !pageOverGraph ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}
@@ -1546,11 +1542,49 @@ export function KnowledgePageExplorer({
                           onSelect={selectFromSearch}
                           highlightMentionOf={highlightMentionOf}
                           compact
+                          onOpenPage={() => {
+                            focusTabOnPageOpen.current = true;
+                            openPage(drawerShownId);
+                          }}
                         />
                       </div>
                     </DataPanel>
                   ) : null}
                 </div>
+              ) : null}
+
+              {pageOverGraph ? (
+                <section
+                  ref={focusPageTabOnMount}
+                  aria-label="Selected page"
+                  className="absolute inset-y-2 right-2 left-[calc(var(--knowledge-tree-inset)+0.5rem)] z-20 flex transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
+                >
+                  <DataPanel variant="inline" title="Page" className="shadow-overlay">
+                    <DataPanel.Header>
+                      <DataPanel.Heading>Page</DataPanel.Heading>
+                      <DataPanel.HeaderActions>
+                        <DataPanel.CloseButton
+                          icon="x"
+                          label="Close page"
+                          tooltip="Close"
+                          onClick={() => {
+                            focusViewTab();
+                            onViewChange('graph');
+                          }}
+                        />
+                      </DataPanel.HeaderActions>
+                    </DataPanel.Header>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <SelectedPage
+                        source={source}
+                        pageId={selectedPageId}
+                        pagesById={pagesById}
+                        onSelect={openAnywhere}
+                        highlightMentionOf={highlightMentionOf}
+                      />
+                    </div>
+                  </DataPanel>
+                </section>
               ) : null}
 
               {mention && graphShown ? (

@@ -132,8 +132,8 @@ export function SkillChatComposer({
 
   const emptyState = (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-5 text-center">
-      <div className="rounded-full bg-info-subtle p-3">
-        <IconSparklesTwo className="h-6 w-6 text-info-indicator" />
+      <div className="rounded-full bg-info-subtle p-3 [&>svg]:size-6">
+        <IconSparklesTwo className="text-info-indicator" />
       </div>
       <div className="flex flex-col gap-1">
         <Txt variant="subheading" tone="ink" as="p">

@@ -1,17 +1,17 @@
 import type { FactoryTransitionResultRejected } from '@mastra/factory/rules/types';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { queryKeys } from '../../api/keys';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubIssue } from '../domains/factory/services/factory';
-import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
 import { providerFactsCard } from './fixtures/providerFactsCard';
@@ -378,20 +378,14 @@ describe('Board card pending states', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('links the card details to its attached thread', async () => {
+  it('opens the session a card shows from the card itself', async () => {
     stubBoardEndpoints();
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-
-    const threadLink = within(dialog).getByRole('link', { name: 'Open session' });
-    expect(threadLink).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
-    );
-    const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const cardLink = within(card).getByRole('link', { name: /Fix login bug$/ });
+    expect(cardLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+    const matches = matchRoutes(createAppRoutes(), cardLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('workspaces/:sessionId/threads/:threadId');
   });
 
@@ -477,7 +471,7 @@ describe('Board card pending states', () => {
     await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request', 'Live session']);
   });
 
-  it('marks only the cards whose bound session still exists as live', async () => {
+  it('marks the cards that have a session and opens the others on a draft', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -488,7 +482,6 @@ describe('Board card pending states', () => {
     );
     renderWorkBoard();
 
-    // The sessions sidebar also names the card, so look in the card's column.
     const triage = within(await screen.findByTestId('board-column-triage'));
     const started = (await triage.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
     const unstarted = (await triage.findByText('Unstarted work')).closest<HTMLElement>(
@@ -496,247 +489,12 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
-    // A bound session with nothing to report runs no marker: the way in is the mark.
-    expect(within(started).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
-    expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
-  });
-
-  it('starts a normalized Linear card session on its provider branch rather than an item-id fallback', async () => {
-    stubBoardEndpoints();
-    const item = {
-      ...providerFactsCard,
-      id: ITEM_ID,
-      title: 'ENG-42: Repair source facts',
-      stages: ['done'],
-      sessions: {},
-      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
-      metadata: { repository: 'acme/app', authorTrusted: true },
-      workItem: {
-        ...providerFactsCard.workItem,
-        provider: 'linear',
-        key: 'ENG-42',
-        title: 'ENG-42: Repair source facts',
-        metadata: {},
-      },
-    };
-    const requests: unknown[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [item] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [] }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async ({ request }) => {
-        requests.push(await request.json());
-        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'factory/linear-eng-42' } });
-      }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
-        HttpResponse.json({
-          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    const { client } = renderWorkBoard();
-    await user.click(await screen.findByRole('button', { name: `Details for ${item.title}` }));
-    const dialog = await screen.findByRole('dialog', { name: item.title });
-    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
-    await waitFor(() => expect(requests).toHaveLength(1));
-    expect(requests[0]).toMatchObject({ branch: 'factory/linear-eng-42' });
-    await waitForMutationsIdle(client);
-  });
-
-  it('acknowledges a session start from the card details while it is still resolving the session', async () => {
-    stubBoardEndpoints();
-    const refreshGate = deferred();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
-        // The start reads the clicked card before it can decide to open or create; hold that
-        // read open so the pre-mutation window is observable.
-        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
-        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
-      }),
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
-        const body = (await request.json()) as { metadata: Record<string, unknown> };
-        return HttpResponse.json({
-          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
-        });
-      }),
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
-        HttpResponse.json({
-          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
-
-    // No run mutation exists yet, so this row is the only feedback the click can produce.
-    const status = await screen.findByText('Preparing session…');
-    expect(status.closest('[role="status"]')).not.toBeNull();
-    expect(await screen.findByTestId('work-item-card')).toHaveAttribute('aria-busy', 'true');
-
-    refreshGate.resolve();
-    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
-  });
-
-  it('starts a Linear session in its configured repository without prompting', async () => {
-    stubBoardEndpoints();
-    const sessionRepositories: string[] = [];
-    const patches: unknown[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
-        HttpResponse.json({ categories: {}, tools: {} }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, connected: false })),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [
-            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({
-          projects: [
-            {
-              id: FACTORY_ID,
-              name: 'Acme Factory',
-              repositories: [
-                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
-                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
-              ],
-            },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: false, sourceIds: null },
-            linear: {
-              enabled: true,
-              sourceIds: ['linear-project-1'],
-              repositoryByLinearProject: { 'linear-project-1': 'acme/other' },
-            },
-          },
-        }),
-      ),
-
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [] }),
-      ),
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
-        patches.push(await request.json());
-        return HttpResponse.json({
-          workItem: { ...workItem, metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } },
-        });
-      }),
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, ({ params }) => {
-        sessionRepositories.push(String(params.projectRepositoryId));
-        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } });
-      }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
-        HttpResponse.json({
-          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
-        }),
-      ),
-    );
-    function StartLinearSession() {
-      const { start, enabled } = useStartFactoryRun();
-      return (
-        <button
-          disabled={!enabled}
-          onClick={() =>
-            start.mutate({
-              branch: 'fix-login',
-              threadTitle: 'Fix login bug',
-              workItem: {
-                id: ITEM_ID,
-                role: 'chat',
-                source: 'linear-issue',
-                sourceKey: 'linear:issue-1',
-                title: 'Fix login bug',
-                metadata: { linearProjectId: 'linear-project-1' },
-              },
-            })
-          }
-        >
-          Start Linear session
-        </button>
-      );
-    }
-    const router = createMemoryRouter([{ path: '/factories/:factoryId', element: <StartLinearSession /> }], {
-      initialEntries: [`/factories/${FACTORY_ID}`],
-    });
-    renderWithProviders(<RouterProvider router={router} />);
-    const user = userEvent.setup();
-    const startButton = await screen.findByRole('button', { name: 'Start Linear session' });
-    await waitFor(() => expect(startButton).toBeEnabled());
-    await user.click(startButton);
-
-    await waitFor(() =>
-      expect(patches).toEqual([{ metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } }]),
-    );
-    await waitFor(() => expect(sessionRepositories).toEqual(['repo-2']));
-  });
-
-  it('starts one session when the details run control is re-triggered before it resolves', async () => {
-    stubBoardEndpoints();
-    const refreshGate = deferred();
-    const runStarts: string[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
-        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
-        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
-      }),
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
-        const body = (await request.json()) as { metadata: Record<string, unknown> };
-        return HttpResponse.json({
-          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
-        });
-      }),
-      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
-        const body = (await request.json()) as { kickoffKey?: string };
-        runStarts.push(body.kickoffKey ?? '');
-        return HttpResponse.json({
-          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
-        });
-      }),
-    );
-    // pointerEventsCheck off so clicks reach disabled controls: the attribute alone wouldn't stop a re-dispatch.
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
-    const { client } = renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-    let dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
-
-    await screen.findByText('Preparing session…');
-
-    // Reopening mid-flight must present the run as already happening, not offer a second one.
-    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
-    dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
-    expect(within(dialog).getByRole('button', { name: 'Starting…' })).toBeDisabled();
-
-    refreshGate.resolve();
-    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
-    await waitFor(() => expect(runStarts).toHaveLength(1));
-
-    // Both activations unblock on the same gate release, so a duplicate start would already be in flight here.
-    await waitForMutationsIdle(client);
-    expect(runStarts).toHaveLength(1);
+    expect(within(started).getByText('Session')).toBeInTheDocument();
+    expect(within(unstarted).queryByText('Session')).toBeNull();
+    const draftLink = within(unstarted).getByRole('link', { name: /Unstarted work$/ });
+    expect(draftLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/cards/fresh-item`);
+    const matches = matchRoutes(createAppRoutes(), draftLink.getAttribute('href') ?? '');
+    expect(matches?.at(-1)?.route.path).toBe('cards/:workItemId');
   });
 
   it('offers "Open in GitHub" on review-board PR cards past intake', async () => {
@@ -1096,6 +854,43 @@ describe('Board card pending states', () => {
     expect(within(triageColumn).getByText('Fix login bug')).toBeVisible();
     expect(within(planningColumn).queryByTestId('work-item-card')).not.toBeInTheDocument();
     expect(cardReads).toBeGreaterThan(readsBeforeDrop);
+  });
+
+  it('sends a drop to the server once the read that held the card for its session fails to refresh', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: THREAD_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    const dropIntoPlanning = () => {
+      const column = screen.getByTestId('board-column-planning');
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(card, { dataTransfer });
+      fireEvent.dragOver(column, { dataTransfer });
+      fireEvent.drop(column, { dataTransfer });
+    };
+    dropIntoPlanning();
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(transitionRequests).toEqual([]);
+
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/session-activity`, () =>
+        HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
+      ),
+    );
+    await client.refetchQueries({ queryKey: queryKeys.sessionActivity(FACTORY_ID) });
+    // The board hears of the failed refresh on the next tick.
+    await act(() => delay(0));
+    dropIntoPlanning();
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
   });
 
   it('moves a mapped Linear card into a working lane without asking for a repository while intake config loads', async () => {
