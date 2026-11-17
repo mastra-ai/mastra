@@ -461,7 +461,7 @@ describe('ConnectClient.request', () => {
 
   it('maps errors with status, source and problem code', async () => {
     const { fetchMock } = recordingFetch(() => problem(409, 'linear_workspace_migrated', 'Migrated'));
-    const error = await caught(makeClient(fetchMock).request('GET', '/v1/server/linear/workspaces'));
+    const error = await caught(makeClient(fetchMock).request('GET', '/v1/widgets'));
     expect(error).toMatchObject({ status: 409, source: 'platform', problemCode: 'linear_workspace_migrated' });
   });
 
