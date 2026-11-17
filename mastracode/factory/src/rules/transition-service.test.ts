@@ -3318,7 +3318,7 @@ describe('a stale agent move into the phase the card already reached', () => {
     return { read, current, storage: seed.workItems, parkedMove, audited };
   }
 
-  it('reports the card already in that phase instead of a stale move to retry', async () => {
+  it('commits as a same-phase move instead of a stale move to retry', async () => {
     const { read, current, storage, parkedMove, audited } = await overtakenCard();
     const before = await audited();
 
@@ -3351,7 +3351,7 @@ describe('a stale agent move into the phase the card already reached', () => {
     expect(await storage.get({ orgId: 'org-1', id: read.id })).toMatchObject({ revision: current.revision });
   });
 
-  it("still applies the move's own effects when it lands on the card's phase", async () => {
+  it("leaves an intake route's stale move for its caller to re-plan, even into the card's phase", async () => {
     const seed = await createFactoryStorageForTests();
     const read = await createItem(seed.workItems, { board: 'ship', stages: ['intake'] });
     const service = new FactoryTransitionService({
@@ -3372,7 +3372,8 @@ describe('a stale agent move into the phase the card already reached', () => {
     const current = (await seed.workItems.get({ orgId: 'org-1', id: read.id }))!;
     expect(current).toMatchObject({ stages: ['building'], autonomyArmedAt: expect.any(Date) });
 
-    // An intake route read the card before the drag; a route's move withdraws what a person armed.
+    // An intake route read the card before the drag. Its dispatcher re-plans on `stale`, so the
+    // person's newer say-so must not be overridden by the route's old read.
     await expect(
       service.transition({
         ...request(read, { board: 'ship', stage: 'building', expectedRevision: read.revision }),
@@ -3380,8 +3381,8 @@ describe('a stale agent move into the phase the card already reached', () => {
         ingress: { type: 'rule', identity: 'stale-route-move' },
         eventRoute: { routeId: 'route-1' },
       }),
-    ).resolves.toMatchObject({ status: 'accepted', stage: 'building' });
-    expect((await seed.workItems.get({ orgId: 'org-1', id: read.id }))?.autonomyArmedAt).toBeNull();
+    ).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
+    expect((await seed.workItems.get({ orgId: 'org-1', id: read.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
   });
 
   it('still rejects a stale move into another phase with the revision to retry at', async () => {

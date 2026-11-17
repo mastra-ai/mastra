@@ -1909,13 +1909,22 @@ export class SessionSuspensions {
     return dropped;
   }
 
-  /** Whether any suspension is still parked on the run. */
-  hasRun({ resourceId, threadId, runId }: { resourceId: string; threadId: string; runId: string }): boolean {
-    for (const suspension of this.#pending.values()) {
-      if (suspension.resourceId === resourceId && suspension.threadId === threadId && suspension.runId === runId)
-        return true;
-    }
-    return false;
+  /** The suspensions parked on a run, as copies. */
+  listForRun({
+    resourceId,
+    threadId,
+    runId,
+  }: {
+    resourceId: string;
+    threadId: string;
+    runId: string;
+  }): PendingSuspension[] {
+    return [...this.#pending.values()]
+      .filter(
+        suspension =>
+          suspension.resourceId === resourceId && suspension.threadId === threadId && suspension.runId === runId,
+      )
+      .map(suspension => ({ ...suspension }));
   }
 
   /** Discard the in-memory suspension mirror for a deleted thread. */
@@ -6322,7 +6331,7 @@ export class Session<TState = unknown> {
       // The run tracker may already be reset by the failed start, so name the
       // ending run; otherwise the display would drop other runs' prompts too.
       // A run the agent still holds other calls of stays parked for them.
-      const runStillParked = isUnresumableRun(error) && this.suspensions.hasRun(address);
+      const runStillParked = isUnresumableRun(error) && this.suspensions.listForRun(address).length > 0;
       if (!this.suspensions.has(address) && !runStillParked && this.getCurrentRunId() === address.runId)
         await this.finishAgentRun('error', { runId: address.runId });
     }
@@ -6993,16 +7002,12 @@ export class Session<TState = unknown> {
         // The answered prompt was already dropped before the resume.
         const reason = getErrorFromUnknown(error).message;
         const held = await storedToolCallIds(agent, address);
-        const gone = [{ ...address, toolName: suspension.toolName }];
-        for (const sibling of this.suspensions.deleteForRun(address)) {
-          if (!held.has(sibling.toolCallId)) {
-            gone.push(sibling);
-            continue;
-          }
-          this.suspensions.register(sibling);
-          this.#suspensionAgents.set(this.suspensions.get(sibling)!, agent);
+        this.emit({ type: 'tool_suspension_cancelled', ...address, toolName: suspension.toolName, reason });
+        for (const sibling of this.suspensions.listForRun(address)) {
+          if (held.has(sibling.toolCallId)) continue;
+          this.suspensions.delete(sibling);
+          this.emit({ type: 'tool_suspension_cancelled', ...sibling, reason });
         }
-        for (const pending of gone) this.emit({ type: 'tool_suspension_cancelled', ...pending, reason });
       } else if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);

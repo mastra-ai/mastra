@@ -224,9 +224,13 @@ function staleRejection(result: FactoryTransitionResultRejected, current: Card):
   );
 }
 
-/** Whether a stale move asked for the board and phase the card is already in. */
+/**
+ * Whether an agent's stale move asked for the board and phase the card is already in. Only an
+ * agent's own move: rules and intake routes re-read and re-plan against the card on `stale`.
+ */
 function reachedTarget(request: FactoryTransitionRequest, current: Card): boolean {
-  if (request.reenter || (request.toBoard !== undefined && request.toBoard !== request.board)) return false;
+  if (request.actor.type !== 'agent' || request.eventRoute || request.initialEntry || request.reenter) return false;
+  if (request.toBoard !== undefined && request.toBoard !== request.board) return false;
   return boardForWorkItem(current) === request.board && currentStage(current.stages) === request.stage;
 }
 
@@ -412,6 +416,7 @@ export class FactoryTransitionService {
           current,
         );
         if (isStale(result)) {
+          // Lost a second race: report where the card is now, not where it was.
           const latest = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
           if (latest) result = staleRejection(result, latest);
         }
