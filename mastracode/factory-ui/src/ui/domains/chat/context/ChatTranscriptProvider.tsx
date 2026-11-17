@@ -38,8 +38,8 @@ export function ChatTranscriptProvider({
   const viewerId = useFactoryAuth().data?.user?.userId;
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages, viewerId });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
-  const onEvent = (event: AgentControllerEvent) => {
-    transcriptApi.onEvent(event);
+  const onEvent = (event: AgentControllerEvent, opensStream: boolean) => {
+    transcriptApi.onEvent(event, opensStream);
     dispatchRuntime({ type: 'event', event });
   };
   const reset = (nextThreadId?: string, state?: SessionStateSnapshot) => {
