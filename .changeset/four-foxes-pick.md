@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Add shared contracts for bounded trace reads.
+Add shared contracts for experimental Platform trace navigation.

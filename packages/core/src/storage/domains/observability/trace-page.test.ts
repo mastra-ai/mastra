@@ -33,6 +33,87 @@ async function drain(src: TracePageSource, first: TracePageResponse): Promise<Tr
 }
 
 describe('bounded trace exploration', () => {
+  it.each(['界'.repeat(4096), '\u0000'.repeat(4096)])(
+    'rejects tokens whose serialized bytes could overflow the cursor %#',
+    async readToken => {
+      const ids = Array.from({ length: 100 }, (_, i) => '界'.repeat(125) + String(i).padStart(3, '0'));
+      const src: TracePageSource = {
+        ...source(ids.map(id => span(id))),
+        context: async () => ({
+          readToken,
+          lowerEndedAt: '2026-11-01T00:00:00.000Z',
+          upperEndedAt: '2026-11-01T00:00:00.000Z',
+          roots: [],
+        }),
+      };
+      await expect(readTracePage(src, 'trace', { readToken, spanIds: ids, limit: 1 })).rejects.toMatchObject({
+        code: 'INVALID_REQUEST',
+      });
+      await expect(readTracePage(src, 'trace', { spanIds: ids, limit: 1 })).rejects.toMatchObject({
+        name: 'Error',
+        message: 'Invalid trace context returned by source',
+      });
+    },
+  );
+  it.each(['x'.repeat(4096), '界'.repeat(1365), '\u0000'.repeat(682)])(
+    'keeps maximum-size ID cursors usable with a byte-bounded token %#',
+    async readToken => {
+      const ids = Array.from({ length: 100 }, (_, i) => '界'.repeat(125) + String(i).padStart(3, '0'));
+      const src: TracePageSource = {
+        ...source(ids.map(id => span(id))),
+        context: async () => ({
+          readToken,
+          lowerEndedAt: '2026-11-01T00:00:00.000Z',
+          upperEndedAt: '2026-11-01T00:00:00.000Z',
+          roots: [],
+        }),
+      };
+      const first = (await readTracePage(src, 'trace', { spanIds: ids, readToken, limit: 50 }))!;
+      expect(first.nextCursor!.length).toBeLessThanOrEqual(60000);
+      expect(tracePageRequestSchema.safeParse({ cursor: first.nextCursor }).success).toBe(true);
+      expect((await drain(src, first)).flatMap(page => page.nodes.map(node => node.spanId))).toEqual(ids);
+    },
+  );
+
+  it('classifies invalid requests, forged tokens, and invalid source context separately', async () => {
+    const src = source([span('a'), span('b')]);
+    await expect(readTracePage(src, 'trace', { limit: 201 })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(readTracePage(src, 'trace', { readToken: '界'.repeat(4096) })).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+    });
+    const first = (await readTracePage(src, 'trace', { limit: 1 }))!;
+    const forged = JSON.parse(Buffer.from(first.nextCursor!, 'base64url').toString());
+    forged.selection.readToken = '界'.repeat(4096);
+    await expect(
+      readTracePage(src, 'trace', { cursor: Buffer.from(JSON.stringify(forged)).toString('base64url') }),
+    ).rejects.toMatchObject({ code: 'INVALID_CURSOR' });
+    for (const readToken of ['界'.repeat(4096), '\u0000'.repeat(4096)]) {
+      const invalidSource: TracePageSource = {
+        ...src,
+        context: async () => ({
+          readToken,
+          lowerEndedAt: '2026-11-01T00:00:00.000Z',
+          upperEndedAt: '2026-11-01T00:00:00.000Z',
+          roots: [],
+        }),
+      };
+      await expect(readTracePage(invalidSource, 'trace', { mode: 'context' })).rejects.toMatchObject({
+        name: 'Error',
+        message: 'Invalid trace context returned by source',
+      });
+    }
+  });
+
+  it('ignores extra source columns when fingerprinting execution families', async () => {
+    const rows = [span('a'), span('b')];
+    const src = source(rows);
+    let discovery = 0;
+    src.structure = async () => rows.map(row => ({ ...row, adapterDebug: ++discovery }));
+    const first = (await readTracePage(src, 'trace', { includeFamilySummary: true, limit: 1 }))!;
+    const second = await readTracePage(src, 'trace', { cursor: first.nextCursor! });
+    expect(second!.nodes.map(node => node.spanId)).toEqual(['b']);
+  });
+
   it('invalidates a family-summary cursor when a new execution arrives outside the visible selection', async () => {
     const rows = [span('root'), span('other')];
     const src = source(rows);
@@ -437,11 +518,18 @@ describe('trace page request boundaries', () => {
   });
 });
 
-it.each(['browse', 'hydrate', 'search'] as const)(
+it.each(['browse', 'hydrate', 'search', 'context'] as const)(
   'accounts for exact UTF-8 and JSON byte boundaries in %s pages',
   async mode => {
     const rows = [span('a', null, '界"\n'.repeat(4000)), span('b', 'a', '界"\n'.repeat(4000))];
     const src = source(rows, ['b']);
+    if (mode === 'context')
+      src.context = async () => ({
+        readToken: 'window',
+        lowerEndedAt: '2026-11-01T00:00:00.000Z',
+        upperEndedAt: '2026-11-01T00:00:00.000Z',
+        roots: [{ spanId: 'a', tags: ['界"\n'.repeat(500)] }],
+      });
     const selection =
       mode === 'hydrate' ? { spanIds: ['missing"界', 'a', 'b'] } : mode === 'search' ? { search: 'error' } : {};
     const request = { ...selection, include: 'full' as const, maxBytes: 65536 };

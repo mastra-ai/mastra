@@ -238,6 +238,7 @@ export class Observability extends BaseResource {
   /**
    * Retrieves a bounded trace page from Platform. OSS servers do not serve this endpoint.
    * Check `capabilities.tracePage` before calling.
+   * @experimental This Platform integration may change or be removed.
    */
   getTracePage(request: GetTracePageArgs): Promise<TracePageResponse> {
     const { traceId, ...body } = request;

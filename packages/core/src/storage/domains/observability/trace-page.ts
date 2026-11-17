@@ -10,10 +10,15 @@ export const tracePageIdSchema = z
   .max(128)
   .refine(value => Buffer.byteLength(JSON.stringify(value)) <= 384, 'Identifier exceeds the serialized byte limit');
 const id = tracePageIdSchema;
+const readTokenSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine(value => Buffer.byteLength(JSON.stringify(value)) <= 4098, 'Read token exceeds the serialized byte limit');
 const selectionSchema = z
   .object({
     mode: z.literal('context').optional(),
-    readToken: z.string().min(1).max(4096).optional(),
+    readToken: readTokenSchema.optional(),
     anchorSpanId: id.optional(),
     depth: z.number().int().min(0).max(32).optional().describe('Browse depth from the anchor or roots; defaults to 2.'),
     spanIds: z.array(id).min(1).max(100).optional(),
@@ -78,7 +83,7 @@ const tracePageRootContextSchema = spanRecordSchema
 
 const traceContextSchema = z
   .object({
-    readToken: z.string().min(1).max(4096),
+    readToken: readTokenSchema,
     lowerEndedAt: z.string().datetime(),
     upperEndedAt: z.string().datetime(),
     roots: z.array(tracePageRootContextSchema.extend({ spanId: id })).max(200),
@@ -238,6 +243,9 @@ const cursorSchema = z
 /**
  * @internal Experimental Platform reader; not a supported OSS storage-adapter contract.
  * Bounded wire pages over a capped topology read; this is not O(page size) database work.
+ * Explicit IDs without flattening/family summaries skip topology: unknown IDs are reported
+ * as missing without a separate trace-existence check. childCount is null and a non-root
+ * parentState is 'not-requested'. A source context may independently verify trace existence.
  */
 export async function readTracePage(
   source: TracePageSource,
@@ -245,7 +253,15 @@ export async function readTracePage(
   request: TracePageRequest,
 ): Promise<TracePageResponse | null> {
   if (!id.safeParse(traceId).success) throw new TracePageError('INVALID_REQUEST', 'Invalid trace identifier');
-  const parsed = tracePageRequestSchema.parse(request);
+  const requestResult = tracePageRequestSchema.safeParse(request);
+  if (!requestResult.success) {
+    const code = request && typeof request === 'object' && 'cursor' in request ? 'INVALID_CURSOR' : 'INVALID_REQUEST';
+    throw new TracePageError(
+      code,
+      code === 'INVALID_CURSOR' ? 'Invalid trace continuation' : 'Invalid trace page request',
+    );
+  }
+  const parsed = requestResult.data;
   let continuation: z.infer<typeof cursorSchema> | undefined;
   if ('cursor' in parsed) {
     try {
@@ -261,8 +277,8 @@ export async function readTracePage(
   const incomingToken = initialSelection.readToken;
   if ((incomingToken || initialSelection.mode === 'context') && !source.context)
     throw new TracePageError('UNSUPPORTED', 'Trace read context is unavailable');
-  const context = source.context
-    ? traceContextSchema.parse(
+  const contextResult = source.context
+    ? traceContextSchema.safeParse(
         await source.context(
           traceId,
           incomingToken,
@@ -270,9 +286,15 @@ export async function readTracePage(
         ),
       )
     : undefined;
-  const selection = context
-    ? selectionSchema.parse({ ...initialSelection, readToken: context.readToken })
-    : initialSelection;
+  if (contextResult && !contextResult.success)
+    throw new Error('Invalid trace context returned by source', { cause: contextResult.error });
+  const context = contextResult?.data;
+  const selectionResult = selectionSchema.safeParse(
+    context ? { ...initialSelection, readToken: context.readToken } : initialSelection,
+  );
+  if (!selectionResult.success)
+    throw new Error('Invalid trace selection after source context', { cause: selectionResult.error });
+  const selection = selectionResult.data;
   const initialContext = !incomingToken ? context : undefined;
   if (selection.mode === 'context') {
     const response: TracePageResponse = {
@@ -381,33 +403,39 @@ export async function readTracePage(
       (bytes, spanId) => bytes + Buffer.byteLength(JSON.stringify(spanId)),
       0,
     );
-    // Serialize each selected payload once. The small envelope changes as the cursor
-    // advances; empty arrays already account for brackets, with commas added below.
+    // Fixed metadata and cursor selection are serialized once, including large read contexts.
+    // Only the offset digit count, ancestor state and array contents change while fitting nodes.
+    const fixedEnvelopeBytes = Buffer.byteLength(JSON.stringify({ ...result, nodes: [], missingSpanIds: [] }));
+    const cursorPrefix = JSON.stringify({ version: 2, selection, fingerprint }).slice(0, -1) + ',"offset":';
+    const cursorPropertyBytes = Buffer.byteLength(',"nextCursor":""');
+    const fixedCursorBytes = Buffer.byteLength(cursorPrefix) + 1; // Closing brace.
+    let processed = 0;
+    const hasContinuation = () => offset + processed < ids.length;
+    const cursorLength = () => Math.ceil(((fixedCursorBytes + String(offset + processed).length) * 4) / 3);
+    const ancestorPaths = (): TracePageResponse['ancestorPaths'] =>
+      selection.search && selection.ancestors !== false
+        ? hasContinuation()
+          ? 'continued'
+          : topology?.unavailableAncestors
+            ? 'unavailable'
+            : 'complete'
+        : 'not-requested';
     const responseBytes = () =>
-      Buffer.byteLength(JSON.stringify({ ...result, nodes: [], missingSpanIds: [] })) +
+      fixedEnvelopeBytes +
+      ancestorPaths().length -
+      'not-requested'.length +
+      (hasContinuation() ? cursorPropertyBytes + cursorLength() : 0) +
       nodeBytes +
       Math.max(0, result.nodes.length - 1) +
       missingIdBytes +
       Math.max(0, result.missingSpanIds.length - 1);
-    let processed = 0;
     const updateContinuation = () => {
-      const nextOffset = offset + processed;
-      if (nextOffset < ids.length)
-        result.nextCursor = Buffer.from(
-          JSON.stringify({
-            version: 2,
-            selection,
-            fingerprint,
-            offset: nextOffset,
-          }),
-        ).toString('base64url');
-      else delete result.nextCursor;
-      if (selection.search && selection.ancestors !== false)
-        result.ancestorPaths = result.nextCursor
-          ? 'continued'
-          : topology?.unavailableAncestors
-            ? 'unavailable'
-            : 'complete';
+      if (hasContinuation()) {
+        if (cursorLength() > 60000)
+          throw new TracePageError('LIMIT_EXCEEDED', 'Trace continuation exceeds the cursor budget');
+        result.nextCursor = Buffer.from(cursorPrefix + (offset + processed) + '}').toString('base64url');
+      } else delete result.nextCursor;
+      result.ancestorPaths = ancestorPaths();
     };
     for (const spanId of pageIds) {
       const record = recordsById.get(spanId);
@@ -473,7 +501,6 @@ export async function readTracePage(
         nodeBytes += addedBytes;
       }
       processed++;
-      updateContinuation();
       if (responseBytes() > selection.maxBytes) {
         if (record) {
           result.nodes.pop();
@@ -483,7 +510,6 @@ export async function readTracePage(
           missingIdBytes -= addedBytes;
         }
         processed--;
-        updateContinuation();
         if (!processed)
           throw new TracePageError(
             'PAYLOAD_TOO_LARGE',
@@ -598,6 +624,10 @@ export async function readTracePage(
       }
     }
   }
+  const familyFingerprint = (familyId: string | undefined) => {
+    const family = familyId ? families.get(familyId) : undefined;
+    return family ? [family.current.spanId, family.count, family.originalAvailable] : null;
+  };
   // Only changes affecting this selection invalidate continuation, not unrelated branches.
   const fingerprint = hash([
     source.scopeKey,
@@ -609,7 +639,7 @@ export async function readTracePage(
       rawNodes.get(node.spanId)?.parentSpanId ?? null,
       node.resumedFromSpanId ?? null,
       node.spanType,
-      selection.includeFamilySummary ? families.get(executionFamilyId(node) ?? '') : null,
+      selection.includeFamilySummary ? familyFingerprint(executionFamilyId(node)) : null,
       node.startedAt.toISOString(),
       children.get(node.spanId)?.length ?? 0,
       !!node.parentSpanId && nodes.has(node.parentSpanId),
