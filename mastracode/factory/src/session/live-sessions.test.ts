@@ -36,6 +36,7 @@ function fakeSession(
   const pendingSuspensions = new Map<string, { toolName: string }>();
   const session: LiveSession = {
     identity: { getId: () => id },
+    thread: { getId: () => id },
     run: { isRunning: () => running.value },
     state: { get: () => ({ factoryOrgId: 'org-1', ...(factoryProjectId ? { factoryProjectId } : {}) }) },
     displayState: { get: () => ({ pendingSuspensions }) },
@@ -249,6 +250,12 @@ describe('LiveSessions on a real controller', () => {
 
     expect(registry.isRunning('session-1')).toBe(false);
     await vi.waitFor(() => expect(frames).toHaveLength(2));
+  });
+
+  it('names the session on the thread its run lies on, though that thread is not its first', async () => {
+    const { registry, runThread } = await sessionMidRun();
+
+    expect(registry.sessionOnThread(runThread.id)).toBe('session-1');
   });
 
   // Leaving a thread ends the run this session started on it, and no `agent_end` reaches a session that has left.

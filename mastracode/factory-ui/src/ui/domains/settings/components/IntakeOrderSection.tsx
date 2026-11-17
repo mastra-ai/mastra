@@ -17,9 +17,8 @@ import { Link } from 'react-router';
 import type { IntakeOrderResponse, IntakeRouteInfo } from '../../../../api/types';
 import { useIntakeOrderQuery, useSaveIntakeOrder } from '../../../../hooks/useIntakeOrder';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
-import { boardRulesPath } from '../../boardConfig/boardConfigPaths';
+import { boardRulesPath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { newItemRules } from '../../boardRules/ruleLanes';
-import { INTAKE_ORDER_ANCHOR } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useRowDrag } from './useRowDrag';
 
@@ -35,6 +34,7 @@ export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
   return (
     <SettingsSubsection
       id={INTAKE_ORDER_ANCHOR}
+      scope="factory"
       title="Intake order"
       description="A new issue or pull request is offered to each board in this order. The first board whose rules take it keeps it; no board taking it leaves it Not routed."
     >

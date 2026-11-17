@@ -115,8 +115,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
     factoryProjectId: string;
     item: Card;
   }) => Promise<RunRepositoryResolution>;
-  /** Materialized sessions, read to report which sessions wait on someone. */
-  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
+  /** Materialized sessions, read to report which sessions wait on someone and which session a run's thread is on. */
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn' | 'sessionOnThread'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   projectSessions?: ProjectSessionsReader;

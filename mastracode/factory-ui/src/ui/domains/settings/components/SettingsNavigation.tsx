@@ -106,8 +106,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: IconInboxEmpty,
-        searchText:
-          'work intake sources tasks issues pull requests github gitlab linear jira incident feed sync connect routes routing new cards board catch-all',
+        searchText: 'work intake sources accounts workspaces connect github gitlab linear jira incident vanta',
       },
       {
         id: 'factory',

@@ -24,6 +24,7 @@ import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
@@ -1280,6 +1281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             recheckMs: 0,
           });
           const configVersion = 'work-less-arrivals-v1';
+          const intake = replica.storage.getDomain<IntakeStorage>('intake');
+          await intake.saveConfig({ orgId, config: { github: { enabled: true, sourceIds: ['acme/ops'] } } });
           const rules = new GithubRules({
             github: {
               rules: resolveGithubRules(),
@@ -1289,6 +1292,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControl,
             integrationStorage: replica.storage.getDomain<IntegrationStorage>('integrations').forIntegration('github'),
             projects: replica.storage.getDomain<FactoryProjectsStorage>('projects'),
+            intake,
             storage: workItems,
             boards,
             configVersion,

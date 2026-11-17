@@ -142,10 +142,10 @@ describe('session row status', () => {
 
   it.each([
     [
-      'a sandbox coming up over a parked run',
+      'a run parked on a person before its sandbox came up',
       { materializedAt: null },
-      { parkedSessionIds: new Set(['s1']) },
-      'initializing',
+      { runningSessionIds: new Set(['s1']), parkedSessionIds: new Set(['s1']) },
+      'waiting',
     ],
     ['a run on a finished card', {}, { cards: [doneCard], runningSessionIds: new Set(['s1']) }, 'working'],
     ['a parked run on a finished card', {}, { cards: [doneCard], parkedSessionIds: new Set(['s1']) }, 'waiting'],
@@ -179,15 +179,15 @@ describe('session row status', () => {
     expect(onlyRow({ sessions: [testSession('s1')], cards: [card] })?.status).toBe('idle');
   });
 
-  it("reads a person's session by its run alone, parked or not", () => {
+  it("reads a person's session by its run, waiting when it parks", () => {
     const rows = rowsOf({
-      sessions: [personSession('quiet'), personSession('busy', { materializedAt: null })],
-      parkedSessionIds: new Set(['quiet']),
+      sessions: [personSession('asking'), personSession('busy', { materializedAt: null })],
+      parkedSessionIds: new Set(['asking']),
       runningSessionIds: new Set(['busy']),
     });
 
     expect(rows.map(row => [row.session.sessionId, row.status])).toEqual([
-      ['quiet', 'idle'],
+      ['asking', 'waiting'],
       ['busy', 'initializing'],
     ]);
   });
@@ -425,7 +425,12 @@ describe('runningSessionIds', () => {
     { threadId: 'private', resourceId: 'user-2' },
     { threadId: 'loose' },
   ];
-  const reach = { viewerUserId: VIEWER, factoryProjectId: PROJECT, visibleSessionIds: new Set(['shared']) };
+  const reach = {
+    viewerUserId: VIEWER,
+    factoryProjectId: PROJECT,
+    visibleSessionIds: new Set(['shared']),
+    sessionOnThread: (threadId: string) => (threadId === 'private' ? 'their-session' : undefined),
+  };
 
   it("leaves out another person's run while auth is on", () => {
     expect([...runningSessionIds(runs, { ...reach, authEnabled: true })].toSorted()).toEqual(

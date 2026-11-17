@@ -40,7 +40,6 @@ function workspacesQueryOptions(baseUrl: string, factoryId: string | undefined) 
     queryFn: factoryId
       ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, factoryId, signal)
       : skipToken,
-    refetchInterval: query => sessionsRefetchInterval(query.state.data),
   });
 }
 
@@ -169,31 +168,6 @@ function invalidateWorkspaceQueries(queryClient: QueryClient, factoryId: string 
   void invalidateSessionQueries(queryClient, factoryId);
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
   void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId) });
-}
-
-const UNMATERIALIZED_POLL_MS = 15_000;
-/**
- * A session created but never run stays un-materialized forever — without a
- * bound it would keep the list polling indefinitely. Materialization follows
- * within minutes of the activity that starts it, and every such trigger (run
- * start, run end, attention) invalidates the sessions list, refreshing
- * `updatedAt` and re-opening this window.
- */
-const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
-
-/**
- * Poll gently while any listed session has not been materialized yet. The
- * sidebar status dots derive "initializing" from `materializedAt`, which the
- * server stamps out-of-band (the session's first command, or another tab) —
- * with no poll the cached `null` never resolved and dots wedged on
- * "initializing".
- */
-export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
-  if (!data) return false;
-  const unresolved = [...data.workspaces, ...data.userSessions].some(
-    session => !session.materializedAt && now - Date.parse(session.updatedAt) < UNMATERIALIZED_POLL_WINDOW_MS,
-  );
-  return unresolved ? UNMATERIALIZED_POLL_MS : false;
 }
 
 export function useWorkspacesQuery(factoryId: string | undefined) {

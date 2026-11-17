@@ -1232,11 +1232,11 @@ export const sessionRowsResponseSchema = z.object({
 
 export const sessionActivityResponseSchema = z.object({
   runningSessionIds: z.array(z.string()),
-  /** Sessions of a card whose run waits on a person's answer. */
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
   parkedSessionIds: z.array(z.string()),
   /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
   cardStatuses: z.record(z.string(), sessionRowStatusSchema),
-  /** Cards one of whose sessions is coming up, running, or parked on a person: no rival run may start on them. */
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
   sessionHeldCardIds: z.array(z.string()),
   /** Cards in `cardStatuses` working, and waiting on a person. */
   cards: z.object({ working: countSchema, waiting: countSchema }),

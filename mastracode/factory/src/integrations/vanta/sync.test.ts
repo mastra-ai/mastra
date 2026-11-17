@@ -3,7 +3,12 @@ import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { VantaRules } from './rules.js';
-import { createVantaSync } from './sync.js';
+import {
+  createVantaSync,
+  VANTA_VULNERABILITIES_SOURCE_ID,
+  vantaOrgsSyncingWithoutSource,
+  vantaVulnerabilitiesSelected,
+} from './sync.js';
 import type { VantaVulnerability } from './sync.js';
 
 const vulnerability: VantaVulnerability = {
@@ -127,5 +132,25 @@ describe('createVantaSync', () => {
     expect(await sync()).toMatchObject({ projects: 2, checked: 2 });
     expect(ingest.mock.calls[0]?.[0]).toMatchObject({ orgId: 'org-1', vulnerabilities: [{ id: 'vuln-1' }] });
     expect(ingest.mock.calls[1]?.[0]).toMatchObject({ orgId: 'org-2', vulnerabilities: [{ id: 'vuln-2' }] });
+  });
+});
+
+describe('Vanta vulnerability selection', () => {
+  it('syncs only once vulnerabilities are selected', () => {
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(true);
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: null })).toBe(false);
+    expect(vantaVulnerabilitiesSelected({ enabled: false, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(false);
+    expect(vantaVulnerabilitiesSelected(undefined)).toBe(false);
+  });
+
+  it('selects vulnerabilities for orgs whose old switch was on with nothing selected', () => {
+    expect(
+      vantaOrgsSyncingWithoutSource([
+        { orgId: 'switch-on', config: { vanta: { enabled: true, sourceIds: null } } },
+        { orgId: 'switch-off', config: { vanta: { enabled: false, sourceIds: null } } },
+        { orgId: 'selected', config: { vanta: { enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] } } },
+        { orgId: 'no-vanta', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
+      ]),
+    ).toEqual(new Map([['switch-on', [VANTA_VULNERABILITIES_SOURCE_ID]]]));
   });
 });

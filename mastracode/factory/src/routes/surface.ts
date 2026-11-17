@@ -81,6 +81,7 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js'
 import { buildFsRoutes } from './fs.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
+import type { IntakeRoutesDeps } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import { createProjectSessionsReader } from './project-sessions.js';
@@ -129,6 +130,8 @@ export interface FactoryApiRoutesDeps {
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
   /** Saved-environment hand-off for environment builds, present when the sandbox can build templates. */
   onEnvironmentSaved?: (projectId: string) => void;
+  /** Sources newly selected in Work Intake, so their existing items can be brought in. */
+  onIntakeSourcesSelected?: IntakeRoutesDeps['onSourcesSelected'];
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -1007,6 +1010,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
+          ...(deps.onIntakeSourcesSelected ? { onSourcesSelected: deps.onIntakeSourcesSelected } : {}),
           integrations: (deps.integrations ?? []).flatMap(({ integration }) => [
             ...(integration.intake ? [{ id: integration.id, intake: integration.intake }] : []),
             ...(integration.additionalIntakes ?? []),
