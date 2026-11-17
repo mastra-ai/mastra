@@ -415,6 +415,55 @@ describe('PlatformSandbox', () => {
     expect(sandbox.templatePending).toBeUndefined();
   });
 
+  describe('vault mode', () => {
+    const create = (response: Record<string, unknown>, sandboxId?: string) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json(response));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        ...(sandboxId ? { sandboxId } : {}),
+        fetch: fetchMock,
+      });
+      return sandbox;
+    };
+
+    it('is unknown before the sandbox starts', () => {
+      expect(create({ id: 'sbx_1' }).vault).toBeUndefined();
+    });
+
+    it('reports a vault provision', async () => {
+      const sandbox = create({ id: 'sbx_1', vault: true });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('reports a provision without the vault flag as not vault', async () => {
+      const sandbox = create({ id: 'sbx_1' });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('leaves the mode unknown when the create route reattached by recovery id', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null });
+      await sandbox._start();
+      expect(sandbox.vault).toBeUndefined();
+    });
+
+    it('leaves the mode unknown when a reattach does not report it', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBeUndefined();
+    });
+
+    it('takes the mode from a reattach that reports it', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null, vault: true }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
+  });
+
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
