@@ -9,7 +9,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import { createQueryClient } from '../../../query-client';
 import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
 import { createAppRoutes } from '../../router';
-import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
+import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -111,6 +111,29 @@ describe('a card without a session', () => {
     expect(runStarts).toEqual([]);
   });
 
+  it("opens the card's draft, ready to start, when Back returns to it from an open thread", async () => {
+    const route = stubDraftRoute();
+    const runStarts = stubCard();
+    const user = userEvent.setup();
+    const { router, client } = renderAt(
+      `/factories/${FACTORY_ID}/workspaces/${DRAFT_SESSION_ID}/threads/${DRAFT_SESSION_ID}`,
+    );
+    await screen.findByRole('textbox', { name: 'Message' });
+
+    await router.navigate(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${OTHER_DRAFT_SESSION_ID}`);
+
+    expect(await screen.findByRole('heading', { level: 2, name: linearCard.title })).toBeInTheDocument();
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'repair the facts');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(runStarts).toEqual([expect.objectContaining({ sessionId: DRAFT_SESSION_ID })]));
+    await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it("shows the card's pull request and description in the session panel before any session exists", async () => {
     stubPageWidth(1200);
     const route = stubDraftRoute();
@@ -199,7 +222,7 @@ describe('a card without a session', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('keeps the first prompt, the model and the focus in view while the session starts and its thread opens', async () => {
+  it('keeps the first prompt, the model and the focus in the same conversation while the session starts and its thread opens', async () => {
     let releaseCreate = () => {};
     const createGate = new Promise<void>(resolve => {
       releaseCreate = resolve;
@@ -209,7 +232,8 @@ describe('a card without a session', () => {
     const user = userEvent.setup();
     const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
 
-    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    const composer = await screen.findByRole('textbox', { name: 'Message' });
+    await user.type(composer, 'repair the facts');
     await user.keyboard('{Enter}');
 
     const conversation = screen.getByRole('region', { name: 'Conversation' });
@@ -223,7 +247,10 @@ describe('a card without a session', () => {
       ),
     );
     await waitFor(() => expect(route.posted).toEqual(['repair the facts']));
-    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+    expect(screen.getByRole('region', { name: 'Conversation' })).toBe(conversation);
+    expect(within(conversation).getAllByText('repair the facts')).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(composer);
+    expect(composer).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Session model' })).toHaveAttribute('title', 'openai/gpt-4o-mini');
 
     route.finishWorkspace();
@@ -343,6 +370,29 @@ describe('a card without a session', () => {
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
+  });
+
+  it('keeps the prompt on the draft when the session cannot be read after the start bound the card', async () => {
+    stubDraftRoute();
+    const runStarts = stubCard();
+    server.use(
+      http.get(
+        `${TEST_BASE_URL}/web/user-sessions/${DRAFT_SESSION_ID}`,
+        () => HttpResponse.json({ error: 'Session read failed' }, { status: 500 }),
+        { once: true },
+      ),
+    );
+    const user = userEvent.setup();
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}`);
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText(/Could not create the session/)).toBeInTheDocument();
+    expect(runStarts).toEqual([expect.objectContaining({ sessionId: DRAFT_SESSION_ID })]);
+    await waitForMutationsIdle(client);
+    expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${FACTORY_ID}/cards/${CARD_ID}/new/`));
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('repair the facts');
   });
 
   it('starts the session in the repository the server files the card under, leaving the card untouched', async () => {

@@ -14,7 +14,7 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { opensWithPrompt } from '../hooks/useHandoffPrompt';
+import { handoffDraftModelId, opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -27,6 +27,7 @@ import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
+import { transcriptKey } from './transcriptKey';
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
@@ -212,14 +213,14 @@ export function ChatSessionBoundary({
       <ChatTranscriptProvider
         // No `isPending` segment: remounting on the pending -> ready flip would drop
         // the live SSE listener. Results merge into the reducer instead.
-        key={`${sessionId}:${threadId ?? 'draft'}`}
+        key={transcriptKey({ sessionId, threadId })}
         threadId={threadId}
         initialMessages={messagesQuery.data}
         hasMoreHistory={messagesQuery.hasMore}
         isLoadingMoreHistory={messagesQuery.isLoadingMore}
         loadMoreHistory={messagesQuery.loadMore}
       >
-        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
+        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId ?? handoffDraftModelId(location.state)}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
             <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
               <ComposerImagesProvider initialImages={failedDraft?.files}>

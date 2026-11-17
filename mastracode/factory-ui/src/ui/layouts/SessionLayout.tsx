@@ -3,17 +3,12 @@ import { Navigate, Outlet, useParams } from 'react-router';
 import { SessionNotFound } from '../domains/chat/components/SessionNotFound';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
-import { CardDraftFrame } from '../domains/factory/components/CardDraftFrame';
-import { ThreadFrame } from '../domains/factory/components/ThreadFrame';
+import { SessionRouteFrame } from '../domains/factory/components/SessionRouteFrame';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspaces/services/user-sessions';
 
 export function SessionLayout() {
-  const { factoryId, threadId, workItemId } = useParams<{
-    factoryId: string;
-    threadId?: string;
-    workItemId?: string;
-  }>();
+  const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const { error } = useThreadWorkspacePath();
 
   if (error instanceof DraftSessionCreateError) {
@@ -23,15 +18,9 @@ export function SessionLayout() {
 
   return (
     <ChatSessionBoundary threadId={threadId}>
-      {workItemId ? (
-        <CardDraftFrame workItemId={workItemId}>
-          <Outlet />
-        </CardDraftFrame>
-      ) : (
-        <ThreadFrame>
-          <Outlet />
-        </ThreadFrame>
-      )}
+      <SessionRouteFrame>
+        <Outlet />
+      </SessionRouteFrame>
     </ChatSessionBoundary>
   );
 }

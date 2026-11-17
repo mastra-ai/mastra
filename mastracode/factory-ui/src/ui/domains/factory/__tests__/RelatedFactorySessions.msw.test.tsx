@@ -15,7 +15,7 @@ import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards
 
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../../../api/types';
 import { ChatSessionTestProvider } from '../../chat/context/ChatSessionTestProvider';
-import { ThreadFrame } from '../components/ThreadFrame';
+import { SessionRouteFrame } from '../components/SessionRouteFrame';
 import type { FactoryDecisionSummary } from '../services/decisions';
 
 const FACTORY_ID = 'factory-1';
@@ -98,7 +98,7 @@ function renderHeader() {
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
             element={
               <ChatSessionTestProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
-                <ThreadFrame>{null}</ThreadFrame>
+                <SessionRouteFrame>{null}</SessionRouteFrame>
               </ChatSessionTestProvider>
             }
           />
@@ -109,7 +109,7 @@ function renderHeader() {
   );
 }
 
-describe('ThreadFrame', () => {
+describe('SessionRouteFrame', () => {
   describe('while the board is still loading', () => {
     it("names the session among the card's others before the board arrives", async () => {
       const card = workItem(undefined);
@@ -408,7 +408,7 @@ describe('ThreadFrame', () => {
                 path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
                 element={
                   <ChatSessionTestProvider threadId={threadId} deferUntilMessagesReady={false}>
-                    <ThreadFrame>{null}</ThreadFrame>
+                    <SessionRouteFrame>{null}</SessionRouteFrame>
                   </ChatSessionTestProvider>
                 }
               />

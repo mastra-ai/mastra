@@ -6,15 +6,20 @@ import { WorkspaceFilesProvider } from '../../workspace-viewer/context/Workspace
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { ChatPageLayout } from './ChatPageLayout';
 
-interface SessionFrameProps {
+export interface SessionFrameSlots {
   panel: WorkspacePanelPage | undefined;
   title?: ReactNode;
   titleMenu?: ReactNode;
   headerCenter?: ReactNode;
-  children: ReactNode;
 }
 
-export function SessionFrame({ panel, title, titleMenu, headerCenter, children }: SessionFrameProps) {
+export function SessionFrame({
+  panel,
+  title,
+  titleMenu,
+  headerCenter,
+  children,
+}: SessionFrameSlots & { children: ReactNode }) {
   return (
     <WorkspaceFilesProvider page={panel}>
       <ChatPageLayout

@@ -7,6 +7,7 @@ import type { WorkItemSessionRepository } from '../../../../api/types';
 import { sessionWorkItemsQueryOptions } from '../../../../hooks/useWorkItems';
 import { addCachedSession, invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import type { DraftSessionStart } from '../../chat/context/DraftSessionStartContext';
+import { continueTranscript } from '../../chat/context/transcriptKey';
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useChatThinking } from '../../chat/context/useChatThinking';
@@ -22,24 +23,31 @@ import { pullRequestSubscriptionsQuery } from '../services/githubSubscriptions';
 import { startFactoryRun } from '../services/workItems';
 import type { WorkItem } from '../services/workItems';
 
-type ResolvedRepository = Extract<WorkItemSessionRepository, { status: 'resolved' }>;
+interface CardStart {
+  factory: FactoryProject;
+  item: WorkItem;
+  repository: Extract<WorkItemSessionRepository, { status: 'resolved' }>;
+}
 
 /** Creates without a session id, so the server reuses the person's session on the card's branch, e.g. one whose start failed. */
 export function useStartCardSessionFromDraft(
-  factory: FactoryProject,
-  item: WorkItem,
+  factory: FactoryProject | undefined,
+  item: WorkItem | undefined,
   sessionRepository: WorkItemSessionRepository | undefined,
 ): DraftSessionStart & { started: boolean } {
-  const { baseUrl } = useChatSessionContext();
-  const { activeModelId, defaultModelId } = useChatModels();
+  const { sessionId: draftSessionId, baseUrl } = useChatSessionContext();
+  const { activeModelId, defaultModelId, setModel } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { localUser, failLocalUser } = useChatTranscript();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const resolved = sessionRepository?.status === 'resolved' ? sessionRepository : undefined;
+  const target: CardStart | undefined =
+    factory && item && sessionRepository?.status === 'resolved'
+      ? { factory, item, repository: sessionRepository }
+      : undefined;
 
   const startSession = useMutation({
-    mutationFn: async (repository: ResolvedRepository) => {
+    mutationFn: async ({ factory, item, repository }: CardStart) => {
       const metadata = item.workItem ? {} : (item.metadata ?? {});
       const { branch, threadTitle } = itemSessionSpec(item);
       const { sessionId } = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
@@ -64,27 +72,28 @@ export function useStartCardSessionFromDraft(
       ]);
       return session;
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factory.id) }),
+    onSettled: (_session, _error, { factory }) =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factory.id) }),
   });
 
   const start: DraftSessionStart['start'] = async ({ prompt, files }) => {
-    if (!resolved) {
+    if (!target) {
       throw new Error('Could not create the session. Reload the page and try again.');
     }
     if (!activeModelId) {
       throw new Error('Session configuration is not ready. Try again.');
     }
-    // Shown while the session starts, as its thread shows it.
-    const shownPrompt = localUser(prompt, false, files);
-    const session = await startSession.mutateAsync(resolved).catch((error: unknown) => {
-      failLocalUser(shownPrompt);
+    const shownMessageId = localUser(prompt, false, files);
+    const session = await startSession.mutateAsync(target).catch((error: unknown) => {
+      failLocalUser(shownMessageId);
       const message = error instanceof Error ? error.message : 'Session creation failed';
       throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
     });
     const { sessionId } = session;
+    const factoryId = target.factory.id;
     queryClient.setQueryData(queryKeys.userSession(sessionId), session);
-    addCachedSession(queryClient, factory.id, session);
-    void invalidateSessionQueries(queryClient, factory.id);
+    addCachedSession(queryClient, factoryId, session);
+    void invalidateSessionQueries(queryClient, factoryId);
     // A session that never got a message has no history, so its thread opens on an empty transcript.
     queryClient.setQueryData<MastraDBMessage[]>(
       queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, sessionId, sessionId, INITIAL_THREAD_MESSAGE_LIMIT),
@@ -92,10 +101,14 @@ export function useStartCardSessionFromDraft(
     );
     stashHandoffFiles(sessionId, files);
     const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
-    void navigate(threadPath(factory.id, { sessionId, threadId: sessionId }), {
+    // The thread shows this model until its session reports one.
+    void setModel(activeModelId);
+    continueTranscript({ sessionId: draftSessionId }, { sessionId, threadId: sessionId });
+    void navigate(threadPath(factoryId, { sessionId, threadId: sessionId }), {
       replace: true,
       state: startPromptHandoff(sessionId, prompt, {
         draftModelId: activeModelId,
+        shownMessageId,
         modelId: draftKeepsServerDefaults ? undefined : activeModelId,
         thinkingLevel: thinkingLevelOverride,
       }),
@@ -103,8 +116,9 @@ export function useStartCardSessionFromDraft(
   };
 
   return {
-    ready: resolved !== undefined && !startSession.isPending,
-    started: startSession.isPending || startSession.isSuccess,
+    ready: target !== undefined && !startSession.isPending,
+    // A failed Start may already have bound the card; the draft stays to show the failure.
+    started: !startSession.isIdle,
     start,
   };
 }

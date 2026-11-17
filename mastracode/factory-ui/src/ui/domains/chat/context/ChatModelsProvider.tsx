@@ -1,84 +1,32 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useLocation } from 'react-router';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { handoffDraftModelId } from '../hooks/useHandoffPrompt';
 import { routedDefaultModelId } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
 import { useChatSessionContext } from './useChatSessionContext';
 
-interface ChatModelsProviderProps {
-  children: ReactNode;
-}
-
+/** One provider for a draft and its thread, so a Start keeps the picked model on screen. */
 export function ChatModelsProvider({
   children,
   initialDraftModelId,
-}: ChatModelsProviderProps & { initialDraftModelId?: string }) {
-  const { draftSessionId } = useChatSessionContext();
-  return draftSessionId ? (
-    <DraftChatModelsProvider initialModelId={initialDraftModelId}>{children}</DraftChatModelsProvider>
-  ) : (
-    <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
-  );
-}
-
-function DraftChatModelsProvider({ children, initialModelId }: ChatModelsProviderProps & { initialModelId?: string }) {
-  const { projectQuery: factoryProjectQuery, modelScope, catalogTarget } = useChatModelScope();
+}: {
+  children: ReactNode;
+  initialDraftModelId?: string;
+}) {
+  const { draftSessionId, sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { state } = useChatConnection();
+  // A thread shows its draft's model until the session reports one.
+  const [draftModelId, setDraftModelId] = useState(initialDraftModelId);
+  const { projectQuery, modelScope, catalogTarget, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
-  const [draftModelId, setDraftModelId] = useState(initialModelId);
-  const defaultModelId = routedDefaultModelId(modelScope, {
-    factory: factoryProjectQuery.data?.defaultModelId,
-    personal: defaultModelQuery.data?.modelId,
-  });
-  const personalDefaultUsed = modelScope !== 'factory';
-  const usesFallback = !defaultModelId;
-  const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
-    defaultModelId,
-    pendingModelId: undefined,
-    isLoading:
-      factoryProjectQuery.isPending ||
-      (personalDefaultUsed && defaultModelQuery.isPending) ||
-      (usesFallback && fallbackModelQuery.isPending),
-    error:
-      factoryProjectQuery.error ??
-      (personalDefaultUsed ? defaultModelQuery.error : null) ??
-      (usesFallback ? fallbackModelQuery.error : null) ??
-      undefined,
-    setModel: modelId => {
-      setDraftModelId(modelId);
-      return Promise.resolve();
-    },
-  };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
-}
-
-function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { state } = useChatConnection();
-  const location = useLocation();
-  // Fixed at mount: the thread drops the handoff from its state once it sends.
-  const [draftModelId] = useState(() => handoffDraftModelId(location.state));
-  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
-  const defaultModelQuery = useDefaultModelQuery();
-  const localDefaultModelId = routedDefaultModelId(modelScope, {
-    factory: projectQuery.data?.defaultModelId,
-    personal: defaultModelQuery.data?.modelId,
-  });
-  const defaultModelId = sessionModelsQuery.isSuccess
-    ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
-      undefined)
-    : undefined;
   const {
     mutateAsync: switchModel,
     isPending: switching,
@@ -89,14 +37,45 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const value: ChatModelsApi = {
+  const localDefaultModelId = routedDefaultModelId(modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: defaultModelQuery.data?.modelId,
+  });
+
+  if (draftSessionId) {
+    const personalDefaultUsed = modelScope !== 'factory';
+    const usesFallback = !localDefaultModelId;
+    const draft: ChatModelsApi = {
+      activeModelId: draftModelId ?? localDefaultModelId ?? fallbackModelQuery.data,
+      defaultModelId: localDefaultModelId,
+      pendingModelId: undefined,
+      isLoading:
+        projectQuery.isPending ||
+        (personalDefaultUsed && defaultModelQuery.isPending) ||
+        (usesFallback && fallbackModelQuery.isPending),
+      error:
+        projectQuery.error ??
+        (personalDefaultUsed ? defaultModelQuery.error : null) ??
+        (usesFallback ? fallbackModelQuery.error : null) ??
+        undefined,
+      setModel: modelId => {
+        setDraftModelId(modelId);
+        return Promise.resolve();
+      },
+    };
+    return <ChatModelsContext.Provider value={draft}>{children}</ChatModelsContext.Provider>;
+  }
+
+  const live: ChatModelsApi = {
     activeModelId: state?.modelId ?? draftModelId,
-    defaultModelId,
+    defaultModelId: sessionModelsQuery.isSuccess
+      ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
+        undefined)
+      : undefined,
     pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),
   };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
+  return <ChatModelsContext.Provider value={live}>{children}</ChatModelsContext.Provider>;
 }

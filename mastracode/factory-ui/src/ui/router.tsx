@@ -49,13 +49,18 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
-// Card drafts and threads share this frame, and a draft's first prompt opens its thread.
+const SessionPage = lazyPage(() =>
+  import('./pages/SessionPage').then(module => {
+    SessionLayout.preload().catch(() => undefined);
+    return module.SessionPage;
+  }),
+);
+// Card drafts and threads share this frame and page, and a draft's first prompt opens its thread.
 const SessionLayout = lazyPage(
   () =>
     import('./layouts/SessionLayout').then(module => {
       // A failed preload retries on the visit.
-      ThreadPage.preload().catch(() => undefined);
+      SessionPage.preload().catch(() => undefined);
       return module.SessionLayout;
     }),
   <AppPageLoader />,
@@ -68,12 +73,6 @@ const NewPage = lazyPage(
       return module.NewPage;
     }),
   <AppPageLoader />,
-);
-const CardDraftPage = lazyPage(() =>
-  import('./pages/CardDraftPage').then(module => {
-    SessionLayout.preload().catch(() => undefined);
-    return module.CardDraftPage;
-  }),
 );
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
@@ -289,16 +288,16 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         {
                           path: 'cards/:workItemId',
                           element: <CardDraftRedirect />,
-                          ...loadOnEntry(prefetchCardDraft, CardDraftPage),
+                          ...loadOnEntry(prefetchCardDraft, SessionPage),
                         },
                         {
                           ...lazyRoute(SessionLayout),
                           children: [
-                            { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
-                            { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                            { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(SessionPage) },
+                            { path: 'user/threads/:threadId', ...lazyRoute(SessionPage) },
                             {
                               path: 'cards/:workItemId/new/:draftSessionId',
-                              ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                              ...lazyRoute(SessionPage, prefetchCardDraft),
                             },
                           ],
                         },

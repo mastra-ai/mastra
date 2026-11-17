@@ -18,6 +18,7 @@ interface PromptHandoff {
   handoffDraftModelId: string;
   handoffModelId?: string;
   handoffThinkingLevel?: ThinkingLevelSetting;
+  handoffShownMessageId?: string;
 }
 
 interface HandoffModel {
@@ -31,7 +32,15 @@ const unsentHandoffs = new Map<string, HandoffModel>();
 export function startPromptHandoff(
   sessionId: string,
   prompt: string,
-  { draftModelId, ...model }: HandoffModel & { draftModelId: string },
+  {
+    draftModelId,
+    shownMessageId,
+    ...model
+  }: HandoffModel & {
+    draftModelId: string;
+    /** The draft's bubble for this prompt, which a thread that keeps the draft's transcript shows already. */
+    shownMessageId?: string;
+  },
 ): PromptHandoff {
   unsentHandoffs.set(sessionId, model);
   storePendingHandoff(sessionId, prompt);
@@ -40,6 +49,7 @@ export function startPromptHandoff(
     handoffDraftModelId: draftModelId,
     handoffModelId: model.modelId,
     handoffThinkingLevel: model.thinkingLevel,
+    handoffShownMessageId: shownMessageId,
   };
 }
 
@@ -103,7 +113,7 @@ export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { localUser, clearPending, pushNotice } = useChatTranscript();
+  const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
   const { restoreComposerDraft } = useChatCommands();
   const { setImages } = useComposerImagesState();
   const mutationArgs = {
@@ -121,6 +131,8 @@ export function useHandoffPrompt(): void {
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
+  const shownMessageId = readHandoffField(location.state, 'handoffShownMessageId');
+  const promptShown = transcript.entries.some(entry => entry.id === shownMessageId);
 
   useEffect(() => {
     if (handedOff.current) return;
@@ -139,7 +151,7 @@ export function useHandoffPrompt(): void {
       }
       shown.current = true;
       const files = peekHandoffFiles(sessionId);
-      if (prompt || files.length > 0) localUser(prompt, false, toOutgoing(files));
+      if (!promptShown && (prompt || files.length > 0)) localUser(prompt, false, toOutgoing(files));
     }
     if (!sessionEnabled) return;
     if (prompt === undefined) {
@@ -192,6 +204,7 @@ export function useHandoffPrompt(): void {
     modelId,
     navigate,
     prompt,
+    promptShown,
     pushNotice,
     restoreComposerDraft,
     sessionId,

@@ -2,26 +2,24 @@ import { cardContextSessions, phaseContext } from '@mastra/factory/work-items/ca
 import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { SessionFrame } from '../../chat/components/SessionFrame';
+import type { SessionFrameSlots } from '../../chat/components/SessionFrame';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { currentItemStage } from '../boardStages';
-import { useSessionCard } from '../hooks/useSessionCard';
-import { useOpenSession } from '../hooks/useOpenSession';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
-import { CardStageBar } from './CardStageBar';
-import { CardStageSummary } from './CardStageSummary';
-import { SessionContextMenu } from './SessionContextMenu';
-import { SessionPanelOverview } from './SessionPanelOverview';
-import { SessionPanelSubject } from './SessionPanelSubject';
-import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
+import { CardStageBar } from '../components/CardStageBar';
+import { CardStageSummary } from '../components/CardStageSummary';
+import { SessionContextMenu } from '../components/SessionContextMenu';
+import { SessionPanelOverview } from '../components/SessionPanelOverview';
+import { SessionPanelSubject } from '../components/SessionPanelSubject';
+import { useOpenSession } from './useOpenSession';
+import { useSessionCard } from './useSessionCard';
 
 const SESSION_PANEL: WorkspacePanelPage = {
   subject: lead => <SessionPanelSubject lead={lead} />,
@@ -71,7 +69,7 @@ function stageUnavailable(
   return undefined;
 }
 
-export function ThreadFrame({ children }: { children: ReactNode }) {
+export function useThreadFrame(): SessionFrameSlots {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const { session, isUserThread, title: sessionTitle } = useOpenSession();
   const { workspacePath } = useThreadWorkspacePath();
@@ -93,47 +91,40 @@ export function ThreadFrame({ children }: { children: ReactNode }) {
   const title = currentItem ? switchable && `${switchable.label} session` : cardLoading ? undefined : sessionTitle;
   const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
 
-  return (
-    <SessionFrame
-      panel={workspacePath ? SESSION_PANEL : undefined}
-      title={title}
-      titleMenu={
-        switchable && factoryId && sessionId ? (
-          <>
-            <SessionContextMenu factoryId={factoryId} sessions={switchable.sessions} openSessionId={sessionId} />
-            {switchable.workingSession ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                aria-label={`Go to ${switchable.workingSession.label} session`}
-                render={<Link to={threadPath(factoryId, switchable.workingSession.ref)} />}
-              >
-                {switchable.workingSession.label}
-                <IconArrowRight aria-hidden />
-              </Button>
-            ) : null}
-          </>
-        ) : isUserThread && factoryId && session ? (
-          <UserSessionSharing factoryId={factoryId} session={session} />
-        ) : undefined
-      }
-      headerCenter={
-        currentItem && boardEntry && factory ? (
-          <CardStageBar
-            item={currentItem}
-            sessionItems={sessionItems}
-            board={boardEntry}
-            factory={factory}
-            openContext={openContext?.context}
-          />
-        ) : currentItem && stageNote ? (
-          <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
-        ) : undefined
-      }
-    >
-      <ThreadSubscriptionsRefresh />
-      {children}
-    </SessionFrame>
-  );
+  return {
+    panel: workspacePath ? SESSION_PANEL : undefined,
+    title,
+    titleMenu:
+      switchable && factoryId && sessionId ? (
+        <>
+          <SessionContextMenu factoryId={factoryId} sessions={switchable.sessions} openSessionId={sessionId} />
+          {switchable.workingSession ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              aria-label={`Go to ${switchable.workingSession.label} session`}
+              render={<Link to={threadPath(factoryId, switchable.workingSession.ref)} />}
+            >
+              {switchable.workingSession.label}
+              <IconArrowRight aria-hidden />
+            </Button>
+          ) : null}
+        </>
+      ) : isUserThread && factoryId && session ? (
+        <UserSessionSharing factoryId={factoryId} session={session} />
+      ) : undefined,
+    headerCenter:
+      currentItem && boardEntry && factory ? (
+        <CardStageBar
+          item={currentItem}
+          sessionItems={sessionItems}
+          board={boardEntry}
+          factory={factory}
+          openContext={openContext?.context}
+        />
+      ) : currentItem && stageNote ? (
+        <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
+      ) : undefined,
+  };
 }
