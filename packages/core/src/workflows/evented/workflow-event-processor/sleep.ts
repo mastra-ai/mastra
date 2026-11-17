@@ -1,7 +1,8 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
-import type { WorkflowsStorage } from '../../../storage/domains/workflows';
+import type { RunStorage } from '../../run-storage';
+import { setLongTimeout } from '../../utils';
 import { withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
@@ -81,12 +82,12 @@ export async function processWorkflowSleep(
   {
     pubsub,
     stepExecutor,
-    workflowsStore,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
-    workflowsStore?: WorkflowsStorage;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
@@ -110,9 +111,7 @@ export async function processWorkflowSleep(
     });
   }
 
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.writeStepResult({
     stepId: step.id,
     result: {
       status: 'waiting',
@@ -121,14 +120,10 @@ export async function processWorkflowSleep(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await workflowsStore?.updateWorkflowState({
-    workflowName: workflowId,
-    runId,
-    opts: {
-      status: 'running',
-      activePaths: executionPath,
-      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-    },
+  await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
   });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
@@ -145,61 +140,58 @@ export async function processWorkflowSleep(
     actor,
   });
 
-  setTimeout(
-    async () => {
-      if (emitStepEvents) {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'success',
-              payload: prevResult.status === 'success' ? prevResult.output : undefined,
-              output: prevResult.status === 'success' ? prevResult.output : undefined,
-              startedAt,
-              endedAt: Date.now(),
-            },
-          },
-        });
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
-            },
-          },
-        });
-      }
-
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
+  setLongTimeout(async () => {
+    if (emitStepEvents) {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
         runId,
         data: {
-          workflowId,
-          runId,
-          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resumeSteps,
-          timeTravel,
-          restart,
-          stepResults,
-          prevResult,
-          resumeData,
-          parentWorkflow,
-          activeStepsPath,
-          requestContext,
-          actor,
-          perStep,
+          type: 'workflow-step-result',
+          payload: {
+            id: step.id,
+            status: 'success',
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            output: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt,
+            endedAt: Date.now(),
+          },
         },
       });
-    },
-    duration < 0 ? 0 : duration,
-  );
+
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        },
+      });
+    }
+
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+        resumeSteps,
+        timeTravel,
+        restart,
+        stepResults,
+        prevResult,
+        resumeData,
+        parentWorkflow,
+        activeStepsPath,
+        requestContext,
+        actor,
+        perStep,
+      },
+    });
+  }, duration);
 }
 
 export async function processWorkflowSleepUntil(
@@ -223,12 +215,12 @@ export async function processWorkflowSleepUntil(
   {
     pubsub,
     stepExecutor,
-    workflowsStore,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
-    workflowsStore?: WorkflowsStorage;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
@@ -237,9 +229,7 @@ export async function processWorkflowSleepUntil(
   const emitStepEvents = workflow.options.emitStepEvents !== false;
   const startedAt = Date.now();
 
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.writeStepResult({
     stepId: step.id,
     result: {
       status: 'waiting',
@@ -248,14 +238,10 @@ export async function processWorkflowSleepUntil(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await workflowsStore?.updateWorkflowState({
-    workflowName: workflowId,
-    runId,
-    opts: {
-      status: 'running',
-      activePaths: executionPath,
-      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-    },
+  await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
   });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
@@ -288,59 +274,56 @@ export async function processWorkflowSleepUntil(
     });
   }
 
-  setTimeout(
-    async () => {
-      if (emitStepEvents) {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'success',
-              payload: prevResult.status === 'success' ? prevResult.output : undefined,
-              output: prevResult.status === 'success' ? prevResult.output : undefined,
-              startedAt,
-              endedAt: Date.now(),
-            },
-          },
-        });
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
-            },
-          },
-        });
-      }
-
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
+  setLongTimeout(async () => {
+    if (emitStepEvents) {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
         runId,
         data: {
-          workflowId,
-          runId,
-          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resumeSteps,
-          timeTravel,
-          restart,
-          stepResults,
-          prevResult,
-          resumeData,
-          parentWorkflow,
-          activeStepsPath,
-          requestContext,
-          actor,
-          perStep,
+          type: 'workflow-step-result',
+          payload: {
+            id: step.id,
+            status: 'success',
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            output: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt,
+            endedAt: Date.now(),
+          },
         },
       });
-    },
-    duration < 0 ? 0 : duration,
-  );
+
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        },
+      });
+    }
+
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+        resumeSteps,
+        timeTravel,
+        restart,
+        stepResults,
+        prevResult,
+        resumeData,
+        parentWorkflow,
+        activeStepsPath,
+        requestContext,
+        actor,
+        perStep,
+      },
+    });
+  }, duration);
 }

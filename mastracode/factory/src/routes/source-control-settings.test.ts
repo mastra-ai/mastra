@@ -59,7 +59,6 @@ async function seedRepository(integrationId: 'github' | 'gitlab') {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    sandboxProvider: 'local',
   });
   return { sourceControl, linked, project };
 }

@@ -9,6 +9,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createLegacyCardTablesForTests } from '../../test-utils.js';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
@@ -1058,12 +1059,15 @@ describe('work item subscriptions', () => {
     await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
     await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'subscribed'));
 
-    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
-      true,
-    );
-    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
-      false,
-    );
+    const unfollow = () =>
+      storage.unsubscribeFromWorkItem({
+        orgId: 'org1',
+        factoryProjectId: 'project1',
+        workItemId: item.id,
+        sessionId: 'sess-a',
+      });
+    expect(await unfollow()).toBe(true);
+    expect(await unfollow()).toBe(false);
     expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
     expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: other.id })).toHaveLength(1);
   });
@@ -1363,6 +1367,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       delete legacy.work_item;
       delete legacy.work_item_sources;
       delete legacy.changed_at;
+      await createLegacyCardTablesForTests(storage);
       await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');

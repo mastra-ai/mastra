@@ -90,7 +90,7 @@ export function ScheduleTriggersList({
                     variant="caption"
                     className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
                   >
-                    <IconExclamationTriangle size={14} />
+                    <IconExclamationTriangle className="size-icon-sm" />
                     publish failed
                   </Txt>
                 ) : t.run ? (
@@ -109,7 +109,7 @@ export function ScheduleTriggersList({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex text-destructive-foreground">
-                        <IconExclamationTriangle size={14} />
+                        <IconExclamationTriangle className="size-icon-sm" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{errorMessage}</TooltipContent>
@@ -125,7 +125,7 @@ export function ScheduleTriggersList({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex text-info-indicator">
-                        <IconExclamationTriangle size={14} />
+                        <IconExclamationTriangle className="size-icon-sm" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>Published {driftValue} after the scheduled fire time</TooltipContent>

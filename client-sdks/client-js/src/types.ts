@@ -1492,7 +1492,14 @@ export interface MastraPackage {
 
 export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
-export type GetObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
+type BaseObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
+export type GetObservabilityCapabilitiesResponse = Omit<BaseObservabilityCapabilitiesResponse, 'capabilities'> & {
+  capabilities: BaseObservabilityCapabilitiesResponse['capabilities'] & {
+    /** Optional capabilities advertised by Platform's trace page endpoint. */
+    tracePage?: boolean;
+    tracePageSearch?: boolean;
+  };
+};
 
 // ============================================================================
 // Workspace Types
@@ -2607,3 +2614,10 @@ export type {
   SavedViewSort,
   SavedViewState,
 } from '@mastra/core/storage';
+
+export type {
+  GetTracePageArgs,
+  TracePageRequest,
+  TracePageResponse,
+  TracePageNode,
+} from './resources/observability-route-types';

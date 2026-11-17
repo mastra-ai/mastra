@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  inferredParentWorkItemId,
   relatedCardName,
   relatedWorkItemIndex,
   relationshipLabel,
   relationshipPath,
   workItemReference,
+  workItemShortReference,
 } from './relationships';
 import type { WorkItem } from './workItems';
 
@@ -58,7 +58,6 @@ describe('Factory work item relationships', () => {
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
   it('links a GitLab MR back to its issue session and names it as a Review item', () => {
@@ -76,7 +75,6 @@ describe('Factory work item relationships', () => {
     });
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);
     expect(relatedWorkItemIndex([review, issue])(issue)).toEqual([review]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
     expect(relationshipLabel(review)).toBe('Review: MR !5');
     expect(workItemReference(review)).toBe('MR !5');
   });
@@ -126,7 +124,6 @@ describe('Factory work item relationships', () => {
     });
 
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([]);
-    expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
   });
 
   it('uses source-specific relationship references', () => {
@@ -165,13 +162,19 @@ describe('Factory work item relationships', () => {
   });
 
   it.each([
-    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42' },
-    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42' },
-    { source: 'gitlab-issue', key: 'group/sub/app#7', inside: 'Issue #7', outside: 'Issue group/sub/app#7' },
-    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7' },
+    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42', short: 'app#42' },
+    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42', short: 'app#42' },
+    {
+      source: 'gitlab-issue',
+      key: 'group/sub/app#7',
+      inside: 'Issue #7',
+      outside: 'Issue group/sub/app#7',
+      short: 'app#7',
+    },
+    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7', short: 'app!7' },
   ] as const)(
-    'drops the repository from a $source reference only inside that repository',
-    ({ source, key, inside, outside }) => {
+    'drops the repository from a $source reference only inside that repository, and its owner from the short key',
+    ({ source, key, inside, outside, short }) => {
       const item = workItem({
         id: `${source}-keyed`,
         source,
@@ -191,6 +194,7 @@ describe('Factory work item relationships', () => {
       expect(workItemReference(item, repository.toUpperCase())).toBe(inside);
       expect(workItemReference(item, 'acme/other')).toBe(outside);
       expect(workItemReference(item)).toBe(outside);
+      expect(workItemShortReference(item)).toBe(short);
     },
   );
 

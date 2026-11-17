@@ -2,6 +2,19 @@ import { safeStringify } from '@mastra/core/utils';
 
 export type SerializedStreamChunk = { ok: true; json: string } | { ok: false; error: Error };
 
+/** Chunks marked by {@link shareStreamChunk}, with their JSON once the first stream serializes them. */
+const sharedChunks = new WeakMap<object, SerializedStreamChunk | undefined>();
+
+/**
+ * Mark a chunk that is enqueued, unchanged, on several streams so it is
+ * serialized once instead of once per stream. The chunk must not be mutated
+ * afterwards: every stream receives the JSON of its first serialization.
+ */
+export function shareStreamChunk<T extends object>(chunk: T): T {
+  if (!sharedChunks.has(chunk)) sharedChunks.set(chunk, undefined);
+  return chunk;
+}
+
 /**
  * Serializes a stream chunk to JSON for wire transport.
  *
@@ -16,11 +29,19 @@ export type SerializedStreamChunk = { ok: true; json: string } | { ok: false; er
  * chunk, and keep streaming.
  */
 export function serializeStreamChunk(chunk: unknown): SerializedStreamChunk {
-  try {
-    return { ok: true, json: safeStringify(withPlainPayloadError(chunk)) };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+  const shared = typeof chunk === 'object' && chunk !== null && sharedChunks.has(chunk);
+  if (shared) {
+    const serialized = sharedChunks.get(chunk);
+    if (serialized) return serialized;
   }
+  let serialized: SerializedStreamChunk;
+  try {
+    serialized = { ok: true, json: safeStringify(withPlainPayloadError(chunk)) };
+  } catch (error) {
+    serialized = { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+  }
+  if (shared) sharedChunks.set(chunk as object, serialized);
+  return serialized;
 }
 
 /**

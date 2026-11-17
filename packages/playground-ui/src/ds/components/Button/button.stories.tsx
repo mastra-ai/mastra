@@ -7,7 +7,7 @@ import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -139,7 +139,7 @@ export const IconBesideText: Story = {
             Add item
           </Button>
           <Button size={`icon-${size}`} tooltip="Settings">
-            <IconSettingsGear1 />
+            <IconSettingsGear5 />
           </Button>
           <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
             <TrashIcon />
@@ -152,7 +152,7 @@ export const IconBesideText: Story = {
 
 export const IconButtonDefault: Story = {
   args: {
-    children: <IconSettingsGear1 />,
+    children: <IconSettingsGear5 />,
     tooltip: 'Settings',
     size: 'icon-md',
     variant: 'default',
@@ -164,7 +164,7 @@ export const IconButtonVariants: Story = {
     <div className="flex flex-wrap items-center gap-2">
       {ALL_VARIANTS.filter(variant => variant !== 'link').map(variant => (
         <Button key={variant} size="icon-md" variant={variant} tooltip={variant}>
-          <IconSettingsGear1 />
+          <IconSettingsGear5 />
         </Button>
       ))}
     </div>
@@ -175,13 +175,13 @@ export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
       <Button size="icon-sm" tooltip="Small">
-        <IconSettingsGear1 />
+        <IconSettingsGear5 />
       </Button>
       <Button size="icon-md" tooltip="Medium">
-        <IconSettingsGear1 />
+        <IconSettingsGear5 />
       </Button>
       <Button size="icon-lg" tooltip="Large">
-        <IconSettingsGear1 />
+        <IconSettingsGear5 />
       </Button>
     </div>
   ),
@@ -189,7 +189,7 @@ export const IconButtonSizes: Story = {
 
 export const IconButtonDisabled: Story = {
   args: {
-    children: <IconSettingsGear1 />,
+    children: <IconSettingsGear5 />,
     tooltip: 'Settings (disabled)',
     size: 'icon-md',
     disabled: true,

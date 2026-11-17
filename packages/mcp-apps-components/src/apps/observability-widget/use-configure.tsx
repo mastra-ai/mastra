@@ -1,6 +1,6 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
-import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
@@ -49,7 +49,7 @@ export function useConfigure(
   };
   return (
     <MetricsCard.Action label={`Configure ${name}`} onClick={onConfigure} className={onCardHover}>
-      <IconSettingsGear1 />
+      <IconSettingsGear5 />
     </MetricsCard.Action>
   );
 }

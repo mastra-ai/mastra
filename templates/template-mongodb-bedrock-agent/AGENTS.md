@@ -9,7 +9,6 @@ Read `README.md` for setup and `CONTRIBUTING.md` for code principles. Keep this 
 - TypeScript uses strict NodeNext ESM; relative imports need `.js` extensions.
 - MongoDB Atlas backs retrieval, conversations, and traces. Keep storage off the runtime filesystem.
 - Bedrock uses the AWS credential chain. Keep model IDs configurable and `EMBED_DIMENSION` consistent with the embedder and Atlas index.
-- Preserve the pinned Bedrock provider version and its `patch-package` fix until deliberately migrating it.
 - Never commit credentials, `.env` files, deployment state, or generated output. Keep example configuration free of secrets.
 
 ## AgentCore

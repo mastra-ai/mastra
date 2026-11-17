@@ -222,7 +222,7 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <IconBrain className="h-4 w-4 text-badge-purple-indicator" />
+    <IconBrain className="size-icon-md text-badge-purple-indicator" />
     <Txt as="h3" variant="subheading" tone="ink">
       Observational Memory
     </Txt>
@@ -232,7 +232,7 @@ const ObservationalMemoryHeader = () => (
 const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
-      <IconBrain className="h-4 w-4 text-muted-foreground" />
+      <IconBrain className="size-icon-md text-muted-foreground" />
       <Txt as="h3" variant="subheading" tone="ink">
         Observational Memory
       </Txt>
@@ -254,7 +254,7 @@ const ObservationalMemoryDisabled = () => (
         <Txt as="span" variant="body" className="block">
           Learn about Observational Memory
         </Txt>
-        <IconSquareArrowTopRight className="h-3 w-3" />
+        <IconSquareArrowTopRight className="size-icon-xs" />
       </a>
     </div>
   </div>

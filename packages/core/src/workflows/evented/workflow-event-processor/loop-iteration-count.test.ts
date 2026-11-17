@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { processWorkflowLoop } from './loop';
+import { runInStorageScope } from './storage-scope';
 
 /**
  * Regression coverage for the evented engine's loop `iterationCount`.
@@ -66,7 +67,7 @@ async function driveLoop(loopType: 'dountil' | 'dowhile', condition: (n: number)
         prevResult: bodyResult,
         requestContext: {},
       } as any,
-      { pubsub, stepExecutor, step, stepResult: bodyResult },
+      { pubsub, runStorage: {} as any, stepExecutor, step, stepResult: bodyResult },
     );
 
     if (published.some(e => e.type === 'workflow.step.end')) {
@@ -97,5 +98,80 @@ describe('evented loop iterationCount', () => {
 
     expect(ended).toBe(true);
     expect(seenCounts).toEqual([1, 2, 3]);
+  });
+
+  it('reports the stored count when a completion is replayed instead of advancing it again', async () => {
+    const writes: any[] = [];
+    const published: any[] = [];
+    const pubsub = { publish: async (_topic: string, event: any) => void published.push(event) } as any;
+    const step = makeLoopStep('dountil', () => false);
+    const bodyResult = { status: 'success' as const, output: { n: 1 }, startedAt: 1, endedAt: 2, payload: {} };
+    // The delivery's own result: the earlier attempt stored it with the count of the iteration it ran.
+    const stored = { ...bodyResult, metadata: { startedBy: 'evt-1', loopCondition: false, iterationCount: 3 } };
+
+    await runInStorageScope(2, () =>
+      processWorkflowLoop(
+        {
+          workflowId: 'wf',
+          runId: 'run-1',
+          executionPath: [0],
+          stepResults: { body: stored },
+          activeStepsPath: {},
+          resumeSteps: [],
+          prevResult: bodyResult,
+          requestContext: {},
+        } as any,
+        {
+          pubsub,
+          runStorage: { writeStepResult: async (args: any) => void writes.push(args) } as any,
+          stepExecutor: {} as any,
+          step,
+          stepResult: stored,
+          // A guarded store reuses the condition it saved with the completion.
+          savedCondition: false,
+          replayedIterationCount: 3,
+        },
+      ),
+    );
+
+    const runEvent = published.find(event => event.type === 'workflow.step.run');
+    expect(runEvent?.data.stepResults.body.metadata.iterationCount).toBe(3);
+    // The stored record keeps the same count, so the next iteration runs as iteration 4.
+    expect(writes[0].result.metadata.iterationCount).toBe(3);
+  });
+
+  it('stores the body state next to the next input on an unguarded store', async () => {
+    const writes: any[] = [];
+    const pubsub = { publish: async () => {} } as any;
+    const step = makeLoopStep('dountil', () => false);
+    const bodyResult = { status: 'success' as const, output: { n: 1 }, startedAt: 1, endedAt: 2, payload: {} };
+
+    await runInStorageScope(2, () =>
+      processWorkflowLoop(
+        {
+          workflowId: 'wf',
+          runId: 'run-1',
+          executionPath: [0],
+          stepResults: {},
+          activeStepsPath: {},
+          resumeSteps: [],
+          prevResult: bodyResult,
+          requestContext: {},
+          state: { n: 1 },
+        } as any,
+        {
+          pubsub,
+          runStorage: { writeStepResult: async (args: any) => void writes.push(args) } as any,
+          stepExecutor: { evaluateCondition: async () => false } as any,
+          step,
+          stepResult: bodyResult,
+          // No saved condition means an unguarded store: the write records the next iteration as
+          // started rather than the body's committed result.
+        },
+      ),
+    );
+
+    expect(writes[0].result).toMatchObject({ status: 'running', payload: { n: 1 } });
+    expect(writes[0].state).toEqual({ n: 1 });
   });
 });

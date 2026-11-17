@@ -18,29 +18,6 @@ let seed!: FactoryStorageTestSeed;
 const listJiraSources = vi.fn(async () => [
   { id: '1', name: 'Engineering', type: 'project', metadata: { key: 'ENG' } },
 ]);
-const listActiveJiraIssues = vi.fn(async (_after?: string, _scopes?: unknown[]) => ({
-  issues: [
-    {
-      id: '10001',
-      externalId: 'jira-issue:encoded-reference',
-      sourceId: '1',
-      identifier: 'ENG-42',
-      title: 'Fix intake sync',
-      url: 'https://acme.atlassian.net/browse/ENG-42',
-      author: 'Grace',
-      state: 'To Do',
-      stateType: 'unstarted',
-      priority: 'High',
-      assignee: 'Ada',
-      source: 'ENG',
-      labels: ['bug'],
-      commentCount: null,
-      createdAt: '2026-07-01T00:00:00Z',
-      updatedAt: '2026-07-02T00:00:00Z',
-    },
-  ],
-  nextCursor: 'page-2',
-}));
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
@@ -97,7 +74,6 @@ beforeEach(async () => {
     },
   ]);
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
-  vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
     orgId: 'org1',
     config: { jira: { enabled: true, sourceIds: ['1'] } },
@@ -117,7 +93,6 @@ describe('status route', () => {
     const app = buildApp(org1(), { authEnabled: false });
     const res = await app.request('/web/jira/status');
     expect(await res.json()).toMatchObject({ enabled: false, configured: true, reason: 'missing_config' });
-    expect((await app.request('/web/jira/issues')).status).toBe(404);
     expect((await app.request('/web/jira/projects')).status).toBe(404);
   });
 
@@ -215,107 +190,8 @@ describe('projects route', () => {
   });
 });
 
-describe('issues route', () => {
-  it('returns a page of issues with the next cursor', async () => {
-    const res = await buildApp(org1()).request('/web/jira/issues');
-    const json = await res.json();
-    expect(json.issues[0]).toMatchObject({
-      id: 'jira-issue:encoded-reference',
-      identifier: 'ENG-42',
-      title: 'Fix intake sync',
-      state: 'To Do',
-      stateType: 'unstarted',
-      priorityLabel: 'High',
-      assignee: 'Ada',
-      author: 'Grace',
-      project: 'ENG',
-      labels: ['bug'],
-    });
-    expect(json.nextCursor).toBe('page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
-  });
-
-  it('forwards the pagination cursor', async () => {
-    await buildApp(org1()).request('/web/jira/issues?after=page-2');
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
-  });
-
-  it('rejects malformed cursors', async () => {
-    const res = await buildApp(org1()).request('/web/jira/issues?after=bad%20cursor%22');
-    expect(res.status).toBe(400);
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('404s when Jira intake is disabled in settings', async () => {
-    await seed.intake.saveConfig({
-      orgId: 'org1',
-      config: { jira: { enabled: false, sourceIds: null } },
-    });
-    const res = await buildApp(org1()).request('/web/jira/issues');
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: 'jira_intake_disabled' });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('returns an empty page without calling Jira when no projects are selected', async () => {
-    await seed.intake.saveConfig({
-      orgId: 'org1',
-      config: { jira: { enabled: true, sourceIds: null } },
-    });
-    const res = await buildApp(org1()).request('/web/jira/issues');
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('treats an org with no saved intake config as Jira intake turned off', async () => {
-    seed = await createFactoryStorageForTests();
-
-    const res = await buildApp(org1()).request('/web/jira/issues');
-
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: 'jira_intake_disabled' });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('409s with jira_auth_failed when Jira rejects the credentials', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (403)', 403));
-    const res = await buildApp(org1()).request('/web/jira/issues');
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: 'jira_auth_failed' });
-  });
-
-  it('502s when the Jira API fails', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
-    const res = await buildApp(org1()).request('/web/jira/issues');
-    expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ error: 'jira_fetch_failed' });
-  });
-
-  it('rejects unauthenticated users', async () => {
-    const res = await buildApp(null).request('/web/jira/issues');
-    expect(res.status).toBe(401);
-  });
-
-  it('rejects malformed factory project ids', async () => {
-    const res = await buildApp(org1()).request('/web/jira/issues?factoryProjectId=not-a-uuid');
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'invalid_factory_project_id' });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-});
-
-describe('issues route — Factory source bindings', () => {
+describe('issue detail route', () => {
   const projectA = '11111111-1111-4111-8111-111111111111';
-  const projectB = '22222222-2222-4222-8222-222222222222';
-
-  const seedProjects = async (count: number) => {
-    for (const id of [projectA, projectB].slice(0, count)) {
-      await createProject(id);
-    }
-  };
-
-  const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -324,20 +200,9 @@ describe('issues route — Factory source bindings', () => {
     });
   });
 
-  it('narrows the selection to the sources bound to the viewed Factory', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    await bind('2', projectB);
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [{ projectId: '1', include: null, exclude: [] }]);
-  });
-
   it('returns the description for a Jira issue routed to the viewed Factory', async () => {
-    await seedProjects(1);
-    await bind('1', projectA);
+    await createProject(projectA);
+    await seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId: '1', factoryProjectId: projectA });
     const issueRef = 'jira-issue:encoded-reference';
     vi.spyOn(jira.intake, 'resolveIntakeDispatch').mockResolvedValue({
       connection: { type: 'oauth', accessToken: 'jira-connection:a1b_acme' },
@@ -373,57 +238,5 @@ describe('issues route — Factory source bindings', () => {
       url: 'https://acme.atlassian.net/browse/ENG-42',
       description: 'Detailed Jira task body',
     });
-  });
-
-  it('hides sources routed to another Factory from this board', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectB}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('hides an unbound selection in a multi-Factory org with no bindings', async () => {
-    await seedProjects(2);
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('withholds the selection from a single-Factory org with no bindings', async () => {
-    await seedProjects(1);
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
-  it('forwards the pagination cursor together with the scoped selection', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-
-    await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}&after=page-2`);
-
-    expect(listActiveJiraIssues).toHaveBeenCalledWith('page-2', [{ projectId: '1', include: null, exclude: [] }]);
-  });
-
-  it('keeps the unscoped selection for callers that omit the Factory project', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-
-    const res = await buildApp(org1()).request('/web/jira/issues');
-
-    expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, [
-      { projectId: '1', include: null, exclude: [] },
-      { projectId: '2', include: null, exclude: [] },
-    ]);
   });
 });

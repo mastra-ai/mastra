@@ -251,7 +251,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   data-testid="sampling-restriction-banner"
                   className="flex items-center gap-2 rounded bg-card px-3 py-2 text-muted-foreground"
                 >
-                  <IconCircleInfo className="h-3.5 w-3.5 shrink-0" />
+                  <IconCircleInfo className="size-icon-sm shrink-0" />
                   <Txt as="span" variant="caption">
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'

@@ -52,7 +52,7 @@ export function FactoryManagementSection() {
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <TrashIcon className="size-3.5" />
+                    <TrashIcon />
                     Delete
                   </Button>
                 }

@@ -28,11 +28,11 @@ const E2E_TIER_JOBS = [
   'type-check',
 ];
 
+// Must match the `e2e:<dir>/*` projects in test-suite.yml's e2e-test matrix, or the file runs nowhere.
 const isPackageE2eTest = file =>
-  file.startsWith('packages/') &&
-  (file.includes('.e2e.') ||
-    file.startsWith('packages/evals/src/scorers/llm/') ||
-    file.startsWith('packages/rag/src/'));
+  ((file.startsWith('packages/') || file.startsWith('client-sdks/')) && file.includes('.e2e.')) ||
+  file.startsWith('packages/evals/src/scorers/llm/') ||
+  file.startsWith('packages/rag/src/');
 const isExternalE2eTest = file => file.startsWith('e2e-tests/') || file.startsWith('packages/playground/e2e/');
 
 /**

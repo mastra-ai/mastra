@@ -52,7 +52,7 @@ gh label create "<label>" --repo <owner/repository> --color '<color>' --descript
 gh issue edit "$ISSUE" --repo <owner/repository> --add-label "<label>"
 ```
 
-Use the Target repository for `--repo`. The labels and their colors: `status: needs triage`, `status: auto-triaged`, `status: needs approval`, `status: pending-close` (`FBCA04`); `effort:low`, `effort:medium`, `effort:high` (`C5DEF5`); `impact:low`, `impact:medium`, `impact:high` (`BFD4F2`); `severity:critical`, `severity:high`, `severity:medium`, `severity:low` (`D93F0B`). The description names what the label records, e.g. `Triage severity: <level>`.
+Use the Target repository for `--repo`. When the Factory system prompt says the card names no repository, determine from the card which of the listed repositories it belongs to, use that one for `--repo` and run code searches in its checkout; if the card gives no way to tell, say so in the triage report instead of guessing. The labels and their colors: `status: needs triage`, `status: auto-triaged`, `status: needs approval`, `status: pending-close` (`FBCA04`); `effort:low`, `effort:medium`, `effort:high` (`C5DEF5`); `impact:low`, `impact:medium`, `impact:high` (`BFD4F2`); `severity:critical`, `severity:high`, `severity:medium`, `severity:low` (`D93F0B`). The description names what the label records, e.g. `Triage severity: <level>`.
 
 ## Phase 2: Related Issues & Prior Work
 

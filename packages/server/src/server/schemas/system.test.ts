@@ -6,14 +6,18 @@ describe('observabilityStorageCapabilitiesSchema', () => {
   it('treats omitted search capabilities from older servers as unavailable', () => {
     const {
       traceQueryAggregatedRoots: _roots,
-      spanQueryTextSearch: _span,
-      traceQueryTextSearch: _trace,
+      spanQueryTokenSearch: _span,
+      traceQueryTokenSearch: _trace,
+      traceAggregateTokenSearch: _traceAggregate,
+      spanAggregateTokenSearch: _spanAggregate,
       ...legacyCapabilities
     } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
     expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
       traceQueryAggregatedRoots: false,
-      spanQueryTextSearch: false,
-      traceQueryTextSearch: false,
+      spanQueryTokenSearch: false,
+      traceQueryTokenSearch: false,
+      traceAggregateTokenSearch: false,
+      spanAggregateTokenSearch: false,
     });
   });
 
