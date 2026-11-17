@@ -1,11 +1,8 @@
-import { ABORT_AGENT_CONTROLLER_SESSION_ROUTE } from '@mastra/server/handlers/agent-controller';
 import type { MiddlewareHandler } from 'hono';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
-const SESSION_ABORT_PATH = new RegExp(
-  `${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path.replace(':controllerId', '[^/]+').replace(':sessionId', '([^/]+)')}/?$`,
-);
+const SESSION_ABORT_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)\/abort\/?$/;
 
 /**
  * Records a session abort request on the session's Factory run bindings before the abort runs, so
