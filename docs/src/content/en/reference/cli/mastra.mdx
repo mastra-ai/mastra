@@ -519,7 +519,7 @@ Replace an existing output file.
 
 ### `mastra env vars set`
 
-Sets env vars on an environment and chooses whether each one is a [secret or config](/docs/mastra-platform/environments#secrets-and-config). Variables you don't name keep their stored values. The new values apply on the next deploy or `mastra env restart`.
+Sets env vars on an environment and chooses whether each one is a [secret or config](/docs/mastra-platform/environments#secrets-and-config), leaving variables you don't name at their stored values. New values apply on the next deploy or `mastra env restart`.
 
 ```bash
 mastra env vars set <env> API_KEY=sk-123 --secret API_KEY
@@ -531,11 +531,11 @@ mastra env vars set <env> --secret DATABASE_URL
 
 #### `--secret`
 
-Store the named variable as a secret: write-only and delivered at boot. Repeat the flag to name several variables. The variable must be set on the environment or in the same command.
+Store the named variable as a secret: write-only and delivered at boot. Repeat the flag for each variable you want to mark. The variable must already exist on the environment or be set in the same command.
 
 #### `--config`
 
-Store the named variable as config: readable and stored on the hosting provider. Repeat the flag to name several variables. To turn an existing secret into config, pass its value in the same command, because the platform can't read the stored secret back.
+Store the named variable as config, which stays readable and is stored on the hosting provider. You can repeat this flag too. Converting an existing secret into config requires passing its value in the same command, because the platform can't read the stored secret back.
 
 ### `mastra env db`
 

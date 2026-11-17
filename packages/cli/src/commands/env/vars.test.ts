@@ -388,6 +388,17 @@ describe('envVarsSetAction', () => {
   it('rejects malformed assignments without echoing the value', async () => {
     await expect(runSet(undefined, ['NOT_AN_ASSIGNMENT'])).rejects.toThrow('Expected KEY=VALUE');
     await expect(runSet(undefined, ['bad-key=s3cret'])).rejects.not.toThrow(/s3cret/);
+    await expect(runSet('my-app', ['sk-abc/def=='])).rejects.toThrow('Invalid variable name in argument 1');
+    await expect(runSet('my-app', ['sk-abc/def=='])).rejects.not.toThrow(/abc/);
+    await expect(runSet('my-app', ['sk-live-abc123'])).rejects.toThrow('Expected KEY=VALUE for variable argument 1');
+    await expect(runSet('my-app', ['A=1', 'API_KEY: sk-live-abc123'])).rejects.not.toThrow(/abc123/);
+  });
+
+  it('does not echo an unknown environment argument, which may be a pasted value', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({})] });
+    const error = await runSet('sk-live-abc123', ['A=1']).catch((e: Error) => e);
+    expect(String(error)).toContain('Environment not found. Available:');
+    expect(String(error)).not.toContain('abc123');
   });
 
   it('refuses to send the placeholder as a value', async () => {

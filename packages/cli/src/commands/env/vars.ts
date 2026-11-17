@@ -62,6 +62,10 @@ function pickEnvironment(environments: Environment[], envArg: string | undefined
 
   const env = environments.find(e => e.id === envArg || e.name === envArg || e.slug === envArg);
   if (!env) {
+    // `set` may get a pasted value in the environment slot, so don't echo it there.
+    if (command === 'set') {
+      throw new Error(`Environment not found. Available: ${environments.map(e => e.slug).join(', ')}`);
+    }
     throw new Error(`Environment not found: ${envArg}`);
   }
   return env;
@@ -157,11 +161,15 @@ const ENV_VAR_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** Parse `KEY=VALUE` arguments. Values are never echoed back in errors. */
 function parseAssignments(args: string[]): Record<string, string> {
   const vars: Record<string, string> = {};
-  for (const arg of args) {
+  for (const [index, arg] of args.entries()) {
     const eq = arg.indexOf('=');
-    const name = eq === -1 ? arg : arg.slice(0, eq);
-    if (eq === -1 || !ENV_VAR_NAME.test(name)) {
-      throw new Error(`Expected KEY=VALUE, got "${name.replace(/[^\w.-]/g, '?')}"`);
+    // A malformed argument may be a pasted value (base64 values end in "="), so refer to it by position only.
+    if (eq === -1) {
+      throw new Error(`Expected KEY=VALUE for variable argument ${index + 1}`);
+    }
+    const name = arg.slice(0, eq);
+    if (!ENV_VAR_NAME.test(name)) {
+      throw new Error(`Invalid variable name in argument ${index + 1}`);
     }
     const value = arg.slice(eq + 1);
     if (isSecretPlaceholder(value)) {
