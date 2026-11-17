@@ -123,7 +123,10 @@ export const CardInset = React.forwardRef<HTMLElement, CardInsetProps>(
   ({ className, as: Component = 'div', ...props }, ref) => (
     <Component
       ref={ref}
-      className={cn('divide-y divide-border overflow-hidden rounded-lg border border-border bg-sidebar', className)}
+      className={cn(
+        'divide-y divide-border overflow-hidden rounded-lg border border-border bg-sidebar *:p-3',
+        className,
+      )}
       {...props}
     />
   ),

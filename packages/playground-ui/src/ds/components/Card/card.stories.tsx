@@ -14,7 +14,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '../Dialog';
+import { Switch } from '../Switch';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardInset, CardLink, CardTitle } from './Card';
+import { SettingsRow } from '@/ds/new/settings';
 
 const meta: Meta<typeof Card> = {
   title: 'Layout/Card',
@@ -103,7 +105,7 @@ function InsetRows() {
   return (
     <CardInset>
       {insetRows.map(row => (
-        <div key={row.label} className="flex items-center justify-between gap-4 p-3">
+        <div key={row.label} className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-body-sm text-foreground">{row.label}</p>
             {row.description ? <p className="text-caption text-muted-foreground">{row.description}</p> : null}
@@ -141,7 +143,14 @@ export const InsetInDialog: Story = {
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <InsetRows />
+          <CardInset>
+            <SettingsRow label="Source" description="The connection to read documents from." viewOnly>
+              Acme Linear
+            </SettingsRow>
+            <SettingsRow label="Enrich pages" description="Relates new pages to ones already in Knowledge.">
+              <Switch defaultChecked />
+            </SettingsRow>
+          </CardInset>
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
