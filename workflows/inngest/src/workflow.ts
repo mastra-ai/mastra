@@ -412,6 +412,32 @@ export class InngestWorkflow<
     return run;
   }
 
+  /**
+   * Records a run Inngest gave up on as failed. Only a row still marked live is
+   * rewritten: a run that failed in its own code already wrote a richer terminal
+   * snapshot in finalize, and a suspended row stays resumable.
+   */
+  async #markRunFailed(runId: string, error: unknown) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return;
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
+    const snapshot = typeof run?.snapshot === 'string' ? undefined : run?.snapshot;
+    if (!snapshot || !['running', 'pending', 'waiting'].includes(snapshot.status)) return;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: this.id,
+      runId,
+      resourceId: run?.resourceId,
+      snapshot: {
+        ...snapshot,
+        status: 'failed',
+        activePaths: [],
+        activeStepsPath: {},
+        error: getErrorFromUnknown(error, { fallbackMessage: 'Inngest run failed' }),
+        timestamp: Date.now(),
+      },
+    });
+  }
+
   //createCronFunction is only called if cronConfig.cron is defined.
   private createCronFunction() {
     if (this.cronFunction) {
@@ -468,6 +494,14 @@ export class InngestWorkflow<
         // Every event that triggers this function carries `data.runId`, and
         // `Run.cancel()` sends the same field.
         cancelOn: [{ event: `cancel.workflow.${this.id}`, match: 'data.runId' }],
+        // Inngest calls this once it gives up on a run. The handler's finalize step is
+        // what records a terminal snapshot, so a run that dies before reaching it
+        // (worker crash, retries exhausted on a failed request) would otherwise stay
+        // `running` in storage forever.
+        onFailure: async ({ event, error }) => {
+          const runId: unknown = event.data?.event?.data?.runId;
+          if (typeof runId === 'string') await this.#markRunFailed(runId, error);
+        },
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
