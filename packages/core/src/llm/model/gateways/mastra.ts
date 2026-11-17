@@ -65,10 +65,11 @@ export class MastraGateway extends MastraModelGateway {
 
   /**
    * Gateway v2 deployments are signaled by MASTRA_GATEWAY_VERSION=v2 (set by the platform)
-   * or by a v2 (organization) API key prefix, which predates the env var signal.
+   * or by a v2 (organization) API key prefix, which predates the env var signal. A v1 project
+   * key (`msk_`) is always served by v1, so it wins over the env var.
    * Keep in sync with isGatewayV2 in @mastra/server's gateway-memory-client.
    * Public so the server can ask a registered gateway instance for its
-   * effective v2 state (the instance may carry a v2 key via config.apiKey
+   * effective v2 state (the instance may carry a key via config.apiKey
    * that env-only checks cannot see).
    */
   isV2(): boolean {
@@ -238,6 +239,7 @@ interface V2CatalogEntry {
  */
 let v2CatalogCaches = new WeakMap<typeof fetch, Map<string, V2CatalogEntry>>();
 
+/** Only an in-memory cache key, so the raw key is not held. Not a password hash. */
 function hashApiKey(apiKey: string): string {
   return createHash('sha256').update(apiKey).digest('hex');
 }

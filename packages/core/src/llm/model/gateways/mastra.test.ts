@@ -372,8 +372,7 @@ describe('MastraGateway', () => {
       for await (const part of stream) parts.push(part);
 
       const finish = parts.find(part => part.type === 'finish');
-      expect(finish?.usage?.inputTokens?.total ?? finish?.usage?.inputTokens).toBe(7);
-      expect(finish?.usage?.outputTokens?.total ?? finish?.usage?.outputTokens).toBe(3);
+      expect(finish?.usage).toMatchObject({ inputTokens: { total: 7 }, outputTokens: { total: 3 } });
     });
 
     it('asks for usage on streaming requests only with a custom fetch', async () => {

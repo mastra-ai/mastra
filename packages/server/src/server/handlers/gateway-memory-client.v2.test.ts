@@ -1,3 +1,4 @@
+import { MastraGateway } from '@mastra/core/llm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getGatewayClient, isGatewayV2 } from './gateway-memory-client.js';
 
@@ -44,6 +45,24 @@ describe('Gateway memory client in v2 deployments', () => {
     vi.stubEnv('MASTRA_GATEWAY_VERSION', '');
     vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_v1-key');
     const mastra = { listGateways: () => ({ mastra: { id: 'mastra', isV2: () => true } }) };
+    expect(getGatewayClient(mastra)).toBeNull();
+  });
+
+  it('agrees with a registered gateway whose v1 config key wins over MASTRA_GATEWAY_VERSION', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+    const gateway = new MastraGateway({ apiKey: 'msk_0123456789abcdef0123456789abcdef' });
+    const mastra = { listGateways: () => ({ mastra: gateway }) };
+    expect(gateway.isV2()).toBe(false);
+    expect(isGatewayV2(mastra)).toBe(false);
+  });
+
+  it('does not build a v1 memory client from an organization env key', () => {
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', '');
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'mskv2_org-key');
+    const gateway = new MastraGateway({ apiKey: 'msk_0123456789abcdef0123456789abcdef' });
+    const mastra = { listGateways: () => ({ mastra: gateway }) };
+    expect(isGatewayV2(mastra)).toBe(false);
     expect(getGatewayClient(mastra)).toBeNull();
   });
 

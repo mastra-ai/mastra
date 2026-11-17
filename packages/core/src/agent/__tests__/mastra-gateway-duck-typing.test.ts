@@ -110,17 +110,18 @@ describe('mastra gateway duck typing', () => {
 
     async function run(model: ModelRouterLanguageModel) {
       const warn = vi.fn();
+      const debug = vi.fn();
       const agent = new Agent({
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model,
       });
-      agent.__setLogger({ debug: vi.fn(), info: vi.fn(), warn, error: vi.fn(), trace: vi.fn() } as any);
+      agent.__setLogger({ debug, info: vi.fn(), warn, error: vi.fn(), trace: vi.fn() } as any);
       const result = await agent.generate('hello', {
         memory: { thread: { id: 'thread-1' }, resource: 'resource-1' },
       });
-      return { result, warn };
+      return { result, warn, debug };
     }
 
     const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -146,12 +147,16 @@ describe('mastra gateway duck typing', () => {
     it('finishes the run and does not warn when the check fails', async () => {
       const model = routerModel('mskv2_org-key');
       const check = vi.spyOn(model, 'isGatewayMemoryManaged').mockRejectedValue(new Error('credential unavailable'));
-      const { result, warn } = await run(model);
+      const { result, warn, debug } = await run(model);
 
       expect(result.text).toBe('ok');
       await vi.waitFor(() => expect(check).toHaveBeenCalled());
       await settle();
       expect(warn).not.toHaveBeenCalledWith(WARNING, expect.anything());
+      expect(debug).toHaveBeenCalledWith('Could not tell whether the gateway manages memory for this model', {
+        agent: 'test-agent',
+        error: expect.objectContaining({ message: 'credential unavailable' }),
+      });
     });
 
     it('does not wait for a slow check before running the model', async () => {

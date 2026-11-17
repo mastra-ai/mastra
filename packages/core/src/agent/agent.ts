@@ -9299,7 +9299,11 @@ export class Agent<
             managed => {
               if (!managed) warnMissingMemory();
             },
-            () => {},
+            error =>
+              this.logger.debug('Could not tell whether the gateway manages memory for this model', {
+                agent: this.name,
+                error,
+              }),
           );
       }
     }

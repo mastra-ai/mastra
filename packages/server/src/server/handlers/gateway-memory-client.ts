@@ -293,27 +293,24 @@ function isV2GatewayKey(key: string): boolean {
 }
 
 /**
- * Whether this deployment targets Gateway v2. Signaled either by the
- * MASTRA_GATEWAY_VERSION=v2 runtime env var (set by the platform), by a v2
- * (organization) API key prefix (which predates the env var signal), or by a
- * registered Mastra gateway instance that carries a v2 key via config.apiKey
- * (pass `mastra` so instance-level config is consulted too).
+ * Whether this deployment targets Gateway v2. Signaled by the MASTRA_GATEWAY_VERSION=v2 runtime
+ * env var (set by the platform) or by a v2 (organization) API key prefix, which predates the env
+ * var signal. A v1 project key (`msk_`) is always served by v1, so it wins over the env var.
+ *
+ * Pass `mastra` so the registered Mastra gateway answers: it holds the key model calls use, which
+ * may be set in its config rather than the environment, and its `isV2()` applies the same rules.
+ * Keep the environment rules below in sync with `MastraGateway.isV2` in `@mastra/core`.
  */
 export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unknown> | undefined }): boolean {
-  const key = process.env.MASTRA_GATEWAY_API_KEY;
-  // A v1 project key (`msk_`) is always served by v1, so it wins over MASTRA_GATEWAY_VERSION.
-  // A registered gateway instance can still report v2 for its own config key below.
-  const isV1Key = !!key && key.startsWith('msk_');
-  if (!isV1Key && process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
-  if (!!key && isV2GatewayKey(key)) return true;
-  // A user-registered MastraGateway can hold a v2 key in its config rather
-  // than the environment; ask the instance for its effective v2 state.
   const gateways = mastra?.listGateways?.() ?? {};
   for (const gateway of Object.values(gateways)) {
     const candidate = gateway as { id?: string; isV2?: () => boolean };
-    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function' && candidate.isV2()) return true;
+    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function') return candidate.isV2();
   }
-  return false;
+  const key = process.env.MASTRA_GATEWAY_API_KEY;
+  if (key?.startsWith('msk_')) return false;
+  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
+  return !!key && isV2GatewayKey(key);
 }
 
 // Singleton-ish lazy instance
@@ -330,10 +327,9 @@ export function getGatewayClient(mastra?: Parameters<typeof isGatewayV2>[0]): Ga
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
-  if (!key) {
-    _gatewayClient = null;
-    return null;
-  }
+  // An organization key cannot use the v1 memory API, even when a registered gateway with a v1
+  // key of its own makes the deployment v1.
+  if (!key || isV2GatewayKey(key)) return null;
   _gatewayClient = new GatewayMemoryClient(url, key);
   return _gatewayClient;
 }

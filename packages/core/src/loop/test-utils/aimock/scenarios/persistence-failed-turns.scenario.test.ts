@@ -95,7 +95,10 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
       .poll(async () => (await memory.recall({ threadId, resourceId })).messages.map(m => m.role))
       .toEqual(['user', 'assistant']);
     const [errorPart] = errorParts((await memory.recall({ threadId, resourceId })).messages);
-    expect(errorPart).toMatchObject({ type: 'error', error: { statusCode: 400 } });
+    expect(errorPart).toMatchObject({
+      type: 'error',
+      error: { statusCode: 400, requestOrigin: new URL(getMock().url).origin },
+    });
     expect(JSON.parse((errorPart as { error: { responseBody: string } }).error.responseBody)).toMatchObject({
       error: { message: 'PROVIDER_400_EXPLANATION', type: 'invalid_request_error' },
     });
