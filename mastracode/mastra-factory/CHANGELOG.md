@@ -1,5 +1,24 @@
 # create-factory
 
+## 0.5.0-alpha.5
+
+### Minor Changes
+
+- Added a `--tag <dist-tag>` option to `create-factory`. It pins the scaffolded template's `mastra` and `@mastra/*` dependencies to the exact versions published under that npm dist-tag, so you can try a new Factory on prerelease packages: ([#30598](https://github.com/mastra-ai/mastra/pull/30598))
+
+  ```sh
+  npx create-factory@latest my-factory --tag alpha
+  ```
+
+  When the pinned versions include prereleases and the project uses npm, `create-factory` also writes `legacy-peer-deps=true` to the project's `.npmrc`, because npm otherwise rejects the prerelease peer ranges.
+
+### Patch Changes
+
+- `create-factory --tag` now stops before installing when the npm registry lookup for a Mastra package fails, instead of keeping that package's template version and producing a project that mixes release channels. A package that simply has no release under the tag still keeps its template version with a warning. ([#30614](https://github.com/mastra-ai/mastra/pull/30614))
+
+- Updated dependencies [[`c638825`](https://github.com/mastra-ai/mastra/commit/c638825c83d0f81196cfdede24c13a95e398717a), [`a6dbd29`](https://github.com/mastra-ai/mastra/commit/a6dbd29a4ebbba1f1f5ec31770d82a536e1cd48b), [`3c7c003`](https://github.com/mastra-ai/mastra/commit/3c7c00383d22fbfb02e844e599151ec153d2f281), [`b90d0ec`](https://github.com/mastra-ai/mastra/commit/b90d0ecd413b9955e63438aef6b3ef9b1ad6eb09), [`e22c5a7`](https://github.com/mastra-ai/mastra/commit/e22c5a7035b8a85f4258dabf8d2c2930b28f0774)]:
+  - mastra@1.40.0-alpha.5
+
 ## 0.4.4-alpha.4
 
 ### Patch Changes
