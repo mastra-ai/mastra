@@ -481,24 +481,37 @@ describe('describeRunError', () => {
     );
 
     describe('a saved 429, rebuilt from history', () => {
-      // History keeps no request URL. Versions of core that record the request's origin save it as
-      // `requestOrigin`; this core does not emit it yet, so the tests add it to the real saved part.
-      const saved429 = (url: string, error: Record<string, unknown>, requestOrigin?: string) => ({
-        ...toPersistedErrorIdentity({
+      // History keeps no request URL. Core saves the request's origin as `requestOrigin`; a part
+      // saved by an older core has none, which is what leaving the argument out stands for.
+      const saved429 = (url: string, error: Record<string, unknown>, requestOrigin?: string) => {
+        const { requestOrigin: _recorded, ...part } = toPersistedErrorIdentity({
           name: 'AI_APICallError',
           message: String(error.message),
           statusCode: 429,
           url,
           responseBody: JSON.stringify({ error }),
-        }),
-        ...(requestOrigin ? { requestOrigin } : {}),
-      });
+        }) as Record<string, unknown>;
+        return { ...part, ...(requestOrigin ? { requestOrigin } : {}) };
+      };
       const gatewayLimit = {
         type: 'rate_limit_error',
         code: 'rate_limit_exceeded',
         message: 'Gateway key requests limit exceeded. Retry in 12s.',
       };
       const relayedLimit = { message: 'rate limited', type: 'rate_limit_error', code: null };
+
+      it("names the gateway's own limit from the origin core saves with the error", () => {
+        const saved = toPersistedErrorIdentity({
+          name: 'AI_APICallError',
+          message: gatewayLimit.message,
+          statusCode: 429,
+          url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+          responseBody: JSON.stringify({ error: gatewayLimit }),
+        });
+        expect(saved).toMatchObject({ requestOrigin: 'https://gateway-api.mastra.ai' });
+        expect(saved).not.toHaveProperty('url');
+        expect(describeRunError(saved)).toMatchObject({ title: 'Mastra Gateway rate limit reached' });
+      });
 
       it('stays a provider rate limit without a request origin, since its type and code are shared', () => {
         const saved = saved429('https://gateway-api.mastra.ai/v1/chat/completions', gatewayLimit);
