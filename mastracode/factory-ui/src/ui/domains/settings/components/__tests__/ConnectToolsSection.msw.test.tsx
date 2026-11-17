@@ -4,13 +4,19 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { ConnectToolConnection } from '../../../factory/services/platformConnect';
+import type { ConnectTools, ConnectToolConnection } from '../../../factory/services/platformConnect';
 import { ConnectToolsSection } from '../ConnectToolsSection';
 
 const CONNECT_TOOLS = `${TEST_BASE_URL}/web/integrations/platform/connect-tools`;
 
-function serveConnections(connections: ConnectToolConnection[]) {
-  server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ projectId: 'proj_1', connections })));
+function serveConnections(connections: ConnectToolConnection[], toolsSource: ConnectTools['toolsSource'] = 'default') {
+  server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ projectId: 'proj_1', toolsSource, connections })));
+}
+
+function serveOff(body: { reason?: string; message?: string }) {
+  server.use(
+    http.get(CONNECT_TOOLS, () => HttpResponse.json({ error: 'connect_tools_off', ...body }, { status: 404 })),
+  );
 }
 
 function signInToOrganization(organizationId: string) {
@@ -68,11 +74,74 @@ describe('Mastra Connect tools settings', () => {
     );
   });
 
-  it("says sessions get no Connect tools when this Factory doesn't give them any", async () => {
-    server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ error: 'connect_tools_off' }, { status: 404 })));
+  // #30579: a Factory that narrows Connect tools in its `tools` option was shown as "off" with no connections.
+  it('lists the connections and says session tools are set in code when the Factory sets tools', async () => {
+    serveConnections(
+      [
+        {
+          id: 'conn-posthog',
+          integrationId: 'posthog',
+          providerName: 'PostHog',
+          logoUrl: null,
+          accountLabel: 'Acme analytics',
+          status: 'active',
+        },
+      ],
+      'custom',
+    );
     renderWithProviders(<ConnectToolsSection />);
 
-    expect(await screen.findByText(/Mastra Connect tools are off/)).toBeInTheDocument();
+    expect(await screen.findByText('PostHog')).toBeInTheDocument();
+    expect(screen.getByText(/This Factory sets its session tools in code/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toBeInTheDocument();
+    expect(screen.queryByText(/Mastra Connect tools are off/)).not.toBeInTheDocument();
+  });
+
+  it("doesn't mention code when sessions get the default Connect tools", async () => {
+    serveConnections([
+      {
+        id: 'conn-linear',
+        integrationId: 'linear',
+        providerName: 'Linear',
+        logoUrl: null,
+        accountLabel: null,
+        status: 'active',
+      },
+    ]);
+    renderWithProviders(<ConnectToolsSection />);
+
+    expect(await screen.findByText('Linear')).toBeInTheDocument();
+    expect(screen.queryByText(/sets its session tools in code/)).not.toBeInTheDocument();
+  });
+
+  it('names the missing Platform credentials when the Factory has none', async () => {
+    serveOff({ reason: 'no_credentials' });
+    renderWithProviders(<ConnectToolsSection />);
+
+    const notice = await screen.findByText(
+      /Mastra Connect tools are off: this Factory has no Mastra Platform credentials/,
+    );
+    expect(notice).toHaveTextContent('MASTRA_PLATFORM_SECRET_KEY');
+    expect(notice).not.toHaveTextContent('MASTRA_PROJECT_ID');
+    expect(notice).not.toHaveTextContent('tools option');
+  });
+
+  it('names the missing project id when the Factory has credentials but no MASTRA_PROJECT_ID', async () => {
+    serveOff({ reason: 'no_project_id' });
+    renderWithProviders(<ConnectToolsSection />);
+
+    const notice = await screen.findByText(/this Factory has Platform credentials but no/);
+    expect(notice).toHaveTextContent('MASTRA_PROJECT_ID');
+    expect(notice).not.toHaveTextContent('MASTRA_PLATFORM_SECRET_KEY');
+  });
+
+  it('lists every possible cause when an older Factory gives no reason', async () => {
+    serveOff({});
+    renderWithProviders(<ConnectToolsSection />);
+
+    expect(await screen.findByText(/sets a custom/)).toHaveTextContent(
+      'Mastra Connect tools are off: this Factory sets a custom tools option or is missing Platform credentials or MASTRA_PROJECT_ID.',
+    );
   });
 
   it('offers a retry, not setup guidance, when the Platform refuses the listing', async () => {

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { tools as connectTools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -1623,6 +1624,36 @@ describe('MastraFactory.prepare', () => {
         const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+      });
+
+      // #30579: setting `tools` used to drop the project id, so Settings › Tools said Connect tools were off.
+      it('lists the connections in Settings › Tools when the tools option narrows them to read-only', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-narrowed');
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          auth: null,
+          tools: connectTools({ providers: ['linear'], allowTools: ['linear_list_*'] }),
+        });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        expect(Object.keys(tools)).toContain('linear_list_teams');
+        expect(
+          Object.keys(tools).filter(name => name.startsWith('linear_') && !name.startsWith('linear_list_')),
+        ).toEqual([]);
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          projectId: 'project-narrowed',
+          toolsSource: 'custom',
+          connections: [expect.objectContaining({ id: 'conn-linear', integrationId: 'linear' })],
+        });
       });
     });
   });

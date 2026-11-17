@@ -92,6 +92,7 @@ import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js
 import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import type { ConnectToolsSetupMissing } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
@@ -531,16 +532,15 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   return new PlatformFactorySandbox();
 }
 
-function platformConnectProjectId(): string | undefined {
-  if (!hasPlatformCredentials()) return undefined;
+/**
+ * The Platform project whose Mastra Connect connections this Factory uses, or
+ * the one piece of setup that's missing. Independent of the `tools` option:
+ * Settings › Tools lists the project's connections either way.
+ */
+function platformConnectSetup(): { projectId: string } | { missing: ConnectToolsSetupMissing } {
+  if (!hasPlatformCredentials()) return { missing: 'no_credentials' };
   const projectId = process.env.MASTRA_PROJECT_ID?.trim();
-  if (!projectId) {
-    console.warn(
-      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
-    );
-    return undefined;
-  }
-  return projectId;
+  return projectId ? { projectId } : { missing: 'no_project_id' };
 }
 
 function warnIgnoredMcpConfig(): void {
@@ -1786,9 +1786,15 @@ export class MastraFactory {
           return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
         },
       });
-    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const connectSetup = platformConnectSetup();
+    const connectToolsSource = this.#config.tools === undefined ? 'default' : 'custom';
+    if (connectToolsSource === 'default' && 'missing' in connectSetup && connectSetup.missing === 'no_project_id') {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+      );
+    }
     const sessionTools =
-      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
+      this.#config.tools ?? ('projectId' in connectSetup ? platformConnectTools(connectSetup.projectId) : undefined);
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2362,9 +2368,13 @@ export class MastraFactory {
             : []),
           buildConnectToolsRoute(
             routeAuth,
-            connectToolsProjectId
-              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
-              : undefined,
+            'projectId' in connectSetup
+              ? {
+                  client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                  projectId: connectSetup.projectId,
+                  toolsSource: connectToolsSource,
+                }
+              : connectSetup,
           ),
         ],
         buildServerConfig: () => {

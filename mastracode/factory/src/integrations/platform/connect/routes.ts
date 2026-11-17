@@ -19,7 +19,7 @@ import type { Context } from 'hono';
 
 import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
-import type { PlatformApiClient} from '../api-client.js';
+import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 import { offersSessionTools } from './session-tools.js';
 
@@ -83,7 +83,22 @@ export interface BuildPlatformConnectRoutesOptions {
 export interface ConnectToolsSource {
   client: PlatformApiClient;
   projectId: string;
+  /**
+   * `default`: sessions get Factory's own Connect tools for this project.
+   * `custom`: the Factory's `tools` option sets session tools, and may or may
+   * not include these connections.
+   */
+  toolsSource: 'default' | 'custom';
 }
+
+/** The one piece of setup the Factory lacks to list its project's connections. */
+export type ConnectToolsSetupMissing = 'no_credentials' | 'no_project_id';
+
+const MISSING_SETUP_MESSAGES: Record<ConnectToolsSetupMissing, string> = {
+  no_credentials:
+    'This Factory has no Mastra Platform credentials. Set MASTRA_PLATFORM_SECRET_KEY or MASTRA_PLATFORM_ACCESS_TOKEN.',
+  no_project_id: 'This Factory has Mastra Platform credentials but no MASTRA_PROJECT_ID.',
+};
 
 async function resolveOrgTenant(
   c: RouteContext,
@@ -126,23 +141,33 @@ function platformError(c: RouteContext, err: unknown) {
   return c.json({ error: 'platform_request_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
-export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSource | undefined): ApiRoute {
+/**
+ * Lists the Platform project's connections for Settings › Tools whenever the
+ * Factory has Platform credentials and `MASTRA_PROJECT_ID`, whatever its
+ * `tools` option. `toolsSource` tells the panel whether sessions get these
+ * connections by default or only through the Factory's own `tools` code.
+ */
+export function buildConnectToolsRoute(
+  auth: RouteAuth,
+  source: ConnectToolsSource | { missing: ConnectToolsSetupMissing },
+): ApiRoute {
   return registerApiRoute('/web/integrations/platform/connect-tools', {
     method: 'GET',
     requiresAuth: false,
     handler: async rawContext => {
       const c = loose(rawContext);
-      if (!source) {
-        return c.json(
-          { error: 'connect_tools_off', message: "This Factory's sessions don't get Mastra Connect tools." },
-          404,
-        );
-      }
       if (auth.enabled()) {
         await auth.ensureUser(c);
         if (!auth.tenant(c)) return c.json({ error: 'unauthorized' }, 401);
       }
-      const { client, projectId } = source;
+      if ('missing' in source) {
+        // `connect_tools_off` stays the code so settings pages from older CLIs still read it.
+        return c.json(
+          { error: 'connect_tools_off', reason: source.missing, message: MISSING_SETUP_MESSAGES[source.missing] },
+          404,
+        );
+      }
+      const { client, projectId, toolsSource } = source;
       try {
         const [listed, catalog] = await Promise.all([
           client.request<{ connections: ProjectConnectionRow[] }>(
@@ -171,7 +196,7 @@ export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSour
             };
           })
           .sort((a, b) => a.providerName.localeCompare(b.providerName));
-        return c.json({ projectId, connections });
+        return c.json({ projectId, toolsSource, connections });
       } catch (err) {
         return platformError(c, err);
       }

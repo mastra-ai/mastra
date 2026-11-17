@@ -16,32 +16,45 @@ import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { isConnectToolsOffError, platformProjectConnectUrl } from '../../factory/services/platformConnect';
-import type { ConnectToolConnection } from '../../factory/services/platformConnect';
+import { connectToolsOffReason, platformProjectConnectUrl } from '../../factory/services/platformConnect';
+import type { ConnectToolConnection, ConnectToolsSetupMissing } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
 
 const SECTION_LABEL = 'Mastra Connect';
 
+const DEFAULT_DESCRIPTION =
+  "Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval. Tools named for deleting or archiving, and GitHub and GitLab tools, are left out.";
+const CUSTOM_DESCRIPTION =
+  "The connections attached to this Factory's Platform project. This Factory's tools option decides which of their Mastra Connect tools sessions get.";
+
 export function ConnectToolsSection() {
   const query = useConnectToolsQuery();
-  const unavailable = query.isError && isConnectToolsOffError(query.error);
+  const offReason = query.isError ? connectToolsOffReason(query.error) : undefined;
+  const custom = query.data?.toolsSource === 'custom';
 
   return (
     <SettingsSubsection
       scope="deployment"
       title="Mastra Connect tools"
-      description="Sessions can use the Mastra Connect tools of every connection attached to this Factory's Platform project. They run without asking for approval. Tools named for deleting or archiving, and GitHub and GitLab tools, are left out."
+      description={custom ? CUSTOM_DESCRIPTION : DEFAULT_DESCRIPTION}
     >
+      {custom && (
+        <Notice variant="info">
+          <Notice.Message>
+            This Factory sets its session tools in code, with the <InlineCode>tools</InlineCode> option. These
+            connections are used only if that code includes them, and it may narrow their tools.
+          </Notice.Message>
+        </Notice>
+      )}
       {query.isPending ? (
         <SettingsContainer>
           <SettingsSkeleton variant="item" label="Loading Mastra Connect tools" />
         </SettingsContainer>
-      ) : unavailable ? (
+      ) : offReason ? (
         <Notice variant="info">
           <Notice.Message>
-            Mastra Connect tools are off: this Factory sets a custom <InlineCode>tools</InlineCode> option or is missing
-            Platform credentials or <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
+            <ConnectToolsOffMessage reason={offReason} />
           </Notice.Message>
         </Notice>
       ) : query.isError ? (
@@ -74,6 +87,32 @@ export function ConnectToolsSection() {
         </SettingsContainer>
       )}
     </SettingsSubsection>
+  );
+}
+
+function ConnectToolsOffMessage({ reason }: { reason: ConnectToolsSetupMissing | 'unknown' }) {
+  if (reason === 'no_credentials') {
+    return (
+      <>
+        Mastra Connect tools are off: this Factory has no Mastra Platform credentials. Set{' '}
+        <InlineCode>MASTRA_PLATFORM_SECRET_KEY</InlineCode> or <InlineCode>MASTRA_PLATFORM_ACCESS_TOKEN</InlineCode>.
+      </>
+    );
+  }
+  if (reason === 'no_project_id') {
+    return (
+      <>
+        Mastra Connect tools are off: this Factory has Platform credentials but no{' '}
+        <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
+      </>
+    );
+  }
+  // Servers that predate the reason also answered "off" for a custom `tools` option.
+  return (
+    <>
+      Mastra Connect tools are off: this Factory sets a custom <InlineCode>tools</InlineCode> option or is missing
+      Platform credentials or <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
+    </>
   );
 }
 
