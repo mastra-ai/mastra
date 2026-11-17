@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 1.84.0-alpha.5
+
+### Minor Changes
+
+- Added `knowledge.movePage()` to move a page, with its child pages, to a new parent or scope from your app. The page keeps its ID, notes, pins and embeddings, and links by path follow it, so a sync that sees a page move at its source no longer has to remove and re-create it. ([#30631](https://github.com/mastra-ai/mastra/pull/30631))
+
+  ```ts
+  await knowledge.movePage({ scope: 'docs:acme', path: 'inbox/plan', parent: 'projects/q4' });
+  ```
+
+  Links by name now stay correct when a page moves or a new page takes a name. A page moved to another scope, and every page under it, re-resolves its `[[Name]]` links in the new scope. A link that pointed at one page by name stops resolving once a second page answers to that name. When more than 99 pages share that name, the write logs a warning and `knowledge.reindexLinks()` repairs the rest.
+
+- Added `knowledge.reembed()` to embed Knowledge pages and notes that already exist, such as content written before `vector` and `embedder` were configured or after switching embedders. It runs in batches with a resumable cursor, doesn't change the pages, lists failures and pages over the chunk cap, and stops early with a cursor when the embedder keeps rate limiting. ([#30603](https://github.com/mastra-ai/mastra/pull/30603))
+
+  ```ts
+  let cursor: string | undefined;
+  do {
+    const result = await knowledge.reembed({ scope: 'org:acme', cursor });
+    if (result.rateLimited) await new Promise(resolve => setTimeout(resolve, 60_000));
+    cursor = result.nextCursor;
+  } while (cursor);
+  ```
+
+### Patch Changes
+
+- Fixed slow handling of Gateway base URLs and Supabase URLs that contain very long runs of `/`. The resulting URLs are unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
+- Fixed `run.restart()` running a step again when the workflow run finished or suspended after `restart()` read it but before `restart()` took it over from the process running it. Restarting a run that finished now returns its stored result, and restarting a run that suspended fails with the usual "This workflow run was not active" error. ([#30399](https://github.com/mastra-ai/mastra/pull/30399))
+
+- Fixed workflow `.sleep()` and `.sleepUntil()` waits longer than about 24.8 days ending almost immediately. The next step now runs only after the full wait, on the default and evented engines. ([#30395](https://github.com/mastra-ai/mastra/pull/30395))
+
 ## 1.84.0-alpha.4
 
 ### Minor Changes

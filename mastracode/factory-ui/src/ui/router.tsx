@@ -335,7 +335,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         {
                           path: 'settings',
                           children: [
-                            { index: true, element: <Navigate to="preferences" replace /> },
+                            { index: true, element: <Navigate to="account" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
                             { path: 'board', element: <BoardSettingsRedirect /> },
                             { path: 'skills', element: <SkillsSettingsRedirect /> },

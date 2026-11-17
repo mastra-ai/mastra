@@ -18,7 +18,7 @@ import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
+import { BehaviorSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
 
@@ -56,7 +56,6 @@ export function SettingsPanel() {
   return (
     <>
       {section === 'account' && <AccountSettingsSection />}
-      {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
