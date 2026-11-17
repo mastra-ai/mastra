@@ -128,6 +128,8 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     fromStage: string | undefined;
     toStage: string;
+    fromBoard: string;
+    toBoard: string;
   }) => Promise<void> | void;
   /**
    * Called after a transition commits out of the last phase that runs in a
@@ -416,6 +418,8 @@ export class FactoryTransitionService {
           workItemId: item.id,
           fromStage,
           toStage: result.stage,
+          fromBoard: request.board,
+          toBoard: request.toBoard ?? request.board,
         }),
       )
       .catch(error => {

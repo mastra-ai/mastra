@@ -25,6 +25,7 @@ import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { decisionOvertaken } from './decision-applicability.js';
+import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
@@ -2428,7 +2429,78 @@ describe('onTransitionCommitted', () => {
       workItemId: item.id,
       fromStage: 'approval',
       toStage: 'shipped',
+      fromBoard: 'release',
+      toBoard: 'release',
     });
+  });
+
+  async function goalSetup(stamp: Record<string, unknown>) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const phases = () => ({
+      inbox: { title: 'Inbox', kind: 'resting' as const, next: 'triage' },
+      triage: { title: 'Triage', kind: 'working' as const, runner: { context: 'triage' }, next: 'inbox' },
+    });
+    const work = defineBoard({ id: 'work', title: 'Work', initialPhase: 'inbox', phases: phases() });
+    const preview = defineBoard({ id: 'preview', title: 'Preview', initialPhase: 'inbox', phases: phases() });
+    const item = await createItem(storage, {
+      board: 'work',
+      stages: ['triage'],
+      metadata: { [PHASE_GOAL_METADATA_KEY]: stamp },
+    });
+    const updateObjectiveOptions = vi.fn();
+    const agent = {
+      getObjective: vi.fn(async () => ({ id: String(stamp.goalId), status: 'active' })),
+      setObjective: vi.fn(),
+      updateObjectiveOptions,
+    };
+    const ender = createPhaseGoalEnder({
+      workItems: storage,
+      agentFor: async () => agent as never,
+      store: async () => undefined,
+    });
+    // Wrapped so a test can await the ender's own run: the service never awaits the hook.
+    const committed = vi.fn(async (args: Parameters<typeof ender>[0]) => {
+      await ender(args);
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'goal-test',
+      boards: boardRegistryOf([work, preview]),
+      onTransitionCommitted: committed,
+    });
+    return { item, service, committed, updateObjectiveOptions };
+  }
+
+  it("ends the old board's phase goal when the card moves to a same-named phase on another board", async () => {
+    // A stamp from before boards were recorded names no board: it was made where the card came from.
+    const { item, service, updateObjectiveOptions } = await goalSetup({
+      phaseKey: 'triage',
+      goalId: 'g1',
+      threadId: 't1',
+      sessionId: 's1',
+    });
+
+    const result = await service.transition(request(item, { board: 'preview', stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    await vi.waitFor(() => expect(updateObjectiveOptions).toHaveBeenCalledWith({ threadId: 't1', status: 'done' }));
+  });
+
+  it("keeps a goal the destination's runner already stamped for the new board", async () => {
+    const { item, service, committed, updateObjectiveOptions } = await goalSetup({
+      phaseKey: 'triage',
+      boardKey: 'preview',
+      goalId: 'g2',
+      threadId: 't2',
+      sessionId: 's2',
+    });
+
+    const result = await service.transition(request(item, { board: 'preview', stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    await vi.waitFor(() => expect(committed).toHaveBeenCalledOnce());
+    await committed.mock.results[0]!.value;
+    expect(updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
   it('says nothing for a rejected transition or a same-stage commit', async () => {
