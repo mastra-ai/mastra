@@ -142,7 +142,7 @@ function CardDraft({
 }) {
   useGlobalShortcuts();
   const sessionRepository = useCardSessionRepository(factory.id, item.id);
-  const draftStart = useStartCardSessionFromDraft(item, sessionRepository.data);
+  const draftStart = useStartCardSessionFromDraft(item, sessionRepository.error ? undefined : sessionRepository.data);
   const repositoryProblem = sessionRepository.error
     ? `Could not find this card's repository: ${sessionRepository.error.message}`
     : sessionRepository.data?.status === 'unlinked'

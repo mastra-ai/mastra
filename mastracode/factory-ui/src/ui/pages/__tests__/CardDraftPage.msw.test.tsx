@@ -282,6 +282,29 @@ describe('a card without a session', () => {
     expect(runStarts).toEqual([]);
   });
 
+  it("stops the start when a later lookup of the card's repository fails", async () => {
+    const route = stubDraftRoute();
+    const runStarts = stubCard();
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/cards/${CARD_ID}/new/${DRAFT_SESSION_ID}`);
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'repair the facts');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${CARD_ID}/session-repository`, () =>
+        HttpResponse.json({ error: 'Intake config unavailable' }, { status: 500 }),
+      ),
+    );
+    await client.invalidateQueries({ queryKey: ['factory', 'work-item-session-repository'] });
+
+    expect(await screen.findByText(/Could not find this card's repository/)).toBeInTheDocument();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(route.createBodies).toEqual([]);
+    expect(runStarts).toEqual([]);
+  });
+
   it("keeps the card's title and next steps on the draft when the composer posts a notice", async () => {
     stubDraftRoute();
     stubCard();
