@@ -881,6 +881,20 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   },
 });
 
+/**
+ * Reason this route states for the run it stops. A person pressing Stop in a
+ * client is its only caller, so the abort is always deliberate, and saying so
+ * lets a host (e.g. Factory) settle the run as stopped instead of retrying an
+ * abort it cannot explain.
+ *
+ * Mirrored rather than imported: only types may come from
+ * `@mastra/core/agent-controller` (see the import note at the top of this
+ * file). `agent-controller-abort-reason.test.ts` imports core's
+ * `USER_STOP_ABORT_REASON` and asserts this route states the same value, so
+ * the two cannot drift.
+ */
+const USER_STOP_ABORT_REASON = 'user-stop';
+
 export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/abort',
@@ -889,7 +903,8 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   pathParamSchema: sessionPathParams,
   responseSchema: ackResponseSchema,
   summary: 'Abort a controller session run',
-  description: 'Aborts the in-flight run for the session, if any.',
+  description:
+    'Aborts the in-flight run for the session, if any. Recorded as a deliberate stop, so the run ends with `agent_end.abortReason` set.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -897,7 +912,7 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
-      session.abort();
+      session.abort({ reason: USER_STOP_ABORT_REASON });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error aborting controller session');
