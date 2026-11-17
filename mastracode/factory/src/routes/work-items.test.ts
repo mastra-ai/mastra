@@ -22,6 +22,8 @@ let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
 /** Work the build seat was handed (see acceptsWork): production syncs acceptance labels from here. */
 let acceptedHook: Array<{ workItemId: string }> = [];
+/** Committed stage changes: production reports them and ends the left phase's goal from here. */
+let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -107,6 +109,9 @@ function buildApp(
         onAccepted: async args => {
           acceptedHook.push({ workItemId: args.workItemId });
         },
+        onTransitionCommitted: async args => {
+          committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
+        },
       }),
       startCoordinator,
       sessionRepository,
@@ -160,6 +165,7 @@ beforeEach(async () => {
   auditRecorded = [];
   auditFailure = undefined;
   acceptedHook = [];
+  committedHook = [];
   await seedProject();
 });
 
@@ -1154,11 +1160,22 @@ describe('POST transition moving a card to another board', () => {
     expect(res.status).toBe(200);
     const moved = (await res.json()).result;
     expect(moved.status).toBe('accepted');
-    // Preview's Triage is not Work's Triage: entering it starts Preview's own runner.
+    // Preview's Triage is not Work's Triage: entering it starts Preview's own runner, and the
+    // card's notice names both boards — the phase names alone would hide the move.
     expect(moved.decisions).toContainEqual(
-      expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
+      expect.objectContaining({
+        type: 'invokeSkill',
+        skillName: 'preview-triage',
+        startsAfterOwnMove: true,
+        precedingMessage:
+          'This work was moved from the triage stage on the Work board to the triage stage on the Preview board.',
+      }),
     );
     expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+    // Leaving Work's triage for Preview's is a stage change: the old phase's goal must end.
+    await vi.waitFor(() =>
+      expect(committedHook).toContainEqual({ workItemId: item.id, fromStage: 'triage', toStage: 'triage' }),
+    );
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
         action: 'factory.work_item.stage_moved',

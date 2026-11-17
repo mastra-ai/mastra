@@ -292,7 +292,16 @@ function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStar
   return request.actor.type === 'agent' && request.actor.role === decision.role;
 }
 
-function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
+// On a board change the phase names alone can read as no move at all ("from triage to triage"),
+// so the notice names both boards whenever the card crosses them.
+function stageTransitionMessage(
+  fromStage: FactoryRuleStage,
+  toStage: FactoryRuleStage,
+  boards?: { from: string; to: string },
+): string {
+  if (boards) {
+    return `This work was moved from the ${fromStage} stage on the ${boards.from} board to the ${toStage} stage on the ${boards.to} board.`;
+  }
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
 
@@ -394,7 +403,10 @@ export class FactoryTransitionService {
     if (!onTransitionCommitted || result.status !== 'accepted') return;
     // Board-neutral: `currentStage` only knows the built-in rule stages.
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.stage === fromStage) return;
+    // A board change is a stage change even under the same phase name: on another board that
+    // name is a different phase, and the one the card left must end its goal.
+    const movedBoards = request.toBoard !== undefined && request.toBoard !== request.board;
+    if (result.stage === fromStage && !movedBoards) return;
     // Inside the chain so a synchronous throw is isolated the same way an async rejection is.
     void Promise.resolve()
       .then(() =>
@@ -725,7 +737,11 @@ export class FactoryTransitionService {
             }
           }
           if (humanMove) {
-            const message = stageTransitionMessage(fromStage, request.stage);
+            const message = stageTransitionMessage(
+              fromStage,
+              request.stage,
+              crossesBoards ? { from: fromBoard.name, to: board.name } : undefined,
+            );
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
               skill.precedingMessage = message;
