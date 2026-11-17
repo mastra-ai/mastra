@@ -2264,6 +2264,9 @@ export class FactoryDecisionDispatcher {
       ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:destination` },
       cause: materializedByDecision ? 'linked_item_materialized' : 'linked_item_reconciled',
       causalChain,
+      // The stage is what intake resolved — a route or the project's default — so, as with a
+      // route's status-event move, the first phase's next phases don't restrict it.
+      routeFiling: true,
     });
     if (moved.status === 'rejected') throw new FactoryRuleRejectedError(moved.code, moved.reason);
   }

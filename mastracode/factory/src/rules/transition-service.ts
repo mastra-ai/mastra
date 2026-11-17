@@ -78,6 +78,12 @@ export interface FactoryTransitionRequest {
    */
   untrustedPullRequestEvent?: boolean;
   /**
+   * Internal: intake filing moves a fresh card from the board's first phase to the phase its
+   * route names. Like `eventRoute` the target is admin-authored, so the first phase's next
+   * phases don't restrict it; every other check (phase, card shape, consent) still applies.
+   */
+  routeFiling?: boolean;
+  /**
    * Internal, with `eventRoute` only: the installed board the route moves the card to, at `stage`.
    * `board` stays the card's current board. The target board's next phases don't restrict the
    * move; its phase, card shape and policy checks still apply, and its phase's runner starts.
@@ -521,7 +527,7 @@ export class FactoryTransitionService {
     }
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
-      (!request.eventRoute && !board.allowsTransition(fromStage, request.stage))
+      (!request.eventRoute && !request.routeFiling && !board.allowsTransition(fromStage, request.stage))
     ) {
       if (board !== fromBoard) {
         return this.#commitRejection(
