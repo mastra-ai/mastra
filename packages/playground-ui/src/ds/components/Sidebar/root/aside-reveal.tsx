@@ -30,10 +30,11 @@ export type AsideRevealProps = {
 export function AsideReveal({ open, onOpenChange, label, triggerRef, children, className }: AsideRevealProps) {
   const sidebar = useMaybeSidebar();
   if (!sidebar) throw new Error('AsideReveal must be used within a SidebarProvider.');
-  const { scopeRef, scope, drawerOwnerRef, openMobile } = sidebar;
-  // Navigation keeps the edge while it is out; the panel follows once it closes.
-  const out = open && !openMobile;
-  // Held out past `out` while a drag or the closing slide is still on screen.
+  const { scopeRef, scope, drawerOwnerRef, mobileDrawerPresent } = sidebar;
+  // Navigation keeps the edge while it is on screen, closing slide included; the panel follows once it is gone.
+  const out = open && !mobileDrawerPresent;
+  // Held out past `out` while a drag or the closing slide is on screen. Set on grab, and once an open settles,
+  // so a close from any source (gesture, Escape, scrim, or the parent) slides out before unmounting.
   const [held, setHeld] = useState(false);
   const present = out || held;
 
@@ -50,9 +51,7 @@ export function AsideReveal({ open, onOpenChange, label, triggerRef, children, c
     open: out,
     onGrab: () => flushSync(() => setHeld(true)),
     onRelease: onOpenChange,
-    onSettled: () => {
-      if (!out) setHeld(false);
-    },
+    onSettled: () => setHeld(out),
   });
 
   if (!scope) return null;

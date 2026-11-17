@@ -21,14 +21,20 @@ beforeAll(() => {
   });
 });
 
-afterEach(() => cleanup());
+let heldSlides: { mockRestore(): void } | undefined;
+
+afterEach(() => {
+  heldSlides?.mockRestore();
+  cleanup();
+});
 
 // Opens the panel from outside, the way a route or a command would, bypassing the page that navigation makes inert.
-let openPanel: () => void = () => {};
+let setPanel: (open: boolean) => void = () => {};
+const openPanel = () => setPanel(true);
 
 function SessionPage() {
   const [open, setOpen] = useState(false);
-  openPanel = () => setOpen(true);
+  setPanel = setOpen;
   return (
     <>
       <p>Session transcript</p>
@@ -87,6 +93,20 @@ function drag(target: Element, from: number, to: number) {
   touch('touchmove', target, to, 400);
   touch('touchend', target, to, 420);
 }
+
+/** Keeps every slide running until the returned function finishes them. */
+function holdSlides() {
+  let finish!: () => void;
+  const finished = new Promise<void>(resolve => (finish = resolve));
+  heldSlides = vi.spyOn(Element.prototype, 'getAnimations').mockReturnValue([{ finished } as unknown as Animation]);
+  return async () => {
+    heldSlides?.mockRestore();
+    await act(async () => finish());
+  };
+}
+
+/** Lets the slides that are running now settle. */
+const settleSlides = () => act(() => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve))));
 
 const sessionPanel = () => screen.queryByRole('dialog', { name: 'Session panel' });
 const navigation = () => screen.queryByRole('dialog', { name: 'Navigation' });
@@ -201,9 +221,44 @@ describe('AsideReveal', () => {
 
       await userEvent.keyboard('{Escape}');
 
+      await waitFor(() => expect(sessionPanel()).not.toBeNull());
       expect(navigation()).toBeNull();
-      expect(sessionPanel()).not.toBeNull();
       expect(transcript().closest('[inert]')).not.toBeNull();
+    });
+
+    it('holds a panel opened from outside until navigation has finished sliding closed', async () => {
+      renderApp();
+      await userEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+      await settleSlides();
+      const finishSlides = holdSlides();
+      await userEvent.keyboard('{Escape}');
+
+      act(() => openPanel());
+
+      expect(sessionPanel()).toBeNull();
+      expect(screen.queryByText('Changed files')).toBeNull();
+
+      await finishSlides();
+
+      await waitFor(() => expect(sessionPanel()).not.toBeNull());
+    });
+  });
+
+  describe('when the parent closes the open panel', () => {
+    it('keeps the panel mounted until its closing slide settles', async () => {
+      renderApp();
+      await userEvent.click(screen.getByRole('button', { name: 'Show details' }));
+      await settleSlides();
+      const finishSlides = holdSlides();
+
+      act(() => setPanel(false));
+
+      expect(sessionPanel()).toBeNull();
+      expect(screen.getByText('Changed files')).toBeTruthy();
+
+      await finishSlides();
+
+      await waitFor(() => expect(screen.queryByText('Changed files')).toBeNull());
     });
   });
 
