@@ -905,6 +905,47 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
 
     await sandbox2._destroy();
   }, 300000);
+
+  it('stop() then start() remounts the same instance mounts', async () => {
+    const sandbox = new E2BSandbox({
+      id: `test-stop-remount-${Date.now()}`,
+      timeout: 120000,
+    });
+    await sandbox._start();
+
+    const s3Config = getS3TestConfig();
+    const filesystem = {
+      id: 'fs-remount',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
+
+    const mountPath = '/data/remount-test';
+    await sandbox.mount(filesystem, mountPath);
+
+    // Write through the mount so a lost remount is observable
+    const markerFile = `${mountPath}/pause-marker.txt`;
+    await sandbox.executeCommand('sh', ['-c', `echo "survives-pause" > ${markerFile}`]);
+
+    // Stop pauses the VM, unmounting FUSE mounts first
+    await sandbox._stop();
+
+    // Starting the same instance resumes the paused VM and must remount
+    await sandbox._start();
+
+    // The mount is back without any manual remount
+    const mountCheck = await sandbox.executeCommand('mountpoint', ['-q', mountPath]);
+    expect(mountCheck.exitCode).toBe(0);
+
+    // A file written through the mount before the pause is readable again
+    const readResult = await sandbox.executeCommand('cat', [markerFile]);
+    expect(readResult.stdout.trim()).toBe('survives-pause');
+
+    await sandbox.executeCommand('rm', [markerFile]);
+    await sandbox._destroy();
+  }, 300000);
 });
 
 /**

@@ -535,19 +535,34 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * Pausing freezes the whole VM — filesystem, memory, and running processes —
    * and stops billing immediately. The next `start()` reconnects and resumes it,
    * with background processes still running. Filesystem mounts are unmounted
-   * first (FUSE mounts don't survive pause) and reconciled again on start.
+   * first (FUSE mounts don't survive pause) and registered again as pending, so
+   * the next `start()` remounts them.
    *
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
-    // Unmount all filesystems before pausing
-    // Collect keys first since unmount() mutates the map
-    for (const mountPath of [...this.mounts.entries.keys()]) {
+    // Unmount all filesystems before pausing. Snapshot the filesystems first:
+    // unmount() deletes the entry from the mount manager, and a paused sandbox
+    // resumes with an empty mount directory unless the mount is registered again.
+    const remount: Record<string, WorkspaceFilesystem> = {};
+    for (const [mountPath, entry] of this.mounts.entries) {
+      remount[mountPath] = entry.filesystem;
+    }
+
+    for (const mountPath of Object.keys(remount)) {
       try {
         await this.unmount(mountPath);
       } catch {
         // Best-effort unmount; sandbox may already be dead
       }
+    }
+
+    // Keep the mounts registered as pending: the base class remounts pending
+    // entries after the next start(), and a paused VM keeps none of its FUSE
+    // mounts. Re-registering before the pause keeps them recoverable when
+    // pause() throws and the sandbox stays running.
+    if (Object.keys(remount).length > 0) {
+      this.mounts.add(remount);
     }
 
     // Pause failures propagate — a sandbox that failed to pause is still

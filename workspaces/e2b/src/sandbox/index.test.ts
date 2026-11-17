@@ -3033,6 +3033,88 @@ describe('E2BSandbox Stop Behavior', () => {
 
     expect(fusermountCalls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('re-registers mounts as pending on stop so a resumed sandbox remounts them', async () => {
+    const { Sandbox } = await import('e2b');
+
+    // Discovery finds the paused sandbox, so the second _start() resumes it
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+    });
+
+    // Mock s3fs as installed so a real mount command is issued
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which s3fs')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+
+    const sandbox = new E2BSandbox({ id: 'resume-mounts' });
+    await sandbox._start();
+
+    const filesystem = {
+      id: 'fs1',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+      }),
+    } as any;
+
+    await sandbox.mount(filesystem, '/data/managed');
+    expect(sandbox.mounts.get('/data/managed')?.state).toBe('mounted');
+
+    await sandbox._stop();
+
+    // The mount survives the pause, registered as pending for the next start
+    expect(sandbox.mounts.get('/data/managed')?.filesystem).toBe(filesystem);
+    expect(sandbox.mounts.get('/data/managed')?.state).toBe('pending');
+
+    mockSandbox.commands.run.mockClear();
+
+    await sandbox._start();
+
+    // Resuming the sandbox re-issues the mount command
+    const remountCalls = mockSandbox.commands.run.mock.calls.filter(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/managed') && !call[0].includes('which'),
+    );
+    expect(remountCalls.length).toBeGreaterThanOrEqual(1);
+    expect(sandbox.mounts.get('/data/managed')?.state).toBe('mounted');
+
+    // Reset discovery mock
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([]),
+    });
+  });
+
+  it('destroy() clears mounts instead of queueing a remount', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const filesystem = {
+      id: 'fs1',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ type: 's3', bucket: 'test-bucket', region: 'us-east-1' }),
+    } as any;
+
+    sandbox.mounts.add({ '/data/managed': filesystem });
+    expect(sandbox.mounts.entries.size).toBe(1);
+
+    await sandbox._destroy();
+
+    expect(sandbox.mounts.entries.size).toBe(0);
+  });
 });
 
 /**
