@@ -226,7 +226,8 @@ async function resolveInstanceId(base: string, token: string, projectId: string 
     // Gateways can return non-JSON error pages.
   }
   if (!response.ok) {
-    const detail = typeof body.detail === 'string' ? body.detail : text;
+    // A non-JSON body (a gateway page) is only a hint, so it is cut short rather than quoted whole.
+    const detail = typeof body.detail === 'string' ? body.detail : text.length > 200 ? `${text.slice(0, 200)}…` : text;
     throw Object.assign(
       new Error(
         `PlatformKnowledge could not find the project's Knowledge instance (${response.status})${detail ? `: ${detail}` : ''}`,
@@ -285,6 +286,8 @@ export class PlatformKnowledge extends Knowledge {
     });
     super({
       ...config,
+      // Hosts register Knowledge under its id, so it must be the same on every boot.
+      id: config.id ?? 'platform-knowledge',
       tools: config.tools ?? { read: true },
       // Platform owns every scope declaration and access grant: the instance serves them all through
       // `getScopeDeclarations`, so there is one place to change who reads what. Declaring scopes here

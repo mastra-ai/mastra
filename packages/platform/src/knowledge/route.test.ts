@@ -331,6 +331,7 @@ it.each([
   'fails every operation when the project instance lookup answers %i, without guessing an instance',
   async (status, detail) => {
     vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
     const urls: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
       urls.push(String(input));
@@ -355,3 +356,49 @@ it.each([
     }
   },
 );
+
+it('registers under the same id on every boot when no id is given', () => {
+  const options = { apiUrl: 'http://localhost', accessToken: 'jwt' };
+  expect(new PlatformKnowledge(options).id).toBe('platform-knowledge');
+  expect(new PlatformKnowledge(options).id).toBe(new PlatformKnowledge(options).id);
+  expect(new PlatformKnowledge({ ...options, id: 'team' }).id).toBe('team');
+});
+
+it('looks the instance up once when the first operations run in parallel', async () => {
+  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
+  vi.stubEnv('MASTRA_PROJECT_ID', '');
+  const urls: string[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    urls.push(String(input));
+    return new Response(
+      JSON.stringify(String(input).endsWith('/v1/knowledge') ? { id: 'kn_1' } : { result: { pages: [] } }),
+    );
+  });
+  try {
+    const store = (await new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'jwt' }).getStorage())!;
+    await Promise.all([store.listPages({ read: 'all' }), store.listPages({ read: 'all' })]);
+    expect(urls.filter(url => url === 'http://localhost/v1/knowledge')).toHaveLength(1);
+    expect(urls).toHaveLength(3);
+  } finally {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  }
+});
+
+it('keeps a non-JSON lookup failure body out of the error beyond a short snippet', async () => {
+  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
+  vi.stubEnv('MASTRA_PROJECT_ID', '');
+  const page = `<html>${'x'.repeat(5000)}</html>`;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(page, { status: 502 }));
+  try {
+    const store = (await new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'jwt' }).getStorage())!;
+    const error = (await store.listPages({ read: 'all' }).catch(e => e)) as Error & { status?: number };
+    expect(error.status).toBe(502);
+    expect(error.message).toBe(
+      `PlatformKnowledge could not find the project's Knowledge instance (502): ${page.slice(0, 200)}…`,
+    );
+  } finally {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  }
+});
