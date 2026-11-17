@@ -319,6 +319,39 @@ describe('chat run errors', () => {
     expect(addCredits).toHaveAttribute('target', '_blank');
   });
 
+  describe("a gateway's own rate limit from a self-hosted gateway", () => {
+    const gatewayLimit = (): MastraDBMessage => {
+      const message = 'Gateway key requests limit exceeded. Retry in 12s.';
+      // Saved by a core version that records the request's origin; this core's type does not name it yet.
+      const error = {
+        name: 'AI_APICallError',
+        message,
+        statusCode: 429,
+        responseBody: JSON.stringify({ error: { type: 'rate_limit_error', code: 'rate_limit_exceeded', message } }),
+        modelId: 'anthropic/claude-opus-4-5',
+        requestOrigin: 'http://127.0.0.1:4180',
+      };
+      return { ...failedReply(), content: { format: 2, parts: [{ type: 'error', error }] } };
+    };
+
+    it('names the gateway once the server reports that origin as its gateway', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [], mastraGatewayOrigin: 'http://127.0.0.1:4180' }),
+        ),
+      );
+      renderWithProviders(<ErrorSession messages={[gatewayLimit()]} />);
+
+      expect(await screen.findByText('Mastra Gateway rate limit reached')).toBeVisible();
+    });
+
+    it('stays a provider rate limit while the server names no gateway origin', async () => {
+      renderWithProviders(<ErrorSession messages={[gatewayLimit()]} />);
+
+      expect(await screen.findByText('Provider rate limit reached')).toBeVisible();
+    });
+  });
+
   it('continues a timed-out run from the card', async () => {
     const sentMessages: unknown[] = [];
     server.use(

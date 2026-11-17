@@ -10,7 +10,7 @@ import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bed
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
 import { MASTRA_GATEWAY_PREFIX, normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions, MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { getModelReasoningOptions, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -44,7 +44,14 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
 import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
-import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
+import { fetchMastraGatewayCatalog } from './gateway-catalog.js';
+import {
+  createGatewayKey,
+  getGatewayCredits,
+  MASTRA_SIGN_IN_REQUIRED,
+  MastraGatewayError,
+  mastraGatewayBaseUrl,
+} from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -81,15 +88,7 @@ import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
  * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
-  | 'deployment'
-  | 'oauth'
-  | 'stored'
-  | 'env'
-  | 'none'
-  | 'oauth-user'
-  | 'oauth-org'
-  | 'stored-user'
-  | 'stored-org';
+  'deployment' | 'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -187,22 +186,47 @@ async function isReservedProviderId(controller: ModelCatalog, providerId: string
  * The controller's model catalog, plus the Mastra Gateway's models for tenant
  * callers. The boot-time catalog lists `mastra/...` models only when the server
  * itself has a gateway key; tenants bring their own (connected in one click).
+ * A tenant's own gateway key wins over the server's at run time, so its
+ * catalogue is fetched with that key: a v2 key sees what its organization may
+ * use. A catalogue that cannot be fetched leaves the gateway's models out
+ * rather than failing the caller's settings, and the server key's list is
+ * never shown in place of a tenant key's.
  */
 async function listCatalogModels(
   controller: ModelCatalog,
   tenantCredentials: CredentialRecord[] | undefined,
 ): Promise<CatalogModel[]> {
   const models = await controller.listAvailableModels();
-  if (!tenantCredentials || models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
-  const gateway = (await new MastraGateway().fetchProviders())[MASTRA_GATEWAY_CATALOG_PROVIDER];
-  const gatewayModels = (gateway?.models ?? []).map(modelName => ({
+  if (!tenantCredentials) return models;
+  const tenantKey = tenantGatewayKey(tenantCredentials);
+  if (!tenantKey && models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
+  const gateway = await fetchMastraGatewayCatalog({ apiKey: tenantKey, baseUrl: mastraGatewayBaseUrl() });
+  // The server key's models are not what a tenant's own key may use, so they never stand in for its list.
+  const withoutGateway = tenantKey ? models.filter(m => m.provider !== MASTRA_GATEWAY_CATALOG_PROVIDER) : models;
+  if (!gateway) return withoutGateway;
+  const gatewayModels = gateway.models.map(modelName => ({
     id: `${MASTRA_GATEWAY_CATALOG_PROVIDER}/${modelName}`,
     provider: MASTRA_GATEWAY_CATALOG_PROVIDER,
     modelName,
     hasApiKey: false,
-    releaseDate: gateway?.modelReleaseDates?.[modelName],
+    releaseDate: gateway.modelReleaseDates?.[modelName],
   }));
-  return [...models, ...gatewayModels];
+  return [...models.filter(m => m.provider !== MASTRA_GATEWAY_CATALOG_PROVIDER), ...gatewayModels];
+}
+
+function originOf(url: string): string | undefined {
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? undefined : origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The tenant's stored gateway key, personal before organization, as model resolution picks it. */
+function tenantGatewayKey(tenantCredentials: CredentialRecord[]): string | undefined {
+  const credential = grantingTenantRecord(tenantCredentials, MASTRA_GATEWAY_PROVIDER)?.credential;
+  return credential?.type === 'api_key' ? credential.key.trim() || undefined : undefined;
 }
 
 /**
@@ -232,8 +256,15 @@ export async function listProviders({
 }): Promise<ProviderInfo[]> {
   const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
+  // The gateway's connect and disconnect controls stay reachable for tenant callers when its model
+  // list is empty or unavailable, as they are when the bundled list is shown.
+  const keepGatewayRow =
+    tenantCredentials !== undefined && !models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER);
+  const rows: Array<Pick<CatalogModel, 'provider' | 'hasApiKey' | 'apiKeyEnvVar'>> = keepGatewayRow
+    ? [...models, { provider: MASTRA_GATEWAY_CATALOG_PROVIDER, hasApiKey: false }]
+    : models;
 
-  for (const model of models) {
+  for (const model of rows) {
     if (seen.has(model.provider)) continue;
 
     if (tenantCredentials && isDeploymentModelProvider(model.provider)) {
@@ -1197,6 +1228,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const gatewayOrigin = originOf(mastraGatewayBaseUrl());
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
               ? async () => {
@@ -1215,6 +1247,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
+              // Lets the web UI recognize a saved run error from this server's gateway, wherever it is hosted.
+              ...(gatewayOrigin ? { mastraGatewayOrigin: gatewayOrigin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

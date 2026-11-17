@@ -1,3 +1,7 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { prepareCredentialTenant, setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { ProviderAuthRequiredError } from '@mastra/code-sdk/auth/provider-auth-error';
@@ -212,5 +216,18 @@ describe('slackRunErrorCard', () => {
       expect(card).not.toContain('Change model');
       expect(card).not.toContain('https://');
     }
+  });
+
+  it('recognizes a refusal from the gateway this server is configured to use', () => {
+    // An empty settings directory, so only the environment names the gateway.
+    vi.stubEnv('MASTRA_APP_DATA_DIR', mkdtempSync(join(tmpdir(), 'slack-gateway-settings-')));
+    vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.staging.example.com/v1');
+    const outOfCredits = Object.assign(new Error('Payment Required'), {
+      name: 'AI_APICallError',
+      statusCode: 402,
+      url: 'https://gateway.staging.example.com/v1/chat/completions',
+    });
+
+    expect(rendered(slackRunErrorCard(outOfCredits, slackRun()))).toContain('Out of Mastra Gateway credits');
   });
 });

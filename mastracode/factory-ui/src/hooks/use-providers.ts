@@ -41,6 +41,15 @@ export function useProvidersQuery() {
   });
 }
 
+/** Origin of the server's Mastra Gateway, so run errors from a staging or self-hosted gateway are recognized. */
+export function useMastraGatewayOrigin(): string | undefined {
+  const { client } = useApiConfig();
+  return useQuery({
+    ...providersQueryOptions(client),
+    select: (body: ProvidersResponse) => body.mastraGatewayOrigin,
+  }).data;
+}
+
 /**
  * Whether the caller may write org-wide keys (tenant mode). Shares the
  * providers cache entry — no extra request. Fails open when the server
