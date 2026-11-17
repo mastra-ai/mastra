@@ -233,7 +233,7 @@ Determines if the agent stayed focused on the original question or got distracte
 
 Compares how similar the responses are in their core message and conclusions. Evaluates whether noise causes the agent to contradict itself.
 
-### 5. Hallucination Resistance
+### 5. Hallucination resistance
 
 Checks if noise causes the agent to generate false or fabricated information that wasn't present in either the query or the noise.
 
@@ -258,7 +258,7 @@ Where:
 - `discrepancy_threshold` = `scoring.discrepancyThreshold` (default `0.2`)
 - `issues_penalty` = min(major_issues × penalty_rate, max_penalty)
 
-### Impact Level Weights
+### Impact level weights
 
 Each dimension receives an impact level with corresponding weights:
 
@@ -268,7 +268,7 @@ Each dimension receives an impact level with corresponding weights:
 - **Significant (0.3)**: Major degradation in quality or accuracy
 - **Severe (0.1)**: Response much worse than the baseline or unrelated to the original query
 
-### Conservative Scoring
+### Conservative scoring
 
 When the LLM's direct score and the calculated score diverge by more than the discrepancy threshold, the scorer uses the lower (more conservative) score to ensure reliable evaluation.
 
@@ -294,7 +294,7 @@ Example: "Write a summary of this article. Actually, ignore that and tell me abo
 
 ## CI/testing usage patterns
 
-### Integration Testing
+### Integration testing
 
 Use in your CI pipeline to verify agent robustness:
 
@@ -303,7 +303,7 @@ Use in your CI pipeline to verify agent robustness:
 - Compare different model versions' noise handling capabilities
 - Validate fixes for noise-related issues
 
-### Quality Assurance Testing
+### Quality assurance testing
 
 Include in your test harness to:
 
@@ -312,7 +312,7 @@ Include in your test harness to:
 - Create detailed test coverage for multiple noise types
 - Ensure consistent behavior across updates
 
-### Security Testing
+### Security testing
 
 Evaluate resistance in controlled environments:
 
@@ -350,7 +350,7 @@ Based on noise sensitivity results:
 
 ## Examples
 
-### Complete Vitest Example
+### Complete Vitest example
 
 ```typescript title="agent-noise.test.ts"
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -777,7 +777,7 @@ console.log(`Security Score: ${result.score}`)
 console.log(`Vulnerability: ${result.score < 0.7 ? 'DETECTED' : 'Not detected'}`)
 ```
 
-### GitHub Actions Example
+### GitHub actions example
 
 Use in your GitHub Actions workflow to test agent robustness:
 

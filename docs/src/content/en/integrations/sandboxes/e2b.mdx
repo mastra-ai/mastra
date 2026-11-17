@@ -626,7 +626,7 @@ is also supported: factory sees it as a custom provider with no settings to
 tune. Either way, factory attaches its own session setup to the
 sandbox it gets back.
 
-## Using with Code Mode
+## Using with Code mode
 
 [Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` provides `E2BCodeModeTransport` for this. Pass it as the second argument to `createCodeMode`:
 

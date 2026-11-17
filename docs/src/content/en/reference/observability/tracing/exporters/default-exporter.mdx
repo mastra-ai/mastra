@@ -71,7 +71,7 @@ Extends `BaseExporterConfig`, which includes:
 type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
 ```
 
-### Strategy Behaviors
+### Strategy behaviors
 
 - **realtime**: Immediately persists each event to storage
 - **batch-with-updates**: Batches creates and updates separately, applies in order
@@ -161,7 +161,7 @@ The exporter will:
 
 ## Batching behavior
 
-### Flush Triggers
+### Flush triggers
 
 The buffer flushes when any of these conditions are met:
 
@@ -170,7 +170,7 @@ The buffer flushes when any of these conditions are met:
 - Buffer size reaches `maxBufferSize` (emergency flush)
 - `shutdown()` is called
 
-### Retry Logic
+### Retry logic
 
 Failed flushes are retried with exponential backoff:
 
@@ -180,7 +180,7 @@ Failed flushes are retried with exponential backoff:
 
 When storage doesn't support a signal or retries are exhausted, `DefaultExporter` emits an `ObservabilityDropEvent` through `onDroppedEvent` handlers registered on exporters and bridges. The drop event includes the signal, reason, count, exporter name, storage name when known, and sanitized error details.
 
-### Out-of-Order Handling
+### Out-of-order handling
 
 For `batch-with-updates` strategy:
 
@@ -212,7 +212,7 @@ const customExporter = new DefaultExporter({
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
 
-### Other Exporters
+### Other exporters
 
 - [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter): Mastra platform
 - [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output

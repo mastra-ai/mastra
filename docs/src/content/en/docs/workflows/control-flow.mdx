@@ -477,7 +477,7 @@ The `.map()` method provides additional helper functions for more complex mappin
 - [`getInitData<any>()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
 - [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
-### Parallel and Branch outputs
+### Parallel and branch outputs
 
 Both `.parallel()` and `.branch()` return an object keyed by child step `id`. Use `.map()` to reshape that output for the next operation. This example maps two parallel results into the shared input required by `.branch()`:
 

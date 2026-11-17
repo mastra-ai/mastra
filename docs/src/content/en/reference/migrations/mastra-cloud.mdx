@@ -50,7 +50,7 @@ The Mastra platform replaces Mastra Cloud with separate Studio and Server produc
   </StepItem>
 </Steps>
 
-## Replace Mastra Cloud Store with a hosted database
+## Replace Mastra cloud store with a hosted database
 
 Unlike Mastra Cloud, which provided a managed libSQL database backed by [Turso](https://turso.tech), the Mastra platform doesn't host a database for you. Point your storage at an externally hosted instance.
 
@@ -288,7 +288,7 @@ mastra deploy --env staging --env-file .env.staging --yes
 
 Each environment has a dedicated URL and environment variables, along with a separate deploy history.
 
-## Deploy Server (optional)
+## Deploy server (optional)
 
 If you need a production API endpoint, deploy a Server:
 
@@ -375,7 +375,7 @@ jobs:
           MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
-## Decommission old Cloud project
+## Decommission old cloud project
 
 Update any clients pointing to your old Mastra Cloud URL to the new Server or Studio URL. Verify traces appear in the new platform by checking the [Studio observability dashboard](/docs/studio/observability). Delete your old Mastra Cloud project once everything is confirmed working.
 

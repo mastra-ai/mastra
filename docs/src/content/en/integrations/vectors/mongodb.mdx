@@ -28,7 +28,7 @@ const store = new MongoDBVector({
 })
 ```
 
-### Custom Embedding Field Path
+### Custom embedding field path
 
 If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
 
@@ -742,7 +742,7 @@ try {
 }
 ```
 
-## Automated Embedding
+## Automated embedding
 
 MongoDB can generate the embeddings for you. Create the index with `autoEmbed` and a Voyage AI model, write plain text through `documents`, and search with `queryText`. No embedding provider runs in your application, and no vectors travel through it.
 

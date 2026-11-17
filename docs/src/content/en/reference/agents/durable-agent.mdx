@@ -48,7 +48,7 @@ const text = await output.text
 cleanup()
 ```
 
-### Plain Agent stream configuration
+### Plain agent stream configuration
 
 The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
 

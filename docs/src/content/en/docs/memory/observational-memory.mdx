@@ -231,7 +231,7 @@ const memory = new Memory({
 
 Each tier needs a concrete model ID, not `'auto'`. Each `upTo` key is an inclusive upper bound. A call larger than the biggest key throws, so make the last tier cover the largest input you expect.
 
-### Attachments and text-only Observers
+### Attachments and text-only observers
 
 By default the Observer receives images and PDFs (`observation.observeAttachments: ['image/*', 'application/pdf']`). Other attachments are left out, and their placeholders stay in the transcript. Change it when your Observer model handles more or less:
 

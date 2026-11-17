@@ -95,7 +95,7 @@ npx @mastra/codemod@latest v1
 
 :::
 
-### High Impact Changes
+### High impact changes
 
 - Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/reference/migrations/upgrade-to-v1/tools)
 - Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/reference/migrations/upgrade-to-v1/mastra)
@@ -103,7 +103,7 @@ npx @mastra/codemod@latest v1
 - Install `@mastra/observability` and wrap configuration with `new Observability()` - [Tracing](/reference/migrations/upgrade-to-v1/tracing)
 - Migrate from `telemetry:` to `observability:` configuration (if upgrading from 0.x OTEL) - [Tracing](/reference/migrations/upgrade-to-v1/tracing)
 
-### Medium Impact Changes
+### Medium impact changes
 
 - Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/reference/migrations/upgrade-to-v1/agent), [Tools](/reference/migrations/upgrade-to-v1/tools), [Workflows](/reference/migrations/upgrade-to-v1/workflows)
 - Update storage methods from `get*` to `list*` pattern - [Storage](/reference/migrations/upgrade-to-v1/storage)
@@ -114,7 +114,7 @@ npx @mastra/codemod@latest v1
 - Update voice methods to use `agent.voice` namespace - [Agent Class](/reference/migrations/upgrade-to-v1/agent)
 - Rename configuration property `processors` to `spanOutputProcessors` (if using custom processors) - [Tracing](/reference/migrations/upgrade-to-v1/tracing)
 
-### Low-Impact Changes
+### Low-impact changes
 
 - Rename `keepSeparator` to `separatorPosition` in chunk options - [RAG](/reference/migrations/upgrade-to-v1/rag)
 - Rename `createRunAsync` to `createRun` - [Workflows](/reference/migrations/upgrade-to-v1/workflows)

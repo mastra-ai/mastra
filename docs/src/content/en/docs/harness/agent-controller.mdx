@@ -6,7 +6,7 @@ packages:
   - '@mastra/client-js'
 ---
 
-# Agent Controller
+# Agent controller
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
@@ -14,7 +14,7 @@ packages:
 
 When the agent you host works in a codebase, build it with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) instead of `new Agent()`. It returns a standard `Agent` that already has a workspace, task tracking, and retries for transient model errors, which are the defaults Mastra Code runs on.
 
-## When to use the Agent Controller
+## When to use the agent controller
 
 Use the Agent Controller when your application needs:
 
@@ -220,7 +220,7 @@ await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__')
 console.log(session.model.get())
 ```
 
-### Select Observational Memory models
+### Select observational Memory models
 
 Observer and reflector model choices are independent. Each role can use an explicit model or an automatic selection that the host resolves from the active main model and session state.
 

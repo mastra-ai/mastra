@@ -164,7 +164,7 @@ const mastra = new Mastra({
 })
 ```
 
-### Combined with Exporters
+### Combined with exporters
 
 The bridge can be used alongside exporters. The bridge handles OTEL context, while exporters send data to additional destinations:
 
@@ -223,7 +223,7 @@ const result = await agent.generate('Hello', {
 })
 ```
 
-### How Tags Are Stored
+### How tags are stored
 
 Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute:
 

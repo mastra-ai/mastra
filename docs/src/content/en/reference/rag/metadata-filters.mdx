@@ -350,7 +350,7 @@ await store.createIndex({
 
 - Currently doesn't have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
-### Amazon S3 Vectors
+### Amazon S3 vectors
 
 - Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date aren't allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
 - `$in`/`$nin` require **non-empty arrays of primitives**. Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.

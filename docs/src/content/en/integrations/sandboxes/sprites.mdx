@@ -8,7 +8,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Fly.io Sprites
+# Fly.io sprites
 
 Executes commands in persistent [Fly.io Sprites](https://sprites.dev) through the official `@fly/sprites` SDK. A Sprite is a Linux VM that keeps its filesystem between runs and hibernates on its own when idle. `SpritesSandbox` gets or creates a Sprite by name, so a new process can reconnect to the same files. Supports command execution with streaming output, timeouts, cancellation, background processes with stdin, and checkpoint capture. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
@@ -75,7 +75,7 @@ const response = await agent.generate(
 console.log(response.text)
 ```
 
-### Reusing a Sprite
+### Reusing a sprite
 
 The `id` is the Sprite name. On `start()`, `SpritesSandbox` looks up a Sprite with that name and reconnects to it, or creates one when none exists. Files written in an earlier session are still there:
 

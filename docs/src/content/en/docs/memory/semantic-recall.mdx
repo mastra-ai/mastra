@@ -355,7 +355,7 @@ Every other store expects your application to supply the vectors, and keeps requ
 
 Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
-### Using the Model Router (Recommended)
+### Using the model router (recommended)
 
 The simplest way is to use a `provider/model` string with autocomplete support:
 
@@ -399,7 +399,7 @@ const agent = new Agent({
 
 The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`). Google models also fall back to `GOOGLE_GENERATIVE_AI_API_KEY`.
 
-### Using AI SDK Packages
+### Using AI SDK packages
 
 You can also use AI SDK embedding models directly:
 

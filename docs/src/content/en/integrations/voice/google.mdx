@@ -363,7 +363,7 @@ Returns: `string` - The location (default: `'us-central1'`)
 
 The Google Voice provider supports two authentication methods:
 
-#### Standard Mode (API Key)
+#### Standard mode (API key)
 
 Uses a Google Cloud API key for authentication. Suitable for development and basic use cases.
 
@@ -379,7 +379,7 @@ const voice = new GoogleVoice({
 })
 ```
 
-#### Vertex AI Mode (Service Account)
+#### Vertex AI mode (service account)
 
 Uses Google Cloud project-based authentication with service accounts. Recommended for production and enterprise deployments.
 
@@ -427,9 +427,9 @@ const voice = new GoogleVoice({
 })
 ```
 
-##### Required Permissions
+##### Required permissions
 
-##### IAM Roles
+##### IAM roles
 
 For Text-to-Speech:
 
@@ -441,7 +441,7 @@ For Speech-to-Text:
 
 - `roles/speech.client` - Speech-to-Text Client
 
-##### OAuth Scopes
+##### OAuth scopes
 
 For synchronous Text-to-Speech synthesis:
 
@@ -1090,7 +1090,7 @@ The following voice options are available:
 
 ### Authentication methods
 
-#### Gemini API (Development)
+#### Gemini API (development)
 
 The simplest method using an API key from [Google AI Studio](https://makersuite.google.com/app/apikey):
 
@@ -1101,7 +1101,7 @@ const voice = new GeminiLiveVoice({
 })
 ```
 
-#### Vertex AI (Production)
+#### Vertex AI (production)
 
 For production use with OAuth authentication and Google Cloud Platform:
 
@@ -1132,7 +1132,7 @@ const voice = new GeminiLiveVoice({
 
 ### Advanced features
 
-#### Session Management
+#### Session management
 
 The Gemini Live API supports session resumption for handling network interruptions:
 
@@ -1151,7 +1151,7 @@ const voice = new GeminiLiveVoice({
 })
 ```
 
-#### Tool Calling
+#### Tool calling
 
 Enable the model to call functions during conversations:
 

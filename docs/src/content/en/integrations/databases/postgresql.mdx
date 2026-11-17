@@ -179,7 +179,7 @@ const store4 = new PostgresStore({
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -345,7 +345,7 @@ export const mastra = new Mastra({
 
 `disableInit: true` also makes explicit `init()` calls a no-op, so leave it off the store in the deployment script.
 
-### Using an Existing Pool
+### Using an existing pool
 
 If you already have a `pg.Pool` in your application (e.g., shared with an ORM or for Row Level Security), you can pass it directly to `PostgresStore`:
 
@@ -370,7 +370,7 @@ const storage = new PostgresStore({
 - When you **provide a pool**: Mastra uses your pool but **doesn't** close it when `store.close()` is called. You manage the pool lifecycle.
 - When Mastra **creates a pool**: Mastra owns the pool and will close it when `store.close()` is called.
 
-### Direct Database and Pool Access
+### Direct database and pool access
 
 `PostgresStore` exposes the underlying database client and pool for advanced use cases:
 
@@ -559,7 +559,7 @@ for await (const chunk of stream.textStream) {
 
 PostgreSQL storage provides index management to optimize query performance.
 
-### Default Indexes
+### Default indexes
 
 PostgreSQL storage creates composite indexes during initialization for common query patterns:
 
@@ -575,7 +575,7 @@ PostgreSQL storage creates composite indexes during initialization for common qu
 
 These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries and Studio's workflow runs-list.
 
-### Configuring Indexes
+### Configuring indexes
 
 You can control index creation via constructor options:
 
@@ -616,7 +616,7 @@ For advanced index types, you can specify additional options:
 - `storage: { fillfactor: 90 }` for update-heavy tables
 - `concurrent: true` for non-blocking creation (default)
 
-### Index Options
+### Index options
 
 <PropertiesTable
   content={[
@@ -683,7 +683,7 @@ For advanced index types, you can specify additional options:
 ]}
 />
 
-### Schema-Specific Indexes
+### Schema-specific indexes
 
 When using custom schemas, index names are prefixed with the schema name:
 
@@ -704,7 +704,7 @@ const storage = new PostgresStore({
 // Creates index as: custom_schema_idx_threads_status
 ```
 
-### Managing Indexes via SQL
+### Managing indexes via SQL
 
 For advanced index management (listing, dropping, analyzing), use direct SQL queries via the `db` accessor:
 

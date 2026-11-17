@@ -278,7 +278,7 @@ Filter deletion runs one approximate query with `topK: 1000` and deletes the ret
 
 Upstash Vector supports hybrid search that combines semantic search (dense vectors) with keyword-based search (sparse vectors) for improved relevance and accuracy.
 
-### Basic Hybrid Usage
+### Basic hybrid usage
 
 ```typescript
 import { UpstashVector } from '@mastra/upstash'
@@ -315,7 +315,7 @@ const results = await vectorStore.query({
 })
 ```
 
-### Advanced Hybrid Search Options
+### Advanced hybrid search options
 
 ```typescript
 import { FusionAlgorithm, QueryMode } from '@upstash/vector'
@@ -347,7 +347,7 @@ const sparseResults = await vectorStore.query({
 })
 ```
 
-### Updating Hybrid Vectors
+### Updating hybrid vectors
 
 ```typescript
 // Update both dense and sparse components

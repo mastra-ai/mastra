@@ -46,7 +46,7 @@ Detailed instructions for setting up the table using AWS CloudFormation or AWS C
 
 ## Usage
 
-### Basic Usage
+### Basic usage
 
 ```typescript
 import { Memory } from '@mastra/memory'
@@ -72,7 +72,7 @@ const memory = new Memory({
 })
 ```
 
-### Local Development with DynamoDB Local
+### Local development with DynamoDB local
 
 For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html).
 
@@ -197,7 +197,7 @@ const storage = new DynamoDBStore({
 })
 ```
 
-### Supported Entity Types
+### Supported entity types
 
 TTL can be configured for these entity types:
 
@@ -211,7 +211,7 @@ TTL can be configured for these entity types:
 | `resource` | User/resource data |
 | `score` | Scoring results |
 
-### TTL Entity Configuration
+### TTL entity configuration
 
 Each entity type accepts the following configuration:
 
@@ -240,7 +240,7 @@ Each entity type accepts the following configuration:
 ]}
 />
 
-### Enabling TTL on Your DynamoDB Table
+### Enabling TTL on your DynamoDB table
 
 After configuring TTL in your code, you must enable TTL on the DynamoDB table itself:
 

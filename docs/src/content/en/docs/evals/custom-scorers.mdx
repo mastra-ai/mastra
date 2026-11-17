@@ -107,7 +107,7 @@ console.log(result.score) // 1
 console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedia"] }
 ```
 
-### Agent Type for Agent Evaluation
+### Agent type for agent evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. The same scorer can evaluate an agent and score traces:
 
@@ -494,7 +494,7 @@ export const glutenCheckerScorer = createScorer({
   })
 ```
 
-### Judge Configuration
+### Judge configuration
 
 Sets up the LLM model and defines its role as a domain expert.
 
@@ -505,7 +505,7 @@ judge: {
 }
 ```
 
-### Analysis Step
+### Analysis step
 
 Defines how the LLM should analyze the input and what structured output to return.
 
@@ -529,7 +529,7 @@ The analysis step uses a prompt object to:
 - Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
 - Generate runtime prompts based on the input content
 
-### Score Generation
+### Score generation
 
 Converts the LLM's structured analysis into a numerical score.
 

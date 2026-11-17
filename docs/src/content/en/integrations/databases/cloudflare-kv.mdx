@@ -24,7 +24,7 @@ Cloudflare storage **doesn't support the observability domain**. Traces from the
 npm install @mastra/cloudflare@latest
 ```
 
-## Cloudflare KV Storage
+## Cloudflare KV storage
 
 The KV storage implementation provides a globally distributed, serverless key-value store solution using Cloudflare Workers KV.
 
@@ -98,7 +98,7 @@ const storageRest = new CloudflareKVStorage({
 
 ### Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -195,7 +195,7 @@ Both storage implementations handle schema creation and updates automatically. T
 - `messages`: Stores individual messages
 - `workflow_snapshot`: Stores workflow run state
 
-## Deprecated Aliases
+## Deprecated aliases
 
 For backwards compatibility, the following aliases are available:
 

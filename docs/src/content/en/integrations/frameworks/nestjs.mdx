@@ -134,7 +134,7 @@ In a separate terminal window, use `curl` to ask the weather agent:
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 
-## Use Mastra in Your Own Services
+## Use Mastra in your own services
 
 The module exports two ways to access Mastra from your NestJS services: the `MastraService` wrapper and the `MASTRA` injection token.
 

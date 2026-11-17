@@ -33,7 +33,7 @@ LANGCHAIN_PROJECT=my-project  # Default project for traces
 LANGSMITH_BASE_URL=https://api.smith.langchain.com  # For self-hosted
 ```
 
-### Zero-Config Setup
+### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -54,7 +54,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -81,7 +81,7 @@ export const mastra = new Mastra({
 
 ## Configuration options
 
-### Complete Configuration
+### Complete configuration
 
 ```typescript
 new LangSmithExporter({
@@ -118,7 +118,7 @@ The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` en
 
 You can override at runtime LangSmith settings per-span using `withLangsmithMetadata`. This is useful for routing traces to different projects based on runtime conditions (e.g., customer, environment, or feature).
 
-### Using the Helper
+### Using the helper
 
 Use `withLangsmithMetadata` with `buildTracingOptions` to set LangSmith-specific options:
 
@@ -138,7 +138,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-### Dynamic Project Routing
+### Dynamic project routing
 
 Use `requestContext` to route traces to different projects based on runtime conditions.
 
@@ -168,7 +168,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-### Available Fields
+### Available fields
 
 The `withLangsmithMetadata` helper accepts these fields:
 

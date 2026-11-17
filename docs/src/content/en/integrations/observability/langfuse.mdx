@@ -30,7 +30,7 @@ LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 ```
 
-### Zero-Config Setup
+### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -51,7 +51,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -82,11 +82,11 @@ export const mastra = new Mastra({
 
 ## Configuration options
 
-### Realtime vs Batch Mode
+### Realtime vs batch mode
 
 The Langfuse exporter supports two modes for sending traces:
 
-#### Realtime Mode (Development)
+#### Realtime mode (development)
 
 Traces appear immediately in Langfuse dashboard, ideal for debugging:
 
@@ -98,7 +98,7 @@ new LangfuseExporter({
 })
 ```
 
-#### Batch Mode (Production)
+#### Batch mode (production)
 
 Better performance with automatic batching:
 
@@ -110,7 +110,7 @@ new LangfuseExporter({
 })
 ```
 
-#### Batch Tuning for High-Volume Traces
+#### Batch tuning for high-volume traces
 
 For self-hosted Langfuse deployments or streamed runs that produce many spans per second, you can tune the OTEL batch size and flush interval to reduce request pressure on the Langfuse ingestion endpoint:
 
@@ -139,7 +139,7 @@ new Observability({
 })
 ```
 
-### Complete Configuration
+### Complete configuration
 
 ```typescript
 new LangfuseExporter({
@@ -246,7 +246,7 @@ See the [`LangfuseExporter` reference](/reference/observability/tracing/exporter
 
 You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). It enables version tracking and metrics for your prompts.
 
-### Using the Helper (Recommended)
+### Using the helper (recommended)
 
 Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 
@@ -275,7 +275,7 @@ export const supportAgent = new Agent({
 
 The `withLangfusePrompt` helper accepts `name` and `version` fields for prompt linking. Langfuse v5 requires both fields.
 
-### Manual Fields
+### Manual fields
 
 You can also pass manual fields if you're not using the Langfuse SDK:
 
@@ -283,7 +283,7 @@ You can also pass manual fields if you're not using the Langfuse SDK:
 const tracingOptions = buildTracingOptions(withLangfusePrompt({ name: 'my-prompt', version: 1 }))
 ```
 
-### Prompt Object Fields
+### Prompt object fields
 
 The prompt object requires both `name` and `version`:
 

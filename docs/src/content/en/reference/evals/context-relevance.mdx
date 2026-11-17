@@ -115,7 +115,7 @@ Note: Either `context` or `contextExtractor` must be provided. If both are provi
 
 ## Scoring details
 
-### Weighted Relevance Scoring
+### Weighted relevance scoring
 
 Context Relevance uses a advanced scoring algorithm that considers:
 
@@ -131,7 +131,7 @@ Context Relevance uses a advanced scoring algorithm that considers:
    - **Unused High-Relevance**: `unusedHighRelevanceContext` penalty per unused high-relevance context (default: 0.1)
    - **Missing Context**: Up to `maxMissingContextPenalty` for identified missing information (default: 0.5)
 
-### Scoring Formula
+### Scoring formula
 
 ```text
 Base Score = Σ(relevance_weights) / (num_contexts × 1.0)
@@ -256,7 +256,7 @@ console.log('Strict penalties:', strictResult.score) // Lower score due to unuse
 console.log('Lenient penalties:', lenientResult.score) // Higher score, less penalty
 ```
 
-### Dynamic Context Extraction
+### Dynamic context extraction
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
