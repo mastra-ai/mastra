@@ -1,5 +1,5 @@
 extends: substitution
-message: "Use 'select' or 'open' instead of '%s' for accessibility."
+message: "Use '%s' or 'open' instead of '%s' for accessibility."
 level: warning
 ignorecase: true
 swap:

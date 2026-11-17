@@ -1,5 +1,5 @@
 extends: substitution
-message: "Use 'opens' or 'displays' instead of '%s'."
+message: "Use '%s' or 'displays' instead of '%s'."
 level: warning
 ignorecase: true
 swap:
