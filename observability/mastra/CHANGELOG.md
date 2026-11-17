@@ -1,5 +1,18 @@
 # @mastra/observability
 
+## 1.24.1-alpha.1
+
+### Patch Changes
+
+- Fixed `strategy: 'realtime'` on `MastraStorageExporter` in apps with durable execution. It isn't supported there, so the exporter now logs one warning and uses `batch-with-updates`. Existing configs keep working, and single-process apps without durable execution still get `realtime`. ([#29566](https://github.com/mastra-ai/mastra/pull/29566))
+
+- Fixed the storage exporter dropping a span end that reached storage before the span's create row. This happens when a worker process ends a span that the API process started. Under `batch-with-updates`, the end is now retried, so Studio shows the real outcome instead of a trace that stays open. A `span-not-updatable` drop for such an end now arrives after the retries run out, not right away. ([#29274](https://github.com/mastra-ai/mastra/pull/29274))
+
+- Stop deep-copying span metadata twice for every logger and metrics context. `getLoggerContext` and `getMetricsContext` now pass span metadata straight to the context implementation, which snapshots it once, halving the deep copies taken on the agent execution path when observability is enabled. ([#30679](https://github.com/mastra-ai/mastra/pull/30679))
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+
 ## 1.24.1-alpha.0
 
 ### Patch Changes

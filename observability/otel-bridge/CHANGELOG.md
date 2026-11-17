@@ -1,5 +1,20 @@
 # @mastra/otel-bridge
 
+## 1.6.0-alpha.2
+
+### Minor Changes
+
+- Spans now use the OpenTelemetry semantic conventions 1.41.0 attributes from `@mastra/otel-exporter`. See the `@mastra/otel-exporter` changelog for the attribute changes. ([#30342](https://github.com/mastra-ai/mastra/pull/30342))
+
+### Patch Changes
+
+- Fixed Mastra logs being dropped by `OtelBridge` in apps on OpenTelemetry JS SDK 3. The bridge now finds a `LoggerProvider` registered through `@opentelemetry/api` (SDK 3) as well as one registered through `@opentelemetry/api-logs` (SDK 2), including when it is registered after the bridge is created. When no provider is registered, the bridge now says so once at debug level. Fixes [#29695](https://github.com/mastra-ai/mastra/issues/29695). ([#30546](https://github.com/mastra-ai/mastra/pull/30546))
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`1eacc80`](https://github.com/mastra-ai/mastra/commit/1eacc80686baf41b2f99edc930a6827bcaf120e3), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`9a4f20d`](https://github.com/mastra-ai/mastra/commit/9a4f20d55d772b38705383fe6f20508c1402ae79), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`d0beb31`](https://github.com/mastra-ai/mastra/commit/d0beb31dfa6e3551bc64f559be4c58871540195c), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`85fdeb1`](https://github.com/mastra-ai/mastra/commit/85fdeb19701e258e5ad85291e9d428c8c9cf9590), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/observability@1.24.1-alpha.1
+  - @mastra/otel-exporter@1.6.0-alpha.2
+
 ## 1.5.23-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,28 @@
 # @mastra/mcp
 
+## 2.10.0-alpha.1
+
+### Minor Changes
+
+- Added `appsRequireClientSupport` to `MCPServer`. When enabled, MCP Apps are served only to clients that declare MCP Apps support; other clients see the server as if it had no apps (no `ui://` resources, no app links on tools or results, and no app-only tools). This also works for 2025-era clients over stateless HTTP: a client that declares support at `initialize` gets an `Mcp-Session-Id` that carries the declaration on its later requests. ([#30244](https://github.com/mastra-ai/mastra/pull/30244))
+
+  ```ts
+  const server = new MCPServer({
+    name: 'My server',
+    version: '1.0.0',
+    tools,
+    appResources: { 'ui://my-app': myApp },
+    appsRequireClientSupport: true,
+  });
+  ```
+
+  Tool result `transform` functions now also receive `apps` in their context: `true` when the calling client renders MCP Apps, so a transform can send a short summary to the model and the full data to the app as `structuredContent`.
+
+### Patch Changes
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+
 ## 2.10.0-alpha.0
 
 ### Minor Changes

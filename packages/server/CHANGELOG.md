@@ -1,5 +1,40 @@
 # @mastra/server
 
+## 1.84.0-alpha.7
+
+### Minor Changes
+
+- Removed unsupported experimental textSearch requests. ([#30511](https://github.com/mastra-ai/mastra/pull/30511))
+
+- The built-in MCP server now shows observability results as Studio views in clients that render MCP Apps, such as the Claude app: ([#30244](https://github.com/mastra-ai/mastra/pull/30244))
+
+  - `get_trace` opens Studio's trace viewer: the timeline, with each span's details on click.
+  - `query_traces`, `list_traces`, `list_logs`, and `analyze_metrics` open Studio's observability explorer, with Traces, Spans, Threads, Logs, and Metrics tabs. The model's filters stay applied and show up as filter-bar chips the user can edit. Each tab appears only when the store keeps that data and the caller can use the tools that read it.
+  - When an app shows a result, the model gets a compact text summary and the app gets the full rows as `structuredContent`, cutting model context for these tools by roughly 5–8x.
+
+  Install `@mastra/mcp-apps-components` to turn it on. Clients without MCP Apps support get the same tools and JSON results as before.
+
+  ```bash
+  npm install @mastra/mcp-apps-components
+  ```
+
+  Two new `server.mcp` options: `apps: false` turns the apps off, and `studioUrl` sets where the apps' **Open in Studio** button points. Under `mastra dev`, `studioUrl` defaults to the local Studio.
+
+  ```typescript title="src/mastra/index.ts"
+  export const mastra = new Mastra({
+    server: {
+      mcp: { studioUrl: 'https://studio.example.com' },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/mcp@2.10.0-alpha.1
+  - @mastra/mcp-apps-components@0.2.0-alpha.2
+
 ## 1.84.0-alpha.6
 
 ### Patch Changes

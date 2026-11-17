@@ -1,5 +1,92 @@
 # @mastra/factory
 
+## 0.29.0-alpha.8
+
+### Minor Changes
+
+- Organization admins can now create skills for one Factory from Settings › Skills, without redeploying. Choose **New skill**, give it a name, description and instructions, and the Factory's sessions can load it from their next start. A phase of the Factory's boards can also run it as `runner.skill`. Created skills show a **Custom** badge and can be edited or deleted from the same page. Creating and deleting are recorded in the audit log as `factory.skill.created` and `factory.skill.deleted`. ([#30647](https://github.com/mastra-ai/mastra/pull/30647))
+
+  A board phase runs a created skill by its name, like any other skill:
+
+  ```ts
+  await factory.upsertBoard(
+    {
+      key: 'notes',
+      name: 'Release notes',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['writing'] },
+        {
+          key: 'writing',
+          name: 'Writing',
+          kind: 'working',
+          runner: { context: 'writer', skill: 'release-notes' },
+          nextPhases: ['done'],
+        },
+        { key: 'done', name: 'Done', kind: 'terminal' },
+      ],
+    },
+    // Each project listed must have created `release-notes`; a board for 'all' projects may only run the app's skills.
+    { projects: [{ orgId, factoryProjectId }] },
+  );
+  ```
+
+  If the app later ships a skill under the same name, the app's skill takes over the name and the Factory's text becomes an edit of it, which **Revert to original** removes.
+
+- Removed the `intake.evaluator` option from `MastraFactory`. New projects already use the intake order, so the option only mattered for older projects. ([#30676](https://github.com/mastra-ai/mastra/pull/30676))
+
+  - `MastraFactory` no longer accepts `intake: { evaluator }`, and throws at startup when it is passed.
+  - `GET /web/factory/projects/:id/intake-order` no longer reports `evaluatorSource: 'option'`; it reports `env`, `project`, or `legacy`.
+
+  **Upgrading**
+
+  Set the evaluator with the environment variable instead, the same on every replica:
+
+  ```ts
+  // Before
+  new MastraFactory({ storage, intake: { evaluator: 'route-list' } });
+
+  // After: FACTORY_INTAKE_EVALUATOR=route-list in the environment
+  new MastraFactory({ storage });
+  ```
+
+  Or switch one older project at a time: `mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'`. Code that read `evaluatorSource: 'option'` should treat `env` as the forced case.
+
+### Patch Changes
+
+- Pull request review status comments now say why a review attempt failed, without exposing private details. Alongside the existing label, the comment adds a short reason from a fixed list, for example `Agent run ended in error (the model provider rate-limited the run, HTTP 429)`, `Factory automation failed (a board rule threw an error)` or `Factory automation failed (StoredBoardError: TypeError)`. Reasons cover model provider failures, board rule rejections, Factory's own error classes and built-in JavaScript error types. The comment never includes error messages, provider responses, hostnames or IDs. Operators can read the sanitized error text, limited to 512 characters, on the Factory decision. ([#30687](https://github.com/mastra-ai/mastra/pull/30687))
+
+- Factory card links that agents post (in Slack threads, GitHub comments and tool results) now open the card's session directly, the same as clicking the card on its board. Before, they opened the board with the card highlighted in the list, so you had to find and click the card again. ([#30666](https://github.com/mastra-ai/mastra/pull/30666))
+
+- Card-move rules now decide for themselves whether they act on pull requests from outside authors. A new rule that should only act for trusted authors says so with a "Pull request trusted is yes" condition; the rule builder warns when a rule on pull request events would also match outside authors and adds that condition in one click. Rules stored before this change keep the old behaviour and skip outside authors' pull requests until an admin opts them in with "Let outside authors match", or over the API: ([#30623](https://github.com/mastra-ai/mastra/pull/30623))
+
+  ```http
+  PATCH /web/factory/projects/:projectId/intake-routes/:routeId
+  { "expectedRevision": 3, "outsiderPullRequestsGated": false }
+  ```
+
+  The intake dry-run tester reports the same skips dispatch would, and a run queued by a card move on a pull request event no trusted actor vouches for always waits for a person's approval, even in a phase that starts on its own. A maintainer pushing to or requesting review of an outside author's pull request is that vouch, so the review they ask for starts as before.
+
+- Factory sessions now tell the agent that a directory's AGENTS.md only loads when it opens files there with `view` or an edit tool, and ask it to read the applicable AGENTS.md files before its first change in a directory, including when it works through shell commands. Sessions on an untrusted checkout, such as pull request reviews, do not get this guidance, so they are not pointed at AGENTS.md files the pull request could have changed. ([#30678](https://github.com/mastra-ai/mastra/pull/30678))
+
+- Intake rules that file new cards can now target any non-terminal phase of their board, not just phases the board's first phase can move to. The `unreachable_phase` refusal is gone: a rule on, say, "Pull request opened" can file cards straight into a PR review phase even when the board's first phase doesn't move there, and the rule builder's phase picker offers every phase but the finished ones. Stored rules that previously fell back to the board's first phase because of this check now file into the phase they name — whether the card arrives from a provider or is created by hand without naming a board — and a phase with `autoStart` starts its run on arrival as usual. Terminal phases still refuse filing, arrival rules still stay on their own board, and a card that can't work in a phase (an issue without a pull request aimed at PR review) is still skipped. ([#30620](https://github.com/mastra-ai/mastra/pull/30620))
+
+- Factory agents can now resolve and reopen GitHub pull request review threads with `source_control_resolve_diff_thread`. Before, the tool always failed on GitHub because only GitLab supported resolving review threads. Pass the id of any comment in the thread, including a reply. If the comment is not part of a published thread, the tool says so and explains what to do next. ([#30671](https://github.com/mastra-ai/mastra/pull/30671))
+
+- When the observational memory model fails (rejected model, quota, credentials, rate limit, context limit or provider outage), the error now tells you to change the memory model in Memory settings and offers a "Change memory model" action that opens them, in both the Factory chat and Slack. Before, it offered "Change model", which changes the session's chat model and could never fix a failing observer or reflector model. ([#30702](https://github.com/mastra-ai/mastra/pull/30702))
+
+- Fixed Factory sessions being cut off from a card they were still working on. A cleanup that runs every 10 minutes ended a session's assignment to its card once the assignment was a day old, even when the card was still open in that session's phase. The session then lost its card tools and was told its part was done, so the card stayed put until a person moved it. The cleanup now leaves a session on its card while the card is still open in the phase that session works. ([#30608](https://github.com/mastra-ai/mastra/pull/30608))
+
+- Coding agents now subscribe their thread to an existing pull request or merge request when they start working on it, such as reviewing it, fixing merge conflicts, addressing review comments, fixing CI, or pushing to its branch. The thread then gets the merge and close notices for that PR, not only for PRs the agent created itself. ([#30675](https://github.com/mastra-ai/mastra/pull/30675))
+
+- `source_control_push_branch` now reports what it pushed. The result includes the pushed `commit`, plus `upToDate: true` when the remote already had that commit and nothing new was sent. Agents can tell a push that landed from a no-op, for example when they push before their commit exists. ([#30700](https://github.com/mastra-ai/mastra/pull/30700))
+
+- Fixed a pull request getting two review verdicts on the same commit. A push during a running review queues another review; when the running review already covered the pushed commit, the queued one is now skipped. A review requested by a person after a verdict still runs. ([#30691](https://github.com/mastra-ai/mastra/pull/30691))
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/mcp@2.10.0-alpha.1
+  - @mastra/code-sdk@1.19.1-alpha.8
+
 ## 0.29.0-alpha.7
 
 ### Patch Changes
