@@ -335,6 +335,31 @@ test('maps CI job names to tier keys', () => {
   assert.deepEqual(key('Prebuild', 'Unit and E2E Tests / Affected UNIT Test'), []);
 });
 
+test('the merged light E2E job fails only the suite whose step failed', () => {
+  // Step names as e2e-tests.yml's e2e-light job reports them in the jobs API.
+  const steps = [
+    { name: 'Set up job', conclusion: 'success' },
+    { name: 'Build', conclusion: 'success' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E no-bundling', conclusion: 'failure' },
+    { name: 'E2E create-mastra: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E create-mastra', conclusion: 'skipped' },
+    { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'failure' },
+    { name: 'E2E CommonJS', conclusion: 'skipped' },
+    { name: 'E2E npm import: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E npm import', conclusion: 'success' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E deployers', conclusion: 'success' },
+    { name: 'E2E Type check: install e2e test type-check', conclusion: 'success' },
+    { name: 'E2E Type check', conclusion: 'success' },
+  ];
+  const keys = jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  assert.deepEqual(keys.ran, ['job:e2e/commonjs', 'job:e2e/deployers', 'job:e2e/no-bundling', 'job:e2e/type-check']);
+  assert.deepEqual(keys.failed, ['job:e2e/commonjs', 'job:e2e/no-bundling']);
+  // A job the API returned without steps names no key rather than guessing.
+  assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [] });
+});
+
 test('a folded job fails only the packages that started and never finished', () => {
   // Lines as pnpm -r prints them in the light-stores job (run 41359171549).
   const log = [

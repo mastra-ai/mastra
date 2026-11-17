@@ -204,10 +204,12 @@ const NAMED_JOBS = {
  * The tier keys one CI job ran, and which of them failed. `log` is only read for the jobs that
  * run several packages with `pnpm -r` (light stores, workspace unit tests): a package whose
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
- * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing.
+ * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
+ * jobs API's) is only read for the merged light E2E job: each suite's install and test steps
+ * are named `E2E <label>…`, so a suite ran when one of its steps ran and failed when one failed.
  * @returns {{ ran: string[], failed: string[] }}
  */
-export function jobKeysFor(workflow, name, log = () => '') {
+export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
@@ -218,6 +220,17 @@ export function jobKeysFor(workflow, name, log = () => '') {
   if ((m = /^Combined Store Tests \/ test \(([\w-]+)\)$/.exec(name))) return one(`job:store/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-unit \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-unit/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-docker \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-docker/${m[1]}`);
+  if (name === 'E2E Tests / E2E light suites') {
+    const ran = new Set();
+    const failed = new Set();
+    for (const step of steps) {
+      const key = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step.name)?.[1]];
+      if (!key || !step.conclusion || step.conclusion === 'skipped') continue;
+      ran.add(`job:e2e/${key}`);
+      if (step.conclusion === 'failure') failed.add(`job:e2e/${key}`);
+    }
+    return { ran: [...ran].sort(), failed: [...failed].sort() };
+  }
   if ((m = /^E2E Tests \/ E2E (.+?)(?: \(\d+\/\d+\)| \(optional\))?$/.exec(name)) && E2E_JOB_LABELS[m[1]])
     return one(`job:e2e/${E2E_JOB_LABELS[m[1]]}`);
   const folded =
@@ -664,7 +677,7 @@ function versioningCommand(tiers, { runId, date, escapesOut }) {
   const ran = [];
   const failedJobs = [];
   for (const job of jobs) {
-    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
     ran.push(...keys.ran);
     if (job.conclusion === 'failure') failedJobs.push(...keys.failed);
   }
@@ -729,7 +742,7 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
     for (const job of jobs.filter(j => j.conclusion === 'failure')) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
       if (!isFileListJob(job.name)) {
-        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
         const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
