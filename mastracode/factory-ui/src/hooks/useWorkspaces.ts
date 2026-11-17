@@ -171,7 +171,7 @@ function invalidateWorkspaceQueries(queryClient: QueryClient, factoryId: string 
   void queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId) });
 }
 
-export const UNMATERIALIZED_POLL_MS = 15_000;
+const UNMATERIALIZED_POLL_MS = 15_000;
 /**
  * A session created but never run stays un-materialized forever — without a
  * bound it would keep the list polling indefinitely. Materialization follows

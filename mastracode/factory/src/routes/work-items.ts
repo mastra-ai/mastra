@@ -75,7 +75,6 @@ import {
   etagDigest,
   sendJson,
   sendRevalidated,
-  sessionIdsWhere,
 } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectSessionsReader } from './project-sessions.js';
@@ -116,8 +115,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
     factoryProjectId: string;
     item: Card;
   }) => Promise<RunRepositoryResolution>;
-  /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
-  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  /** Materialized sessions, read to report which sessions wait on someone. */
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   projectSessions?: ProjectSessionsReader;
@@ -499,7 +498,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
         },
       }),
-      // ── List the org's work items for a project, and which are being worked ─
+      // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
@@ -537,21 +536,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 : source
                   ? cardsFiledFrom(board, source)
                   : ids && cardsWithIds(board, ids));
-          const items = part ?? board;
-          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
-          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
           // A tab that kept the board gets what moved since its cursor: a body the size of the change.
           if (list.changed) {
             const workItems = list.changed.map(toWireWorkItem);
             const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
-            return sendJson(context, movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
-              'Cache-Control': 'no-store',
-            });
+            return sendJson(context, movedBody(moved), { 'Cache-Control': 'no-store' });
           }
           const snapshot = part
             ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
-              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
-            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
+              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, unstarted?.total)
+            : boardSnapshot(board, toWireWorkItem, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           return sendRevalidated(context, snapshot);
         },
@@ -683,15 +677,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             resolved.userId,
             wireVersion,
           );
-          const names = {
-            ...body,
-            runningSessionIds: sessionIdsWhere(named, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(named, sessionId => liveSessions.parked(sessionId) !== undefined),
-          };
           // The board asks again on each feed frame; most frames change nothing it shows.
           return sendRevalidated(
             context,
-            namedBody(names, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
+            namedBody(body, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
           );
         },
       }),

@@ -473,7 +473,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "sessionActivity",
     "method": "GET",
     "path": "/web/factory/projects/:id/session-activity",
-    "description": "List which of a project's sessions are running, waiting on a person or coming up",
+    "description": "List which of a project's sessions are running or waiting on a person, and each card's status",
     "pathParams": [
       "id"
     ],
@@ -515,7 +515,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemList",
     "method": "GET",
     "path": "/web/factory/projects/:id/work-items",
-    "description": "List Factory work items and running sessions",
+    "description": "List Factory work items",
     "pathParams": [
       "id"
     ],
@@ -2773,18 +2773,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ],
             "additionalProperties": {}
           }
-        },
-        "runningSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "parkedSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       },
       "required": [
@@ -2792,9 +2780,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "related",
         "relatedTotal",
         "boardTotal",
-        "matchingTotal",
-        "runningSessionIds",
-        "parkedSessionIds"
+        "matchingTotal"
       ],
       "$defs": {
         "__schema0": {
@@ -4833,7 +4819,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "type": "string"
           }
         },
-        "initializingSessionIds": {
+        "cardStatuses": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "working",
+              "initializing",
+              "idle",
+              "done"
+            ]
+          }
+        },
+        "sessionHeldCardIds": {
           "type": "array",
           "items": {
             "type": "string"
@@ -4853,17 +4855,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "working",
             "waiting"
           ]
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
         "runningSessionIds",
         "parkedSessionIds",
-        "initializingSessionIds",
-        "cards",
-        "settling"
+        "cardStatuses",
+        "sessionHeldCardIds",
+        "cards"
       ],
       "$defs": {
         "__schema0": {
@@ -5162,9 +5161,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "userId"
             ]
           }
-        },
-        "settling": {
-          "type": "boolean"
         }
       },
       "required": [
@@ -5172,8 +5168,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "matching",
         "groups",
         "boards",
-        "owners",
-        "settling"
+        "owners"
       ],
       "$defs": {
         "__schema0": {
@@ -5560,18 +5555,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "additionalProperties": {}
           }
         },
-        "runningSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "parkedSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "total": {
           "type": "integer",
           "minimum": 0,
@@ -5591,9 +5574,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         }
       },
       "required": [
-        "workItems",
-        "runningSessionIds",
-        "parkedSessionIds"
+        "workItems"
       ]
     }
   },

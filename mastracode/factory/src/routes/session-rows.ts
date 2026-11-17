@@ -3,12 +3,13 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { isSettling, sessionActivity, sessionRowsView } from '../session/session-row-view.js';
-import { runningSessionIds, sessionRows } from '../session/session-rows.js';
+import { sessionActivity, sessionRowsView } from '../session/session-row-view.js';
+import { runningSessionIds } from '../session/session-rows.js';
+import type { SessionRowIndex, SessionStatusViewer } from '../session/session-rows.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { hashedBody, sendRevalidated, sessionIdsWhere } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
-import type { ListedSession, ProjectSessionsReader } from './project-sessions.js';
+import type { ProjectSessions, ProjectSessionsReader, SeenSessions } from './project-sessions.js';
 import { loose } from './route.js';
 import { CARD_DECISION_PAGE_SIZE, CARD_DECISION_STATUSES, cardsAwaitingPerson } from './work-item-starters.js';
 
@@ -31,33 +32,45 @@ interface SessionRowRouteDependencies {
 }
 
 interface SessionFacts {
-  sessions: ListedSession[];
+  seen: SeenSessions;
   cards: readonly Card[];
-  runningSessionIds: Set<string>;
-  parkedSessionIds: Set<string>;
+  index: SessionRowIndex;
+  viewer: SessionStatusViewer;
 }
 
 async function sessionFacts(deps: SessionRowRouteDependencies, scope: ViewerScope): Promise<SessionFacts> {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
-  const [sessions, cards] = await Promise.all([
-    deps.projectSessions({ ...project, userId: scope.userId }),
+  await deps.workItems.ensureReady();
+  const [sessions, cards, boards, { decisions }] = await Promise.all([
+    deps.projectSessions(project),
     deps.sessionCards(project),
-  ]);
-  return {
-    sessions,
-    cards,
-    runningSessionIds: runningSessionIds(deps.activeRuns(), {
-      authEnabled: deps.authEnabled(),
-      viewerUserId: scope.userId,
-      factoryProjectId: scope.factoryProjectId,
-      visibleSessionIds: new Set(sessions.map(session => session.sessionId)),
+    deps.boards.load(project),
+    deps.workItems.listDeferredDecisionPage({
+      ...project,
+      statuses: [...CARD_DECISION_STATUSES],
+      limit: CARD_DECISION_PAGE_SIZE,
     }),
-    parkedSessionIds: new Set(sessionIdsWhere(cards, sessionId => deps.liveSessions.parked(sessionId) !== undefined)),
+  ]);
+  const seen = sessions.seenBy(scope.userId);
+  return {
+    seen,
+    cards,
+    index: sessions.rowIndex(cards, boards),
+    viewer: {
+      viewerUserId: scope.userId,
+      awaitingPerson: cardsAwaitingPerson(decisions),
+      runningSessionIds: runningSessionIds(deps.activeRuns(), {
+        authEnabled: deps.authEnabled(),
+        viewerUserId: scope.userId,
+        factoryProjectId: scope.factoryProjectId,
+        visibleSessionIds: seen,
+      }),
+      parkedSessionIds: new Set(sessionIdsWhere(cards, sessionId => deps.liveSessions.parked(sessionId) !== undefined)),
+    },
   };
 }
 
 export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRoute[] {
-  const { workItems } = deps;
   return [
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.sessionRows.path, {
       method: FACTORY_ROUTE_CONTRACTS.sessionRows.method,
@@ -79,33 +92,13 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         });
         if (!query.success) return c.json({ error: 'invalid_session_rows_query' }, 400);
         const { pin, children, ...view } = query.data;
-        const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
-        await workItems.ensureReady();
-        const [facts, boards, { decisions }] = await Promise.all([
-          sessionFacts(deps, resolved),
-          deps.boards.load(project),
-          workItems.listDeferredDecisionPage({
-            ...project,
-            statuses: [...CARD_DECISION_STATUSES],
-            limit: CARD_DECISION_PAGE_SIZE,
-          }),
-        ]);
-        const rows = sessionRows({
-          ...facts,
-          boards,
-          awaitingPerson: cardsAwaitingPerson(decisions),
-          viewerUserId: resolved.userId,
+        const facts = await sessionFacts(deps, resolved);
+        const rows = facts.index.rows({
+          ...facts.viewer,
           pinnedSessionIds: pin,
           revealChildSessions: children === 'true',
         });
-        const now = Date.now();
-        return sendRevalidated(
-          context,
-          hashedBody({
-            ...sessionRowsView(rows, view, resolved.userId, now),
-            settling: isSettling(facts.sessions, now),
-          }),
-        );
+        return sendRevalidated(context, hashedBody(sessionRowsView(rows, view, resolved.userId, Date.now())));
       },
     }),
 
@@ -116,9 +109,19 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
         const context = loose(c);
         const resolved = await deps.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        await workItems.ensureReady();
-        const facts = await sessionFacts(deps, resolved);
-        return sendRevalidated(context, hashedBody(sessionActivity({ ...facts, now: Date.now() })));
+        const { seen, cards, index, viewer } = await sessionFacts(deps, resolved);
+        return sendRevalidated(
+          context,
+          hashedBody(
+            sessionActivity({
+              sessions: seen.sessions,
+              cards,
+              runningSessionIds: viewer.runningSessionIds,
+              parkedSessionIds: viewer.parkedSessionIds,
+              cardStatuses: index.cardStatuses(viewer),
+            }),
+          ),
+        );
       },
     }),
   ];

@@ -810,11 +810,8 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       await ops.deleteMany(PHASES, { ...scopeWhere(scope), board_key: key });
       const deleted = routes.filter(route => route.board_key === key);
       if (deleted.length > 0) {
+        // The surviving routes keep their positions; readers sort over the gaps.
         await ops.deleteMany(INTAKE_ROUTES, { ...scopeWhere(scope), board_key: key });
-        await placeIntakeRoutes(
-          ops,
-          routes.filter(route => route.board_key !== key),
-        );
         await forgetDerivedIntakeOrder(ops, scope);
       }
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
@@ -1133,7 +1130,19 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const ahead = catchAlls.length > 0 && !catchAlls.includes(-1) ? Math.max(...catchAlls) : -1;
       if (ahead >= 0) {
         const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
-        await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
+        const target = rows[ahead]!;
+        const previous = ahead === 0 ? -1 : rows[ahead - 1]!.position;
+        if (target.position - previous > 1) {
+          // A deleted route left a free slot just ahead of the catch-all: take it and move nothing.
+          await updateIntakeRouteRow(ops, added, { position: target.position - 1 });
+        } else {
+          // Move the catch-all and what follows it one place down; the routes ahead stay put.
+          await moveIntakeRoutes(
+            ops,
+            [added, ...rows.slice(ahead)].map((row, index) => ({ row, position: target.position + index })),
+            actor,
+          );
+        }
       }
     });
     return (await this.getIntakeRoute(scope, id))!;
@@ -1182,7 +1191,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return (await this.getIntakeRoute(scope, id))!;
   }
 
-  /** Deletes a route; the routes after it move up one place. */
+  /** Deletes a route; the others keep their positions, and readers sort over the gap. */
   async deleteIntakeRoute(scope: StoredBoardScope, id: string, options: { expectedRevision: number }): Promise<void> {
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
@@ -1193,10 +1202,6 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       if ((await ops.deleteMany(INTAKE_ROUTES, { id: row.id, revision: row.revision })) === 0) {
         throw new ConcurrentBoardWrite();
       }
-      await placeIntakeRoutes(
-        ops,
-        rows.filter(route => route.id !== row.id),
-      );
       await forgetDerivedIntakeOrder(ops, scope);
     });
   }
@@ -1227,9 +1232,18 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         );
       }
       const queue = ids.map(id => byId.get(id)!);
-      const order =
-        boardKey === undefined ? queue : rows.map(row => (row.board_key === boardKey ? queue.shift()! : row));
-      await placeIntakeRoutes(ops, order, actor);
+      if (boardKey === undefined) {
+        await placeIntakeRoutes(ops, queue, actor);
+      } else {
+        // The board's routes trade the position slots the board already holds, so every other
+        // board's routes keep their positions and revisions.
+        const slots = scoped.map(row => row.position);
+        await moveIntakeRoutes(
+          ops,
+          queue.map((row, index) => ({ row, position: slots[index]! })),
+          actor,
+        );
+      }
       await forgetDerivedIntakeOrder(ops, scope);
     });
     return this.listIntakeRoutes(scope, { boardKey });
@@ -1698,7 +1712,24 @@ async function lockIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope)
 
 /** Moves routes, read under the project's route lock, to the positions of their order in `rows`. */
 async function placeIntakeRoutes(ops: FactoryStorageOps, rows: IntakeRouteRow[], actor?: string): Promise<void> {
-  const moving = rows.flatMap((row, position) => (row.position === position ? [] : [{ row, position }]));
+  await moveIntakeRoutes(
+    ops,
+    rows.map((row, position) => ({ row, position })),
+    actor,
+  );
+}
+
+/**
+ * Moves each route of `moves`, read under the project's route lock, to the position named for it.
+ * A route already in its place is left alone. Each move parks at a negative position first, so the
+ * moves can trade places without meeting the unique position index on the way.
+ */
+async function moveIntakeRoutes(
+  ops: FactoryStorageOps,
+  moves: { row: IntakeRouteRow; position: number }[],
+  actor?: string,
+): Promise<void> {
+  const moving = moves.filter(({ row, position }) => row.position !== position);
   const parked = [];
   for (const [index, { row, position }] of moving.entries()) {
     const revision = await updateIntakeRouteRow(ops, row, {

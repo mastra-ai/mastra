@@ -263,16 +263,9 @@ export interface UpdateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * The board as of one read: its cards, plus the sessions running on them right
- * then. Both come from the same response so a card and its run marker can
- * never disagree.
- */
+/** The cards of one read. */
 export interface BoardSnapshot {
   workItems: WorkItem[];
-  runningSessionIds: string[];
-  /** Sessions parked on a tool until someone answers, read live with the cards. */
-  parkedSessionIds: string[];
   /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
   total?: number;
 }
@@ -303,16 +296,11 @@ export async function listWorkItems(
         : only,
   );
   // No id and no source asked for: no card. Sent bare, the request would read the whole project.
-  if (params.size === 0) return { workItems: [], runningSessionIds: [], parkedSessionIds: [] };
-  const { workItems, runningSessionIds, parkedSessionIds, total } = await requestJson<
+  if (params.size === 0) return { workItems: [] };
+  const { workItems, total } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
   >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`, { signal });
-  return {
-    workItems: workItems.map(fromWireWorkItem),
-    runningSessionIds: runningSessionIds ?? [],
-    parkedSessionIds: parkedSessionIds ?? [],
-    ...(total === undefined ? {} : { total }),
-  };
+  return { workItems: workItems.map(fromWireWorkItem), ...(total === undefined ? {} : { total }) };
 }
 
 /** The board read's answer. It holds the cards' bodies only when they were asked for. */
