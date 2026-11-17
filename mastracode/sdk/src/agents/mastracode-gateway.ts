@@ -310,8 +310,11 @@ const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...i
  * token in `Authorization` and the gateway key in `GATEWAY_AUTH_HEADER`. Only the v1 gateway
  * (project keys) supports that. Gateway v2 (organization keys) reads its key from `Authorization`
  * and cannot forward a provider credential, so a v2 key always takes the gateway's own route.
+ * The gateway chooses v1 or v2 from the key itself, so a project key (`msk_…`) keeps the
+ * pass-through even where `MASTRA_GATEWAY_VERSION=v2` is set.
  */
-export function mastraGatewayPassesProviderSignIn(mastraGatewayApiKey: string | undefined): boolean {
+export function mastraGatewayPassesProviderSignIn(mastraGatewayApiKey: string): boolean {
+  if (mastraGatewayApiKey.startsWith('msk_')) return true;
   return !new MastraGateway({ apiKey: mastraGatewayApiKey }).isV2();
 }
 

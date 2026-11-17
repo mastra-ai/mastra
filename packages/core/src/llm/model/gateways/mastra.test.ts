@@ -575,12 +575,17 @@ describe('MastraGateway', () => {
       return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
-    async function firstRequest(gatewayKey: string, providerId: string, modelId: string) {
+    async function firstRequest(
+      gatewayKey: string,
+      providerId: string,
+      modelId: string,
+      constructorKey: string | undefined = gatewayKey,
+    ) {
       const customFetch = vi.fn(async () => stubResponse());
       const globalFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => stubResponse());
       vi.stubGlobal('fetch', globalFetch);
       try {
-        const gateway = new MastraGateway({ apiKey: gatewayKey, baseUrl: 'https://gateway.example', customFetch });
+        const gateway = new MastraGateway({ apiKey: constructorKey, baseUrl: 'https://gateway.example', customFetch });
         const model: any = gateway.resolveLanguageModel({ modelId, providerId, apiKey: gatewayKey });
         await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }).catch(() => {
           // the stubbed response is not a valid provider payload; only the request matters
@@ -614,6 +619,29 @@ describe('MastraGateway', () => {
         expect(request.headers.get('X-Memory-Gateway-Authorization')).toBeNull();
       },
     );
+
+    it('classifies the key the request carries, not the key the gateway was built with', async () => {
+      const request = await firstRequest(
+        'msk-gateway-eu_override-key',
+        'anthropic',
+        'claude-sonnet-4-5',
+        'msk_project-key',
+      );
+
+      expect(request.usedCustomFetch).toBe(false);
+      expect(request.url).toBe('https://gateway.example/v1/chat/completions');
+      expect(request.headers.get('Authorization')).toBe('Bearer msk-gateway-eu_override-key');
+    });
+
+    it('keeps the provider sign-in pass-through for a project key when MASTRA_GATEWAY_VERSION is v2', async () => {
+      process.env.MASTRA_GATEWAY_VERSION = 'v2';
+
+      const request = await firstRequest('msk_project-key', 'anthropic', 'claude-sonnet-4-5');
+
+      expect(request.usedCustomFetch).toBe(true);
+      expect(request.url).toBe('https://gateway.example/v1/messages');
+      expect(request.headers.get('X-Memory-Gateway-Authorization')).toBe('Bearer msk_project-key');
+    });
 
     it('keeps the provider sign-in pass-through for a project key', async () => {
       const request = await firstRequest('msk_project-key', 'anthropic', 'claude-sonnet-4-5');

@@ -121,10 +121,11 @@ function nonEmptyString(value: unknown): string | undefined {
 }
 
 /**
- * The code and message from a Mastra Gateway error body, `{ "error": { "type", "code", "message" } }`.
- * The message may only repeat the code, so both are kept.
+ * The code and message from a Mastra Gateway error body, `{ "error": { "type": "gateway_error", "code", "message" } }`.
+ * The message may only repeat the code, so both are kept. Errors the gateway forwards from a provider
+ * carry the provider's own `type`, so only `gateway_error` bodies count as the gateway's refusal.
  */
-function gatewayErrorOf(error: unknown): { code?: string; message?: string } {
+function gatewayErrorOf(error: unknown): { code?: string; message?: string } | undefined {
   for (const candidate of [error, isRecord(error) ? error['cause'] : undefined]) {
     if (!isRecord(candidate)) continue;
     let body = candidate['data'];
@@ -136,9 +137,11 @@ function gatewayErrorOf(error: unknown): { code?: string; message?: string } {
       }
     }
     const inner = isRecord(body) ? body['error'] : undefined;
-    if (isRecord(inner)) return { code: nonEmptyString(inner['code']), message: nonEmptyString(inner['message']) };
+    if (isRecord(inner) && inner['type'] === 'gateway_error') {
+      return { code: nonEmptyString(inner['code']), message: nonEmptyString(inner['message']) };
+    }
   }
-  return {};
+  return undefined;
 }
 
 function describeGatewayError({ code, message }: { code?: string; message?: string }): string | undefined {
@@ -155,6 +158,7 @@ function parseGatewayRefusal(
   fallbackDetail: string | undefined,
 ): ParsedError | undefined {
   const gatewayError = gatewayErrorOf(error);
+  if (!gatewayError) return undefined;
   const detail = describeGatewayError(gatewayError) ?? fallbackDetail;
   if (status === 402) {
     return {
@@ -167,7 +171,7 @@ function parseGatewayRefusal(
       source: 'gateway',
     };
   }
-  if (status === 403 && gatewayError.code) {
+  if (status === 403) {
     return {
       message: "The Mastra Gateway's policy or routing does not allow this model or feature for your key.",
       detail,

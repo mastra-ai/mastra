@@ -183,8 +183,9 @@ vi.mock('@mastra/core/llm', () => ({
     this.apiKey = config?.apiKey;
     this.baseUrl = config?.baseUrl;
     this.customFetch = config?.customFetch;
-    // Mirrors the key classification of the real gateway: organization keys belong to Gateway v2.
+    // Mirrors the real gateway: the version variable, then organization keys, select Gateway v2.
     this.isV2 = vi.fn(() => {
+      if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
       const key = config?.apiKey ?? process.env.MASTRA_GATEWAY_API_KEY;
       return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
     });
@@ -1256,6 +1257,21 @@ describe('resolveModel', () => {
         expect(createOpenAI).not.toHaveBeenCalled();
         expect(buildOpenAICodexOAuthFetch).not.toHaveBeenCalled();
         expect(openaiCodexProvider).not.toHaveBeenCalled();
+      });
+
+      it('keeps the Codex OAuth pass-through for a v1 project key when MASTRA_GATEWAY_VERSION is v2', () => {
+        process.env.MASTRA_GATEWAY_VERSION = 'v2';
+        useGatewayKey('msk_project_key');
+        signInWithOAuth();
+
+        const result = resolveModel('mastra/openai/gpt-4o') as Record<string, unknown>;
+
+        expect(result.__provider).toBe('openai-direct');
+        expect(buildOpenAICodexOAuthFetch).toHaveBeenCalled();
+        const opts = vi.mocked(createOpenAI).mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+        expect((opts?.headers as Record<string, string>)?.['X-Memory-Gateway-Authorization']).toBe(
+          'Bearer msk_project_key',
+        );
       });
 
       it('keeps the Claude OAuth pass-through for a v1 project key', () => {

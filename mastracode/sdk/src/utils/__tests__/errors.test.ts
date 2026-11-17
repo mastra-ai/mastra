@@ -196,6 +196,35 @@ describe('parseError', () => {
       expect(denied.message).toBe('Access denied. You may not have permission to use this model.');
     });
 
+    it.each([
+      [403, 'request_forbidden', 'unsupported_country_region_territory'],
+      [402, 'invalid_request_error', 'insufficient_quota'],
+    ])('keeps the provider wording for a provider %i the gateway forwarded with type %s', (status, type, code) => {
+      const error = Object.assign(new Error(code), {
+        statusCode: status,
+        url: `${gatewayBaseUrl}/v1/responses`,
+        responseBody: JSON.stringify({ error: { type, code, message: code } }),
+      });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBeUndefined();
+      expect(parsed.message).not.toContain('Mastra Gateway');
+    });
+
+    it('words a gateway 403 from the messages endpoint, which sends the code as the message', () => {
+      const error = Object.assign(new Error('model_not_allowed'), {
+        statusCode: 403,
+        url: `${gatewayBaseUrl}/v1/messages`,
+        responseBody: JSON.stringify({ type: 'error', error: { type: 'gateway_error', message: 'model_not_allowed' } }),
+      });
+
+      const parsed = parseError(error, { gatewayBaseUrl });
+
+      expect(parsed.source).toBe('gateway');
+      expect(parsed.detail).toBe('model_not_allowed');
+    });
+
     it('keeps the access-denied wording for a gateway 403 without a gateway code', () => {
       const error = Object.assign(new Error('forbidden'), {
         status: 403,

@@ -174,9 +174,10 @@ export class MastraGateway extends MastraModelGateway {
     const fullModelId = `${providerId}/${modelId}`;
 
     // Passing a provider sign-in through the gateway (customFetch sets Authorization, the gateway key
-    // travels in GATEWAY_AUTH_HEADER) only works on the v1 gateway. Gateway v2 reads its key from
-    // Authorization and cannot forward a provider credential, so v2 always takes the API key path.
-    const passThroughFetch = this.isV2() ? undefined : this.config?.customFetch;
+    // travels in GATEWAY_AUTH_HEADER) only works on the v1 gateway. The gateway picks v1 or v2 from the
+    // key the request carries, and v2 reads its key only from Authorization, so a request whose own key
+    // is an organization key always takes the API key path.
+    const passThroughFetch = isOrganizationKey(apiKey) ? undefined : this.config?.customFetch;
 
     if (passThroughFetch && providerId === 'anthropic') {
       // Anthropic OAuth path: use native Anthropic SDK (sends /messages, not /chat/completions)

@@ -153,6 +153,18 @@ describe('provider web search follows the model transport', () => {
     });
   });
 
+  it('keeps the Claude sign-in pass-through for a project key when MASTRA_GATEWAY_VERSION is v2', async () => {
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk_project-key');
+    vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+    signInWithOAuth('anthropic');
+    const modelId = 'mastra/anthropic/claude-sonnet-4-5';
+    expect(resolveProviderWebSearchRoute(modelId)).toBe('anthropic');
+
+    const { url, headers } = await firstRequest(modelId);
+    expect(url).toMatch(/\/v1\/messages/);
+    expect(headers.get('x-memory-gateway-authorization')).toBe('Bearer msk_project-key');
+  });
+
   describe('Mastra gateway alias with a Gateway v2 organization key', () => {
     it.each([
       ['anthropic', 'mastra/anthropic/claude-sonnet-4-5', 'msk-gateway-us_org-key'],
