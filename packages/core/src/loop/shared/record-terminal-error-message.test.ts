@@ -46,6 +46,7 @@ describe('toPersistedErrorIdentity', () => {
       responseBody: '{"error":{"code":"insufficient_quota"}}',
       modelId: 'claude-opus-4-5',
       codes: ['insufficient_quota'],
+      requestOrigin: 'https://api.example.com',
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
     expect(
@@ -56,6 +57,50 @@ describe('toPersistedErrorIdentity', () => {
         }),
       ),
     ).toMatchObject({ statusCode: 400, reason: 'prompt is too long' });
+  });
+
+  it('keeps only the origin of the URL a failed model request was sent to', () => {
+    const error = Object.assign(new Error('Too Many Requests'), {
+      name: 'AI_APICallError',
+      statusCode: 429,
+      url: 'http://user:secret@127.0.0.1:4180/v1/chat/completions?api_key=secret#frag',
+      requestBodyValues: { model: 'stub/ok' },
+    });
+
+    const identity = toPersistedErrorIdentity(error);
+
+    expect(identity.requestOrigin).toBe('http://127.0.0.1:4180');
+    expect(JSON.stringify(identity)).not.toContain('secret');
+    expect(JSON.stringify(identity)).not.toContain('/v1/chat/completions');
+  });
+
+  it('reads the request origin from a model request error wrapped as a cause', () => {
+    const apiCallError = Object.assign(new Error('Service Unavailable'), {
+      name: 'AI_APICallError',
+      statusCode: 503,
+      url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      requestBodyValues: {},
+    });
+    const wrapped = new Error('Model call failed', { cause: apiCallError });
+
+    expect(toPersistedErrorIdentity(wrapped).requestOrigin).toBe('https://gateway-api.mastra.ai');
+  });
+
+  it.each([
+    ['a malformed URL', 'not a url'],
+    ['a relative URL', '/v1/chat/completions'],
+    ['a non-http scheme', 'file:///etc/passwd'],
+    ['a non-string URL', 42],
+  ])('leaves the request origin out for %s', (_label, url) => {
+    const error = Object.assign(new Error('Bad Request'), { statusCode: 400, url, requestBodyValues: {} });
+
+    expect(toPersistedErrorIdentity(error)).not.toHaveProperty('requestOrigin');
+  });
+
+  it('ignores a url on an error that is not a model request error', () => {
+    const error = Object.assign(new Error('Not Found'), { url: 'https://internal.example/resource' });
+
+    expect(toPersistedErrorIdentity(error)).not.toHaveProperty('requestOrigin');
   });
 
   it('keeps a bounded response body and the provider request id', () => {

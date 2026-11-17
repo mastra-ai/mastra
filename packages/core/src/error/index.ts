@@ -15,5 +15,6 @@ export {
   providerErrorReason,
   providerModelId,
   providerRequestId,
+  providerRequestOrigin,
 } from './provider-error';
 export type { ProviderFailureKind } from './provider-error';

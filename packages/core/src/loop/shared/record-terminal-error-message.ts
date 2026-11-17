@@ -16,6 +16,7 @@
  *
  * Only `{ name, message }` is persisted, plus `statusCode`, a bounded
  * `responseBody`, the provider `requestId`, the `modelId` the request named,
+ * the `requestOrigin` the request was sent to (scheme, host and port only),
  * every provider code and the innermost `reason` for provider failures —
  * without those, an `APICallError` whose message is just "Bad Request" cannot
  * be diagnosed or classified after the fact. The rest of the request body,
@@ -26,7 +27,7 @@
  */
 
 import type { MastraDBMessage, MastraErrorPart, MessageList } from '../../agent/message-list';
-import { providerErrorFacts } from '../../error/provider-error';
+import { providerErrorFacts, providerRequestOrigin } from '../../error/provider-error';
 import { readProviderErrorDetails } from './provider-error-details';
 
 const FALLBACK_ERROR_NAME = 'Error';
@@ -58,11 +59,13 @@ export function toPersistedErrorIdentity(error: unknown): MastraErrorPart['error
     return { name: FALLBACK_ERROR_NAME, message: FALLBACK_ERROR_MESSAGE };
   }
 
+  const requestOrigin = providerRequestOrigin(error);
   return {
     name: readErrorField(error, 'name') ?? FALLBACK_ERROR_NAME,
     message: readErrorField(error, 'message') ?? FALLBACK_ERROR_MESSAGE,
     ...readProviderErrorDetails(error),
     ...providerErrorFacts(error),
+    ...(requestOrigin ? { requestOrigin } : {}),
   };
 }
 
