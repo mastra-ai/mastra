@@ -3656,9 +3656,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         bindingId: binding.id,
         revokedAt: input.now,
       });
-      if (!result) continue;
-      revoked += 1;
-      input.onRevoked?.(binding);
+      if (result) {
+        revoked += 1;
+        input.onRevoked?.(binding);
+      }
     }
     return revoked;
   }
