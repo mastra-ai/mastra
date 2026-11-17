@@ -153,6 +153,14 @@ const MODE_ID_KEY = 'currentModeId';
 export const ABORTED_BY_USER_REASON = 'Aborted by the user';
 
 /**
+ * Reason reported on `agent_end` when a deliberate stop ended the run, so a
+ * host can tell a person's Stop from an incidental abort (a server restart, a
+ * lost thread lease, a failed run). Distinct from {@link ABORTED_BY_USER_REASON},
+ * which is the human-readable text attached to retracted tool prompts.
+ */
+export const USER_STOP_ABORT_REASON = 'user-stop';
+
+/**
  * Session-state keys that are transparently persisted to thread metadata on
  * every state update and restored by `Session.loadMetadata()`. These are user
  * preferences that must survive a host restart (sessions themselves are
@@ -4264,6 +4272,12 @@ export class Session<TState = unknown> {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Whether the in-flight abort teardown must stay local to this process. */
   #localOnlyAbort = false;
+  /**
+   * Why this session stopped a run, kept until that run's `agent_end` reports
+   * it. A bare `abort()` (steering, teardown, a lifecycle stop) records nothing,
+   * and the record is consumed by run id so it cannot attach to a later run.
+   */
+  #stoppedRun: { runId: string; reason: string } | null = null;
   /** Settles once the previous `sendMessage` carrying scopes is admitted, so scoped messages start in send order. */
   #scopedSendTail: Promise<void> = Promise.resolve();
   #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
@@ -4492,8 +4506,16 @@ export class Session<TState = unknown> {
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
     { abortReason }: { abortReason?: string } = {},
   ): Promise<void> {
-    const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
     const runId = this.run.getRunId();
+    // A deliberate stop records why in `abortRun`; report it when the abort chunk
+    // itself carried no reason. Consumed per run id so a stop cannot leak onto a
+    // later, unrelated abort.
+    const resolvedAbortReason = reason === 'aborted' ? (abortReason ?? this.#takeStopReason(runId)) : undefined;
+    const event = {
+      type: 'agent_end',
+      reason,
+      ...(resolvedAbortReason ? { abortReason: resolvedAbortReason } : {}),
+    } as const;
     for (const listener of this.#beforeAgentEndListeners) {
       try {
         await listener(event);
@@ -4510,6 +4532,17 @@ export class Session<TState = unknown> {
     } finally {
       this.#endingRunId = undefined;
     }
+  }
+
+  /**
+   * Consume the recorded stop reason if it belongs to the run that just ended,
+   * so a stop can only ever attach to the run it stopped. Always clears.
+   */
+  #takeStopReason(runId: string | null): string | undefined {
+    const stopped = this.#stoppedRun;
+    this.#stoppedRun = null;
+    if (!stopped || runId === null) return undefined;
+    return stopped.runId === runId ? stopped.reason : undefined;
   }
 
   /** Await the terminal event for a specific accepted agent run. */
@@ -4691,13 +4724,22 @@ export class Session<TState = unknown> {
    * awaiting `approval.arm()` is not streaming, so we resolve it as a decline so
    * the gated tool is rejected and the run can finalize rather than hang.
    */
-  abortRun(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
+  abortRun(options: { localOnly?: boolean; keepParked?: boolean; reason?: string } = {}): void {
     this.#abortGeneration++;
     // Aborting twice while a gate is parked would tear the stream down before
     // the deferred decline lands (the second call sees the gate already
     // cancelled), which is the exact failure the deferral exists to avoid. Two
     // `tool_approval_required` subscribers each calling abort() is enough.
     if (this.run.isAbortRequested()) return;
+
+    // Remember why this run was stopped, if the caller said. A bare abort (steering,
+    // teardown, a lifecycle stop) records nothing, so only a deliberate stop is
+    // reported on `agent_end`. Keyed by run id so a stale reason cannot attach to a
+    // later run, and only recorded while a run is live.
+    const stoppingRunId = options.reason ? this.run.getRunId() : null;
+    if (options.reason && stoppingRunId) {
+      this.#stoppedRun = { runId: stoppingRunId, reason: options.reason };
+    }
 
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
@@ -4826,8 +4868,12 @@ export class Session<TState = unknown> {
    * orphaned), aborts the live subscription, and marks the run as aborting; this
    * additionally clears the display-state mirror of those suspensions and
    * notifies subscribers so stale suspension UI doesn't linger.
+   *
+   * `reason` states why the run is being stopped (e.g. {@link USER_STOP_ABORT_REASON}
+   * for a person's Stop). It is reported on the run's `agent_end` so a host can
+   * tell a deliberate stop from an incidental abort.
    */
-  abort(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
+  abort(options: { localOnly?: boolean; keepParked?: boolean; reason?: string } = {}): void {
     const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
     this.displayState.clearPendingSuspensions();
     this.abortRun(options);
