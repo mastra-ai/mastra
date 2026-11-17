@@ -34,7 +34,7 @@ Every UI change reads `rules/core.md` first, and follows the `react-best-practic
 | Charts, or a page that is mostly charts (metrics, observability, usage) | `rules/charts.md`, `examples/pages/requests-dashboard.tsx`                                                                        | loading, updating, empty, and error each keep every card's size; the range and filters survive a reload |
 | A data table or list                                                    | "Tables and lists" in `rules/page-frame.md`, `examples/pages/usage-dashboard.tsx`                                                 | keyboard path through rows; loading rows match the ready row count                                      |
 | Motion                                                                  | `theme/motion.css`, the `transitions` presets (`@mastra/playground-ui/primitives/transitions`), section 5 of `build-component.md` | the same interaction with `prefers-reduced-motion: reduce`                                              |
-| A form                                                                  | "Forms" in `rules/controls.md`, `examples/pages/create-project.tsx`                                                               | submit empty, fix one field, submit again                                                               |
+| A form                                                                  | "Forms" in `rules/controls.md`, "Create and edit form pages" in `rules/page-frame.md`, `examples/pages/create-project.tsx`        | submit empty, fix one field, submit again                                                               |
 
 ## When nothing here covers the case
 

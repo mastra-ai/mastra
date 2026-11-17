@@ -56,6 +56,8 @@ Is it a workspace for one entity: panels, editor, graph, board, or chat that scr
 |   \-- Yes -> container (the default)
 |-- Is it a dashboard whose content sits side by side (panels, charts, metric cards in columns)?
 |   \-- Yes -> container
+|-- Is its job one create or edit form (New alert, New project, Edit destination)?
+|   \-- Yes -> FormLayout, not a PageLayout variant (Create and edit form pages below)
 \-- Otherwise it is one column read top to bottom (stacked overview blocks, feed, settings, simple detail, wizard)
     -> narrow
 
@@ -73,6 +75,24 @@ Some pages look like destinations but take no `PageHeader`:
 
 `container` gives lists and dashboards the full width, `fit` hands the body to panels that manage their own scroll, and `narrow` caps reading width. Pick by the content's shape. "Overview" is not a layout: Factory's overview is stacked blocks (`narrow`), and Platform's project overview is a side-by-side dashboard (wide, with a header).
 
+### Create and edit form pages
+
+A page whose job is one create or edit form uses `FormLayout`: a back link and the title above the 640px `SettingsLayout` column, inset to line up with the section titles, sections 28px apart, and no breadcrumb bar.
+
+```tsx
+import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
+
+<FormLayout backHref={alertsHref} backLabel="Alerts" title="New alert" LinkComponent={Link}>
+  {form}
+</FormLayout>;
+```
+
+- Use `FormLayout` when the installed package exports `@mastra/playground-ui/components/FormLayout`. When it does not, build the same frame from `SettingsLayout`: a `PageLayout` with no `breadcrumbs` around `<SettingsLayout header={<PageHeader>…</PageHeader>}>`, whose `PageHeader` holds the back link in `.Eyebrow` and the `.Title`. Name the upgrade that replaces it with `FormLayout`.
+- MUST NOT put a create or edit form in `PageLayout variant="narrow"`. Its 1024px column leaves the 640px form against its left edge, so the title and section titles stop lining up and every form page sits differently.
+- The back link is the way out, so a form page has no breadcrumbs: two ways back to the same place compete.
+- The form body adds no width or spacing of its own (`mt-6`, `pb-16`, `max-w-*`); the column owns both.
+- A settings page someone browses to and changes in place, and a one-column page to read, keep the `narrow` frame below. Only a page that exists to create or edit one thing is a form page. ([#30715](https://github.com/mastra-ai/mastra/pull/30715), [#29626](https://github.com/mastra-ai/mastra/pull/29626))
+
 ### Narrow pages: the frame owns width and title
 
 A `narrow` page is one `max-w-5xl` column, so page edges and titles line up across pages, and one `h1` from `PageHeader.Title`.
@@ -82,7 +102,7 @@ A `narrow` page is one `max-w-5xl` column, so page edges and titles line up acro
 - `PageHeader` (`@mastra/playground-ui/components/PageHeader`) is the only page header. Every `narrow` page and every dashboard has one, passed through `header`. Indexes and workspaces have none, and their breadcrumbs name them. The Agent Builder index pages currently add one to `container`. Never use `MainHeader`, `EntityHeader`, or a hand-built heading row on a new page. The 7 Studio pages still using them (datasets, workflow entity header, experiment panels) are legacy; do not copy them.
 - Use the compound API only. The props form (`<PageHeader title="…" description="…" />`) is legacy; nothing uses it, and new code must not start.
 - `PageHeader` parts: `.Title`, `.Description` (optional, one sentence saying what the page is for), `.Meta beside` for a version or the entity's state as a `Badge`, `.Icon`, `.Eyebrow` (a back link above the title, create and edit flows only), and `.Action` (top-aligned, never re-aligned with classes). Pass loading through `PageHeader.Title isLoading`, not a skeleton of your own.
-- The way back is the `breadcrumbs` trail (`X › Current`). A create or edit flow also gets a back link in `PageHeader.Eyebrow` (`← Back to alerts`), above the title. Never put a back link in the page body or in `.Action`.
+- The way back is the `breadcrumbs` trail (`X › Current`). A create or edit form page instead has a back link in `PageHeader.Eyebrow` (`← Alerts`) above the title and no breadcrumbs, as `FormLayout` renders it. Never put a back link in the page body or in `.Action`.
 - **The breadcrumb bar holds navigation and reference links, never actions.** Its left side is the breadcrumbs. Its right side (`headerActions`) may hold `Button variant="link" size="sm"` links that take the user somewhere to read, such as Docs or API endpoints, plus the shell's collapsed-sidebar trigger and search. Anything that creates, changes, runs, or deletes is an action and goes on the page's own row, because the bar is shared chrome, not part of the page:
   - `container` index: `<ActionRow.End>`, after view options, with the primary action last.
   - `fit` workspace: the right end of the routed tab row.
@@ -100,7 +120,6 @@ A `narrow` page is one `max-w-5xl` column, so page edges and titles line up acro
     ```text
     /agents                      [navCrumb('/agents')]
     /agents/:id                  [navCrumb('/agents'), agentCrumb]
-    /scorers/create              [navCrumb('/scorers'), { id: 'create-scorer', label: 'Create scorer' }]
     /datasets/:id/versions       [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }]
     /experiments/review-queue    [navCrumb('/experiments'), navCrumb('/experiments/review-queue')]
     ```
@@ -141,7 +160,7 @@ A page filtered by anything more than free text has one `FilterBar` in `ActionRo
 - **Operators** start from `DEFAULT_FILTER_OPERATORS`, narrowed per field with `operators`. A status takes `is` and `is not`; a name takes `contains` and `is`.
 - **State lives in the URL.** Rebuild `value` from the URL on every render and pass `createItemId={fieldId => fieldId}`, so the chip being built and the committed chip are the same element. The time range keeps its own URL params and never round-trips through the filter items.
 - **Copy**: `aria-label="{Things} filters"` and `placeholder="Filter {things}"`, sentence case, no ellipsis.
-- `SettingsLayout` is replaced by `narrow` + `PageHeader`. Do not add it to new pages. Studio's `/settings` still uses it and will migrate.
+- On settings pages, `SettingsLayout` is replaced by `narrow` + `PageHeader`; do not add it to a new settings page. Studio's `/settings` still uses it and will migrate. Create and edit form pages are the exception: they use `FormLayout`, or the `SettingsLayout` frame where `FormLayout` is not installed.
 
 ### Narrow pages own the gap below their title
 
@@ -204,6 +223,7 @@ Nothing to show, or a failure?        -> EmptyState variant="fill"
 
 <quality-checklist>
 - [ ] The variant matches the content's shape (index or side-by-side dashboard: `container`, one-entity workspace: `fit`, one column: `narrow`), and the header decision was made separately
+- [ ] A create or edit form page uses `FormLayout`, or the `SettingsLayout` frame where `FormLayout` is not installed, with no breadcrumbs and never `narrow`
 - [ ] `narrow` pages have a compound `PageHeader` in `header`; no `MainHeader`, `EntityHeader`, or hand-built title; content sets no width and renders no `h1`
 - [ ] A `narrow` reading body sets `mt-6` below its title and `pb-16` at the end; container dashboards do not duplicate the frame's padding
 - [ ] Rows of data are an inset `Table` (`DataList` only for list navigation), settings are `SettingsGroup` > `SettingsContainer` > `SettingsRow`, and cards are not nested around rims

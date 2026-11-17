@@ -10,12 +10,12 @@ The shapes come from pages that shipped in October 2026, so the compositions may
 
 ## Pick the page
 
-| You are building                                                                       | Start from                     | Frame                                                     |
-| -------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------- |
-| A settings-like overview read top to bottom: billing, plan, account, an entity summary | `pages/billing-overview.tsx`   | `narrow`, `PageHeader` with actions                       |
-| A view that opens on filters, with KPIs and a breakdown: usage, metrics, activity      | `pages/usage-dashboard.tsx`    | `container`, breadcrumbs and `actionRow`, no `PageHeader` |
-| A page that is mostly charts: metrics, observability, requests                         | `pages/requests-dashboard.tsx` | `container`, breadcrumbs and `actionRow`, no `PageHeader` |
-| A form that creates or edits one thing: new project, new agent, edit settings          | `pages/create-project.tsx`     | `narrow`, `PageHeader.Eyebrow` back link, two-zone form   |
+| You are building                                                                       | Start from                     | Frame                                                              |
+| -------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------ |
+| A settings-like overview read top to bottom: billing, plan, account, an entity summary | `pages/billing-overview.tsx`   | `narrow`, `PageHeader` with actions                                |
+| A view that opens on filters, with KPIs and a breakdown: usage, metrics, activity      | `pages/usage-dashboard.tsx`    | `container`, breadcrumbs and `actionRow`, no `PageHeader`          |
+| A page that is mostly charts: metrics, observability, requests                         | `pages/requests-dashboard.tsx` | `container`, breadcrumbs and `actionRow`, no `PageHeader`          |
+| A form that creates or edits one thing: new project, new agent, edit destination       | `pages/create-project.tsx`     | two-zone form; the frame is `FormLayout`, not this file's `narrow` |
 
 When none fits, walk the width and header trees in `../rules/page-frame.md` and start from the closest file.
 

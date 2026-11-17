@@ -42,10 +42,10 @@ Otherwise, one of a short fixed list                            -> Select
 
 ## Forms
 
-A create or edit form has two zones:
+A create or edit form page sits in `FormLayout` ("Create and edit form pages" in `page-frame.md`), which sets its width. The form has two zones:
 
 ```tsx
-<form noValidate onSubmit={submit} className="flex max-w-160 flex-col gap-6">
+<form noValidate onSubmit={submit} className="flex flex-col gap-6">
   <Field invalid={Boolean(errors.name)}>                                               {/* free text: stacked, full width */}
     <FieldLabel required>Name</FieldLabel>
     <Input name="name" placeholder="Support triage" />
