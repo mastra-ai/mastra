@@ -76,7 +76,7 @@ export function OnboardingDoneRow({
           className="bg-foreground text-background grid size-6 shrink-0 place-items-center rounded-full"
           aria-hidden="true"
         >
-          <IconCheckmark2Medium className="size-3.5" />
+          <IconCheckmark2Medium className="size-icon-sm" />
         </span>
         <Txt as="span" tone="muted" className="w-20 shrink-0">
           {label}

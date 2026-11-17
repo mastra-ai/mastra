@@ -24,6 +24,7 @@ import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
@@ -1232,7 +1233,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ]);
         }, 60_000);
 
-        it("files a work-less project's GitHub arrivals on the app's board, where its routes place them", async () => {
+        it("files a work-less project's GitHub arrivals on the app's board where its routes place them, and no others", async () => {
           stubModel();
           const orgId = `org-${randomUUID()}`;
           const replica = await boot(await isolatedDatabase(), orgId);
@@ -1280,6 +1281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             recheckMs: 0,
           });
           const configVersion = 'work-less-arrivals-v1';
+          const intake = replica.storage.getDomain<IntakeStorage>('intake');
+          await intake.saveConfig({ orgId, config: { github: { enabled: true, sourceIds: ['acme/ops'] } } });
           const rules = new GithubRules({
             github: {
               rules: resolveGithubRules(),
@@ -1289,6 +1292,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControl,
             integrationStorage: replica.storage.getDomain<IntegrationStorage>('integrations').forIntegration('github'),
             projects: replica.storage.getDomain<FactoryProjectsStorage>('projects'),
+            intake,
             storage: workItems,
             boards,
             configVersion,
@@ -1339,18 +1343,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           });
 
           const cards = await workItems.list(scope);
-          // No route takes the issue: it lands on the project's first board, in its initial phase.
-          expect(cards.find(card => card.title === 'Disk alert')).toMatchObject({ board: 'ops', stages: ['inbox'] });
+          // A project created now places by intake order: no route takes the issue, so it is Not
+          // routed rather than filed on the first board.
           expect(cards.find(card => card.title === 'Raise the disk limit')).toMatchObject({
             board: 'ops',
             stages: ['review'],
           });
-          expect(cards).toHaveLength(2);
+          expect(cards).toHaveLength(1);
+          expect((await replica.boards.listNotRouted(scope)).notRouted).toMatchObject([{ title: 'Disk alert' }]);
 
-          // A card a person files without a board lands there too.
-          const filed = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
-            title: 'Rotate keys',
+          // A card a person files without a board no rule takes is refused until they pick one.
+          const path = `/web/factory/projects/${projectId}/work-items`;
+          expect(await replica.send('POST', path, { title: 'Rotate keys' })).toMatchObject({
+            status: 422,
+            json: { error: 'intake_board_required' },
           });
+          const filed = await replica.send('POST', path, { title: 'Rotate keys', board: 'ops' });
           expect(filed.status, JSON.stringify(filed.json)).toBe(200);
           expect(filed.json.workItem).toMatchObject({ board: 'ops', stages: ['inbox'] });
         }, 60_000);

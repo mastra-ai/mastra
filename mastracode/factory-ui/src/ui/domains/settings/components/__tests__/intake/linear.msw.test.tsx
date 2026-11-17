@@ -50,8 +50,6 @@ describe('IntakeSection linear', () => {
       expect(screen.getByText(/1 project or team paused/)).toBeInTheDocument();
       expect(screen.queryByText(/linear-project:/)).not.toBeInTheDocument();
       if (connected) expect(await screen.findByText('Labs roadmap')).toBeInTheDocument();
-      if (connected) expect(screen.getByRole('button', { name: 'Connect another Linear workspace' })).toBeEnabled();
-      else expect(screen.queryByRole('button', { name: /^Connect .*Linear/ })).not.toBeInTheDocument();
       await userEvent.click(paused);
       await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject]));
     },
@@ -216,29 +214,27 @@ describe('IntakeSection linear', () => {
       await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({}));
     });
 
-    it('keeps repository mapping available while Linear sync is off', async () => {
+    it('keeps a paused selection repository mapping when a source is added', async () => {
       seedGithubProject();
-      useIntakeHandlers({
-        config: { ...baseConfig(), linear: { enabled: false, sourceIds: ['lproj-1'] } },
+      const saved = useIntakeHandlers({
+        config: {
+          ...baseConfig(),
+          linear: { enabled: false, sourceIds: ['lproj-1'], repositoryByLinearProject: { 'lproj-1': 'mastra' } },
+        },
       });
-      server.use(
-        http.get(BINDINGS_URL, () =>
-          HttpResponse.json({
-            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1' }],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-          HttpResponse.json({
-            projects: [{ id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] }],
-          }),
-        ),
-      );
 
       renderIntakeSection();
+      await openSourcePicker('Linear projects and teams');
+      const projects = await screen.findByRole('group', { name: 'Linear projects and teams' });
+      await userEvent.click(within(projects).getAllByRole('button', { name: 'Add Shared initiative' })[0]);
 
-      expect(
-        await screen.findByRole('button', { name: 'Add repository mapping to Linear repository mappings' }),
-      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(saved.at(-1)?.linear).toMatchObject({
+          enabled: true,
+          sourceIds: ['lproj-3'],
+          repositoryByLinearProject: { 'lproj-1': 'mastra' },
+        }),
+      );
     });
 
     it('maps projects included through a team source to that team’s routed Factory', async () => {
@@ -481,7 +477,7 @@ describe('IntakeSection linear', () => {
   });
 
   describe('given Linear workspaces are connected through Mastra Platform', () => {
-    it('keeps the card free of connect prompts and offers another workspace under Add a source', async () => {
+    it('keeps the card free of connect prompts and offers another workspace on its card', async () => {
       useIntakeHandlers({ status: linearWorkspaceStatus });
 
       renderIntakeSection();
@@ -489,11 +485,7 @@ describe('IntakeSection linear', () => {
       const linearSection = await screen.findByRole('region', { name: 'Linear' });
       expect(await within(linearSection).findByText('Mastra Labs')).toBeInTheDocument();
       expect(within(linearSection).queryByRole('button', { name: /connect/i })).not.toBeInTheDocument();
-      expect(
-        within(screen.getByRole('region', { name: 'Add a source' })).getByRole('button', {
-          name: 'Connect another Linear workspace',
-        }),
-      ).toBeEnabled();
+      expect(within(linearSection).getByRole('button', { name: 'Add workspace to Linear' })).toBeEnabled();
     });
   });
 
@@ -526,10 +518,9 @@ describe('IntakeSection linear', () => {
 
       expect(await screen.findByText('Connect a Linear workspace to sync its issues.')).toBeInTheDocument();
       expect(
-        within(screen.getByRole('region', { name: 'Add a source' })).getByRole('button', { name: 'Connect Linear' }),
+        within(screen.getByRole('region', { name: 'Sources' })).getByRole('button', { name: 'Connect Linear' }),
       ).toBeEnabled();
       expect(screen.queryByRole('button', { name: 'Add Q3 Roadmap' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('switch', { name: 'Sync Linear issues' })).not.toBeInTheDocument();
     });
   });
 

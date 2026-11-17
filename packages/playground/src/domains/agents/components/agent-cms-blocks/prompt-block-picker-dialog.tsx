@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -91,10 +92,10 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
               <Txt variant="caption">Loading prompt blocks...</Txt>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
-              <IconFileText className="h-8 w-8" />
-              <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
-            </div>
+            <EmptyState
+              iconSlot={<IconFileText />}
+              titleSlot={search ? 'No matching prompt blocks' : 'No prompt blocks available'}
+            />
           ) : (
             <div className="flex flex-col gap-1">
               {filtered.map(block => (

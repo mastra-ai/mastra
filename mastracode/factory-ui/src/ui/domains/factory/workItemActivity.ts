@@ -206,8 +206,3 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
 }
-
-/** Comments render as themselves; the audit row each one also writes would show it twice. */
-export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
-  return activity.events.filter(event => !event.action.includes('.comment_'));
-}

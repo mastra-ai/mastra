@@ -1,5 +1,61 @@
 # @mastra/playground-ui
 
+## 69.1.0-alpha.4
+
+### Minor Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Opening a Knowledge page now shows it in a panel beside the Pages tree instead of replacing the graph, and the graph stops drawing while the page is open. The page's right column gains a Details list with its scope, last update, author, creation date and version. ([#30588](https://github.com/mastra-ai/mastra/pull/30588))
+
+### Patch Changes
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- New feedback comments now show up in the list as soon as you submit them, instead of after the next refresh. Lists from `useTraceFeedback` and `useSpanFeedback` show the comment right away, remove it if the submit fails, and keep showing it until the list returns the stored comment or 60 seconds pass, whichever comes first. While a comment is waiting to be stored, the list refreshes every 3 seconds instead of every 30 seconds. ([#30515](https://github.com/mastra-ai/mastra/pull/30515))
+
+  Comments that are not stored yet have `isPending: true`, so you can hide actions such as delete until the stored comment arrives:
+
+  ```tsx
+  const { data } = useTraceFeedback({ traceId });
+
+  data?.feedback.map(item => (item.isPending ? <span>Sending…</span> : <FeedbackActions item={item} />));
+  ```
+
+  In Studio, a comment that is not stored yet shows "Sending…" instead of its review status, and its Mark reviewed and Delete actions stay hidden until the stored comment arrives.
+
+  `useCreateFeedback` now runs your `onMutate`, `onError` and `onSuccess` options in addition to its own behavior. Before, passing `onSuccess` skipped the hook's list refresh.
+
+- `Sidebar.NavShowMore` accepts a `ref` to its button, so an app can move focus to it, for example when the other toggle disappears after a click. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+  ```tsx
+  const showLess = useRef<HTMLButtonElement>(null);
+
+  <Sidebar.NavShowMore ref={showLess} foldedCount={20} expanded onExpandedChange={collapse} />;
+
+  showLess.current?.focus();
+  ```
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`83a6d17`](https://github.com/mastra-ai/mastra/commit/83a6d17903e678df0f0a788daf2d08c64cc0b7d5), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/react@1.15.1-alpha.4
+  - @mastra/client-js@1.60.1-alpha.4
+  - @mastra/ai-sdk@1.12.0
+
 ## 69.1.0-alpha.3
 
 ### Minor Changes

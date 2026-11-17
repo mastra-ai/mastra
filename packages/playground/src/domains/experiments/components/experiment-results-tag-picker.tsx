@@ -42,7 +42,9 @@ export function ExperimentResultsTagPicker({
     const existing = sortedVocabulary.map(tag => ({
       label: tag,
       value: tag,
-      end: appliedToAll.has(tag) ? <IconCheckmark2Medium data-testid="tag-applied" className="size-3.5" /> : undefined,
+      end: appliedToAll.has(tag) ? (
+        <IconCheckmark2Medium data-testid="tag-applied" className="size-icon-sm" />
+      ) : undefined,
     }));
     const trimmed = search.trim();
     const canCreate = trimmed.length > 0 && !sortedVocabulary.includes(trimmed);

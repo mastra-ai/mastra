@@ -26,13 +26,13 @@ export function ShowMore({
     <li className="-mx-2 flex items-center gap-1">
       {left > 0 && (
         <button type="button" onClick={onMore} className={button}>
-          <IconChevronDownMedium className="size-3.5 shrink-0" />
+          <IconChevronDownMedium className="size-icon-sm shrink-0" />
           Show {Math.min(left, pageSize)} more
         </button>
       )}
       {shown > limit && (
         <button type="button" onClick={onLess} className={button}>
-          <IconChevronTopMedium className="size-3.5 shrink-0" />
+          <IconChevronTopMedium className="size-icon-sm shrink-0" />
           Show top {limit}
         </button>
       )}

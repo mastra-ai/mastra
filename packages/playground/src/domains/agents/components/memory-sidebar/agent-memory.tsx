@@ -216,7 +216,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                 <Txt as="span" variant="body" className="block">
                   Learn about semantic recall
                 </Txt>
-                <IconSquareArrowTopRight className="h-3 w-3" />
+                <IconSquareArrowTopRight className="size-icon-xs" />
               </a>
             </div>
           )}

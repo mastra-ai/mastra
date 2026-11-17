@@ -10,6 +10,15 @@ const maskToken = '__CENTRAL_MASK_ID__';
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const icons = [...new Set([...manifest.icons, ...process.argv.slice(2)])].sort();
+const opticalInset = manifest.opticalInset ?? {};
+const badInset = Object.entries(opticalInset).filter(
+  ([name, inset]) => !icons.includes(name) || !(Number.isFinite(inset) && inset > 0),
+);
+if (badInset.length > 0) {
+  throw new Error(
+    `opticalInset needs a positive number for an icon in the set: ${badInset.map(([name]) => name).join(', ')}`,
+  );
+}
 
 if (!process.env.CENTRAL_LICENSE_KEY) {
   throw new Error('Set CENTRAL_LICENSE_KEY to the Mastra Central Icons license key to install the icon package.');
@@ -33,9 +42,16 @@ const toAttribute = value => {
   return `{${JSON.stringify(value)}}`;
 };
 
-const toJsx = (node, Fragment) => {
+const scaleStroke = (value, strokeScale) => {
+  if (strokeScale === 1) return value;
+  const scaled = Number((Number(value) * strokeScale).toFixed(4));
+  if (!Number.isFinite(scaled)) throw new Error(`Cannot scale strokeWidth ${String(value)}`);
+  return String(scaled);
+};
+
+const toJsx = (node, Fragment, strokeScale = 1) => {
   if (node === null || node === undefined || node === false) return '';
-  if (Array.isArray(node)) return node.map(child => toJsx(child, Fragment)).join('');
+  if (Array.isArray(node)) return node.map(child => toJsx(child, Fragment, strokeScale)).join('');
   if (typeof node.type !== 'string' && node.type !== Fragment) {
     throw new Error(`Unexpected element type in icon shapes: ${String(node.type)}`);
   }
@@ -43,9 +59,9 @@ const toJsx = (node, Fragment) => {
   const tag = node.type === Fragment ? '' : node.type;
   const { children, ...props } = node.props;
   const attributes = Object.entries(props)
-    .map(([key, value]) => ` ${key}=${toAttribute(value)}`)
+    .map(([key, value]) => ` ${key}=${toAttribute(key === 'strokeWidth' ? scaleStroke(value, strokeScale) : value)}`)
     .join('');
-  const inner = toJsx(children, Fragment);
+  const inner = toJsx(children, Fragment, strokeScale);
 
   return inner ? `<${tag}${attributes}>${inner}</${tag}>` : `<${tag}${attributes} />`;
 };
@@ -75,13 +91,14 @@ try {
     const module = await import(pathToFileURL(join(packageDir, name, 'index.mjs')).href);
     const element = module[name].type.render({}, null);
     const shapes = element.props.renderShapes ? element.props.renderShapes(maskToken) : element.props.children;
-    const jsx = toJsx(shapes, Fragment);
+    const inset = opticalInset[name] ?? 0;
+    const jsx = toJsx(shapes, Fragment, (24 + 2 * inset) / 24);
     const body = Array.isArray(shapes) ? `<>${jsx}</>` : jsx;
     const parameter = jsx.includes('${maskId}') ? 'maskId' : '()';
 
     writeFileSync(
       join(iconsDir, `${name}.tsx`),
-      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body}));\n`,
+      `import { createCentralIcon } from './create-central-icon';\n\nexport const ${name} = createCentralIcon('${name}', ${parameter} => (${body})${inset ? `, ${inset}` : ''});\n`,
     );
   }
 

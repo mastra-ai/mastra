@@ -60,7 +60,7 @@ const UNEMBED_FAILED =
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
 async function embed(
   host: KnowledgePageToolHost,
-  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  work: (index: KnowledgeSemanticIndex) => Promise<unknown>,
   failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
