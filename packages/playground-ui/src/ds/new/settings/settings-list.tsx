@@ -76,7 +76,18 @@ export type SettingsItemProps = Omit<ComponentProps<'div'>, 'title'> & {
   children?: ReactNode;
 };
 
-/** One thing in a settings list (an account, a member, a session, a source). Goes in a `SettingsContainer`. */
+/**
+ * One thing in a settings list (an account, a member, a session, a source, a package version). Its right side holds
+ * the item's status or its own actions (Remove, Revoke, Copy), not a control that changes a setting. Goes in a
+ * `SettingsContainer`, usually under a `SettingsListHeader`.
+ *
+ * For a setting the person changes (an input, select or switch with a label), use `SettingsRow` instead.
+ *
+ * @example
+ * <SettingsItem media={<Avatar size="md" … />} title="Ada Lovelace" description="ada@example.com">
+ *   <Button size="sm" variant="ghost">Remove</Button>
+ * </SettingsItem>
+ */
 export function SettingsItem({ media, title, description, children, className, ...props }: SettingsItemProps) {
   return (
     <div data-slot="settings-item" className={cn('flex min-w-0 items-center gap-3', className)} {...props}>

@@ -142,8 +142,13 @@ export function SlackConnectionSettings() {
               onClick={connectSlack}
               className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
             >
-              <SettingsRow
-                label="Slack"
+              <SettingsItem
+                media={
+                  <SettingsItemIcon>
+                    <SlackIcon />
+                  </SettingsItemIcon>
+                }
+                title="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
                 <Txt
@@ -155,7 +160,7 @@ export function SlackConnectionSettings() {
                   Connect Slack
                   <IconChevronRightMedium aria-hidden="true" />
                 </Txt>
-              </SettingsRow>
+              </SettingsItem>
             </button>
           </SettingsContainer>
         </SettingsSubsection>

@@ -48,7 +48,19 @@ export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: 
   );
 }
 
-/** One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`. */
+/**
+ * One setting the person changes: a label, an optional one-line description, and the control that changes it. The
+ * row is a form field, so its label names the control. Goes in a `SettingsContainer`.
+ *
+ * For one thing in a list (an account, a member, an API key, a package version), use `SettingsItem` instead: a row
+ * with no control, or one per record in a `.map`, is a list item. A setting someone may not change stays a
+ * `SettingsRow` with `viewOnly`.
+ *
+ * @example
+ * <SettingsRow label="Theme" description="Color scheme for the interface.">
+ *   <ThemeToggle />
+ * </SettingsRow>
+ */
 export function SettingsRow({
   label,
   description,
@@ -113,7 +125,15 @@ export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   controlPlacement?: 'side' | 'below';
 };
 
-/** A `SettingsRow` for a group of controls (radios, several switches), labelled by a legend. */
+/**
+ * A `SettingsRow` for one setting made of several controls (radios, several switches), labelled by a legend. Same
+ * rule as `SettingsRow`: a setting the person changes, never a list entry.
+ *
+ * @example
+ * <SettingsFieldsetRow label="Notify me about" controlPlacement="below">
+ *   <Checkbox … />
+ * </SettingsFieldsetRow>
+ */
 export function SettingsFieldsetRow({
   label,
   description,
