@@ -116,11 +116,15 @@ describe('a suspension stored by a process that is gone', () => {
     const reopened = await second.createSession({ id: 'session-1', ownerId: 'owner-1', threadId } as never);
     expect(reopened.thread.getId()).toBe(threadId);
 
-    const { runs } = await reopened.machinery.getAgent().listSuspendedRuns({
-      threadId,
-      resourceId: reopened.identity.getResourceId(),
+    // `sendMessage` resolves once the prompt is shown, which can be before the loop's
+    // suspended snapshot is written.
+    await vi.waitFor(async () => {
+      const { runs } = await reopened.machinery.getAgent().listSuspendedRuns({
+        threadId,
+        resourceId: reopened.identity.getResourceId(),
+      });
+      expect(runs.flatMap(run => run.toolCalls.map(call => call.toolCallId))).toContain('call-1');
     });
-    expect(runs.flatMap(run => run.toolCalls.map(call => call.toolCallId))).toContain('call-1');
 
     // What the tool-suspension route does before claiming.
     await reopened.restoreStoredToolSuspension('call-1');

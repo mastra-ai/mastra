@@ -5450,6 +5450,8 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle: fallBackWhenIdle ? { ...ifIdle, behavior: 'discard' } : ifIdle,
           ...(scopes ? { scopes } : {}),
+          // A reloaded chat rebuilds its transcript from storage, so store what the user sent now.
+          storeOnAccept: true,
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
         // Only callers that observe the outcome may see `accepted` reject; a plain
@@ -5588,6 +5590,7 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
         ...(scopes ? { scopes } : {}),
+        storeOnAccept: true,
       });
       void result.accepted.then(
         settled => {
@@ -5912,7 +5915,7 @@ export class Session<TState = unknown> {
         messageAuthor || providerOptions
           ? { contents: messageInput, ...(messageAuthor ? { author: messageAuthor } : {}), providerOptions }
           : messageInput,
-        scopes?.length ? { ...target, scopes } : target,
+        { ...target, ...(scopes?.length ? { scopes } : {}), storeOnAccept: true },
       );
 
     if (wasActive) {
@@ -6051,6 +6054,7 @@ export class Session<TState = unknown> {
           resourceId,
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
+          storeOnAccept: true,
         },
       ).accepted;
     } finally {

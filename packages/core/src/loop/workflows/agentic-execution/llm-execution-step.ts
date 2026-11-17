@@ -8,6 +8,7 @@ import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
 import { startRunStep } from '../../../agent/run-lease-fence';
 import { createSignal } from '../../../agent/signals';
+import { settleAcceptedSignalStores } from '../../../agent/store-accepted-signal';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
@@ -1794,6 +1795,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
         }
+
+        // A message stored when it was accepted must land before anything in this step saves
+        // the same row again (observational memory saves in processInputStep). The message
+        // stays stored even if a processor below rejects it, so this need not wait for them.
+        await settleAcceptedSignalStores(messageList, logger);
 
         // Captured before processors can rotate the active response id.
         const inputStepAttemptMessageId = currentMessageId;
