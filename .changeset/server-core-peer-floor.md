@@ -3,6 +3,7 @@
 '@mastra/memory': patch
 '@mastra/agent-builder': patch
 '@mastra/editor': patch
+'@mastra/code-sdk': patch
 '@mastra/deployer': patch
 '@mastra/deployer-cloud': patch
 '@mastra/deployer-cloudflare': patch
@@ -21,4 +22,4 @@
 'mastra': patch
 ---
 
-Raised the @mastra/core peer floor to 1.84.0 so it matches @mastra/server, which now uses stripClientAuthoredTurnMarks.
+Raised the @mastra/core peer floor to 1.85.0, the first release that exports the turn markup helpers these packages use or depend on.
