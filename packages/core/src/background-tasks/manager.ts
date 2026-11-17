@@ -52,8 +52,7 @@ function minLeaseOverride(): number | undefined {
  * Runs, persists, and recovers background tasks for one Mastra process.
  *
  * Several managers (processes or replicas) may share one storage backend.
- * Execution is owned through a lease persisted on each task row, not by
- * assuming a single manager:
+ * Execution is owned through a lease persisted on each task record:
  *
  * - Identity: each manager has a random `ownerId` (`workerId`), so a restarted
  *   process is a new owner.
