@@ -183,10 +183,12 @@ vi.mock('@mastra/core/llm', () => ({
     this.apiKey = config?.apiKey;
     this.baseUrl = config?.baseUrl;
     this.customFetch = config?.customFetch;
-    // Mirrors the real gateway: the version variable, then organization keys, select Gateway v2.
+    // Mirrors the real gateway: a project key selects v1, then the version variable or an
+    // organization key selects Gateway v2.
     this.isV2 = vi.fn(() => {
-      if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
       const key = config?.apiKey ?? process.env.MASTRA_GATEWAY_API_KEY;
+      if (key?.startsWith('msk_')) return false;
+      if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
       return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
     });
     this.resolveLanguageModel = vi.fn((args: Record<string, unknown>) => ({
