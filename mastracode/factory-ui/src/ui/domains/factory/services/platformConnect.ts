@@ -157,6 +157,51 @@ export async function listConnectTools(baseUrl: string): Promise<ConnectTools> {
   return requestJson<ConnectTools>(baseUrl, '/web/integrations/platform/connect-tools');
 }
 
+/** One tool a session gets from the Connect tools source, or one Factory leaves out by default. */
+export interface ConnectToolInfo {
+  name: string;
+  description: string | null;
+  /** The tool pauses the run until someone approves each call. */
+  requiresApproval: boolean;
+  /** Factory leaves this default Connect tool out of sessions: its name says it deletes or archives. */
+  excluded?: 'destructive';
+}
+
+export interface ConnectToolList {
+  toolsSource: 'default' | 'custom';
+  tools: ConnectToolInfo[];
+}
+
+export async function listConnectToolList(baseUrl: string): Promise<ConnectToolList> {
+  return requestJson<ConnectToolList>(baseUrl, '/web/integrations/platform/connect-tools/tools');
+}
+
+export interface ConnectToolGroups {
+  /** Tools by the integration id their name starts with (`posthog_get_insight` → `posthog`). */
+  byIntegration: Map<string, ConnectToolInfo[]>;
+  /** Tools from no listed connection, such as MCP or custom tools a `tools` option adds. */
+  other: ConnectToolInfo[];
+}
+
+/** Connect names each tool `<integrationId>_<tool>`, so a tool belongs to the connection its name starts with. */
+export function groupConnectTools(tools: ConnectToolInfo[], integrationIds: string[]): ConnectToolGroups {
+  // Longest id first, so an id that starts another id can't take its tools.
+  const ids = [...new Set(integrationIds)].sort((a, b) => b.length - a.length);
+  const byIntegration = new Map<string, ConnectToolInfo[]>();
+  const other: ConnectToolInfo[] = [];
+  for (const tool of tools) {
+    const id = ids.find(candidate => tool.name.startsWith(`${candidate}_`));
+    if (!id) {
+      other.push(tool);
+      continue;
+    }
+    const group = byIntegration.get(id) ?? [];
+    group.push(tool);
+    byIntegration.set(id, group);
+  }
+  return { byIntegration, other };
+}
+
 /**
  * The Connect settings page of the Platform project. Without the organization id, Platform's `/org/*` route fills in
  * the user's current organization.

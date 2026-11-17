@@ -4,8 +4,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { PlatformApiClient } from '../api-client.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
-import type { ConnectToolsSetupMissing } from './routes.js';
+import { buildConnectToolListRoute, buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
+import type { ConnectToolsSetupMissing, ConnectToolsSource } from './routes.js';
 
 const SESSION = {
   connectionId: 'conn-new',
@@ -31,6 +31,7 @@ function buildApp(
     connectToolsProjectId?: string;
     toolsSource?: 'default' | 'custom';
     missing?: ConnectToolsSetupMissing;
+    resolveTools?: ConnectToolsSource['resolveTools'];
   } = {},
 ): Hono {
   const app = new Hono();
@@ -45,14 +46,18 @@ function buildApp(
     fetchImpl,
   });
   const projectId = options.connectToolsProjectId;
+  const source: ConnectToolsSource | { missing: ConnectToolsSetupMissing } = projectId
+    ? {
+        client,
+        projectId,
+        toolsSource: options.toolsSource ?? 'default',
+        resolveTools: options.resolveTools ?? (async () => ({})),
+      }
+    : { missing: options.missing ?? 'no_credentials' };
   mountApiRoutes(app, [
     ...buildPlatformConnectRoutes({ auth, client }),
-    buildConnectToolsRoute(
-      auth,
-      projectId
-        ? { client, projectId, toolsSource: options.toolsSource ?? 'default' }
-        : { missing: options.missing ?? 'no_credentials' },
-    ),
+    buildConnectToolsRoute(auth, source),
+    buildConnectToolListRoute(auth, source),
   ]);
   return app;
 }
@@ -174,6 +179,50 @@ describe('platform connect routes', () => {
 
     const response = await app.request('/web/integrations/platform/connect-tools');
     expect(response.status).toBe(401);
+  });
+
+  it("lists a tools option's tools as written, flagging the ones that ask for approval", async () => {
+    const app = buildApp(org1(), vi.fn<typeof fetch>(), {
+      connectToolsProjectId: 'proj_1',
+      toolsSource: 'custom',
+      resolveTools: async () => ({
+        posthog_list_dashboards: { id: 'posthog_list_dashboards', description: '  List dashboards.\n' },
+        posthog_delete_insight: {
+          id: 'posthog_delete_insight',
+          description: 'Delete an insight.',
+          requireApproval: true,
+        },
+        tickets_lookup: { id: 'tickets_lookup' },
+      }),
+    });
+
+    const response = await app.request('/web/integrations/platform/connect-tools/tools');
+    expect(response.status).toBe(200);
+    // Factory doesn't filter a tools option, so nothing is marked as left out.
+    await expect(response.json()).resolves.toEqual({
+      toolsSource: 'custom',
+      tools: [
+        { name: 'posthog_delete_insight', description: 'Delete an insight.', requiresApproval: true },
+        { name: 'posthog_list_dashboards', description: 'List dashboards.', requiresApproval: false },
+        { name: 'tickets_lookup', description: null, requiresApproval: false },
+      ],
+    });
+  });
+
+  it('names the missing setup piece and hides setup from signed-out callers on the tool list too', async () => {
+    const missing = await buildApp(org1(), vi.fn<typeof fetch>(), { missing: 'no_project_id' }).request(
+      '/web/integrations/platform/connect-tools/tools',
+    );
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toMatchObject({ error: 'connect_tools_off', reason: 'no_project_id' });
+
+    const resolveTools = vi.fn<ConnectToolsSource['resolveTools']>(async () => ({}));
+    const signedOut = await buildApp(null, vi.fn<typeof fetch>(), {
+      connectToolsProjectId: 'proj_1',
+      resolveTools,
+    }).request('/web/integrations/platform/connect-tools/tools');
+    expect(signedOut.status).toBe(401);
+    expect(resolveTools).not.toHaveBeenCalled();
   });
 
   it('lists Jira connections and hides other providers', async () => {

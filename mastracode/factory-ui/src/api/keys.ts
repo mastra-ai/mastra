@@ -86,6 +86,7 @@ export const queryKeys = {
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
+  connectToolList: () => ['connect-tools', 'tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
