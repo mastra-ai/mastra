@@ -1,8 +1,12 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError, FactoryRuleRejectedError } from './dispatch-errors.js';
-import { publicFailureReason } from './public-failure-reason.js';
+import { FACTORY_ERROR_NAMES, publicFailureReason } from './public-failure-reason.js';
 
 function providerError(message: string, fields: Record<string, unknown>): Error {
   return Object.assign(new Error(message), { name: 'AI_APICallError', ...fields });
@@ -94,36 +98,28 @@ describe('publicFailureReason', () => {
     expect(publicFailureReason('unknown', new WorkItemUpdateConflictError('revision'))).toBe(
       'Factory automation failed (WorkItemUpdateConflictError)',
     );
-    const refused = Object.assign(new Error('connect ECONNREFUSED 10.0.3.7:5432'), { code: 'ECONNREFUSED' });
-    const wrapped = Object.assign(new Error('could not load board at db.internal', { cause: refused }), {
+    const broken = new TypeError("Cannot read properties of undefined (reading 'secretField')");
+    const wrapped = Object.assign(new Error('could not load board at db.internal', { cause: broken }), {
       name: 'StoredBoardError',
     });
     const reason = publicFailureReason('unknown', wrapped);
-    expect(reason).toBe('Factory automation failed (StoredBoardError: a network connection was refused)');
-    expect(reason).not.toContain('10.0.3.7');
+    expect(reason).toBe('Factory automation failed (StoredBoardError: TypeError)');
+    expect(reason).not.toContain('db.internal');
   });
 
-  it('describes system and database errors by their code only', () => {
-    const notFound = Object.assign(new Error('getaddrinfo ENOTFOUND db.internal'), { code: 'ENOTFOUND' });
-    expect(publicFailureReason('unknown', notFound)).toBe(
-      'Factory automation failed (a host name could not be resolved)',
-    );
-
-    const conflict = Object.assign(new Error('duplicate key value violates unique constraint "secret_idx"'), {
-      code: '23505',
-      severity: 'ERROR',
-    });
-    expect(publicFailureReason('unknown', conflict)).toBe(
-      'Factory automation failed (a database unique constraint was violated)',
-    );
-  });
-
-  it('ignores codes it does not know, and SQLSTATE-shaped codes off database errors', () => {
-    expect(publicFailureReason('unknown', Object.assign(new Error('x'), { code: 'internal-secret' }))).toBe(
-      'Factory automation failed',
-    );
-    expect(publicFailureReason('unknown', Object.assign(new Error('x'), { code: '23505' }))).toBe(
-      'Factory automation failed',
-    );
+  it('names every Factory error class or excludes it on purpose', () => {
+    // Wrappers that carry a failure code shown by other means, so naming them would hide the cause below.
+    const notNamed = new Set(['FactoryDispatchError', 'FactoryRuleRejectedError', 'RunEndedInError']);
+    const src = fileURLToPath(new URL('..', import.meta.url));
+    const declared = new Set<string>();
+    for (const file of readdirSync(src, { recursive: true, encoding: 'utf8' })) {
+      if (!file.endsWith('.ts') || file.endsWith('.test.ts')) continue;
+      for (const match of readFileSync(join(src, file), 'utf8').matchAll(/class (\w+Error) extends /g)) {
+        declared.add(match[1]!);
+      }
+    }
+    const unaccounted = [...declared].filter(name => !FACTORY_ERROR_NAMES.has(name) && !notNamed.has(name));
+    expect(unaccounted, 'add new error classes to FACTORY_ERROR_NAMES, or to notNamed here').toEqual([]);
+    expect([...FACTORY_ERROR_NAMES].filter(name => !declared.has(name))).toEqual([]);
   });
 });

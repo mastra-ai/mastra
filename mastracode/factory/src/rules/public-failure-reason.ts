@@ -43,41 +43,6 @@ const RULE_REJECTION_DETAIL: Record<FactoryRuleRejectionCode, string> = {
   card_busy: 'a run is already in flight on the card',
 };
 
-// Node and undici system error codes: they name the fault, never the host or path.
-const SYSTEM_ERROR_DETAIL: Record<string, string> = {
-  ECONNREFUSED: 'a network connection was refused',
-  ECONNRESET: 'a network connection was reset',
-  ETIMEDOUT: 'a network connection timed out',
-  ENOTFOUND: 'a host name could not be resolved',
-  EAI_AGAIN: 'a host name could not be resolved',
-  EHOSTUNREACH: 'a network host was unreachable',
-  ENETUNREACH: 'the network was unreachable',
-  EPIPE: 'a network connection closed while writing',
-  UND_ERR_CONNECT_TIMEOUT: 'a network connection timed out',
-  UND_ERR_HEADERS_TIMEOUT: 'a network response timed out',
-  UND_ERR_BODY_TIMEOUT: 'a network response timed out',
-  UND_ERR_SOCKET: 'a network connection was reset',
-  ENOSPC: 'the disk is full',
-  EMFILE: 'too many files were open',
-  EACCES: 'a file permission was denied',
-  EPERM: 'a file permission was denied',
-  ENOENT: 'a required file was missing',
-};
-
-// Postgres SQLSTATE codes.
-const DATABASE_ERROR_DETAIL: Record<string, string> = {
-  '23505': 'a database unique constraint was violated',
-  '23503': 'a database foreign key was violated',
-  '40001': 'a database transaction conflicted with another',
-  '40P01': 'a database deadlock occurred',
-  '57014': 'a database statement timed out',
-  '53300': 'the database has too many connections',
-  '08000': 'the database connection was lost',
-  '08003': 'the database connection was lost',
-  '08006': 'the database connection was lost',
-  '57P01': 'the database connection was lost',
-};
-
 // Built-in error names say what kind of fault it was without saying anything about where.
 const BUILT_IN_ERROR_NAMES = new Set([
   'AbortError',
@@ -91,7 +56,8 @@ const BUILT_IN_ERROR_NAMES = new Set([
 ]);
 
 // Factory's own error classes say where it failed; the names are in its public source.
-const FACTORY_ERROR_NAMES = new Set([
+// A test fails when a new error class is neither listed here nor excluded in public-failure-reason.test.ts.
+export const FACTORY_ERROR_NAMES: ReadonlySet<string> = new Set([
   'BoardDefinitionError',
   'BoardWriteError',
   'FactoryProjectNotFoundError',
@@ -108,15 +74,21 @@ const FACTORY_ERROR_NAMES = new Set([
   'MastraGatewayError',
   'MaterializeError',
   'PlatformApiError',
+  'PullRequestClosedError',
+  'RealtimeSessionError',
+  'ReviewBoardInUseError',
   'SessionBranchHeldError',
   'SessionOwnershipMismatchError',
   'SetupCommandError',
   'SkillInvocationError',
+  'SlackSessionStartError',
   'SourceControlConnectionNotFoundError',
   'StoredBoardError',
   'UntrustedSharedSessionError',
+  'WorkItemRelationError',
   'WorkItemRepositoryError',
   'WorkItemSourceConflictError',
+  'WorkItemSplitModeError',
   'WorkItemUpdateConflictError',
 ]);
 
@@ -154,14 +126,9 @@ function providerDetail(error: object): string | undefined {
   return http ? `${PROVIDER_FAILURE_DETAIL[kind]}, HTTP ${status}` : PROVIDER_FAILURE_DETAIL[kind];
 }
 
-function codedDetail(error: object): string | undefined {
-  if (error instanceof FactoryRuleRejectedError) return RULE_REJECTION_DETAIL[error.code];
-  const code = field(error, 'code');
-  if (typeof code !== 'string') return undefined;
-  if (Object.hasOwn(SYSTEM_ERROR_DETAIL, code)) return SYSTEM_ERROR_DETAIL[code];
-  const fromDatabase = 'severity' in error || 'routine' in error;
-  if (fromDatabase && Object.hasOwn(DATABASE_ERROR_DETAIL, code)) return DATABASE_ERROR_DETAIL[code];
-  return undefined;
+function ruleRejectionDetail(error: object): string | undefined {
+  if (!(error instanceof FactoryRuleRejectedError)) return undefined;
+  return Object.hasOwn(RULE_REJECTION_DETAIL, error.code) ? RULE_REJECTION_DETAIL[error.code] : undefined;
 }
 
 function first<T>(chain: object[], pick: (error: object) => T | undefined): T | undefined {
@@ -177,7 +144,7 @@ function publicDetail(error: unknown): string | undefined {
   const where = first(chain, candidate => namesOf(candidate).find(name => FACTORY_ERROR_NAMES.has(name)));
   const what =
     first(chain, providerDetail) ??
-    first(chain, codedDetail) ??
+    first(chain, ruleRejectionDetail) ??
     first(chain, candidate => namesOf(candidate).find(name => BUILT_IN_ERROR_NAMES.has(name)));
   if (where && what) return `${where}: ${what}`;
   return where ?? what;
