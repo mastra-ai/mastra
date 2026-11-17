@@ -1,6 +1,9 @@
 /** Registers built-in domains on fresh LibSQL storage or an isolated Postgres schema. */
 
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -138,9 +141,8 @@ export function createProviderWorkItemForTests(input: {
   };
 }
 
-/** Keep migration tests from clearing tables another Postgres test is using. */
-export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
-  const { PgFactoryStorage, PostgresStore } = await import('@mastra/pg');
+async function isolatedPostgresSchemaForTests(connectionString: string): Promise<string> {
+  const { PostgresStore } = await import('@mastra/pg');
   const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
   const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
   await admin.pool.query(`CREATE SCHEMA "${schema}"`);
@@ -150,7 +152,32 @@ export async function createIsolatedFactoryPostgresForTests(connectionString: st
     await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.close();
   });
-  return new PgFactoryStorage({ id: 'factory-test', connectionString: url.toString() });
+  return url.toString();
+}
+
+/** Keep migration tests from clearing tables another Postgres test is using. */
+export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const { PgFactoryStorage } = await import('@mastra/pg');
+  return new PgFactoryStorage({
+    id: 'factory-test',
+    connectionString: await isolatedPostgresSchemaForTests(connectionString),
+  });
+}
+
+export async function createSharedFactoryDatabaseForTests(): Promise<{
+  connect(id: string): Promise<FactoryStorageTestSeed>;
+}> {
+  if (process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres') {
+    const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+    if (!postgresUrl) throw new Error('FACTORY_TEST_POSTGRES_URL is required for the Postgres test backend.');
+    const { PgFactoryStorage } = await import('@mastra/pg');
+    const connectionString = await isolatedPostgresSchemaForTests(postgresUrl);
+    return { connect: id => createFactoryStorageForTests(new PgFactoryStorage({ id, connectionString })) };
+  }
+  const directory = await mkdtemp(join(tmpdir(), 'factory-test-'));
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
+  const url = `file:${join(directory, 'factory.db')}`;
+  return { connect: id => createFactoryStorageForTests(new LibSQLFactoryStorage({ id, url })) };
 }
 
 export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorage> {

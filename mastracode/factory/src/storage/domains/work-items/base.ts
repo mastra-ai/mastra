@@ -24,8 +24,8 @@ import {
   recordWorkItemSplitComplete,
 } from '../../../work-items/split-migration.js';
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
+import { AnnouncedLists } from '../../announced-lists.js';
 import { ensureLegacyCollections } from '../../legacy-collections.js';
-import { ProbedList, probeNewest } from '../../probed-list.js';
 import {
   BoardScopes,
   bumpBoardVersions,
@@ -1326,7 +1326,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listCache = new Map<string, { version: string; takenAt: number; readFrom: number; items: Card[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
-  readonly #projectSubscriptions = new ProbedList<WorkItemSubscription>();
+  readonly projectSubscriptions = new AnnouncedLists<WorkItemSubscription>();
   #boardChanged: (scope: FactoryBoardScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards: no card counts as finished until the host wires the predicate.
@@ -4207,6 +4207,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         reason: input.reason,
         created_at: new Date(),
       });
+      this.projectSubscriptions.announce({ orgId: row.org_id, factoryProjectId: row.factory_project_id });
       return toWorkItemSubscription(row);
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
@@ -4219,18 +4220,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Stop a session following a work item. Returns whether it was following. */
   async unsubscribeFromWorkItem({
     orgId,
+    factoryProjectId,
     workItemId,
     sessionId,
   }: {
     orgId: string;
+    factoryProjectId: string;
     workItemId: string;
     sessionId: string;
   }): Promise<boolean> {
     const deleted = await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {
       org_id: orgId,
+      factory_project_id: factoryProjectId,
       work_item_id: workItemId,
       session_id: sessionId,
     });
+    if (deleted > 0) this.projectSubscriptions.announce({ orgId, factoryProjectId });
     return deleted > 0;
   }
 
@@ -4265,18 +4270,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<readonly WorkItemSubscription[]> {
     const ops = super.ops;
     const where = { org_id: orgId, factory_project_id: factoryProjectId };
-    return this.#projectSubscriptions.read(
-      `${orgId}\u0000${factoryProjectId}`,
-      () => probeNewest(ops, FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, 'created_at'),
-      async () =>
-        (
-          await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
-            orderBy: [
-              ['created_at', 'asc'],
-              ['id', 'asc'],
-            ],
-          })
-        ).map(toWorkItemSubscription),
+    return this.projectSubscriptions.read({ orgId, factoryProjectId }, async () =>
+      (
+        await ops.findMany<WorkItemSubscriptionDbRow>(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, where, {
+          orderBy: [
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+        })
+      ).map(toWorkItemSubscription),
     );
   }
 
@@ -4327,12 +4329,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const candidate = await this.#cards(this.#db, { transaction: false }).findOne(where);
     if (!candidate) return null;
 
-    return this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+    let unfollowed = false;
+    const card = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
+      unfollowed = false;
       const existing = await this.#cards(ops, { transaction: true }).findOne(where);
       if (!existing) return null;
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
-      await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
+      unfollowed =
+        (await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id })) > 0;
       if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,
@@ -4346,5 +4351,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return toWorkItem(existing);
     });
+    if (card && unfollowed) this.projectSubscriptions.announce({ orgId, factoryProjectId: card.factoryProjectId });
+    return card;
   }
 }

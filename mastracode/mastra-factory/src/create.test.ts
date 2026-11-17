@@ -502,16 +502,32 @@ describe('create --tag', () => {
     expect(tinyexec.x).not.toHaveBeenCalledWith('npm', expect.arrayContaining(['view']), expect.anything());
   });
 
-  it('fails before installing when no Mastra package resolves for the tag', async () => {
+  it('fails before installing when no Mastra package is published under the tag', async () => {
+    await expect(
+      create({ projectName: 'my-factory', noPlatform: true, versionTag: 'does-not-exist', analytics }),
+    ).rejects.toThrow(
+      'No Mastra packages are published under the "does-not-exist" tag. Run `cd my-factory && npm view @mastra/core dist-tags` to see the available tags.',
+    );
+    const packageManager = detectPackageManager();
+    expect(tinyexec.x).not.toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), expect.anything());
+  });
+
+  it('fails before installing when a registry lookup fails, instead of mixing release channels', async () => {
     tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
       if (command === 'npx' && args[0] === 'degit') fs.cpSync(templateDir, args[2]!, { recursive: true });
-      if (command === 'npm' && args[0] === 'view') throw new Error('ENOTFOUND registry.npmjs.org');
+      if (command === 'npm' && args[0] === 'view') {
+        if (args[1] === '@mastra/factory') throw new Error('E503 Service Unavailable');
+        return { stdout: JSON.stringify(distTags[args[1]!]), stderr: '', exitCode: 0, killed: false };
+      }
       return { stdout: '', stderr: '', exitCode: 0, killed: false };
     });
 
     await expect(
       create({ projectName: 'my-factory', noPlatform: true, versionTag: 'alpha', analytics }),
-    ).rejects.toThrow('Could not resolve any Mastra package versions for the "alpha" tag');
+    ).rejects.toThrow(
+      'Could not look up the "alpha" versions of @mastra/factory. Run `cd my-factory && npm view @mastra/factory dist-tags` to check that the registry is reachable and the tag exists.',
+    );
+    expect(readPkg().dependencies['@mastra/core']).toBe('latest');
     const packageManager = detectPackageManager();
     expect(tinyexec.x).not.toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), expect.anything());
   });

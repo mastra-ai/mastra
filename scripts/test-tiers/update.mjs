@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { escapedFiles } from './attribute.mjs';
 import { WINDOW_DAYS, isExternalE2eTest, isJobKey } from './select.mjs';
 
 // PR failures are looked at for this long, so a fix that lands days later still counts.
@@ -655,7 +656,7 @@ function repoTestFiles() {
   return trackedTestFiles;
 }
 
-function versioningCommand(tiers, { runId, date }) {
+function versioningCommand(tiers, { runId, date, escapesOut }) {
   const jobs = runJobs(runId).filter(j => j.conclusion && j.conclusion !== 'skipped');
   const files = jobs
     .filter(j => j.conclusion === 'failure' && isFileListJob(j.name))
@@ -669,7 +670,13 @@ function versioningCommand(tiers, { runId, date }) {
   }
   // The versioning PR runs every job, so this is where new jobs join the list.
   const added = addJobKeys(tiers, ran, date);
+  const before = structuredClone(tiers);
   const moved = applyVersioningFailures(tiers, [...files, ...failedJobs], date);
+  if (escapesOut) {
+    const escaped = escapedFiles(before, moved);
+    fs.writeFileSync(escapesOut, `${JSON.stringify({ run_id: runId, ...escaped })}\n`);
+    console.error(`escaped (out before this run): ${escaped.files.length} files, ${escaped.jobs.length} jobs`);
+  }
   console.error(`versioning run ${runId}: ${moved.length} files and jobs in; new jobs: ${added.length}`);
   for (const f of moved) console.error(`  in ${f}`);
   for (const k of added) console.error(`  new ${k}`);
@@ -784,6 +791,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     days: String(LOOKBACK_DAYS),
     date: new Date().toISOString().slice(0, 10),
     budgetMinutes: String(DAILY_BUDGET_MINUTES),
+    escapesOut: null,
   };
   for (const arg of rest) {
     const m = /^--([a-z-]+)=(.*)$/.exec(arg);

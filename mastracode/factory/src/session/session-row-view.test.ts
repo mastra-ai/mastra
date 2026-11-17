@@ -4,9 +4,9 @@ import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { sessionRowsQuerySchema } from '../routes/contracts.js';
 import type { SessionRow } from '../routes/contracts.js';
 import { testCard } from '../routes/test-utils.js';
-import { isSettling, sessionActivity, sessionRowsView } from './session-row-view.js';
+import { sessionActivity, sessionRowsView } from './session-row-view.js';
 import type { SessionRowsView } from './session-row-view.js';
-import { sessionRows } from './session-rows.js';
+import { SessionRowIndex } from './session-rows.js';
 import type { RowSession } from './session-rows.js';
 
 const VIEWER = 'user-1';
@@ -172,15 +172,16 @@ describe('a card with its sessions revealed', () => {
     createdAt: new Date(AT),
     updatedAt: new Date(AT),
   });
-  const revealed = sessionRows({
-    sessions: [session('triage'), session('work'), session('review')],
-    cards: [
+  const revealed = new SessionRowIndex(
+    [session('triage'), session('work'), session('review')],
+    [
       testCard('c1', {
         stages: ['execute'],
         sessions: { triage: ref('triage'), work: ref('work'), review: ref('review') },
       }),
     ],
-    boards: createTriageWorkRegistry(),
+    createTriageWorkRegistry(),
+  ).rows({
     awaitingPerson: new Set(),
     runningSessionIds: new Set(['review']),
     parkedSessionIds: new Set(),
@@ -389,16 +390,6 @@ describe('boards and owners', () => {
   });
 });
 
-describe('isSettling', () => {
-  const coming = (updatedAt: number) => ({ materializedAt: null, updatedAt: new Date(updatedAt) });
-
-  it('settles a session still coming up for ten minutes, then stops waiting on it', () => {
-    expect(isSettling([coming(NOW - 10 * 60_000 + 1)], NOW)).toBe(true);
-    expect(isSettling([coming(NOW - 10 * 60_000)], NOW)).toBe(false);
-    expect(isSettling([{ materializedAt: new Date(NOW), updatedAt: new Date(NOW) }], NOW)).toBe(false);
-  });
-});
-
 describe('sessionActivity', () => {
   const session = (sessionId: string, materializedAt: Date | null = new Date(AT)): RowSession => ({
     id: `row-${sessionId}`,
@@ -429,7 +420,6 @@ describe('sessionActivity', () => {
       ],
       runningSessionIds: new Set(['listed', 'card-run', 'parked-and-running', 'elsewhere', VIEWER]),
       parkedSessionIds: new Set(['parked']),
-      now: NOW,
     });
 
     expect(activity).toEqual({
@@ -437,7 +427,6 @@ describe('sessionActivity', () => {
       parkedSessionIds: ['parked'],
       initializingSessionIds: ['coming'],
       cards: { working: 1, waiting: 1 },
-      settling: false,
     });
   });
 });

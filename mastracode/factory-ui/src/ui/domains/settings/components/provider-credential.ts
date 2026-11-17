@@ -10,7 +10,13 @@ export type CredentialScope = 'user' | 'org';
 
 export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 export const SIGN_IN_EXPIRED_LABEL = 'Sign-in expired';
-const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
+export const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
+
+/** Who can use a provider connected at each scope. */
+export const SCOPE_AUDIENCE: Record<CredentialScope, string> = {
+  user: 'Only you can use it.',
+  org: 'Everyone in your organization can use it.',
+};
 
 export const SHARED_SOURCE: Partial<Record<ProviderInfo['source'], { label: string; description: string }>> = {
   env: { label: 'From env', description: 'Read from the server environment' },

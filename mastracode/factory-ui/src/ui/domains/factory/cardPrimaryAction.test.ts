@@ -361,11 +361,10 @@ describe('resumeStage', () => {
 describe('cardPrimaryAction', () => {
   const handlers = {
     onApproveProposal: vi.fn(),
-    onCreateSession: vi.fn(),
     onMove: vi.fn(),
   };
 
-  it('resumes a parked card instead of leaving Open session as the only way back', () => {
+  it('resumes a parked card back into its lane', () => {
     const onMove = vi.fn();
     const action = cardPrimaryAction({
       ...handlers,
@@ -373,7 +372,6 @@ describe('cardPrimaryAction', () => {
       item: item({ plan: sessionRef('plan') }),
       move: plan,
       resumeStage: 'planning',
-      hasSession: true,
       onMove,
     });
 
@@ -389,7 +387,6 @@ describe('cardPrimaryAction', () => {
       board: work,
       item: { ...item({}), board: 'release', stages: ['queued'] },
       nextPhase: { id: 'preparing', label: 'Preparing' },
-      hasSession: false,
       onMove,
     });
 
@@ -407,7 +404,6 @@ describe('cardPrimaryAction', () => {
       item: held,
       columnStage: 'intake',
       move: plan,
-      hasSession: true,
       onMove,
     });
 
@@ -428,7 +424,6 @@ describe('cardPrimaryAction', () => {
       columnStage: 'intake',
       move: plan,
       waiting: { label: 'Review', decisionId: 'decision-1' },
-      hasSession: true,
       onApproveProposal,
       onMove,
     });
@@ -440,7 +435,7 @@ describe('cardPrimaryAction', () => {
   });
 
   it('holds only a Work card triage left in Intake, not one still triaging, past Triage since, or never triaged', () => {
-    const args = { ...handlers, board: work, move: plan, hasSession: true };
+    const args = { ...handlers, board: work, move: plan };
     expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'intake' })?.label).toBe('Accept');
     // Still in Triage: the run decides where it goes.
     expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'triage' })?.label).toBe('Plan');
@@ -467,7 +462,6 @@ describe('cardPrimaryAction', () => {
       move: review,
       resumeStage: 'review',
       waiting: { label: 'Review', decisionId: 'decision-1' },
-      hasSession: true,
       onApproveProposal,
     });
 
@@ -478,60 +472,46 @@ describe('cardPrimaryAction', () => {
 
   it('moves the card into the lane it names', () => {
     const onMove = vi.fn();
-    const action = cardPrimaryAction({ ...handlers, item: item({}), move: review, hasSession: false, onMove });
+    const action = cardPrimaryAction({ ...handlers, item: item({}), move: review, onMove });
 
     expect(action?.label).toBe('Review');
     action?.start();
     expect(onMove).toHaveBeenCalledWith('pr-review');
   });
 
-  it('falls back to opening a session on a card with no lane to offer', () => {
-    const onCreateSession = vi.fn();
-    const action = cardPrimaryAction({ ...handlers, item: item({}), hasSession: false, onCreateSession });
-
-    expect(action?.label).toBe('Start session');
-    action?.start();
-    expect(onCreateSession).toHaveBeenCalledWith({ branch: 'factory/item-item-1', threadTitle: 'one' });
+  it('offers no button on a card with no lane to offer: opening the card starts its session', () => {
+    expect(cardPrimaryAction({ ...handlers, item: item({}) })).toBeUndefined();
   });
 });
 
 describe('cardActions', () => {
-  const session = { label: 'Open session', href: '/session' };
   const retry = { label: 'Retry', start: vi.fn() };
   const run = { label: 'Investigate', start: vi.fn() };
 
-  it('leads with the likeliest click and offers a rival run only beside an idle session', () => {
+  it('leads with the likeliest click and offers nothing while a session holds the card', () => {
     const idle = { state: boardCardState({}) };
     const running = { state: boardCardState({ sessionStatus: 'working' }) };
     const labels = (actions: CardAction[]) => actions.map(action => action.label);
-    expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
-    expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
-    expect(labels(cardActions({ ...running, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...running, session, retry, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...running, retry }))).toEqual([]);
-    expect(labels(cardActions({ state: boardCardState({ sessionStatus: 'ready' }), session, run }))).toEqual([
-      'Open session',
-    ]);
+    expect(labels(cardActions({ ...idle, run }))).toEqual(['Investigate']);
+    expect(labels(cardActions({ ...idle, retry, run }))).toEqual(['Retry', 'Investigate']);
+    expect(labels(cardActions({ ...running, retry, run }))).toEqual([]);
+    expect(labels(cardActions({ state: boardCardState({ sessionStatus: 'ready' }), run }))).toEqual([]);
     expect(cardActions(idle)).toEqual([]);
   });
 
   it('lights only the click the card waits on a person for', () => {
     const idle = { state: boardCardState({}) };
-    const running = { state: boardCardState({ sessionStatus: 'working' }) };
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
-    expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
-    expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
-    expect(lit(cardActions({ ...running, session, run }))).toEqual([]);
-    expect(lit(cardActions({ ...running, session, retry, run }))).toEqual([]);
-    expect(lit(cardActions({ state: boardCardState({ held: true }), session, run }))).toEqual(['Investigate']);
+    expect(lit(cardActions({ ...idle, run }))).toEqual([]);
+    expect(lit(cardActions({ ...idle, retry, run }))).toEqual(['Retry']);
+    expect(lit(cardActions({ state: boardCardState({ held: true }), run }))).toEqual(['Investigate']);
   });
 
-  it('replaces the run with a disabled progress action until there is a session to open', () => {
+  it('replaces the run with a disabled progress action while the card moves', () => {
     const state = boardCardState({ moving: { stage: 'review', label: 'Reviewing' } });
     expect(cardActions({ state, run: { ...run, ariaLabel: 'Start suggested run: Review' } })).toEqual([
       { label: 'Moving…', start: run.start, disabled: true },
     ]);
-    expect(cardActions({ state, session, run })).toEqual([session]);
   });
 
   it('names an available suggestion accessibly and clears that name while starting it', () => {

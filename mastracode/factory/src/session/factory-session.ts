@@ -1,6 +1,7 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
+import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
 import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
@@ -414,7 +415,8 @@ export async function requireOrganizationModelKey(
   if (credentials.some(credential => credential.scope === 'org')) return;
   if (sources.customProviders) {
     await sources.customProviders.ensureReady();
-    if ((await sources.customProviders.list({ orgId: project.orgId })).length) return;
+    const organizationProviders = await sources.customProviders.list({ orgId: project.orgId });
+    if (organizationProviders.some(provider => !customEndpointUrlProblem(provider.url))) return;
   }
   throw new FactoryDispatchError(
     'factory_org_key_missing',

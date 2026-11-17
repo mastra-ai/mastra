@@ -91,8 +91,17 @@ import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import {
+  buildConnectToolListRoute,
+  buildConnectToolsRoute,
+  buildPlatformConnectRoutes,
+} from './integrations/platform/connect/routes.js';
+import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
+import {
+  platformConnectTools,
+  projectConnectTools,
+  resolveToolsInTime,
+} from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -173,6 +182,7 @@ import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
+import { shareSessionListChanges } from './session-list-changes.js';
 import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -530,16 +540,15 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   return new PlatformFactorySandbox();
 }
 
-function platformConnectProjectId(): string | undefined {
-  if (!hasPlatformCredentials()) return undefined;
+/**
+ * The Platform project whose Mastra Connect connections this Factory uses, or
+ * the one piece of setup that's missing. Independent of the `tools` option:
+ * Settings › Tools lists the project's connections either way.
+ */
+function platformConnectSetup(): { projectId: string } | { missing: ConnectToolsSetupMissing } {
+  if (!hasPlatformCredentials()) return { missing: 'no_credentials' };
   const projectId = process.env.MASTRA_PROJECT_ID?.trim();
-  if (!projectId) {
-    console.warn(
-      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
-    );
-    return undefined;
-  }
-  return projectId;
+  return projectId ? { projectId } : { missing: 'no_project_id' };
 }
 
 function warnIgnoredMcpConfig(): void {
@@ -642,6 +651,7 @@ export class MastraFactory {
   #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
+  #unsubscribeSessionListChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -1001,6 +1011,10 @@ export class MastraFactory {
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
     this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
+    this.#unsubscribeSessionListChanges = shareSessionListChanges(eventBus, {
+      sourceControl: sourceControlStorage,
+      workItems: workItemsStorage,
+    });
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -1780,9 +1794,34 @@ export class MastraFactory {
           return item ? boundChangeRequestNumber(await toBoardSource(boards).load(binding), item) : undefined;
         },
       });
-    const connectToolsProjectId = this.#config.tools === undefined ? platformConnectProjectId() : undefined;
+    const connectSetup = platformConnectSetup();
+    const connectToolsSource = this.#config.tools === undefined ? 'default' : 'custom';
+    if (connectToolsSource === 'default' && 'missing' in connectSetup && connectSetup.missing === 'no_project_id') {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+      );
+    }
     const sessionTools =
-      this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
+      this.#config.tools ?? ('projectId' in connectSetup ? platformConnectTools(connectSetup.projectId) : undefined);
+    const configuredTools = this.#config.tools;
+    // What Settings › Tools lists: the same tools a session resolves, before Factory's default filters.
+    const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
+      'projectId' in connectSetup
+        ? {
+            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            projectId: connectSetup.projectId,
+            toolsSource: connectToolsSource,
+            resolveTools:
+              configuredTools === undefined
+                ? projectConnectTools(connectSetup.projectId)
+                : async ({ requestContext }: { requestContext: RequestContext }) =>
+                    resolveToolsInTime(
+                      Promise.resolve(
+                        typeof configuredTools === 'function' ? configuredTools({ requestContext }) : configuredTools,
+                      ),
+                    ),
+          }
+        : connectSetup;
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -2354,12 +2393,8 @@ export class MastraFactory {
                 client: new PlatformApiClient(platformApiClientConfigFromEnv()),
               })
             : []),
-          buildConnectToolsRoute(
-            routeAuth,
-            connectToolsProjectId
-              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
-              : undefined,
-          ),
+          buildConnectToolsRoute(routeAuth, connectToolsList),
+          buildConnectToolListRoute(routeAuth, connectToolsList),
         ],
         buildServerConfig: () => {
           // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
@@ -2674,6 +2709,9 @@ export class MastraFactory {
       const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
       this.#unsubscribeLinkedRepositoryChanges = undefined;
       await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
+      const unsubscribeSessionListChanges = this.#unsubscribeSessionListChanges;
+      this.#unsubscribeSessionListChanges = undefined;
+      await unsubscribeSessionListChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>
