@@ -1018,6 +1018,30 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await gatewayRow(buildApp(fakePlatform()))).toMatchObject({ connectWithMastraAccount: true });
     expect(await gatewayRow(buildApp())).not.toHaveProperty('connectWithMastraAccount');
   });
+  describe('the gateway origin for the web UI', () => {
+    beforeEach(async () => {
+      // An empty settings directory, so a gateway URL in the developer's own settings cannot apply.
+      vi.stubEnv('MASTRA_APP_DATA_DIR', await fs.mkdtemp(join(tmpdir(), 'factory-gateway-origin-')));
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    it.each([
+      ['https://gateway-api.mastra.ai', 'https://gateway-api.mastra.ai'],
+      ['http://127.0.0.1:4180/v1/', 'http://127.0.0.1:4180'],
+    ])('reports the origin of the configured gateway %s', async (configured, origin) => {
+      vi.stubEnv('MASTRA_GATEWAY_URL', configured);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const body = (await (await buildApp(fakePlatform()).request('/web/config/providers')).json()) as {
+        mastraGatewayOrigin?: string;
+      };
+
+      expect(body.mastraGatewayOrigin).toBe(origin);
+    });
+  });
 });
 
 describe('GET /web/config/models', () => {

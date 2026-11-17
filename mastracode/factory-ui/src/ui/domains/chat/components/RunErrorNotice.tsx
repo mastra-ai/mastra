@@ -17,6 +17,7 @@ import type { RunErrorRecovery } from '@mastra/factory/run-error';
 import { useContext } from 'react';
 import type { ComponentType } from 'react';
 
+import { useMastraGatewayOrigin } from '../../../../hooks/use-providers';
 import { ChatSessionContext } from '../context/ChatSessionContext';
 import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext';
 import { AddGatewayCreditsAction } from './AddGatewayCreditsAction';
@@ -37,7 +38,9 @@ const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType<{ entryId: string
 export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['error']; entryId: string }) {
   const session = useContext(ChatSessionContext);
   const displayedThread = useContext(ChatThreadMessagesContext);
-  const { title, message, recoveries, model } = describeRunError(error);
+  // Until the provider list loads, only the production gateway's hosts are recognized.
+  const gatewayBaseUrl = useMastraGatewayOrigin();
+  const { title, message, recoveries, model } = describeRunError(error, { gatewayBaseUrl });
   const diagnostics = JSON.stringify(
     {
       ...error,
