@@ -5,7 +5,8 @@
  * successor claimed the run and raised the memory fence. These cases run that ordering on a real
  * LibSQL file, with workflows and memory in the same store, and check that the late write carries
  * the finished run's claim to the memory domain object the adapter fences, so LibSQL's write
- * transaction rejects it. (#30182)
+ * transaction rejects it. With nobody taking over, the late suspension parks the task and a resume
+ * completes it on the same database. (#30182)
  */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -163,6 +164,8 @@ async function startDeferredResearch(engine: 'durable' | 'evented', outcome: 'su
     outputSchema: z.object({ summary: z.string() }),
     background: { enabled: true },
     execute: async ({ topic }, options) => {
+      const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
+      if (resumeData) return { summary: `Research on "${topic}": ${resumeData.notes}` };
       await toolGate.promise;
       if (outcome === 'result') return { summary: `Research on "${topic}"` };
       return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as never;
@@ -205,16 +208,20 @@ async function startDeferredResearch(engine: 'durable' | 'evented', outcome: 'su
   expect(taskId).toBeDefined();
 
   const workflows = (await storage.getStore('workflows'))!;
+  // A released claim keeps its row with no lease, unlike one that merely lapsed.
   const released = await waitFor(
     () => workflows.getRunOwnership({ runId: run.runId }),
-    record => record?.live === false,
+    record => record?.leaseExpiresAt === null,
     'the finished run to release its claim',
   );
   await cleanedUp.promise;
 
+  const manager = mastra.backgroundTaskManager!;
   return {
     memoryStore,
     workflows,
+    manager,
+    taskId: taskId!,
     thread,
     runId: run.runId,
     released: released!,
@@ -222,7 +229,7 @@ async function startDeferredResearch(engine: 'durable' | 'evented', outcome: 'su
     storedToolCall: async () => toolCallIn((await memoryStore.listMessages({ ...thread, perPage: false })).messages),
     settledTask: () =>
       waitFor(
-        () => mastra.backgroundTaskManager!.getTask(taskId!),
+        () => manager.getTask(taskId!),
         (task: BackgroundTask | null) => task?.status !== 'pending' && task?.status !== 'running',
         'the background task to settle',
       ),
@@ -268,8 +275,50 @@ async function expectSuccessorUnchanged(research: Research, successor: RunFence)
 }
 
 describe.each(['durable', 'evented'] as const)(
-  '%s agent on LibSQL: late background writes after a takeover',
+  '%s agent on LibSQL: late background writes after the run finished',
   engine => {
+    // Technical: the late suspension's save required the finished run to still own its claim,
+    // which LibSQL showed as released, so the task failed with DURABLE_AGENT_EXECUTION_UNVERIFIED.
+    // With nobody claiming the run since, the save now passes and storage accepts the claim. (#30182)
+    it('parks a deferred tool that asks for input after its run finished, and resumes it (#30182)', async () => {
+      const research = await startDeferredResearch(engine, 'suspend');
+      research.letToolGo();
+
+      const parked = await research.settledTask();
+      expect({ status: parked?.status, error: parked?.error?.message }).toEqual({
+        status: 'suspended',
+        error: undefined,
+      });
+      expect(parked?.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+      const open = await research.storedToolCall();
+      expect(open?.suspended).toMatchObject({
+        taskId: research.taskId,
+        suspendPayload: { awaiting: 'analyst-approval', topic: 'near' },
+      });
+
+      await research.manager.resume(research.taskId, { notes: 'looks promising' });
+      const done = await waitFor(
+        () => research.manager.getTask(research.taskId),
+        (task: BackgroundTask | null) => task?.status === 'completed' || task?.status === 'failed',
+        'the resumed task to finish',
+      );
+      expect({ status: done?.status, error: done?.error?.message, result: done?.result }).toEqual({
+        status: 'completed',
+        error: undefined,
+        result: { summary: 'Research on "near": looks promising' },
+      });
+      // The thread on LibSQL holds the answered tool call, with the open request cleared.
+      const answered = await waitFor(
+        () => research.storedToolCall(),
+        stored => stored?.invocation.state === 'result' && stored.suspended === undefined,
+        'the tool result in memory',
+      );
+      expect(answered?.invocation).toMatchObject({
+        state: 'result',
+        result: { summary: 'Research on "near": looks promising' },
+      });
+    }, 30_000);
+
     // Technical: the suspension's save passed `assertExecutionNotSuperseded` with no successor yet,
     // then reached LibSQL after a successor claimed the run and raised the memory fence.
     // `runFencedToClaim` gives the save the finished run's claim, and the write transaction rejects it. (#30182)
