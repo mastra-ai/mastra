@@ -199,6 +199,7 @@
      thickens a little as the icon grows. Components size icons; none sets a stroke. */
   :where(svg.lucide) {
     stroke-width: var(--icon-stroke-width);
+    padding: 1px;
   }
 
   :focus-visible {

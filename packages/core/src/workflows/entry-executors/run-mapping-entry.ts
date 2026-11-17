@@ -1,4 +1,4 @@
-import { resolveTemplate, traverseMappingPath } from '../mapping-template';
+import { resolveTemplate, templateReadsState, traverseMappingPath } from '../mapping-template';
 import { collectMappingStepRefs, resolveStepOutputs, stepRefId } from '../step-refs';
 import type { MappingStepEntry } from '../types';
 import type { EntryExecuteContext } from './types';
@@ -24,6 +24,16 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
     const id = stepRefId(step);
     return id !== undefined && stepOutputs.has(id) ? stepOutputs.get(id) : null;
   };
+  // Storage v2 runs serve the state through getState only, so templates get it loaded up front.
+  const readsState = Object.values(mapConfig).some(
+    (m: any) => typeof m?.template === 'string' && templateReadsState(m.template),
+  );
+  const templateCtx = {
+    inputData: ctx.inputData,
+    getInitData,
+    requestContext,
+    state: readsState ? await ctx.getState() : undefined,
+  };
 
   const result: Record<string, any> = {};
   for (const [key, mapping] of Object.entries(mapConfig)) {
@@ -40,7 +50,7 @@ export async function runMappingEntry(entry: MappingStepEntry, ctx: EntryExecute
     }
 
     if (typeof m.template === 'string') {
-      result[key] = resolveTemplate(m.template, ctx, stepOutputs);
+      result[key] = resolveTemplate(m.template, templateCtx, stepOutputs);
       continue;
     }
 

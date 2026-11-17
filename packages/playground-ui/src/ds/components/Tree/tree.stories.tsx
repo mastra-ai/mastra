@@ -1,9 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { File, FileCode, FileJson, FileText, Folder, FolderGit2, FolderPlus, Plus, Trash2 } from 'lucide-react';
+import { FolderGit2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { Tree } from './tree';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconScript } from '@/ds/icons/central/IconScript';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const meta: Meta<typeof Tree> = {
   title: 'DataDisplay/Tree',
@@ -23,28 +30,28 @@ export const Default: Story = {
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
             <Tree.Icon className="text-muted-foreground">
-              <Folder />
+              <IconFolder1 />
             </Tree.Icon>
             <Tree.Label>src</Tree.Label>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File id="src/index.ts">
               <Tree.Icon className="text-foreground">
-                <FileCode />
+                <IconScript />
               </Tree.Icon>
               <Tree.Label>index.ts</Tree.Label>
             </Tree.File>
             <Tree.Folder defaultOpen>
               <Tree.FolderTrigger>
                 <Tree.Icon className="text-muted-foreground">
-                  <Folder />
+                  <IconFolder1 />
                 </Tree.Icon>
                 <Tree.Label>components</Tree.Label>
               </Tree.FolderTrigger>
               <Tree.FolderContent>
                 <Tree.File id="src/components/App.tsx">
                   <Tree.Icon className="text-foreground">
-                    <FileCode />
+                    <IconScript />
                   </Tree.Icon>
                   <Tree.Label>App.tsx</Tree.Label>
                 </Tree.File>
@@ -52,7 +59,7 @@ export const Default: Story = {
             </Tree.Folder>
             <Tree.File id="src/utils.ts">
               <Tree.Icon className="text-foreground">
-                <FileCode />
+                <IconScript />
               </Tree.Icon>
               <Tree.Label>utils.ts</Tree.Label>
             </Tree.File>
@@ -60,19 +67,19 @@ export const Default: Story = {
         </Tree.Folder>
         <Tree.File id="package.json">
           <Tree.Icon className="text-muted-foreground">
-            <FileJson />
+            <IconFileText />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
         </Tree.File>
         <Tree.File id="README.md">
           <Tree.Icon className="text-foreground">
-            <FileText />
+            <IconFileText />
           </Tree.Icon>
           <Tree.Label>README.md</Tree.Label>
         </Tree.File>
         <Tree.File id="LICENSE">
           <Tree.Icon className="text-muted-foreground">
-            <File />
+            <IconFileBend />
           </Tree.Icon>
           <Tree.Label>LICENSE</Tree.Label>
         </Tree.File>
@@ -90,20 +97,20 @@ function WithSelectionExample() {
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
             <Tree.Icon className="text-muted-foreground">
-              <Folder />
+              <IconFolder1 />
             </Tree.Icon>
             <Tree.Label>src</Tree.Label>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File id="src/index.ts">
               <Tree.Icon className="text-foreground">
-                <FileCode />
+                <IconScript />
               </Tree.Icon>
               <Tree.Label>index.ts</Tree.Label>
             </Tree.File>
             <Tree.File id="src/utils.ts">
               <Tree.Icon className="text-foreground">
-                <FileCode />
+                <IconScript />
               </Tree.Icon>
               <Tree.Label>utils.ts</Tree.Label>
             </Tree.File>
@@ -111,7 +118,7 @@ function WithSelectionExample() {
         </Tree.Folder>
         <Tree.File id="package.json">
           <Tree.Icon className="text-muted-foreground">
-            <FileJson />
+            <IconFileText />
           </Tree.Icon>
           <Tree.Label>package.json</Tree.Label>
         </Tree.File>
@@ -134,25 +141,25 @@ export const WithActions: Story = {
               actions={
                 <span className="opacity-0 group-hover:opacity-100">
                   <Button size="icon-sm" variant="ghost" tooltip="Add folder">
-                    <FolderPlus />
+                    <IconFolderAddRight />
                   </Button>
                 </span>
               }
             >
               <Tree.Icon className="text-muted-foreground">
-                <Folder />
+                <IconFolder1 />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
             </Tree.FolderTrigger>
             <Tree.FolderContent>
               <Tree.File id="src/index.ts">
                 <Tree.Icon className="text-foreground">
-                  <FileCode />
+                  <IconScript />
                 </Tree.Icon>
                 <Tree.Label>index.ts</Tree.Label>
                 <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
                   <Button size="icon-sm" variant="ghost" tooltip="Delete file" onClick={e => e.stopPropagation()}>
-                    <Trash2 />
+                    <TrashIcon />
                   </Button>
                 </span>
               </Tree.File>
@@ -161,20 +168,20 @@ export const WithActions: Story = {
                   actions={
                     <span className="opacity-0 group-hover:opacity-100">
                       <Button size="icon-sm" variant="ghost" tooltip="Add file">
-                        <Plus />
+                        <IconPlusMedium />
                       </Button>
                     </span>
                   }
                 >
                   <Tree.Icon className="text-muted-foreground">
-                    <Folder />
+                    <IconFolder1 />
                   </Tree.Icon>
                   <Tree.Label>components</Tree.Label>
                 </Tree.FolderTrigger>
                 <Tree.FolderContent>
                   <Tree.File id="src/components/App.tsx">
                     <Tree.Icon className="text-foreground">
-                      <FileCode />
+                      <IconScript />
                     </Tree.Icon>
                     <Tree.Label>App.tsx</Tree.Label>
                   </Tree.File>
@@ -203,14 +210,14 @@ export const CustomContent: Story = {
           <Tree.FolderContent>
             <Tree.File>
               <Tree.Icon>
-                <FileCode className="text-muted-foreground" />
+                <IconScript className="text-muted-foreground" />
               </Tree.Icon>
               <Tree.Label>core</Tree.Label>
               <span className="ml-auto text-meta text-muted-foreground">v2.1.0</span>
             </Tree.File>
             <Tree.File>
               <Tree.Icon>
-                <FileCode className="text-muted-foreground" />
+                <IconScript className="text-muted-foreground" />
               </Tree.Icon>
               <Tree.Label>cli</Tree.Label>
               <span className="ml-auto text-meta text-muted-foreground">v1.0.3</span>
@@ -257,16 +264,16 @@ function WithInlineCreationExample() {
               actions={
                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
                   <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
-                    <Plus />
+                    <IconPlusMedium />
                   </Button>
                   <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
-                    <FolderPlus />
+                    <IconFolderAddRight />
                   </Button>
                 </span>
               }
             >
               <Tree.Icon className="text-muted-foreground">
-                <Folder />
+                <IconFolder1 />
               </Tree.Icon>
               <Tree.Label>src</Tree.Label>
             </Tree.FolderTrigger>
@@ -284,7 +291,7 @@ function WithInlineCreationExample() {
                   <Tree.Folder key={file.id}>
                     <Tree.FolderTrigger>
                       <Tree.Icon className="text-muted-foreground">
-                        <Folder />
+                        <IconFolder1 />
                       </Tree.Icon>
                       <Tree.Label>{file.name}</Tree.Label>
                     </Tree.FolderTrigger>
@@ -293,7 +300,7 @@ function WithInlineCreationExample() {
                 ) : (
                   <Tree.File key={file.id} id={file.id}>
                     <Tree.Icon className="text-foreground">
-                      <FileCode />
+                      <IconScript />
                     </Tree.Icon>
                     <Tree.Label>{file.name}</Tree.Label>
                   </Tree.File>

@@ -1,0 +1,9 @@
+{
+  "name": "npm-import-langfuse",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "e2e-test",
+    "@mastra/langfuse": "e2e-test"
+  }
+}

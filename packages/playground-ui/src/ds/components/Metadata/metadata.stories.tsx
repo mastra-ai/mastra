@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Clock, UserRound } from 'lucide-react';
 import { Metadata } from './metadata';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof Metadata> = {
   title: 'Layout/Metadata',
@@ -19,10 +20,10 @@ export const Issue: Story = {
       <Metadata>
         <Metadata.Item>#42</Metadata.Item>
         <Metadata.Item>
-          <UserRound size={12} aria-hidden /> damien
+          <IconUser size={12} aria-hidden /> damien
         </Metadata.Item>
         <Metadata.Item>
-          <Clock size={12} aria-hidden /> 3 hours ago
+          <IconClock size={12} aria-hidden /> 3 hours ago
         </Metadata.Item>
       </Metadata>
     </Txt>

@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { VantaRules } from './rules.js';
-import { createVantaSync } from './sync.js';
+import {
+  createVantaSync,
+  VANTA_VULNERABILITIES_SOURCE_ID,
+  vantaOrgsSyncingWithoutSource,
+  vantaVulnerabilitiesSelected,
+} from './sync.js';
 import type { VantaVulnerability } from './sync.js';
 
 const vulnerability: VantaVulnerability = {
@@ -94,5 +99,58 @@ describe('createVantaSync', () => {
 
     expect(await sync()).toMatchObject({ projects: 0 });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it('does not reconcile an unavailable snapshot or retry it for another project in the same org', async () => {
+    const ingest = vi.fn();
+    const listVulnerabilities = vi.fn(async () => null);
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities,
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-1', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
+    });
+    expect(await sync()).toMatchObject({ projects: 0, checked: 0 });
+    expect(listVulnerabilities).toHaveBeenCalledTimes(1);
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it('passes only the owning organization snapshot to each project', async () => {
+    const ingest = vi.fn();
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities: async orgId => orgId === 'org-1' ? [vulnerability] : [{ ...vulnerability, id: 'vuln-2' }],
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-2', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
+    });
+    expect(await sync()).toMatchObject({ projects: 2, checked: 2 });
+    expect(ingest.mock.calls[0]?.[0]).toMatchObject({ orgId: 'org-1', vulnerabilities: [{ id: 'vuln-1' }] });
+    expect(ingest.mock.calls[1]?.[0]).toMatchObject({ orgId: 'org-2', vulnerabilities: [{ id: 'vuln-2' }] });
+  });
+});
+
+describe('Vanta vulnerability selection', () => {
+  it('syncs only once vulnerabilities are selected', () => {
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(true);
+    expect(vantaVulnerabilitiesSelected({ enabled: true, sourceIds: null })).toBe(false);
+    expect(vantaVulnerabilitiesSelected({ enabled: false, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] })).toBe(false);
+    expect(vantaVulnerabilitiesSelected(undefined)).toBe(false);
+  });
+
+  it('selects vulnerabilities for orgs whose old switch was on with nothing selected', () => {
+    expect(
+      vantaOrgsSyncingWithoutSource([
+        { orgId: 'switch-on', config: { vanta: { enabled: true, sourceIds: null } } },
+        { orgId: 'switch-off', config: { vanta: { enabled: false, sourceIds: null } } },
+        { orgId: 'selected', config: { vanta: { enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] } } },
+        { orgId: 'no-vanta', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
+      ]),
+    ).toEqual(new Map([['switch-on', [VANTA_VULNERABILITIES_SOURCE_ID]]]));
   });
 });

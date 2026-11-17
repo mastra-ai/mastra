@@ -2,11 +2,13 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@m
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronsUpDown, Plug, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { IconChevronGrabberVertical } from '@mastra/playground-ui/icons/central/IconChevronGrabberVertical';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { useId, useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderInfo } from '../../../../../api/types';
@@ -18,6 +20,7 @@ import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { OnboardingProviderOption } from './OnboardingProviderOption';
 import { OnboardingProviderOptions } from './OnboardingProviderOptions';
 import { OnboardingProviderSummary } from './OnboardingProviderSummary';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * A lane's own provider as one row that opens a searchable list: a switch between API-key providers
@@ -36,6 +39,7 @@ export function OnboardingProviderPicker({
   const [tab, setTab] = useState<ProviderConnectionMethod>('api_key');
   const [addingCustom, setAddingCustom] = useState(false);
   const { connection, connectedProvider } = lane;
+  const customReasonId = useId();
 
   const close = () => {
     setOpen(false);
@@ -94,7 +98,7 @@ export function OnboardingProviderPicker({
               connectedProvider ? (
                 <ProviderBrandIcon provider={connectedProvider.provider} />
               ) : (
-                <Plug aria-hidden="true" />
+                <IconPlugin1 aria-hidden="true" />
               )
             }
             title={connectedProvider ? providerDisplayName(connectedProvider.provider) : 'Choose a provider'}
@@ -110,7 +114,7 @@ export function OnboardingProviderPicker({
             }
           />
           <span className="text-muted-foreground flex h-5 shrink-0 items-center [&_svg]:size-4">
-            <ChevronsUpDown aria-hidden="true" />
+            <IconChevronGrabberVertical aria-hidden="true" />
           </span>
         </PopoverTrigger>
         <PopoverContent
@@ -149,18 +153,26 @@ export function OnboardingProviderPicker({
             onPick={pick}
           />
           {shownTab === 'api_key' && (
-            <OnboardingProviderOption
-              icon={<Plus aria-hidden="true" />}
-              title="Add a custom provider"
-              // A sign-in still starting would open its dialog over this one.
-              disabled={connection.pending}
-              onClick={() => {
-                close();
-                // Closing programmatically skips onOpenChange, so the hovered provider's preview stays otherwise.
-                restorePreview();
-                setAddingCustom(true);
-              }}
-            />
+            <>
+              <OnboardingProviderOption
+                icon={<IconPlusMedium aria-hidden="true" />}
+                title="Add a custom provider"
+                reasonId={connection.canWriteAtScope ? undefined : customReasonId}
+                // A sign-in still starting would open its dialog over this one.
+                disabled={connection.pending || !connection.canWriteAtScope}
+                onClick={() => {
+                  close();
+                  // Closing programmatically skips onOpenChange, so the hovered provider's preview stays otherwise.
+                  restorePreview();
+                  setAddingCustom(true);
+                }}
+              />
+              {!connection.canWriteAtScope && (
+                <Txt id={customReasonId} variant="meta" tone="muted" className="px-2 py-1.5">
+                  Only an organization admin can add a custom provider for the company account.
+                </Txt>
+              )}
+            </>
           )}
         </PopoverContent>
       </Popover>
@@ -172,6 +184,7 @@ export function OnboardingProviderPicker({
           <DialogBody>
             <CustomProviderForm
               requireModels
+              scope={connection.credentialScope}
               onCancel={() => setAddingCustom(false)}
               onSaved={provider => {
                 setAddingCustom(false);

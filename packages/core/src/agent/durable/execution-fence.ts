@@ -38,7 +38,9 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
+import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
 import { runInRunFenceScope } from './run-fence-scope';
+import { getRunRegistryEntry } from './run-registry';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -816,6 +818,10 @@ export class ExecutionFence implements RunFenceScope {
     return this.#lossError !== undefined;
   }
 
+  get settlement(): ExecutionSettlement | undefined {
+    return this.#settledAs;
+  }
+
   /** An owned deadline settlement revokes writes without handing its topics to another execution. */
   ownsRunTopics(): boolean {
     return this.#settledAs === 'owned' || !this.#lossError;
@@ -1218,6 +1224,10 @@ export function watchExecutionLoss(
 export function fencePubSub(pubsub: PubSub, fence: Pick<ExecutionFence, 'isLost'>): PubSub {
   return new Proxy(pubsub, {
     get(target, property) {
+      if (property === executionTransport) {
+        const transport: PubSub | undefined = Reflect.get(target, executionTransport);
+        return transport ? fencePubSub(transport, fence) : undefined;
+      }
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
       if (property === 'publish') {
@@ -1324,6 +1334,25 @@ export async function assertExecutionNotSuperseded(args: {
   }
 }
 
+/**
+ * Reject a superseded claim without verifying or mutating the local fence, so a late reader
+ * can settle after its execution releases the claim. Does not require an active lease;
+ * skips the check when no ownership backend is available.
+ */
+export async function assertExecutionGenerationCurrent(args: {
+  runId: string;
+  agentId: string;
+  mastra: Mastra | undefined;
+  claim: DurableExecutionClaim;
+}): Promise<void> {
+  const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, args.claim);
+  if (!backend) return;
+  const details = { agentId: args.agentId, runId: args.runId, executionId: args.claim.executionId };
+  if (await retryOnce(() => backend.isSuperseded(args.claim), details)) {
+    throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+  }
+}
+
 const OWNERSHIP_GUARD = Symbol('durable-execution-ownership-guard');
 type GuardHandle = { scope: RunScope; key: RunScopeKey<ExecutionOwnershipGuard> };
 
@@ -1354,6 +1383,27 @@ function createOwnershipGuard(
 type FenceableStep = { execute: (params: any) => Promise<any> };
 
 /**
+ * A cancelled run stops waiting for an ownership read: a local claim's read has no deadline, and the step handles
+ * the abort itself, as it does at any other point. The read still runs, so a takeover it finds still marks the
+ * fence lost. Known loss still throws.
+ */
+async function checkUnlessAborted(guard: ExecutionOwnershipGuard, signal: AbortSignal | undefined): Promise<void> {
+  let onAbort: (() => void) | undefined;
+  const aborted = signal?.aborted
+    ? Promise.resolve()
+    : new Promise<void>(resolve => {
+        onAbort = resolve;
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
+  try {
+    await Promise.race([guard.check(), aborted]);
+  } finally {
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+  }
+  guard.throwIfLost();
+}
+
+/**
  * Check ownership before a step starts (skipping duplicate model, tool, or
  * scorer work after a takeover) and again after it returns. The post-check
  * throws inside `execute`, so the engine records the step as failed instead
@@ -1375,8 +1425,10 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
       const scope = params.mastra?.__createRunScope(runId) ?? createRunScope();
       const key = createRunScopeKey<ExecutionOwnershipGuard>('durable-step-ownership');
       scope.set(key, guard);
+      // A worker's step creates the run's registry entry as it starts, so each check reads the signal again.
+      const signal = () => getRunRegistryEntry(runId, params.mastra)?.abortSignal ?? params.abortSignal;
       try {
-        await guard.check();
+        await checkUnlessAborted(guard, signal());
         const pubsub = params[PUBSUB_SYMBOL] as PubSub | undefined;
         const output = await execute(
           Object.defineProperties(
@@ -1385,7 +1437,17 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
               // Preserve lazy workflow properties, especially the unused step writer.
               ...Object.getOwnPropertyDescriptors(params),
               [OWNERSHIP_GUARD]: { enumerable: true, value: { scope, key } },
-              [PUBSUB_SYMBOL]: { enumerable: true, value: pubsub && fencePubSub(pubsub, guard) },
+              [PUBSUB_SYMBOL]: {
+                enumerable: true,
+                value:
+                  pubsub &&
+                  withExecutionStreamProducer(fencePubSub(pubsub, guard), {
+                    runId,
+                    agentId,
+                    mastra: params.mastra,
+                    claim,
+                  }),
+              },
               writer: {
                 enumerable: true,
                 get() {
@@ -1429,7 +1491,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
             },
           ),
         );
-        await guard.check();
+        await checkUnlessAborted(guard, signal());
         return output;
       } catch (error) {
         guard.throwIfLost();

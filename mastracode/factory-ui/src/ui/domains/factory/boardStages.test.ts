@@ -175,14 +175,13 @@ describe('pull request cards on a board with its own phase names', () => {
 });
 
 describe('boardLoadingStages', () => {
-  it("shows the intake feed loading in the board's own rest and triage columns", () => {
+  it("shows the intake setup loading in the board's own initial column only", () => {
     const loading = boardLoadingStages({
       board: shipBoard,
       stages: shipBoard.phases.map(phase => ({ id: phase.id, label: phase.title })),
       itemsPending: false,
       intakePending: true,
-      triagePending: true,
     });
-    expect([...loading]).toEqual(['inbox', 'think']);
+    expect([...loading]).toEqual(['inbox']);
   });
 });

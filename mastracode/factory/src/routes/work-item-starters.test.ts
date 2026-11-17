@@ -4,7 +4,7 @@ import { createBoardRegistry } from '../boards/index.js';
 import { triageWorkBoard } from '../boards/test-utils.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { testCard } from './test-utils.js';
-import { cardsWithFailedRun, workItemStarters } from './work-item-starters.js';
+import { cardsAwaitingPerson, cardsWithFailedRun, workItemStarters } from './work-item-starters.js';
 
 const NOW = Date.parse('2026-10-26T12:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -286,5 +286,23 @@ describe('cardsWithFailedRun', () => {
     ]);
 
     expect([...failed].toSorted()).toEqual(['failed', 'proposed-after-failing']);
+  });
+});
+
+describe('cardsAwaitingPerson', () => {
+  it('waits on a person for a failed effect or a lone proposal, not for a proposal an effect in flight outranks', () => {
+    const awaiting = cardsAwaitingPerson([
+      { workItemId: 'retrying', status: 'retry' },
+      { workItemId: 'retrying', status: 'failed' },
+      { workItemId: 'proposed-while-running', status: 'proposed' },
+      { workItemId: 'proposed-while-running', status: 'leased' },
+      { workItemId: 'proposed-after-failing', status: 'proposed' },
+      { workItemId: 'proposed-after-failing', status: 'failed' },
+      { workItemId: 'proposed', status: 'proposed' },
+      { workItemId: 'failed', status: 'failed' },
+      { workItemId: null, status: 'proposed' },
+    ]);
+
+    expect([...awaiting].toSorted()).toEqual(['failed', 'proposed', 'proposed-after-failing']);
   });
 });

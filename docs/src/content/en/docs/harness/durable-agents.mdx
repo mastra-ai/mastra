@@ -257,6 +257,8 @@ await durableAgent.stream('Research topic', {
 
 Visit [Background tasks](/docs/harness/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
 
+Background tasks have their own execution lease, stored on each task record, separate from the run claims described in [run ownership](#run-ownership). Replicas that share storage can run and recover each other's background tasks. Recovery and step redelivery can still run a background tool call more than once. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).
+
 ## Cleanup
 
 Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
@@ -415,7 +417,7 @@ A lease only coordinates the processes that share it. `EventEmitterPubSub`, the 
 
 ### Stop work after ownership loss
 
-Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. If ownership checks keep failing or stop responding, the step stops trusting its claim after one lease TTL, 15 seconds by default.
+Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. A step in the process that holds the claim stops when an ownership check fails, or when the claim can't be renewed before it expires. A step that only observes another process's claim also stops when no check succeeds within one lease TTL (15 seconds by default).
 
 Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
 

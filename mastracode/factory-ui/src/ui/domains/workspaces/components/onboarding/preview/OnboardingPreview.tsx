@@ -1,8 +1,8 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
-import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../../../hooks/useWorkSourceConnections';
+import type { SourceControlRepository } from '../../../services/github';
 import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
@@ -10,14 +10,15 @@ import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
 import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import '../onboarding-preview.css';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
   modelScope?: OnboardingModelScope;
   local?: boolean;
   personalModel?: string;
-  repository?: { name: string; fullName: string; defaultBranch: string };
-  source?: WorkSource;
+  repository?: SourceControlRepository;
+  source?: BoardSource;
   model?: string;
   providerId?: string;
   personalProviderId?: string;
@@ -58,7 +59,7 @@ function OnboardingCodebasePreview({ repository }: Pick<OnboardingPreviewProps, 
           {repository?.fullName ?? 'Your repository'}
         </Txt>
         <div className="text-muted-foreground mt-2 flex items-center gap-2">
-          <GitBranch className="size-3 shrink-0" />
+          <IconBranch className="size-icon-xs shrink-0" />
           <Txt variant="meta" tone="muted">
             {repository?.defaultBranch ?? 'Selected branch'}
           </Txt>
@@ -91,7 +92,7 @@ export function OnboardingPreview({
           <OnboardingCodebasePreview repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={step === 'project-management'}>
-          <OnboardingIntakePreview source={source} />
+          <OnboardingIntakePreview source={source} repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={scene === 'accounts'}>
           <OnboardingAccountsPreview

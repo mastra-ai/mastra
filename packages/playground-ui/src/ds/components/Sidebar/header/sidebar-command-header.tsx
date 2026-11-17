@@ -18,7 +18,7 @@ export const SidebarCommandHeader = forwardRef<HTMLElement, SidebarCommandHeader
       data-state={state}
       className={cn(
         'flex h-header-default shrink-0 items-center gap-0.5 overflow-hidden',
-        state === 'collapsed' ? 'px-3' : 'pr-2 pl-3.5',
+        state === 'collapsed' ? 'px-3' : 'pr-0.5 pl-3.5',
         state !== 'collapsed' && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',
         state === 'collapsed' && '[&_[data-slot=sidebar-search-trigger]]:hidden',
         className,

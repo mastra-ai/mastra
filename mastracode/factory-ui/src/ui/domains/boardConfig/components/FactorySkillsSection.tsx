@@ -7,7 +7,6 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -15,6 +14,10 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /** Skills some board's settings already show: the ones its phases run. None while the boards are unknown. */
 function boardSkillNames(boards: InstalledBoardInfo[] | undefined): Set<string> {
@@ -41,7 +44,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <CodeIcon />}
+        {raw ? <IconFileText /> : <IconCodeBrackets />}
       </Button>
     </div>
   );
@@ -65,6 +68,7 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
                 {skill.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && (
                   <Badge>Overridden by app</Badge>
                 )}
+                {skill.origin === 'project' && <Badge>Custom</Badge>}
                 {skill.edited && <Badge>Edited</Badge>}
               </span>
               {skill.error ? (
@@ -81,7 +85,7 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
           </CollapsibleTrigger>
           <Button
             size="sm"
-            icon={editable ? <Pencil /> : <FileText />}
+            icon={editable ? <IconPencil /> : <IconFileText />}
             aria-label={`${editable ? 'Edit' : 'View'} ${skill.name}`}
             onClick={() => setEditing(true)}
           >
@@ -104,6 +108,20 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
   );
 }
 
+/** Opens the editor on a new skill; admins of an open Factory only. */
+function NewSkillButton({ factoryId }: { factoryId: string }) {
+  const [creating, setCreating] = useState(false);
+
+  return (
+    <div className="flex justify-end">
+      <Button size="sm" icon={<IconPlusMedium />} onClick={() => setCreating(true)}>
+        New skill
+      </Button>
+      {creating && <FactorySkillEditorDialog factoryId={factoryId} canEdit onClose={() => setCreating(false)} />}
+    </div>
+  );
+}
+
 /**
  * The skills no board phase runs. A skill a phase runs lives on that phase's page, so it isn't listed twice.
  */
@@ -118,6 +136,7 @@ export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {factoryId !== undefined && canEdit && <NewSkillButton factoryId={factoryId} />}
       {loading && (
         <Txt tone="muted" as="p" variant="caption" role="status">
           Loading skills…

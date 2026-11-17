@@ -145,7 +145,7 @@ describe('PlatformJiraIntegration discovery', () => {
     ]);
     const jira = integration();
     const reconcile = attachJiraIssueReconciler(jira, {
-      storage: { projects: seeded.projects },
+      storage: { projects: seeded.projects, intake: seeded.intake },
       runtime: {
         configVersion: 'test-v1',
         workItems: seeded.workItems,
@@ -238,6 +238,94 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       metadata: { key: 'ENG', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
     });
     expect(decodeSourceId(sources[1]!.id)).toEqual({ connectionId: 'a1b_beta', projectId: '2' });
+  });
+
+  it('files a new issue on a second connection when the first fills every page of the sweep', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    let acmePage = 0;
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => {
+          acmePage += 1;
+          return json({ issues: [issue(`ENG-${acmePage}`)], nextPageToken: `acme-${acmePage}` });
+        },
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({ observed: 6, failed: 0 });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)).toContain(
+      'OPS-7',
+    );
+  });
+
+  it('files a new issue on a second connection when the first fails', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ errorMessages: ['boom'] }, 500),
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({
+      observed: 1,
+      failed: 1,
+      errors: [{ projectId: project.id }],
+    });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)).toContain(
+      'OPS-7',
+    );
   });
 
   it('pages selected projects across multiple Jira connections without mixing credentials', async () => {

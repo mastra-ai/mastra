@@ -119,7 +119,6 @@ export async function commitDecisions(
     decisions: readonly unknown[];
     ingress?: string;
     actorId?: string;
-    configVersion?: string;
     causalChain?: Array<{ ingressId: string; decisionType: string }>;
   },
 ) {
@@ -135,8 +134,7 @@ export async function commitDecisions(
     expectedRevision: item.revision,
     destinationStage: input.stage,
     actorId: input.actorId ?? 'factory-rule-dispatcher',
-    ingress: { identity: ingress, triggerType: 'rule', transitionId: randomUUID() },
-    configVersion: input.configVersion ?? 'rules-v1',
+    ingress: { identity: ingress, transitionId: randomUUID() },
     causalChain: input.causalChain ?? [],
     evaluation: { outcome: 'accepted', decisions: decisions as unknown as Record<string, unknown>[] },
   });

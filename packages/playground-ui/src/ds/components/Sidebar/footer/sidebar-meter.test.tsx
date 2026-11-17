@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '..';
 import { SidebarMeter } from './sidebar-meter';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 afterEach(() => cleanup());
 
@@ -90,7 +90,7 @@ describe('Sidebar command header', () => {
           <Sidebar.CommandHeader>
             <Sidebar.Brand title="Mastra" />
             <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K" onClick={onSearch}>
-              <Search />
+              <IconMagnifyingGlass />
             </Sidebar.SearchTrigger>
           </Sidebar.CommandHeader>
           <Sidebar.Nav>Navigation</Sidebar.Nav>

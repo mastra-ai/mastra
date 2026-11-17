@@ -1,42 +1,36 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { StrictMode } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import { queryKeys } from '../../api/keys';
+import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
 import { boardViewport, mockBoardRowLayout } from './boardRowLayout';
-import { largeBoard, largeCandidatePage, largeCardId } from './fixtures/largeBoard';
+import { largeBoard, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const ITEM_COUNT = 250;
 
-function serveWorkItems(count: number) {
+function renderBoard(search = '') {
+  stubWorkBoard();
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: largeBoard(count) }),
+      HttpResponse.json({ workItems: largeBoard(ITEM_COUNT) }),
     ),
   );
-}
-
-function renderBoard(search = '', itemCount = ITEM_COUNT) {
-  stubWorkBoard();
-  serveWorkItems(itemCount);
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
   });
-  const { client } = renderWithProviders(
+  renderWithProviders(
     <StrictMode>
       <RouterProvider router={router} />
     </StrictMode>,
   );
-  return { router, client };
+  return { router };
 }
 
 describe('Large factory boards', () => {
@@ -64,7 +58,7 @@ describe('Large factory boards', () => {
   it('given a deep link to the last issue, shows and focuses it without mounting all preceding issues', async () => {
     renderBoard(`?item=${largeCardId(0)}`);
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Details for Large task 0' })).toHaveFocus();
+    expect(screen.getByRole('link', { name: /Large task 0$/ })).toHaveFocus();
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
   });
 
@@ -75,7 +69,7 @@ describe('Large factory boards', () => {
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
     const { router } = renderBoard(`?item=${largeCardId(100)}`);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Details for Large task 100' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('link', { name: /Large task 100$/ })).toHaveFocus());
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 0 } });
@@ -97,71 +91,16 @@ describe('Large factory boards', () => {
     await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));
   });
 
-  it('given open details, scrolling keeps the card and its description draft alive', async () => {
-    renderBoard();
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
-    const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
-    const draft = within(details).getByRole('textbox', { name: 'Description' });
-    await user.type(draft, 'Keep this draft while I scroll');
-
-    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
-    await waitFor(() => expect(screen.queryByRole('article', { name: 'Large task 248' })).not.toBeInTheDocument());
-    expect(details).toBeInTheDocument();
-    expect(draft).toHaveValue('Keep this draft while I scroll');
-    expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
-  });
-
-  it('given an open description draft, changing sort retains the same issue when its position changes', async () => {
-    const { router } = renderBoard();
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
-    const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
-    const draft = within(details).getByRole('textbox', { name: 'Description' });
-    await user.type(draft, 'Keep this draft after sorting');
-
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?sort=created-oldest`));
-
-    expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
-    expect(details).toBeInTheDocument();
-    expect(draft).toHaveValue('Keep this draft after sorting');
-    expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
-  });
-
-  it('given an open description draft, a refresh crossing the virtualization threshold keeps the draft both ways', async () => {
-    const { client } = renderBoard('', 30);
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Large task 29' }));
-    const details = await screen.findByRole('dialog', { name: 'Large task 29' });
-    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
-    const draft = within(details).getByRole('textbox', { name: 'Description' });
-    await user.type(draft, 'Keep this draft across refreshes');
-
-    serveWorkItems(31);
-    await act(() => client.invalidateQueries());
-    expect(await screen.findByLabelText('Large task 30')).toBeInTheDocument();
-    expect(details).toBeInTheDocument();
-    expect(draft).toHaveValue('Keep this draft across refreshes');
-
-    serveWorkItems(30);
-    await act(() => client.invalidateQueries());
-    await waitFor(() => expect(screen.queryByLabelText('Large task 30')).not.toBeInTheDocument());
-    expect(details).toBeInTheDocument();
-    expect(draft).toHaveValue('Keep this draft across refreshes');
-  });
-
   it('given a focused card, scrolling preserves keyboard focus until the user leaves it', async () => {
     renderBoard();
-    const details = await screen.findByRole('button', { name: 'Details for Large task 249' });
-    act(() => details.focus());
+    const link = await screen.findByRole('link', { name: /Large task 249$/ });
+    act(() => link.focus());
 
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByLabelText('Large task 248')).not.toBeInTheDocument());
-    expect(details).toHaveFocus();
+    expect(link).toHaveFocus();
 
-    act(() => details.blur());
+    act(() => link.blur());
     await waitFor(() => expect(screen.queryByLabelText('Large task 249')).not.toBeInTheDocument());
   });
 
@@ -180,95 +119,17 @@ describe('Large factory boards', () => {
     await waitFor(() => expect(screen.queryByLabelText('Large task 249')).not.toBeInTheDocument());
   });
 
-  it.each(['list', 'board'] as const)(
-    'given 30 candidates in %s layout, when another query page arrives, preserves an open prompt and bounds mounted cards',
-    async layout => {
-      const { client } = renderBoard();
-      const requestedPages: number[] = [];
-      let releasePage = () => {};
-      const nextPage = new Promise<void>(resolve => {
-        releasePage = resolve;
-      });
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-          HttpResponse.json({ workItems: [] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-          HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, async ({ request }) => {
-          const params = new URL(request.url).searchParams;
-          if (params.has('label')) return HttpResponse.json(largeCandidatePage(0));
-          const page = Number(params.get('page') ?? 1);
-          requestedPages.push(page);
-          if (page === 2) await nextPage;
-          return HttpResponse.json({
-            ...largeCandidatePage(page === 1 ? 30 : 100, page === 1 ? 0 : 30),
-            nextPage: page === 1 ? 2 : null,
-          });
-        }),
-        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
-          HttpResponse.json({
-            ...largeCandidatePage(1).issues[0],
-            description: 'Candidate description',
-          } satisfies GithubIssueDetail),
-        ),
-      );
-      const user = userEvent.setup();
-      await screen.findByRole('article', { name: 'Candidate 0' });
-      if (layout === 'board') await saveKanbanView(user);
-      await user.click(screen.getByRole('button', { name: 'Load more candidates' }));
-      await screen.findByRole('status', { name: 'Loading more candidates' });
-      await user.click(screen.getByRole('button', { name: 'Details for Candidate 0' }));
-      const details = await screen.findByRole('dialog', { name: 'Candidate 0' });
-      await user.click(within(details).getByRole('button', { name: 'Custom prompt…' }));
-      const prompt = await screen.findByRole('textbox', { name: 'Prompt for Candidate 0' });
-      await user.type(prompt, 'Keep this guidance while loading more');
+  it('given a card opened from the board, going back lists the board from cache before any refetch answers', async () => {
+    const user = userEvent.setup();
+    const { router } = renderBoard();
+    await screen.findByLabelText('Large task 249');
+    await saveKanbanView(user);
+    server.use(http.all('*', () => delay('infinite')));
 
-      releasePage();
-      await waitForMutationsIdle(client);
+    await user.click(screen.getByRole('link', { name: 'Open Large task 249' }));
+    await waitFor(() => expect(screen.queryByTestId('work-item-card')).not.toBeInTheDocument());
+    await act(() => router.navigate(-1));
 
-      expect(details).toBeInTheDocument();
-      expect(prompt).toHaveValue('Keep this guidance while loading more');
-      expect(prompt).toHaveFocus();
-      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-      expect(screen.queryByRole('button', { name: 'Load more candidates' })).not.toBeInTheDocument();
-      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
-      await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 1' })).not.toBeInTheDocument());
-      expect(prompt).toHaveValue('Keep this guidance while loading more');
-      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-      expect(requestedPages).toEqual([1, 2]);
-
-      await act(() => client.refetchQueries({ queryKey: queryKeys.githubIssues(['repo-1']) }));
-      expect(requestedPages).toEqual([1, 2, 1, 2]);
-      expect(prompt).toBeInTheDocument();
-      expect(prompt).toHaveValue('Keep this guidance while loading more');
-      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-    },
-  );
-
-  it.each(['list', 'board'] as const)(
-    'given a large candidate feed in %s layout, scrolling recycles candidates too',
-    async layout => {
-      renderBoard();
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-          HttpResponse.json({ workItems: [] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-          HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-          HttpResponse.json(largeCandidatePage(new URL(request.url).searchParams.has('label') ? 0 : ITEM_COUNT)),
-        ),
-      );
-      await screen.findByRole('article', { name: 'Candidate 0' });
-      if (layout === 'board') await saveKanbanView(userEvent.setup());
-      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-
-      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
-      await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 0' })).not.toBeInTheDocument());
-      expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
-    },
-  );
+    expect(await screen.findByLabelText('Large task 249')).toBeInTheDocument();
+  });
 });

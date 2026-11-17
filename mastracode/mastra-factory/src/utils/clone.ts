@@ -24,7 +24,7 @@ export function toPackageName(name: string): string {
  * True when the template can be scaffolded at `targetPath`: the path doesn't
  * exist yet, or it is an empty directory (e.g. the current directory).
  */
-export function canScaffoldInto(targetPath: string): boolean {
+export function canScaffoldInto(targetPath: string, ignoreEntry?: string): boolean {
   let stat;
   try {
     stat = statSync(targetPath);
@@ -32,7 +32,7 @@ export function canScaffoldInto(targetPath: string): boolean {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
     throw error;
   }
-  return stat.isDirectory() && readdirSync(targetPath).every(entry => entry === '.DS_Store');
+  return stat.isDirectory() && readdirSync(targetPath).every(entry => entry === '.DS_Store' || entry === ignoreEntry);
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {
@@ -48,7 +48,14 @@ export async function cloneTemplate(repoUrl: string, targetPath: string): Promis
     throw new Error(`Directory ${path.basename(targetPath)} already exists and isn't empty`);
   }
 
-  const tempRoot = await fs.mkdtemp(path.join(path.dirname(targetPath), `.${path.basename(targetPath)}-`));
+  // Stage inside an existing (empty) target so the final moves stay on its
+  // filesystem and don't need write access to its parent.
+  const targetExists = await directoryExists(targetPath);
+  const tempRoot = await fs.mkdtemp(
+    targetExists
+      ? path.join(targetPath, '.create-factory-')
+      : path.join(path.dirname(targetPath), `.${path.basename(targetPath)}-`),
+  );
   const tempTarget = path.join(tempRoot, 'template');
 
   try {
@@ -82,10 +89,10 @@ export async function cloneTemplate(repoUrl: string, targetPath: string): Promis
       }
     }
 
-    if (!canScaffoldInto(targetPath)) {
+    if (!canScaffoldInto(targetPath, targetExists ? path.basename(tempRoot) : undefined)) {
       throw new Error(`Directory ${path.basename(targetPath)} already exists and isn't empty`);
     }
-    if (await directoryExists(targetPath)) {
+    if (targetExists) {
       // Move the files in rather than replacing the directory, which may be the
       // user's current working directory.
       for (const entry of await fs.readdir(tempTarget)) {

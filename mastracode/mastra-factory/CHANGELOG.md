@@ -1,5 +1,105 @@
 # create-factory
 
+## 0.5.0
+
+### Minor Changes
+
+- Added a `--tag <dist-tag>` option to `create-factory`. It pins the scaffolded template's `mastra` and `@mastra/*` dependencies to the exact versions published under that npm dist-tag, so you can try a new Factory on prerelease packages: ([#30598](https://github.com/mastra-ai/mastra/pull/30598))
+
+  ```sh
+  npx create-factory@latest my-factory --tag alpha
+  ```
+
+  When the pinned versions include prereleases and the project uses npm, `create-factory` also writes `legacy-peer-deps=true` to the project's `.npmrc`, because npm otherwise rejects the prerelease peer ranges.
+
+### Patch Changes
+
+- `create-factory` can now set up the Factory in the current directory. When you run it without a project name in an empty directory, the name prompt defaults to that directory: press Enter to use it, or type a name to create a new directory. An existing empty directory can also be passed as the project name. ([#30343](https://github.com/mastra-ai/mastra/pull/30343))
+
+  ```bash
+  mkdir my-factory && cd my-factory
+  npx create-factory@latest
+  ```
+
+- `create-factory --tag` now stops before installing when the npm registry lookup for a Mastra package fails, instead of keeping that package's template version and producing a project that mixes release channels. A package that simply has no release under the tag still keeps its template version with a warning. ([#30614](https://github.com/mastra-ai/mastra/pull/30614))
+
+- `create-factory` no longer asks where your Factory project should run. New projects are created in the US region by default. To create the project in the EU instead, pass `--region eu`: ([#30249](https://github.com/mastra-ai/mastra/pull/30249))
+
+  ```bash
+  npx create-factory@latest my-mastra-factory --region eu
+  ```
+
+- Updated dependencies [[`4a3920c`](https://github.com/mastra-ai/mastra/commit/4a3920c7bf8212420879f2b5a8106df470fc1b04), [`39243f2`](https://github.com/mastra-ai/mastra/commit/39243f21cb14e46709a07ac3b405941d5ad8cbd0), [`f75eb1a`](https://github.com/mastra-ai/mastra/commit/f75eb1a197d7b66bfcb9dee1db06be7bfde55dde), [`bfcb0f7`](https://github.com/mastra-ai/mastra/commit/bfcb0f738dc0891014c0802d4d0fc5982fca83ee), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`12f7965`](https://github.com/mastra-ai/mastra/commit/12f79652cf16193febe8952b664927a70b295202), [`5edafc6`](https://github.com/mastra-ai/mastra/commit/5edafc624f4d2afb3905b4464e59b02d14b8602e), [`c638825`](https://github.com/mastra-ai/mastra/commit/c638825c83d0f81196cfdede24c13a95e398717a), [`a6dbd29`](https://github.com/mastra-ai/mastra/commit/a6dbd29a4ebbba1f1f5ec31770d82a536e1cd48b), [`820187e`](https://github.com/mastra-ai/mastra/commit/820187e0db01666ac0ffcf5e7dd2ee7349d2d12c), [`5edafc6`](https://github.com/mastra-ai/mastra/commit/5edafc624f4d2afb3905b4464e59b02d14b8602e), [`da04116`](https://github.com/mastra-ai/mastra/commit/da041165793568da5d00d65259bc5faa8e8d240f), [`338ec03`](https://github.com/mastra-ai/mastra/commit/338ec039256b5babdff8c079671fb87b02db08f5), [`383a19d`](https://github.com/mastra-ai/mastra/commit/383a19d0474ea150b8e209e20963ee6f6206393e), [`673c45a`](https://github.com/mastra-ai/mastra/commit/673c45a8616e7c6a548861b6addeb82f139809fe), [`9b92400`](https://github.com/mastra-ai/mastra/commit/9b9240047b1ab2b164c20ab71414f6d27513c95f), [`3801329`](https://github.com/mastra-ai/mastra/commit/3801329cdb616f241da267d8044f099b1b59f4db), [`54606fb`](https://github.com/mastra-ai/mastra/commit/54606fbfbb895066e2ce2b8916f4d91765fab161), [`cee56cb`](https://github.com/mastra-ai/mastra/commit/cee56cb36564e77c77d1ac1d722c850f56a99e26), [`9e9bb7c`](https://github.com/mastra-ai/mastra/commit/9e9bb7cc20790e3d9c6b0521441e57ae6dae8ba6), [`049b31d`](https://github.com/mastra-ai/mastra/commit/049b31dd2c674a6ef7f14f900fc9bc58987caeed), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`28e243f`](https://github.com/mastra-ai/mastra/commit/28e243f638750d514cc41bc0a052a0b09883f3e2), [`558f07e`](https://github.com/mastra-ai/mastra/commit/558f07e331decba956eedc766827884df306a4a1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`3c7c003`](https://github.com/mastra-ai/mastra/commit/3c7c00383d22fbfb02e844e599151ec153d2f281), [`558b8b9`](https://github.com/mastra-ai/mastra/commit/558b8b997ca3995cf637ab15d66236dd0db60a45), [`8bb6aa8`](https://github.com/mastra-ai/mastra/commit/8bb6aa8e9db7c0ad35ec5e228616f5f6bb9ef7c0), [`92f3c5b`](https://github.com/mastra-ai/mastra/commit/92f3c5ba4f8909174f19c81078c244d6c45990aa), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba), [`918d229`](https://github.com/mastra-ai/mastra/commit/918d229b8b691fd068465c287d2b026c2e6217f6), [`1100a41`](https://github.com/mastra-ai/mastra/commit/1100a41fb723b3ebb96116481580ae95e0f1071a), [`54606fb`](https://github.com/mastra-ai/mastra/commit/54606fbfbb895066e2ce2b8916f4d91765fab161), [`b90d0ec`](https://github.com/mastra-ai/mastra/commit/b90d0ecd413b9955e63438aef6b3ef9b1ad6eb09), [`e22c5a7`](https://github.com/mastra-ai/mastra/commit/e22c5a7035b8a85f4258dabf8d2c2930b28f0774), [`5a231ae`](https://github.com/mastra-ai/mastra/commit/5a231ae55cfb31ab84d6ec0ddbe77303c8483b0e), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`44cece6`](https://github.com/mastra-ai/mastra/commit/44cece6f36f068dae73b1ba0b397ea4fa1360500), [`ec3fd03`](https://github.com/mastra-ai/mastra/commit/ec3fd034e59c9b12792130d6494438a7607cb46c), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67)]:
+  - mastra@1.40.0
+
+## 0.5.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`ec3fd03`](https://github.com/mastra-ai/mastra/commit/ec3fd034e59c9b12792130d6494438a7607cb46c)]:
+  - mastra@1.40.0-alpha.7
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`bfcb0f7`](https://github.com/mastra-ai/mastra/commit/bfcb0f738dc0891014c0802d4d0fc5982fca83ee), [`383a19d`](https://github.com/mastra-ai/mastra/commit/383a19d0474ea150b8e209e20963ee6f6206393e)]:
+  - mastra@1.40.0-alpha.6
+
+## 0.5.0-alpha.5
+
+### Minor Changes
+
+- Added a `--tag <dist-tag>` option to `create-factory`. It pins the scaffolded template's `mastra` and `@mastra/*` dependencies to the exact versions published under that npm dist-tag, so you can try a new Factory on prerelease packages: ([#30598](https://github.com/mastra-ai/mastra/pull/30598))
+
+  ```sh
+  npx create-factory@latest my-factory --tag alpha
+  ```
+
+  When the pinned versions include prereleases and the project uses npm, `create-factory` also writes `legacy-peer-deps=true` to the project's `.npmrc`, because npm otherwise rejects the prerelease peer ranges.
+
+### Patch Changes
+
+- `create-factory --tag` now stops before installing when the npm registry lookup for a Mastra package fails, instead of keeping that package's template version and producing a project that mixes release channels. A package that simply has no release under the tag still keeps its template version with a warning. ([#30614](https://github.com/mastra-ai/mastra/pull/30614))
+
+- Updated dependencies [[`c638825`](https://github.com/mastra-ai/mastra/commit/c638825c83d0f81196cfdede24c13a95e398717a), [`a6dbd29`](https://github.com/mastra-ai/mastra/commit/a6dbd29a4ebbba1f1f5ec31770d82a536e1cd48b), [`3c7c003`](https://github.com/mastra-ai/mastra/commit/3c7c00383d22fbfb02e844e599151ec153d2f281), [`b90d0ec`](https://github.com/mastra-ai/mastra/commit/b90d0ecd413b9955e63438aef6b3ef9b1ad6eb09), [`e22c5a7`](https://github.com/mastra-ai/mastra/commit/e22c5a7035b8a85f4258dabf8d2c2930b28f0774)]:
+  - mastra@1.40.0-alpha.5
+
+## 0.4.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`39243f2`](https://github.com/mastra-ai/mastra/commit/39243f21cb14e46709a07ac3b405941d5ad8cbd0), [`5edafc6`](https://github.com/mastra-ai/mastra/commit/5edafc624f4d2afb3905b4464e59b02d14b8602e), [`820187e`](https://github.com/mastra-ai/mastra/commit/820187e0db01666ac0ffcf5e7dd2ee7349d2d12c), [`5edafc6`](https://github.com/mastra-ai/mastra/commit/5edafc624f4d2afb3905b4464e59b02d14b8602e), [`da04116`](https://github.com/mastra-ai/mastra/commit/da041165793568da5d00d65259bc5faa8e8d240f), [`3801329`](https://github.com/mastra-ai/mastra/commit/3801329cdb616f241da267d8044f099b1b59f4db), [`54606fb`](https://github.com/mastra-ai/mastra/commit/54606fbfbb895066e2ce2b8916f4d91765fab161), [`cee56cb`](https://github.com/mastra-ai/mastra/commit/cee56cb36564e77c77d1ac1d722c850f56a99e26), [`9e9bb7c`](https://github.com/mastra-ai/mastra/commit/9e9bb7cc20790e3d9c6b0521441e57ae6dae8ba6), [`558f07e`](https://github.com/mastra-ai/mastra/commit/558f07e331decba956eedc766827884df306a4a1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`92f3c5b`](https://github.com/mastra-ai/mastra/commit/92f3c5ba4f8909174f19c81078c244d6c45990aa), [`918d229`](https://github.com/mastra-ai/mastra/commit/918d229b8b691fd068465c287d2b026c2e6217f6), [`54606fb`](https://github.com/mastra-ai/mastra/commit/54606fbfbb895066e2ce2b8916f4d91765fab161), [`5a231ae`](https://github.com/mastra-ai/mastra/commit/5a231ae55cfb31ab84d6ec0ddbe77303c8483b0e), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - mastra@1.40.0-alpha.4
+
+## 0.4.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`12f7965`](https://github.com/mastra-ai/mastra/commit/12f79652cf16193febe8952b664927a70b295202), [`9b92400`](https://github.com/mastra-ai/mastra/commit/9b9240047b1ab2b164c20ab71414f6d27513c95f), [`1100a41`](https://github.com/mastra-ai/mastra/commit/1100a41fb723b3ebb96116481580ae95e0f1071a), [`44cece6`](https://github.com/mastra-ai/mastra/commit/44cece6f36f068dae73b1ba0b397ea4fa1360500), [`6c647e6`](https://github.com/mastra-ai/mastra/commit/6c647e6faee5a6182d99e2352808df1b57558b67)]:
+  - mastra@1.39.1-alpha.3
+
+## 0.4.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.39.1-alpha.2
+
+## 0.4.4-alpha.1
+
+### Patch Changes
+
+- `create-factory` can now set up the Factory in the current directory. When you run it without a project name in an empty directory, the name prompt defaults to that directory: press Enter to use it, or type a name to create a new directory. An existing empty directory can also be passed as the project name. ([#30343](https://github.com/mastra-ai/mastra/pull/30343))
+
+  ```bash
+  mkdir my-factory && cd my-factory
+  npx create-factory@latest
+  ```
+
+- Updated dependencies [[`673c45a`](https://github.com/mastra-ai/mastra/commit/673c45a8616e7c6a548861b6addeb82f139809fe), [`049b31d`](https://github.com/mastra-ai/mastra/commit/049b31dd2c674a6ef7f14f900fc9bc58987caeed), [`558b8b9`](https://github.com/mastra-ai/mastra/commit/558b8b997ca3995cf637ab15d66236dd0db60a45), [`8bb6aa8`](https://github.com/mastra-ai/mastra/commit/8bb6aa8e9db7c0ad35ec5e228616f5f6bb9ef7c0), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba)]:
+  - mastra@1.39.1-alpha.1
+
 ## 0.4.4-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,10 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { BracesIcon, FileInputIcon, FileOutputIcon, RouteIcon, TagIcon, WrenchIcon } from 'lucide-react';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconFileArrowRightIn } from '@mastra/playground-ui/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconFileArrowRightOut';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import type { ReactNode } from 'react';
 
 export interface DatasetItemSection {
@@ -25,34 +30,34 @@ export const datasetItemSections: DatasetItemSection[] = [
   {
     key: 'input',
     title: 'Input',
-    icon: <FileInputIcon />,
+    icon: <IconFileArrowRightIn />,
     value: item => toJson(item.input),
     payload: item => item.input,
   },
   {
     key: 'groundTruth',
     title: 'Ground Truth',
-    icon: <FileOutputIcon />,
+    icon: <IconFileArrowRightOut />,
     value: item => (isEmptyPayload(item.groundTruth) ? undefined : toJson(item.groundTruth)),
     payload: item => (isEmptyPayload(item.groundTruth) ? null : item.groundTruth),
   },
   {
     key: 'expectedTrajectory',
     title: 'Expected Trajectory',
-    icon: <RouteIcon />,
+    icon: <IconDirection1 />,
     value: item => (item.expectedTrajectory != null ? toJson(item.expectedTrajectory) : undefined),
   },
   {
     key: 'toolMocks',
     title: 'Tool Mocks',
-    icon: <WrenchIcon />,
+    icon: <IconMaintenance />,
     value: item => (item.toolMocks?.length ? toJson(item.toolMocks) : undefined),
   },
   {
     key: 'requestContext',
     title: 'Request Context',
-    icon: <BracesIcon />,
+    icon: <IconCodeBrackets />,
     value: item => (item.requestContext != null ? toJson(item.requestContext) : undefined),
   },
-  { key: 'metadata', title: 'Metadata', icon: <TagIcon />, value: item => toJson(item.metadata) },
+  { key: 'metadata', title: 'Metadata', icon: <IconTag />, value: item => toJson(item.metadata) },
 ];

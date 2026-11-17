@@ -128,6 +128,7 @@ export const isolatedTestFiles = [
   'src/mastra/custom-gateway-integration.test.ts', // env
   'src/mastra/environment.test.ts', // env
   'src/mastra/internal-workflow-registry.test.ts', // env
+  'src/mastra/recovery-loop.test.ts', // env
   'src/mastra/restart-active-runs-exit.test.ts', // env
   'src/mastra/restart-active-runs-rule.test.ts', // env
   'src/mastra/scheduler-integration.test.ts', // env

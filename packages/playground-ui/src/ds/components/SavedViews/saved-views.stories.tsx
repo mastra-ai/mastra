@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleDotIcon, KanbanIcon, ListIcon, UserIcon } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod/v4';
 import { SavedViewEditor } from './saved-view-editor';
@@ -10,6 +9,10 @@ import { FilterBar } from '@/ds/components/FilterBar/filter-bar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleRecord } from '@/ds/icons/central/IconCircleRecord';
+import { IconKanbanView } from '@/ds/icons/central/IconKanbanView';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const layoutSchema = z.enum(['list', 'board']);
 const settingsSchema = z.object({ layout: layoutSchema.catch('list') });
@@ -19,7 +22,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
-    icon: CircleDotIcon,
+    icon: IconCircleRecord,
     operators: ['is', 'is-not'],
     strict: true,
     suggestions: [{ value: 'open' }, { value: 'closed' }],
@@ -27,7 +30,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'author',
     label: 'Author',
-    icon: UserIcon,
+    icon: IconUser,
     operators: ['is'],
     strict: true,
     suggestions: [
@@ -99,10 +102,10 @@ export const Default: Story = {
           </FilterBar>
           <SegmentedControl aria-label="Layout" size="sm" iconOnly value={settings.layout} onValueChange={setLayout}>
             <SegmentedControlItem value="list" aria-label="List" title="List">
-              <ListIcon aria-hidden />
+              <IconListBullets aria-hidden />
             </SegmentedControlItem>
             <SegmentedControlItem value="board" aria-label="Board" title="Board">
-              <KanbanIcon aria-hidden />
+              <IconKanbanView aria-hidden />
             </SegmentedControlItem>
           </SegmentedControl>
         </SavedViewEditor>

@@ -1,9 +1,9 @@
 import { THREAD_QUERY_FIELD_REGISTRY } from '@mastra/core/storage';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
-import { MessagesSquareIcon } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 import type { TraceFilterGroup, TraceFilterToken } from '../traces/trace-query-filters';
 import { buildThreadQueryWhere, createThreadFilterBarFields, THREAD_FILTER_FIELD_IDS } from './thread-filters';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 
 const eq = (path: string, literal: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
@@ -98,7 +98,7 @@ describe('thread filter fields', () => {
     });
 
     it('labels the trace count as Messages with the Threads message icon', () => {
-      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: MessagesSquareIcon });
+      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: IconChatBubbles });
     });
 
     it('treats time to first chunk and time to first token as numbers', () => {

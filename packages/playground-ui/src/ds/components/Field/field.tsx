@@ -1,10 +1,10 @@
 import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { Fieldset as FieldsetPrimitive } from '@base-ui/react/fieldset';
-import { CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
 import { InfoTooltip } from '@/ds/components/Tooltip';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
@@ -216,7 +216,7 @@ const fieldErrorClassName = '-mt-1 flex gap-1 text-body-sm text-destructive-fore
 function FieldErrorIcon() {
   return (
     <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
-      <CircleAlertIcon />
+      <IconExclamationCircle />
     </Icon>
   );
 }

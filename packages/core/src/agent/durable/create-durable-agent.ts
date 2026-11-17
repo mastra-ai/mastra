@@ -86,6 +86,14 @@ export interface CreateDurableAgentOptions<
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
+   * How the agent's new runs are stored (`1` or `2`). Defaults to `1`. See
+   * {@link DurableAgentConfig.storageVersion}.
+   *
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
+
+  /**
    * Per-topic opt-out of the replay cache.
    *
    * Return `false` to publish a topic straight through to the underlying
@@ -104,6 +112,12 @@ export interface CreateDurableAgentOptions<
  * This factory function is the recommended way to add checkpoint-backed durable
  * execution to an agent. The `durable` option on `AgentConfig` only configures
  * resumable streams and never wraps the agent.
+ *
+ * Wrapping does not change the wrapped Agent's direct runs, including runs already
+ * in flight. Without explicit stream settings, the wrapper shares the Agent's
+ * stream bus; pubsub, cache, cleanupTimeoutMs, and shouldCache overrides apply
+ * only to the wrapper's runs. Evented wrapper runs use Mastra's shared run log
+ * without changing the wrapped Agent's native stream routing.
  *
  * @param options - Configuration options
  * @returns A DurableAgent instance
@@ -141,7 +155,18 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache, shouldPersistSnapshot } = options;
+  const {
+    agent,
+    id,
+    name,
+    cache,
+    pubsub,
+    maxSteps,
+    cleanupTimeoutMs,
+    shouldCache,
+    shouldPersistSnapshot,
+    storageVersion,
+  } = options;
 
   return new DurableAgent({
     agent,
@@ -153,6 +178,7 @@ export function createDurableAgent<
     cleanupTimeoutMs,
     shouldCache,
     shouldPersistSnapshot,
+    storageVersion,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }
 
