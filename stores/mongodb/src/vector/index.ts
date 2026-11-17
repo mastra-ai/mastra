@@ -380,10 +380,10 @@ interface RegistryDoc extends IndexTarget {
   deleteToken?: string;
 }
 
-/** Pipeline expression: `indexIds` with the entry for `name` set to `id` (I11b callers decide when). */
 /** A journal doc whose lease ran out on the server's clock; only such a doc is the reconciler's. */
 const LEASE_EXPIRED = { $expr: { $lt: ['$leaseUntil', '$$NOW'] } };
 
+/** Pipeline expression: `indexIds` with the entry for `name` set to `id` (I11b callers decide when). */
 function indexIdsWith(name: string, id: string): Document {
   return {
     $concatArrays: [
@@ -806,6 +806,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // `uncertain` docs are never resolved here; selecting them could starve the rest of the batch.
       const docs = await journal
         .find({ collectionName, state: { $ne: 'uncertain' }, ...LEASE_EXPIRED })
+        // Oldest lease first; a failure expires the doc anew, so docs that keep failing rotate to the back.
+        .sort({ leaseUntil: 1 })
         .limit(RECONCILE_BATCH)
         .toArray();
       for (const doc of docs) {
@@ -818,12 +820,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           else if (doc.state === 'orphaned') await this.cleanupOrphan(doc, 2);
         } catch (error) {
           this.logger.warn(`could not reconcile provisioning record ${doc._id} on "${collectionName}": ${error}`);
+          await this.expireLease(doc);
         }
       }
     } catch (error) {
       this.logger.warn(`could not reconcile the provisioning records of "${collectionName}": ${error}`);
     }
     return tried;
+  }
+
+  /** Expire a journal doc still in `doc.state` now, so any call retries it at once and behind older ones (R14). */
+  private async expireLease(doc: Pick<JournalDoc, '_id' | 'state'>): Promise<void> {
+    await this.journal()
+      .updateOne({ _id: doc._id, state: doc.state }, [{ $set: { leaseUntil: '$$NOW' } }])
+      .catch(error => this.logger.warn(`could not expire provisioning record ${doc._id}: ${error}`));
   }
 
   /**
@@ -866,6 +876,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         }
       }
       this.logger.warn(`${what}: index "${indexName}" kept changing; left for a later reconcile`);
+      await this.expireLease(doc);
     } catch (error) {
       if (error !== resolved) throw error;
     }
@@ -1838,6 +1849,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         this.logger.error(
           `could not drop search index "${name}" (id ${R}) on "${collectionName}"; cleanup record ${_id} keeps blocking the name: ${error}`,
         );
+        // R14: nobody holds the cleanup now; the next call on the collection retries it.
+        await this.expireLease({ _id, state: 'orphaned' });
         return 'failed';
       }
       await journal.deleteOne({ _id, state: 'orphaned' });

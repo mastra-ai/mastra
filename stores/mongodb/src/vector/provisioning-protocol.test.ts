@@ -1330,6 +1330,47 @@ describe('provisioning protocol', () => {
       await waitFor(async () => (await listedId(db, coll, vec)) === undefined);
     });
 
+    it('RECON-BATCH: records that keep failing never starve a resolvable one', async () => {
+      const coll = await byoColl('preconbatch');
+      const stuck = Array.from({ length: 21 }, (_, i) => ({
+        _id: `stuck-${coll}-${i}:vector`,
+        indexName: `${coll}_gone`,
+        generation: 'gone',
+        collectionName: coll,
+        name: `S${i}`,
+        type: 'vectorSearch',
+        role: 'vector',
+        state: 'orphaned',
+        dropDecided: true,
+        indexId: new ObjectId().toHexString(),
+        leaseUntil: new Date(0),
+        createdAt: new Date(),
+      }));
+      for (const d of stuck) await seedJournal(db, d);
+      // Expired after every stuck one; inserted last and named last, so last in index order too.
+      await seedJournal(db, {
+        ...stuck[0],
+        _id: `ok-${coll}:vector`,
+        name: 'Z',
+        state: 'intent',
+        leaseUntil: new Date(1000),
+      });
+      captureLogs(b);
+      hooks(b, {
+        beforeOrphanDrop: async (_i: string, name: string) => {
+          if (name.startsWith('S')) throw new Error('injected drop failure');
+        },
+      });
+      let calls = 0;
+      while (calls < 3 && (await docsOn(coll)).some(d => d.state === 'intent')) {
+        await reconcile(b, coll);
+        calls++;
+      }
+      expect((await docsOn(coll)).filter(d => d.state === 'intent')).toEqual([]);
+      expect(await docsOn(coll)).toHaveLength(21);
+      clean.opts = { journalExpected: true };
+    });
+
     it('RF-STANDALONE: provisioning on a standalone server fails, rolls back and leaves no journal doc', async () => {
       const uri = 'mongodb://localhost:27017';
       const dbName = uniqueName('standalone');
@@ -1713,13 +1754,16 @@ describe('provisioning protocol', () => {
       it('ORPHAN-DROP-FAIL: a failed drop keeps the decided record, which blocks attaches, and logs at error', async () => {
         const { coll, r, doc } = await seedOrphan('pdropfail');
         const logs = captureLogs(b);
-        hooks(b, {
-          beforeOrphanDrop: async () => {
-            throw new Error('injected drop failure');
-          },
-        });
+        const failDrop = async () => {
+          throw new Error('injected drop failure');
+        };
+        // The attach below retries the cleanup (R14), so its store's drop fails as well.
+        for (const s of [a, b]) hooks(s, { beforeOrphanDrop: failDrop });
         expect(await (b as any).cleanupOrphan(doc, 2)).toBe('failed');
-        expect(await docsOn(coll)).toMatchObject([{ state: 'orphaned', dropDecided: true, indexId: r }]);
+        const [kept] = await docsOn(coll);
+        expect(kept).toMatchObject({ state: 'orphaned', dropDecided: true, indexId: r });
+        // R14: the failed drop expires the record, so the next call retries it at once.
+        expect(kept!.leaseUntil.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
         expect(logs.error.some(m => m.includes(r) && m.includes(doc._id) && m.includes('injected'))).toBe(true);
         const attach: any = await attachN(coll).catch(e => e);
         expect(attach?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
@@ -1833,7 +1877,9 @@ describe('provisioning protocol', () => {
             const proven = pause();
             const p = pause();
             hooks(a, { leaseMs: 0, ...(orphan ? { beforeRecordOwnership: proven.hook } : {}), [seam]: p.hook });
+            const { drops } = recordDrops(b);
             const call = create(a, coll).catch(e => e);
+            let r: string | undefined;
             try {
               if (orphan) {
                 await reached(proven);
@@ -1842,6 +1888,7 @@ describe('provisioning protocol', () => {
                 proven.release.resolve();
               }
               await reached(p);
+              r = (await docsOn(coll))[0]?.indexId;
               await reconcile(b, coll);
             } finally {
               proven.release.resolve();
@@ -1849,6 +1896,8 @@ describe('provisioning protocol', () => {
             }
             const result: any = await call;
             if (orphan) {
+              // The reconciler's orphaned branch did the cleanup.
+              expect(drops).toEqual([{ collectionName: coll, name: vec, id: r }]);
               expect(result?.message).toBe(P7C);
               expect(await entry(coll)).toBeNull();
               await waitFor(async () => (await listedId(db, coll, vec)) === undefined);
@@ -1864,12 +1913,12 @@ describe('provisioning protocol', () => {
         },
       );
 
-      it('P-STALE-ORPHAN: a stale record whose drop fails refuses the attach with M8; a retry runs the cleanup', async () => {
+      it('P-STALE-ORPHAN: a stale record whose drop fails refuses the attach with M8; an immediate retry runs the cleanup', async () => {
         const { coll, r, doc } = await seedOrphan('pstaleorph', new Date(0));
         const logs = captureLogs(a);
         const { drops } = recordDrops(a);
+        // The default lease: a failed drop expires the record (R14), so an immediate retry cleans it.
         hooks(a, {
-          leaseMs: 0,
           beforeOrphanDrop: async () => {
             throw new Error('injected drop failure');
           },
