@@ -63,7 +63,9 @@ const chunkAt = (name: string, endMs: number) => ({
   lastObservedAt: at(endMs),
 });
 
-if (process.env.ENABLE_TESTS === 'true') {
+// Needs a live SQL Server. Without ENABLE_TESTS the file must still register a (skipped) suite,
+// or Vitest fails it with "No test suite found".
+describe.runIf(process.env.ENABLE_TESTS === 'true')('MSSQL observational memory', () => {
   createObservationalMemoryConcurrencyTests({
     label: 'MSSQL (two pools)',
     createStores: async () => {
@@ -448,4 +450,4 @@ if (process.env.ENABLE_TESTS === 'true') {
       expect(head?.id).toBe(record.id);
     });
   });
-}
+});
