@@ -41,7 +41,7 @@ export const createCommitInputSchema = z
   .object({
     project_id: z
       .union([
-        z.number().int().positive(),
+        z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
         z
           .string()
           .min(1)
@@ -68,7 +68,7 @@ export const createCommitInputSchema = z
     start_sha: z.string().optional().describe('SHA of the commit to use as the parent for the new commit'),
     start_project: z
       .union([
-        z.number().int().positive(),
+        z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
         z
           .string()
           .min(1)

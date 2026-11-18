@@ -18,7 +18,7 @@ export const updateProjectInputSchema = z
   .object({
     id: z
       .union([
-        z.number().int().positive(),
+        z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
         z
           .string()
           .min(1)
