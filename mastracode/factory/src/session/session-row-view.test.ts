@@ -84,12 +84,21 @@ describe('session order', () => {
 
   it('orders activity as live work, then idle, then done, across factory and user rows whatever their age', () => {
     const rows = [
-      row('done', { status: 'done' }, { createdAt: '2026-09-04T12:00:00.000Z' }),
-      row('idle', {}, { createdAt: '2026-09-04T11:00:00.000Z' }),
-      userRow('running', { status: 'working' }, { createdAt: '2026-09-04T08:00:00.000Z' }),
+      row('done', { status: 'done', updatedAt: '2026-09-04T12:00:00.000Z' }),
+      row('idle', { updatedAt: '2026-09-04T11:00:00.000Z' }),
+      userRow('running', { status: 'working', updatedAt: '2026-09-04T08:00:00.000Z' }),
     ];
 
     expect(sessionIds(rows, { sort: 'activity' })).toEqual(['running', 'idle', 'done']);
+  });
+
+  it('orders activity within a status by last update, so an old session updated since beats a new one left alone', () => {
+    const rows = [
+      userRow('new-untouched', { updatedAt: '2026-09-04T11:00:00.000Z' }, { createdAt: '2026-09-04T11:00:00.000Z' }),
+      userRow('old-updated', { updatedAt: '2026-09-04T11:30:00.000Z' }, { createdAt: '2026-09-01T08:00:00.000Z' }),
+    ];
+
+    expect(sessionIds(rows, { sort: 'activity' })).toEqual(['old-updated', 'new-untouched']);
   });
 
   it('orders by last update even when creation order disagrees', () => {
@@ -144,6 +153,26 @@ describe('session filters', () => {
 
     expect(sessionIds(rows, { status: 'done' })).toEqual(['done']);
     expect(sessionIds(rows, { status: 'waiting' })).toEqual(['waiting']);
+  });
+
+  it('keeps the rows of one source: a board, the sessions people started, or the ones Slack started', () => {
+    const rows = [
+      userRow('web'),
+      userRow('slack', {}, { branch: 'slack/123.456' }),
+      row('work'),
+      row('release', { board: 'release' }),
+    ];
+
+    expect(sessionIds(rows, { source: 'slack' })).toEqual(['slack']);
+    expect(sessionIds(rows, { source: 'user' })).toEqual(['web']);
+    expect(sessionIds(rows, { source: 'board:release' })).toEqual(['release']);
+    expect(listed(rows, { source: 'board:work' })).toMatchObject({ total: 4, matching: 1 });
+  });
+
+  it('refuses a source that is neither a board, user nor slack', () => {
+    for (const source of ['all', 'github', 'board:', 'Slack']) {
+      expect(sessionRowsQuerySchema.safeParse({ source }).success, source).toBe(false);
+    }
   });
 
   it('counts every row in total and only the matching ones in matching', () => {
@@ -216,7 +245,7 @@ describe('a card with its sessions revealed', () => {
 
   it('sorts a card by what its sessions carry, so newer idle rows do not push it out of the window', () => {
     const newerIdle = Array.from({ length: 5 }, (_, index) =>
-      row(`idle-${index}`, {}, { createdAt: '2026-09-04T11:00:00.000Z' }),
+      row(`idle-${index}`, { updatedAt: '2026-09-04T11:00:00.000Z' }),
     );
 
     expect(sessionIds([...newerIdle, ...revealed], { sort: 'activity' })).toEqual([
@@ -285,7 +314,7 @@ describe('group window', () => {
 
   it('lists the first five rows of each group and counts the rest', () => {
     const otherBoard = Array.from({ length: 6 }, (_, index) => row(`release-${index}`, { board: 'release' }));
-    const answer = listed([...rows, ...otherBoard], { groupBy: 'board' });
+    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', sort: 'created' });
 
     expect(answer.groups.map(group => [group.key, group.rows.length, group.total])).toEqual([
       ['board:release', 5, 6],
@@ -295,7 +324,7 @@ describe('group window', () => {
 
   it('lists a group as deep as the reader asked, and other groups at five', () => {
     const otherBoard = Array.from({ length: 6 }, (_, index) => row(`release-${index}`, { board: 'release' }));
-    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', window: ['board:work:7'] });
+    const answer = listed([...rows, ...otherBoard], { groupBy: 'board', sort: 'created', window: ['board:work:7'] });
 
     expect(answer.groups.map(group => [group.key, group.rows.length])).toEqual([
       ['board:release', 5],

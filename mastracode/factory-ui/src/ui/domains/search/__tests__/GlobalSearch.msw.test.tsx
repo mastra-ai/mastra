@@ -307,7 +307,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   return state;
 }
 
-function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
+function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/account`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
   renderWithProviders(
@@ -378,7 +378,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await screen.findByRole('heading', { name: 'Preferences' });
+    await screen.findByRole('heading', { name: 'My account' });
     const settingsNavigation = await screen.findByRole('navigation', { name: 'Settings sections' });
     const focusedBeforeSearch = within(settingsNavigation).getByRole('button', { name: 'Back to app' });
     act(() => focusedBeforeSearch.focus());
@@ -476,7 +476,7 @@ describe('Global search', () => {
       'Work',
       'Pull requests',
       'Rules',
-      'Preferences',
+      'My account',
       'Manage Factory',
       'Connections',
       'Repositories',
@@ -1024,7 +1024,7 @@ describe('Global search', () => {
 
   it('selects Settings with origin state and closes without creating a session', async () => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();
@@ -1067,7 +1067,7 @@ describe('Global search', () => {
     },
   ])('selects $title on the declared route and closes search', async ({ title, path, preservesOrigin }) => {
     const requests = stubSearchApi();
-    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;
+    const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/account`;
     const user = userEvent.setup();
     const { router } = renderSearchRoute(origin);
     const dialog = await openWithShortcut();

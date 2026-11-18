@@ -2148,6 +2148,7 @@ export class Workflow<
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       persistResumeClaim: options.persistResumeClaim,
+      localCancellationOnly: options.localCancellationOnly,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       watchExecutionLoss: options.watchExecutionLoss,

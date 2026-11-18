@@ -5,6 +5,7 @@ import {
   planSpanQuery,
   spanQueryRequestSchema,
   TraceQueryCursorError,
+  TraceQueryUnsupportedError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -637,3 +638,16 @@ it.each(['durationMs', 'model', 'provider'] as const)(
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
   },
 );
+
+it('maps a typed store unsupported error to the route-specific 501', async () => {
+  const { mastra, observabilityStore } = createHarness();
+  observabilityStore.querySpans.mockRejectedValue(
+    new TraceQueryUnsupportedError('Indexed token search is not supported by this store'),
+  );
+  const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE })));
+  expect(error.status).toBe(501);
+  expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+    code: 'SPAN_QUERY_UNSUPPORTED',
+    message: 'Indexed token search is not supported by this store',
+  });
+});

@@ -23,6 +23,7 @@ import {
   SESSION_ROW_WINDOW_MAX,
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
+  sessionRowSourceSchema,
 } from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
@@ -157,6 +158,8 @@ export const intakeRouteInputSchema = z
     on: intakeRouteFields.on.optional(),
     /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
     pullRequestOpenedMovesOnly: z.literal(true).optional(),
+    /** Restores a route read with `outsiderPullRequestsGated` as it was: its card moves skipping outside authors' pull requests. */
+    outsiderPullRequestsGated: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -167,6 +170,12 @@ export const intakeRoutePatchSchema = z
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
     on: intakeRouteFields.on.optional(),
+    /**
+     * `false` lets outside authors' pull requests match an older rule's card moves, like every rule
+     * written since rules decided them. No other edit changes it, so an edit and its Undo can't
+     * quietly widen the rule.
+     */
+    outsiderPullRequestsGated: z.literal(false).optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -210,6 +219,12 @@ const intakeRouteSchema = z.object({
    * files no pull request, through every edit. Add a route to file pull requests.
    */
   pullRequestOpenedMovesOnly: z.literal(true).optional(),
+  /**
+   * True on a route stored before card-move rules decided outsiders' pull requests: its card moves
+   * skip an outside author's pull request unless its conditions test `pullRequest.trusted`. Edits
+   * keep it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
+   */
+  outsiderPullRequestsGated: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -247,11 +262,10 @@ const intakeOrderResponseSchema = z.object({
   /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
   evaluator: z.enum(['route-list', 'intake-order']),
   /**
-   * What decided `evaluator`: the Factory's `intake.evaluator` option or `FACTORY_INTAKE_EVALUATOR`
-   * (forced on every project), the project's own setting, or none (a project from before the
-   * setting, on `route-list`).
+   * What decided `evaluator`: `FACTORY_INTAKE_EVALUATOR` (forced on every project), the project's
+   * own setting, or none (a project from before the setting, on `route-list`).
    */
-  evaluatorSource: z.enum(['option', 'env', 'project', 'legacy']),
+  evaluatorSource: z.enum(['env', 'project', 'legacy']),
   /** The project's own setting, used unless one is forced; null for a project from before the setting. */
   projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
   /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
@@ -1124,6 +1138,8 @@ export const sessionRowsQuerySchema = z.object({
   owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
   status: z.enum(SESSION_ROW_STATUSES).optional(),
   updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
+  /** `board:<board id>`, `user` or `slack`: keeps the rows that start there. */
+  source: sessionRowSourceSchema.optional(),
   /** `true` lists a card's other sessions under its row. */
   children: z.enum(['true']).optional(),
   /** Repeatable. Sessions listed before every other one of their group. */
@@ -1474,6 +1490,8 @@ const skillNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
 const skillResponseSchema = z.object({ skill: entitySchema });
+/** `skill` is null when the request deleted a skill the project created. */
+const skillRevertResponseSchema = z.object({ skill: entitySchema.nullable() });
 
 /** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
 function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
@@ -1494,6 +1512,12 @@ export const skillOverrideBodySchema = z
  */
 export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
+/** A new skill's SKILL.md must load under the name it is created with, exactly as the runtime validates it. */
+export const skillCreateBodySchema = z
+  .object({ name: skillNameSchema, content: skillContentSchema })
+  .strict()
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
@@ -2074,10 +2098,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: z.object({ projectId: uuidSchema.optional() }),
     responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
+  skillCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/skills',
+    description: 'Create a skill for one Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: skillCreateBodySchema,
+    responseSchema: skillResponseSchema,
+  },
   skillOverrideSave: {
     method: 'PUT',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Save a project's edited SKILL.md for a Factory skill",
+    description: "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     pathSchema: skillPathSchema,
     bodySchema: skillOverrideBodySchema,
     responseSchema: skillResponseSchema,
@@ -2085,9 +2117,10 @@ export const FACTORY_ROUTE_CONTRACTS = {
   skillOverrideRevert: {
     method: 'DELETE',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    description:
+      "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     pathSchema: skillPathSchema,
-    responseSchema: skillResponseSchema,
+    responseSchema: skillRevertResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

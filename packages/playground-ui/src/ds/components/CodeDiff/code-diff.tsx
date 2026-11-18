@@ -97,7 +97,11 @@ export function CodeDiff({ className, layout, overflow = 'wrap', header, ref, ..
   };
 
   return (
-    <div ref={ref} className={cn('code-diff min-w-0 overflow-clip rounded-md border border-border bg-card', className)}>
+    <div
+      ref={ref}
+      data-header={header ? '' : undefined}
+      className={cn('code-diff min-w-0 overflow-clip rounded-md border border-border bg-card', className)}
+    >
       {header ? (
         <CodeDiffHeader
           {...header}

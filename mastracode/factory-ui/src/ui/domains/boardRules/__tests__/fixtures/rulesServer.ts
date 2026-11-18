@@ -167,11 +167,13 @@ export function serveRules({
           { status: 422 },
         );
       }
-      const { expectedRevision: _revision, target, ...rest } = body;
+      const { expectedRevision: _revision, target, outsiderPullRequestsGated, ...rest } = body;
       const updated: IntakeRouteInfo = {
         ...current,
         ...rest,
         when: rest.when === undefined ? current.when : rest.when,
+        // As the server does: only an explicit `false` clears the older rule's outsider gate.
+        ...(outsiderPullRequestsGated === false ? { outsiderPullRequestsGated: undefined } : {}),
         target: target
           ? {
               boardKey: target.boardKey,

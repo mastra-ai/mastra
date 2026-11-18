@@ -7,7 +7,7 @@ Claw has resource-scoped observational memory, so it remembers your preferences 
 ## Prerequisites
 
 - Node.js `>= 22.13.0`
-- A Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
+- A Gateway API key — create one in the [Mastra platform dashboard](https://projects.mastra.ai)
 - (Optional) A Turso database; for local dev, the default `file:./mastra.db` works.
 - Playwright's Chromium browser for local runs, or `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
 

@@ -907,10 +907,14 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             };
 
             // Live events are not replayed, so seed a late subscriber with the
-            // current display state (including the message in flight). This runs
-            // before subscribe() so it precedes the buffered workspace events
-            // subscribe() replays; both are synchronous, so no event slips between.
-            if (displayState !== false) {
+            // session's current state: the display state snapshot by default, or
+            // the equivalent events for a client that opted out of snapshots.
+            // This runs before subscribe() so it precedes the buffered workspace
+            // events subscribe() replays; both are synchronous, so no event slips
+            // between.
+            if (displayState === false) {
+              for (const event of session.initialStateEvents()) push(toWireEvent(event));
+            } else {
               push(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
             }
 

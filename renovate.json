@@ -447,7 +447,7 @@
       "allowedVersions": "<0.20.0"
     },
     {
-      "description": "Keep the OTLP exporters in observability/* on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1, `import` fails with \"does not provide an export named 'SeverityNumber'\", and @mastra/otel-exporter silently exports nothing. Renovate reads 0.22x to 0.300 as a minor update, so the major approval gate does not catch it. Remove when observability/* moves to SDK 3 together.",
+      "description": "Keep the OTLP exporters in observability/* on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1, `import` fails with \"does not provide an export named 'SeverityNumber'\", and @mastra/otel-exporter silently exports nothing. Renovate reads 0.22x to 0.300 as a minor update, so the major approval gate does not catch it. @mastra/langfuse lists exporter-trace-otlp-http and otlp-exporter-base only because @langfuse/otel 5.x accepts any version below 1.0.0 as a peer, so npm would install the SDK 3 ones; drop both from it when it moves to @langfuse/otel 6.1.1 or later. Remove when observability/* moves to SDK 3 together.",
       "matchFileNames": ["observability/**/package.json"],
       "matchPackageNames": [
         "@opentelemetry/exporter-logs-otlp-grpc",
@@ -455,7 +455,8 @@
         "@opentelemetry/exporter-logs-otlp-proto",
         "@opentelemetry/exporter-trace-otlp-grpc",
         "@opentelemetry/exporter-trace-otlp-http",
-        "@opentelemetry/exporter-trace-otlp-proto"
+        "@opentelemetry/exporter-trace-otlp-proto",
+        "@opentelemetry/otlp-exporter-base"
       ],
       "allowedVersions": "<0.300.0"
     },

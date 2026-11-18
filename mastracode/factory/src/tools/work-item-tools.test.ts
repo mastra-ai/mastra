@@ -815,7 +815,7 @@ describe("a card's work requested from a chat", () => {
       env.run('factory_transition_work_item', { workItem: PULL_REQUEST_URL, stage: 'pr-review', rerun: true }),
     ).resolves.toMatchObject({
       workItemId: card.id,
-      url: `https://factory.example.com/factories/project-1/work?item=${card.id}`,
+      url: `https://factory.example.com/factories/project-1/cards/${card.id}`,
       stage: 'pr-review',
       reran: true,
     });
@@ -885,7 +885,7 @@ describe("a card's work requested from a chat", () => {
     ).resolves.toMatchObject({
       workItemId: card.id,
       status: 'pending',
-      url: `https://factory.example.com/factories/project-1/work?item=${card.id}`,
+      url: `https://factory.example.com/factories/project-1/cards/${card.id}`,
     });
 
     // Who the card's review session reports to when its run ends.

@@ -11,7 +11,6 @@ export function BoardItemsSkeleton({ label, layout, rows = 3 }: { label: string;
       <SkeletonRows label={label} rows={rows} className="gap-px">
         <div aria-hidden className={cn(BOARD_LIST_ROW_LAYOUT_CLASS, 'max-sm:min-h-13')}>
           <Skeleton className="size-3.5 shrink-0 motion-reduce:before:animate-none" />
-          <Skeleton className="h-3 w-14 motion-reduce:before:animate-none max-sm:hidden" />
           <div className="flex min-w-0 items-center justify-between gap-3">
             <Skeleton className="h-3.5 w-3/5 max-w-80 motion-reduce:before:animate-none" />
             <Skeleton className="h-5 w-16 shrink-0 rounded-full motion-reduce:before:animate-none max-sm:hidden" />

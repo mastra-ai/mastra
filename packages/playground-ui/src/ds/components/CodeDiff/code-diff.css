@@ -12,3 +12,10 @@
   --diffs-bg-separator-override: var(--muted);
   --diffs-fg-number-override: var(--placeholder);
 }
+
+/* Under a file header the lines run flush from the header to the card's bottom edge, like a pull request.
+   The horizontal scrollbar only takes room when lines overflow. */
+.code-diff[data-header] {
+  --diffs-gap-block: 0px;
+  --diffs-overflow-override: auto;
+}

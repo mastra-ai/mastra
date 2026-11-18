@@ -25,7 +25,7 @@ Install `@mastra/memory` and a [storage adapter](/docs/storage#supported-provide
 npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
-OM needs storage that supports it (`@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex` or `@mastra/oracledb`), a thread for every call, and `observationalMemory: true`. This script stores memory in a local LibSQL file and calls the agent twice on one thread:
+OM needs storage that supports it (`@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, `@mastra/oracledb` or `@mastra/mssql`), a thread for every call, and `observationalMemory: true`. This script stores memory in a local LibSQL file and calls the agent twice on one thread:
 
 ```typescript title="src/observational-memory.ts"
 import { Agent } from '@mastra/core/agent'

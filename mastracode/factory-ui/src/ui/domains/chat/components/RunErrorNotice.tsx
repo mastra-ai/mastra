@@ -20,6 +20,7 @@ import type { ComponentType } from 'react';
 import { ChatSessionContext } from '../context/ChatSessionContext';
 import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext';
 import { AddGatewayCreditsAction } from './AddGatewayCreditsAction';
+import { ChangeMemoryModelAction } from './ChangeMemoryModelAction';
 import { ContinueRunAction } from './ContinueRunAction';
 import { NewSessionAction } from './NewSessionAction';
 import { ProviderReconnectAction } from './ProviderReconnectAction';
@@ -31,6 +32,7 @@ const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType<{ entryId: string
   credentials: ProviderReconnectAction,
   credits: AddGatewayCreditsAction,
   model: ChangeModelAction,
+  memory_model: ChangeMemoryModelAction,
   new_session: NewSessionAction,
 };
 

@@ -1,8 +1,13 @@
 import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
 import { assertKnowledgeNoteTextWithinBound, knowledgePagePath } from '../storage/domains/knowledge/pages';
-import type { KnowledgeNote, KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
-import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
+import type {
+  KnowledgeNote,
+  KnowledgePage,
+  KnowledgeProvenance,
+  MoveKnowledgePageInput,
+} from '../storage/domains/knowledge/pages';
+import { knowledgeSubtree, refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 import { knowledgeEmbedFailedWarning } from './semantic';
@@ -41,6 +46,20 @@ export interface KnowledgeUpsertPageResult {
 export interface KnowledgeRemovePageInput {
   scope: string;
   path: string;
+  author?: string;
+}
+
+/** @experimental */
+export interface KnowledgeMovePageInput {
+  /** Scope address and key path of the page to move, as in {@link KnowledgeUpsertPageInput}. */
+  scope: string;
+  path: string;
+  /** Key path of the new parent in the destination scope. Left out or empty: the top of the scope. */
+  parent?: string;
+  /** Destination scope address. Default `scope`. Created on first write, like `upsertPage`. */
+  toScope?: string;
+  /** The page's version as you read it. Default: its current version. */
+  expectedVersion?: number;
   author?: string;
 }
 
@@ -163,6 +182,7 @@ export async function upsertKnowledgePage(
   host: KnowledgeHostWriter,
   input: KnowledgeUpsertPageInput,
 ): Promise<KnowledgeUpsertPageResult> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   // No principals: the host is trusted, and the scope is placed (belongsTo) by the first run that holds it.
@@ -203,6 +223,7 @@ export async function removeKnowledgePage(
   host: KnowledgeHostWriter,
   input: KnowledgeRemovePageInput,
 ): Promise<KnowledgePage | null> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
@@ -231,6 +252,72 @@ export async function removeKnowledgePage(
     await refreshKnowledgeLinksTo(storage, [deleted]);
   });
   return deleted;
+}
+
+/**
+ * Moves a page and its subtree under `parentId`, then re-resolves links: the subtree's
+ * `scope#key/key` paths changed, so links by an old path stop resolving and new ones may. The page
+ * keeps its id, notes, pins and vectors (the index holds ids only). Shared by the host and the
+ * `knowledge_page` tool.
+ * @internal
+ */
+export async function moveKnowledgePageAndRelink(
+  storage: KnowledgeStorage,
+  warn: ((message: string) => void) | undefined,
+  input: MoveKnowledgePageInput,
+): Promise<KnowledgePage> {
+  const moved = await storage.movePage(input);
+  await updateKnowledgeLinks(warn, async () => {
+    // Every carried page may now sit in another scope, where its links by name resolve differently.
+    for (const page of await knowledgeSubtree(storage, moved)) await syncKnowledgePageBodyLinks(storage, page);
+    await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
+  });
+  return moved;
+}
+
+/** @internal */
+export async function moveKnowledgePage(
+  host: KnowledgeHostWriter,
+  input: KnowledgeMovePageInput,
+): Promise<KnowledgePage> {
+  await host.runtime.resolve();
+  const keys = splitPath(input.path);
+  const ref = `${input.scope}#${keys.join('/')}`;
+  await host.runtime.checkDeclarations();
+  const storage = await host.getStorage();
+  const [scope] = await storage.getScopesByAddress([input.scope]);
+  const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
+  if (!scope || !page) throw new KnowledgeNotFoundError('page', ref);
+  const template = await host.runtime.templatePageRef(page);
+  if (template) throw new Error(`"${template}" is declared in config; change the scope's pages to move it.`);
+
+  const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
+  const toAddress = input.toScope ?? input.scope;
+  const parentKeys = knowledgePagePath(input.parent ?? '');
+  if (toAddress === input.scope && keys.every((key, i) => parentKeys[i] === key)) {
+    throw new Error(`"${ref}" can't move under itself or its own subtree.`);
+  }
+  const destination =
+    toAddress === input.scope ? scope : await host.runtime.materializeScope(toAddress, [], provenance);
+  const parent = parentKeys.length
+    ? await storage.getPageByPath({ scopeId: destination.id, path: parentKeys, read: 'all' })
+    : destination;
+  if (!parent) throw new KnowledgeNotFoundError('page', `${toAddress}#${parentKeys.join('/')}`);
+
+  try {
+    return await moveKnowledgePageAndRelink(storage, host.warn, {
+      id: page.id,
+      expectedVersion: input.expectedVersion ?? page.version,
+      parentId: parent.id,
+      provenance,
+    });
+  } catch (error) {
+    if ((error as Error | undefined)?.name === 'KnowledgePageKeyConflictError') {
+      const at = parentKeys.length ? `${toAddress}#${parentKeys.join('/')}` : toAddress;
+      throw new Error(`"${at}" already has a page with key "${page.key}"; move or rename that one first.`);
+    }
+    throw error;
+  }
 }
 
 const MENTION = /\[\[([^[\]]+)\]\]/g;
@@ -262,6 +349,7 @@ export async function addKnowledgeNote(
   host: KnowledgeHostWriter,
   input: KnowledgeAddNoteInput,
 ): Promise<KnowledgeNote> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   const storage = await host.getStorage();
@@ -285,6 +373,7 @@ export async function updateKnowledgeNote(
   host: KnowledgeHostWriter,
   input: KnowledgeUpdateNoteInput,
 ): Promise<KnowledgeNote> {
+  await host.runtime.resolve();
   assertKnowledgeNoteTextWithinBound(input.text);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   const storage = await host.getStorage();
@@ -324,6 +413,7 @@ export async function removeKnowledgeNote(
   host: KnowledgeHostWriter,
   input: { id: string; author?: string },
 ): Promise<KnowledgeNote | null> {
+  await host.runtime.resolve();
   const author = input.author ?? 'host';
   const storage = await host.getStorage();
   const note = await storage.getNote({ id: input.id, read: 'all' });

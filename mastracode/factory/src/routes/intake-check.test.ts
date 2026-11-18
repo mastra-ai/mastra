@@ -202,7 +202,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       routes: await domains.boards.listIntakeRoutes(scope),
       order: await domains.boards.readIntakeOrder(scope, { boards: ['work', 'docs'] }),
     });
-    return { send, docsRule, workAll, docsCard, notRouted, lookups, snapshot, domains, scope };
+    return { send, docsRule, workAll, docsCard, notRouted, lookups, snapshot, domains, scope, storage };
   }
 
   it('lets members dry-run and test the saved rules, keeps drafts to admins, and writes nothing', async () => {
@@ -268,6 +268,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     const { send, docsCard } = await setup({ evaluator: 'route-list' });
     expect((await send('/intake/dry-run', {}, MEMBER)).body.evaluator).toBe('route-list');
     expect((await send('/intake/test', { itemId: docsCard.id }, MEMBER)).body.evaluator).toBe('route-list');
+  });
+
+  it("previews a draft rule filing into a phase the board's first phase can't move to, as filing would", async () => {
+    const { send, docsCard } = await setup();
+    // Work's Intake can't move to Execute; an intake rule may still file there.
+    const draft = {
+      boards: [{ boardKey: 'work', routes: [{ name: 'Straight to Execute', target: { phaseKey: 'execute' } }] }],
+    };
+    expect(await send('/intake/test', { itemId: docsCard.id, ...draft })).toMatchObject({
+      status: 200,
+      body: { placement: { boardKey: 'work', phase: 'execute' } },
+    });
+    expect((await send('/intake/dry-run', draft)).status).toBe(200);
   });
 
   it('refuses what saving would refuse, and items it cannot read, before reading or writing anything', async () => {
@@ -378,6 +391,90 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
     expect(body.moves[0].at).toBe(new Date(Date.UTC(2030, 0, 1, 0, 0, 0, CARD_HISTORY + 4)).toISOString());
     const rows = await Promise.all(listed.mock.results.map(result => result.value));
     expect(rows.map(read => read.length)).toEqual([CARD_HISTORY + 1]);
+  });
+
+  it("replays an outsider's push past a rule stored before rules decided, as dispatch skips it, in a saved run and a draft echoing it", async () => {
+    const { send, docsCard, workAll, domains, scope, storage } = await setup();
+    const review = await domains.boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Pushes go back to Triage',
+        when: null,
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', phaseKey: 'triage' },
+      },
+      ADMIN,
+    );
+    // As stored before the column existed: NULL, never backfilled, so the old gate holds.
+    await storage.ops.updateMany(
+      'factory_intake_routes',
+      { org_id: scope.orgId, factory_project_id: scope.factoryProjectId, id: review.id },
+      { outsider_pull_requests_gated: null },
+    );
+    const { revision } = (await domains.workItems.get({ orgId: scope.orgId, id: docsCard.id }))!;
+    await domains.workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: docsCard.id,
+      ingress: { identity: 'outsider-push' },
+      configVersion: 'test',
+      expectedRevision: revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'routeEvent',
+          idempotencyKey: 'outsider-push',
+          event: { type: 'pull_request.synchronized', pullRequestTrusted: false },
+        },
+      ],
+      causalChain: [],
+      now: new Date(Date.UTC(2030, 0, 1)),
+    });
+    const gatedSkip = {
+      routeId: review.id,
+      outcome: 'skipped',
+      reason: "the pull request's author is an outsider, and this older rule skips outside authors' pull requests",
+    };
+
+    const saved = await send('/intake/test', { itemId: docsCard.id }, MEMBER);
+    expect(saved.status).toBe(200);
+    expect(saved.body.moves[0]).toMatchObject({ outcome: 'stays', to: null });
+    expect(saved.body.moves[0].rules).toContainEqual(expect.objectContaining(gatedSkip));
+
+    // A draft sending the saved rules back unchanged answers the same: the preview never widens the rule.
+    const asDraft = (route: typeof review) => ({
+      id: route.id,
+      name: route.name,
+      when: route.when,
+      on: route.on,
+      target: { phaseKey: route.target.phaseKey, joinClosedIssue: route.target.joinClosedIssue },
+    });
+    const echoed = await send('/intake/test', {
+      itemId: docsCard.id,
+      boards: [{ boardKey: 'work', routes: [asDraft(review), asDraft(workAll)] }],
+    });
+    expect(echoed.status).toBe(200);
+    expect(echoed.body.moves[0]).toMatchObject({ outcome: 'stays', to: null });
+    expect(echoed.body.moves[0].rules).toContainEqual(expect.objectContaining(gatedSkip));
+
+    // A new draft rule decides for itself: with no gate and no trust condition it takes the outsider's push.
+    const fresh = await send('/intake/test', {
+      itemId: docsCard.id,
+      boards: [
+        {
+          boardKey: 'work',
+          routes: [
+            { name: 'Pushes go back to Triage', on: review.on, target: { phaseKey: 'triage' } },
+            asDraft(workAll),
+          ],
+        },
+      ],
+    });
+    expect(fresh.status).toBe(200);
+    expect(fresh.body.moves[0]).toMatchObject({
+      outcome: 'moves',
+      to: expect.objectContaining({ boardKey: 'work', phase: 'triage' }),
+    });
   });
 
   it("won't say where a burst lands when part of it is older than the decisions it reads", async () => {

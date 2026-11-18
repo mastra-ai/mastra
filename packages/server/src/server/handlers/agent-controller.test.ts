@@ -1200,6 +1200,52 @@ describe('agent-controller routes', () => {
       expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
     });
 
+    it('opens a displayState=false stream on the message in flight, then streams its deltas', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-late-no-snapshots',
+        id: 'user-late-no-snapshots',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'assistant-in-flight',
+        role: 'assistant',
+        createdAt: new Date('2026-01-02T03:04:05.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
+      } as any;
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'message_start', message });
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'so far' } });
+
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-late-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: ' and on' } });
+      const frames: any[] = [];
+      while (frames.length < 2) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object') frames.push(value);
+      }
+      await reader.cancel();
+
+      expect(frames).toEqual([
+        {
+          type: 'message_start',
+          message: expect.objectContaining({
+            id: 'assistant-in-flight',
+            content: expect.objectContaining({ parts: [{ type: 'text', text: 'so far' }] }),
+          }),
+        },
+        { type: 'message_update', id: 'assistant-in-flight', event: { type: 'text-delta', delta: ' and on' } },
+      ]);
+    });
+
     // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
     // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
     // stream, which a client that already left never does. (#28480)

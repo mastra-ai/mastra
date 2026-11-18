@@ -80,7 +80,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const draftStart = useContext(DraftSessionStartContext);
-  const onDraft = onUserDraft || draftStart !== null;
+  const onDraft = onUserDraft || draftStart !== undefined;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
