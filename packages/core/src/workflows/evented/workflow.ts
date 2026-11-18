@@ -2288,15 +2288,18 @@ export class EventedRun<
     // callbacks, so track the whole execution now, before the dispatch wait, so
     // shutdown() drains them before it closes storage and pubsub. Failures before
     // dispatch reject the caller below, so only later ones are logged here.
+    // `background` always fulfills, even if the logger throws, so shutdown's drain never
+    // sees a rejection from it and the release chain cannot raise an unhandled rejection.
     const background = execution.catch(error => {
-      if (isDispatched) {
+      if (!isDispatched) return;
+      try {
         this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      } catch {
+        // A failing logger must not fail the run's tracking or shutdown.
       }
     });
     const releaseTracking = this.mastra.__trackEventedRun(background);
-    // Release on either outcome: `background` rejects only if the logger throws, and a
-    // `.finally()` chain would turn that into an unhandled rejection.
-    void background.then(releaseTracking, releaseTracking);
+    void background.then(releaseTracking);
 
     // Surface subscribe/publish failures, but don't wait for the workflow to finish.
     await Promise.race([dispatched, execution]);
