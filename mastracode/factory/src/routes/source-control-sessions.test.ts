@@ -421,6 +421,18 @@ describe('source-control session routes', () => {
     );
     const app = buildApp([sourceControl], seed, controller, noRuns, user, undefined, renameThread);
     const path = `/web/user-sessions/${sessionId}/title`;
+    // A title request looks up the session's conversations last, then takes its turn. Watching
+    // those lookups tells when a request has passed its owner check and is waiting in line.
+    const lookups: Array<Promise<unknown>> = [];
+    const watch = <T>(lookup: Promise<T>) => {
+      lookups.push(lookup);
+      return lookup;
+    };
+    const queryThreadById = controller.queryThreadById.bind(controller);
+    const queryThreads = controller.queryThreads.bind(controller);
+    vi.spyOn(controller, 'queryThreadById').mockImplementation(input => watch(queryThreadById(input)));
+    vi.spyOn(controller, 'queryThreads').mockImplementation(input => watch(queryThreads(input)));
+    const LOOKUPS_PER_REQUEST = 3;
     return {
       sourceControl,
       controller,
@@ -435,8 +447,12 @@ describe('source-control session routes', () => {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ title }),
         }),
-      /** Long enough for a request to have written, had it not waited its turn behind the model. */
-      settle: () => new Promise(resolve => setTimeout(resolve, 100)),
+      /** Resolves once `count` title requests have finished their lookups and taken their place in line. */
+      inLine: async (count: number) => {
+        await vi.waitFor(() => expect(lookups.length).toBeGreaterThanOrEqual(count * LOOKUPS_PER_REQUEST));
+        await Promise.allSettled(lookups);
+        await new Promise(resolve => setImmediate(resolve));
+      },
     };
   }
 
@@ -449,7 +465,7 @@ describe('source-control session routes', () => {
     // Two typed titles while the model is still thinking: the later one must be the one kept.
     const first = session.typed('Typed first');
     const second = session.typed('Typed second');
-    await session.settle();
+    await session.inLine(3);
     expect(session.renameThread).not.toHaveBeenCalled();
     session.release(1);
     expect((await regenerated).status).toBe(200);
@@ -471,10 +487,10 @@ describe('source-control session routes', () => {
     const before = session.regenerate();
     await session.asked(1);
     const typed = session.typed('Typed title');
-    await session.settle();
+    await session.inLine(2);
     // Asked for after the typed title, so it must replace it, not report the answer still pending from before.
     const after = session.regenerate();
-    await session.settle();
+    await session.inLine(3);
     session.release(1);
     await session.asked(2);
     session.release(2);
@@ -494,7 +510,8 @@ describe('source-control session routes', () => {
     const regenerated = session.regenerate();
     await session.asked(1);
     const typed = session.typed('Typed by the old owner');
-    await session.settle();
+    // Past its owner check and waiting behind the regeneration when the session changes hands.
+    await session.inLine(2);
     await session.sourceControl.sessions.transferOwner({ sessionId, expectedUserId: 'user-1', toUserId: 'user-2' });
     session.release(1);
     await regenerated;

@@ -175,6 +175,20 @@ describe('Renaming a session by hand', () => {
     expect(input).toHaveValue(spaced);
   });
 
+  it('cuts text that is still too long once its extra whitespace is dropped', async () => {
+    useFactoryFixtures(() => [session]);
+
+    const user = userEvent.setup();
+    renderSection();
+
+    const input = await openRename(user, 'dropdown');
+    await user.clear(input);
+    // 60 words of one letter, two spaces apart: stored as 119 characters, so only 40 words fit.
+    await user.paste(Array.from({ length: 60 }, () => 'a').join('  '));
+
+    expect(input).toHaveValue(Array.from({ length: 40 }, () => 'a').join('  ') + '  ');
+  });
+
   it("offers no rename on a teammate's session", async () => {
     useFactoryFixtures(() => [session], 'user-2');
 
