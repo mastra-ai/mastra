@@ -1144,7 +1144,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     void delivery
       .finally(() => {
         inFlightDeliveries.delete(delivery);
-        if (isSubscribed) releaseTerminalSubscription();
+        // Buffered replay handlers run in the drain below, not in
+        // inFlightDeliveries; releasing mid-drain could null the controller
+        // under a terminal handler that is still awaiting its callback.
+        if (isSubscribed && !bufferingReplay) releaseTerminalSubscription();
       })
       .catch(() => {});
     if (nextLogIndex !== undefined && typeof event.index === 'number' && event.index >= nextLogIndex) {
