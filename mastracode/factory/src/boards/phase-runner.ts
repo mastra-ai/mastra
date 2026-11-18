@@ -8,6 +8,8 @@ export interface PhaseEntry {
   readonly initialEntry?: boolean;
   /** The card was moved into the phase it is already in, to run it again. */
   readonly reenter?: boolean;
+  /** The card came from another board: a phase of the same name there is a different phase. */
+  readonly boardEntry?: boolean;
 }
 
 /**
@@ -36,7 +38,7 @@ export function phaseRunDecision(
   rule: Pick<FactoryStageRuleContext, 'ingress' | 'item' | 'fromStage'>,
   entry: PhaseEntry = {},
 ): FactoryInvokeSkillDecision | undefined {
-  const sameStage = rule.fromStage === phaseKey;
+  const sameStage = rule.fromStage === phaseKey && entry.boardEntry !== true;
   if (sameStage && !entry.initialEntry && !entry.reenter) return undefined;
   const phase = Object.hasOwn(board.phases, phaseKey) ? board.phases[phaseKey] : undefined;
   if (phase?.kind !== 'working' || !phase.runner.skill) return undefined;

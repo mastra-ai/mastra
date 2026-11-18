@@ -10344,6 +10344,7 @@ describe('phase goals', () => {
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.metadata?.[PHASE_GOAL_METADATA_KEY]).toEqual({
       phaseKey: 'execute',
+      boardKey: 'work',
       goalId: decision!.id,
       threadId: 'thread-1',
       sessionId: 'session-1',

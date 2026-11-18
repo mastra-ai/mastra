@@ -1971,7 +1971,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemTransition: {
     method: 'POST',
     path: '/web/factory/projects/:id/work-items/:workItemId/transition',
-    description: 'Transition a work item with its expected revision',
+    description:
+      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
     pathSchema: transitionPathSchema,
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,
