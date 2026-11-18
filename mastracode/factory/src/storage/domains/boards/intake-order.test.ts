@@ -157,7 +157,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     expect((await boards.readIntakeOrder(scope, { boards: registry })).boardKeys).toEqual(['desk', 'work', 'ship']);
   });
 
-  it('deletes a board’s rules with it, closes the gaps, and takes it out of the order', async () => {
+  it('deletes a board’s rules with it and takes it out of the order, leaving other boards’ rules untouched', async () => {
     const { boards, scope } = await setup(['work', 'ship']);
     await boards.createIntakeRoute(scope, labelled('work', 'a'), 'admin');
     const shipRoute = await boards.createIntakeRoute(scope, labelled('ship', 'b'), 'admin');
@@ -168,10 +168,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     const { intakeRoutes } = await boards.delete(scope, 'ship', { expectedRevision: ship.revision });
 
     expect(intakeRoutes.map(route => route.id)).toEqual([shipRoute.id]);
+    // The surviving rules keep their positions and revisions; readers sort over the gap.
     const left = await boards.listIntakeRoutes(scope);
-    expect(left.map(route => [route.name, route.position])).toEqual([
-      ['work a', 0],
-      ['work everything', 1],
+    expect(left.map(route => [route.name, route.position, route.revision])).toEqual([
+      ['work a', 0, 1],
+      ['work everything', 2, 1],
     ]);
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work']);
   });

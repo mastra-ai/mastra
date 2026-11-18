@@ -283,7 +283,7 @@ If you've used Claude Code, you may have seen compaction happen during a long se
 
 Compaction waits until a conversation reaches a token threshold. It then summarizes the transcript and replaces earlier messages. It's a blunt fallback. The compaction turn adds latency, and a single summary has to represent everything that came before. Repeated summaries can flatten chronology or lose details that later become important.
 
-Prefer [Observational Memory](#observational-memory) for long-running conversations. It can process history asynchronously in the background while preserving temporal context. Reflection revisits accumulated memories and naturally prunes details that no longer matter. Mastra doesn't provide compaction out of the box, though you could implement it with a custom [processor](/docs/agents/processors).
+Prefer [Observational Memory](#observational-memory) for long-running conversations. It can process history asynchronously in the background while preserving temporal context. Reflection revisits accumulated memories and prunes details that no longer matter. Mastra doesn't provide compaction out of the box, though you could implement it with a custom [processor](/docs/agents/processors).
 
 ### Processors
 

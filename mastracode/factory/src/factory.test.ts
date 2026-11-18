@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { tools as connectTools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -85,7 +86,9 @@ const secretEncryption = createFactorySecretEncryption({
  */
 
 const controllerMock = {
-  onSessionCreated: vi.fn(),
+  onSessionCreated: vi.fn(() => () => {}),
+  onSessionDeleted: vi.fn(() => () => {}),
+  deleteSession: vi.fn(async () => false),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
   getSession: vi.fn(),
@@ -721,13 +724,31 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
-  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
-    const knowledge = { key: 'mastra', instance };
+  it('mounts a bare Knowledge instance and serves its reads under the instance id', async () => {
+    const knowledge = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
 
-    expect(config.knowledge).toEqual(knowledge);
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'shared' }),
+    );
+  });
+
+  it('still mounts the { key, instance } form and serves its reads under that key', async () => {
+    const instance = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
+    const knowledge = { key: 'legacy', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'legacy' }),
+    );
   });
 
   it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
@@ -963,6 +984,11 @@ describe('MastraFactory.prepare', () => {
 
   it('rejects the removed rules option with a migration hint', () => {
     expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
+  });
+
+  it('rejects the removed intake option and points at FACTORY_INTAKE_EVALUATOR', () => {
+    const config = { storage: fakeStorage(), intake: { evaluator: 'intake-order' } };
+    expect(() => new MastraFactory(config as never)).toThrow(/FACTORY_INTAKE_EVALUATOR/);
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
@@ -1624,6 +1650,106 @@ describe('MastraFactory.prepare', () => {
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
       });
+
+      // #30579: setting `tools` used to drop the project id, so Settings › Tools said Connect tools were off.
+      it('lists the connections in Settings › Tools when the tools option narrows them to read-only', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-narrowed');
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          auth: null,
+          tools: connectTools({ providers: ['linear'], allowTools: ['linear_list_*'] }),
+        });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+        expect(Object.keys(tools)).toContain('linear_list_teams');
+        expect(
+          Object.keys(tools).filter(name => name.startsWith('linear_') && !name.startsWith('linear_list_')),
+        ).toEqual([]);
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          projectId: 'project-narrowed',
+          toolsSource: 'custom',
+          connections: [expect.objectContaining({ id: 'conn-linear', integrationId: 'linear' })],
+        });
+
+        // The panel's tool list is what the tools option gives sessions, not Factory's default.
+        const listing = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(listing.status).toBe(200);
+        const { toolsSource, tools: listed } = (await listing.json()) as {
+          toolsSource: string;
+          tools: Array<{ name: string; description: string | null; excluded?: string }>;
+        };
+        expect(toolsSource).toBe('custom');
+        expect(listed.map(tool => tool.name).sort()).toEqual(
+          Object.keys(tools)
+            .filter(name => name.startsWith('linear_'))
+            .sort(),
+        );
+        expect(listed.find(tool => tool.name === 'linear_list_teams')?.description).toEqual(expect.any(String));
+        expect(listed.filter(tool => tool.excluded)).toEqual([]);
+      });
+
+      it('lists in Settings › Tools every Connect tool sessions get, and the ones Factory leaves out', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-default-list');
+        const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+        const sessionTools = Object.keys(
+          await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() }),
+        ).filter(name => name.startsWith('linear_'));
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(response.status).toBe(200);
+        const { toolsSource, tools: listed } = (await response.json()) as {
+          toolsSource: string;
+          tools: Array<{ name: string; excluded?: string }>;
+        };
+
+        expect(toolsSource).toBe('default');
+        const offered = listed.filter(tool => !tool.excluded).map(tool => tool.name);
+        expect(offered.sort()).toEqual([...sessionTools].sort());
+        expect(listed).toEqual(
+          expect.arrayContaining([
+            {
+              name: 'linear_delete_issue',
+              description: expect.any(String),
+              requiresApproval: false,
+              excluded: 'destructive',
+            },
+            expect.objectContaining({ name: 'linear_archive_issue', excluded: 'destructive' }),
+          ]),
+        );
+        expect(listed.filter(tool => tool.name.startsWith('github_'))).toEqual([]);
+      });
+
+      it("says why Settings › Tools can't list the tools when the Platform is down", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'down' });
+        stubPlatform(platform.url, 'project-list-down');
+        const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+        const app = new Hono();
+        mountApiRoutes(
+          app as never,
+          (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} }),
+        );
+        const response = await app.request('/web/integrations/platform/connect-tools/tools');
+        expect(response.status).toBe(502);
+        await expect(response.json()).resolves.toMatchObject({ error: 'tools_unavailable' });
+      });
     });
   });
 
@@ -2096,13 +2222,14 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toHaveLength(1);
     });
 
-    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+    it("primes the woken session owner's custom providers after resolving its credential policy", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
-      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+      // A user session runs on its owner's credentials, so on their own endpoints.
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').create({
+        owner: { orgId: 'org-1', userId: 'user-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'acme',
           name: 'Acme',
@@ -3120,7 +3247,9 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
+        base: {
+          controller: { onSessionCreated: vi.fn(() => () => {}), onSessionDeleted: vi.fn(() => () => {}), setChannels },
+        },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);

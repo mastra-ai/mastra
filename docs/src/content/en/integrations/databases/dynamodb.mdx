@@ -46,7 +46,7 @@ Detailed instructions for setting up the table using AWS CloudFormation or AWS C
 
 ## Usage
 
-### Basic Usage
+### Basic usage
 
 ```typescript
 import { Memory } from '@mastra/memory'
@@ -72,7 +72,7 @@ const memory = new Memory({
 })
 ```
 
-### Local Development with DynamoDB Local
+### Local development with DynamoDB Local
 
 For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html).
 
@@ -197,7 +197,7 @@ const storage = new DynamoDBStore({
 })
 ```
 
-### Supported Entity Types
+### Supported entity types
 
 TTL can be configured for these entity types:
 
@@ -211,7 +211,7 @@ TTL can be configured for these entity types:
 | `resource` | User/resource data |
 | `score` | Scoring results |
 
-### TTL Entity Configuration
+### TTL entity configuration
 
 Each entity type accepts the following configuration:
 
@@ -240,7 +240,7 @@ Each entity type accepts the following configuration:
 ]}
 />
 
-### Enabling TTL on Your DynamoDB Table
+### Enabling TTL on your DynamoDB table
 
 After configuring TTL in your code, you must enable TTL on the DynamoDB table itself:
 
@@ -315,17 +315,17 @@ Key aspects of this approach:
 - **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
 - **Consistency via Interface:** While the underlying storage model differs, this adapter adheres to the same `MastraStorage` interface as other adapters, ensuring it can be used interchangeably within the Mastra `Memory` component.
 
-### Mastra Data in the Single Table
+### Mastra data in the single table
 
 Within the single DynamoDB table, different Mastra data entities (such as Threads, Messages, Traces, Evals, and Workflows) are managed and distinguished using ElectroDB. ElectroDB defines specific models for each entity type, which include unique key structures and attributes. It allows the adapter to store and retrieve diverse data types efficiently within the same table.
 
 For example, a `Thread` item might have a primary key like `THREAD#<threadId>`, while a `Message` item belonging to that thread might use `THREAD#<threadId>` as a partition key and `MESSAGE#<messageId>` as a sort key. The Global Secondary Indexes (GSIs), detailed in `TABLE_SETUP.md`, are strategically designed to support common access patterns across these different entities, such as fetching all messages for a thread or querying traces associated with a workflow.
 
-### Advantages of Single-Table Design
+### Advantages of single-table design
 
 This implementation uses a single-table design pattern with ElectroDB, which offers several advantages within the context of DynamoDB:
 
-1. **Lower cost (potentially):** Fewer tables can simplify Read/Write Capacity Unit (RCU/WCU) provisioning and management, especially with on-demand capacity.
+1. **Lower cost (in some cases):** Fewer tables can simplify Read/Write Capacity Unit (RCU/WCU) provisioning and management, especially with on-demand capacity.
 1. **Better performance:** Related data can be co-located or accessed efficiently through GSIs, enabling fast lookups for common access patterns.
 1. **Simplified administration:** Fewer distinct tables to monitor and back up, with less to manage.
 1. **Reduced complexity in access patterns:** ElectroDB helps manage the complexity of item types and access patterns on a single table.

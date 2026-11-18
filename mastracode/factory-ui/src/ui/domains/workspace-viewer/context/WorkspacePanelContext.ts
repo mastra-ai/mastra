@@ -8,14 +8,17 @@ export interface WorkspaceSectionSlots {
   changeRequest?: ReactNode;
 }
 
+export type WorkspaceSlot = (slots?: WorkspaceSectionSlots) => ReactNode;
+
 export interface WorkspacePanelPage {
   subject: (lead: ReactNode | undefined) => ReactNode;
-  overview: (workspace: (slots?: WorkspaceSectionSlots) => ReactNode) => ReactNode;
+  overview: (workspace: WorkspaceSlot | undefined) => ReactNode;
 }
 
 export interface WorkspacePanelApi {
   open: boolean;
   setOpen: (open: boolean) => void;
+  hasContent: boolean;
   workspacePath?: string;
   threadId?: string;
   canDock: boolean;

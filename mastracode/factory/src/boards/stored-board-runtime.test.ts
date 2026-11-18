@@ -24,6 +24,7 @@ import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
@@ -1076,6 +1077,45 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ).rejects.toMatchObject({ code: 'project_not_found' });
         }, 60_000);
 
+        it('lets a board run a skill the named projects created, and refuses it where one has none', async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(await isolatedDatabase(), orgId);
+          const [withSkill, without] = [await createProject(replica, 'With'), await createProject(replica, 'Without')];
+          const created = await replica.send('POST', `/web/factory/projects/${withSkill}/skills`, {
+            name: 'release-notes',
+            content: '---\nname: release-notes\ndescription: Write release notes\n---\n\n# Notes\n',
+          });
+          expect(created.status, JSON.stringify(created.json)).toBe(201);
+          const notes: StoredBoardInput = {
+            ...bugsBoard,
+            key: 'notes',
+            name: 'Notes',
+            phases: bugsBoard.phases.map(phase =>
+              phase.key === 'fixing' ? { ...phase, runner: { context: 'work', skill: 'release-notes' } } : phase,
+            ),
+          };
+          const scope = (factoryProjectId: string) => ({ orgId, factoryProjectId });
+
+          // A list with a project that lacks the skill is refused before any project is written.
+          await expect(
+            replica.factory.upsertBoard(notes, { projects: [scope(withSkill), scope(without)] }),
+          ).rejects.toMatchObject({ code: 'unknown_skill' });
+          expect(await replica.boards.get(scope(withSkill), 'notes')).toBeNull();
+          // A board for every project may only run the app's skills.
+          await expect(replica.factory.upsertBoard(notes, { projects: 'all' })).rejects.toMatchObject({
+            code: 'unknown_skill',
+          });
+
+          expect(await replica.factory.upsertBoard(notes, { projects: [scope(withSkill)] })).toMatchObject({
+            inserted: [scope(withSkill)],
+          });
+          // Saved again, it is checked against the project's skills as an edit is.
+          expect(await replica.factory.upsertBoard(notes, { projects: [scope(withSkill)] })).toMatchObject({
+            unchanged: [scope(withSkill)],
+          });
+        }, 60_000);
+
         it('stores the Work board the README shows for replacing Work in every project, over edits and cards in Triage, and keeps it through a reset', async () => {
           stubModel();
           // The README, not the changeset: `changeset version` deletes changesets.
@@ -1280,6 +1320,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             recheckMs: 0,
           });
           const configVersion = 'work-less-arrivals-v1';
+          const intake = replica.storage.getDomain<IntakeStorage>('intake');
+          await intake.saveConfig({ orgId, config: { github: { enabled: true, sourceIds: ['acme/ops'] } } });
           const rules = new GithubRules({
             github: {
               rules: resolveGithubRules(),
@@ -1289,6 +1331,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             sourceControl,
             integrationStorage: replica.storage.getDomain<IntegrationStorage>('integrations').forIntegration('github'),
             projects: replica.storage.getDomain<FactoryProjectsStorage>('projects'),
+            intake,
             storage: workItems,
             boards,
             configVersion,

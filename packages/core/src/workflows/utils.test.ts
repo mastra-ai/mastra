@@ -450,4 +450,44 @@ describe('abortableSleep', () => {
     await expect(sleep).resolves.toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  // Node and Bun fire a `setTimeout` delay above 2^31-1 ms after 1 ms.
+  describe('longer than the largest timer delay', () => {
+    const maxDelay = 2 ** 31 - 1;
+    const duration = 2 ** 31 + 60_000;
+
+    it('resolves only after the full duration', async () => {
+      let resolved = false;
+      void abortableSleep(duration).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(maxDelay);
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(duration - maxDelay - 1);
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(resolved).toBe(true);
+    });
+
+    it('clears the timer and resolves when aborted after the largest timer delay has passed', async () => {
+      const controller = new AbortController();
+      let resolved = false;
+      void abortableSleep(duration, controller.signal).then(() => {
+        resolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(maxDelay + 1_000);
+      expect(resolved).toBe(false);
+      expect(vi.getTimerCount()).toBe(1);
+
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(resolved).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
 });

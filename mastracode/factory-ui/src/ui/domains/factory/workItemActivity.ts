@@ -2,6 +2,7 @@ import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions'
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
 
 import { sourceMetadata } from './boardItems';
+import { githubAvatarUrl } from './githubAvatar';
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -37,7 +38,7 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     return {
       id: `github:${author}`,
       name: author,
-      avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
+      avatarUrl: githubAvatarUrl(author),
     };
   }
   if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
@@ -205,9 +206,4 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   // the current assignee ("who owns this now") over the reporter/opener.
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
-}
-
-/** Comments render as themselves; the audit row each one also writes would show it twice. */
-export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
-  return activity.events.filter(event => !event.action.includes('.comment_'));
 }

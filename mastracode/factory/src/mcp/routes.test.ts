@@ -102,8 +102,6 @@ async function setup() {
     auditRecorder: auditDomain,
     sessions: createSourceControlSessionLookup([sourceControl]),
     sessionModel: { projects: seed.projects, modelDefaults: seed.modelDefaults },
-    intake: seed.intake,
-    startCoordinator: () => undefined,
     // No live agent controller: nothing is mid-run.
     messaging: async () => null,
   };

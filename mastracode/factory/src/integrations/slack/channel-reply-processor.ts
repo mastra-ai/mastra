@@ -103,6 +103,10 @@ export function modelSettingsLink(factoryProjectId: string): string | undefined 
   return factorySettingsUrl(factoryProjectId, 'models');
 }
 
+export function memorySettingsLink(factoryProjectId: string): string | undefined {
+  return factorySettingsUrl(factoryProjectId, 'memory');
+}
+
 /** `VOICE_INPUT_ANCHOR` in factory-ui's `settingsSections.ts`; the voice section scrolls itself into view on this hash. */
 export function voiceSettingsLink(factoryProjectId: string): string | undefined {
   const models = modelSettingsLink(factoryProjectId);

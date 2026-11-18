@@ -642,7 +642,14 @@ export interface BackgroundTaskHandle {
   dispatch(): Promise<EnqueueResult>;
   /** Check if the task is suspended */
   checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
-  /** Adopt one persisted task matching this invocation, regardless of status. */
+  /**
+   * Adopt one persisted task matching this invocation, regardless of status.
+   * Registers this handle's context for `pending`, `running`, and `suspended`
+   * tasks so later `restart()`/`resume()` calls run with it. Reads storage
+   * only: it doesn't claim the task's execution lease, and a returned
+   * `running` task may still be owned by a live manager. Throws when more than
+   * one task matches.
+   */
   checkIfExisting(args: CheckIfExistingPayload): Promise<BackgroundTask | undefined>;
   /** Check if the task is running */
   checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;

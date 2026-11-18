@@ -1,4 +1,8 @@
-import { sessionRowOwnerSchema } from '@mastra/factory/session/session-row-query';
+import {
+  SESSION_ROW_ALL_SOURCES,
+  sessionRowOwnerSchema,
+  sessionRowSourceSchema,
+} from '@mastra/factory/session/session-row-query';
 import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
 
@@ -16,8 +20,10 @@ const optionValue = <T extends string>(options: readonly { value: T }[]) =>
 // Each filter falls back on its own, so one stale value doesn't clear the others.
 // An owner who left the factory still parses; the filter then lists nothing until it is reset.
 // Any other owner falls back: the server refuses it and the sidebar would list nothing.
+// A source works the same way: a deleted board still parses, anything the server refuses falls back.
 const sessionFiltersSchema: z.ZodType<SessionFiltersState> = z.object({
   owner: sessionRowOwnerSchema.catch(EMPTY_SESSION_FILTERS.owner),
+  source: z.union([z.literal(SESSION_ROW_ALL_SOURCES), sessionRowSourceSchema]).catch(EMPTY_SESSION_FILTERS.source),
   status: optionValue<SessionStatusFilter>(SESSION_STATUS_OPTIONS).catch(EMPTY_SESSION_FILTERS.status),
   updated: optionValue<SessionUpdatedFilter>(SESSION_UPDATED_OPTIONS).catch(EMPTY_SESSION_FILTERS.updated),
 });
@@ -25,6 +31,7 @@ const sessionFiltersSchema: z.ZodType<SessionFiltersState> = z.object({
 function changesFromEmpty(filters: SessionFiltersState): Partial<SessionFiltersState> {
   const changes: Partial<SessionFiltersState> = {};
   if (filters.owner !== EMPTY_SESSION_FILTERS.owner) changes.owner = filters.owner;
+  if (filters.source !== EMPTY_SESSION_FILTERS.source) changes.source = filters.source;
   if (filters.status !== EMPTY_SESSION_FILTERS.status) changes.status = filters.status;
   if (filters.updated !== EMPTY_SESSION_FILTERS.updated) changes.updated = filters.updated;
   return changes;

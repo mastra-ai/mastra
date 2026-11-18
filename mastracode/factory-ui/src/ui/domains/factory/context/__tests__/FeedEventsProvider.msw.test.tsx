@@ -27,7 +27,7 @@ function watch() {
 function countCardReads(count: () => void) {
   return http.get(BOARD_URL, () => {
     count();
-    return HttpResponse.json({ workItems: [], runningSessionIds: [], parkedSessionIds: [] });
+    return HttpResponse.json({ workItems: [] });
   });
 }
 

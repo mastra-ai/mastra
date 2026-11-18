@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { memo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -10,9 +9,10 @@ import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs'
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelPage, WorkspaceSectionSlots } from '../context/WorkspacePanelContext';
-import { overviewScrollClass } from '../layout';
+import { overviewClass } from '../layout';
 import type { WorkspacePanelSize } from '../layout';
 import type { RepositoryProviders } from './changes/tree/change-tree';
+import { PanelFrame } from './PanelFrame';
 import { PanelSubject } from './PanelSubject';
 import { RecreateSandboxAction } from './RecreateSandboxAction';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
@@ -151,14 +151,9 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
   );
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 grow flex-col overflow-hidden">
-      <div className="flex shrink-0 py-1.5 ps-1.5 pe-[calc(0.375rem+var(--dock-actions-reserve,0px))]">
-        {page ? page.subject(back) : <PanelSubject lead={back} />}
-      </div>
+    <PanelFrame subject={page ? page.subject(back) : <PanelSubject lead={back} />}>
       {view.type === 'overview' ? (
-        <div className={cn(overviewScrollClass, 'divide-border divide-y')}>
-          {page ? page.overview(workspace) : workspace()}
-        </div>
+        <div className={overviewClass}>{page ? page.overview(workspace) : workspace()}</div>
       ) : null}
       {view.type === 'changes' || view.type === 'files' ? (
         <Tabs
@@ -210,6 +205,6 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
           />
         </div>
       ) : null}
-    </div>
+    </PanelFrame>
   );
 });

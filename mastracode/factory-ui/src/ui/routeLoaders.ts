@@ -2,7 +2,7 @@ import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import type { LoaderFunctionArgs } from 'react-router';
+import type { LoaderFunctionArgs, ShouldRevalidateFunction } from 'react-router';
 
 import type { ApiConfig } from '../api/config';
 import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
@@ -22,18 +22,25 @@ import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
   boardPhasesQueryOptions,
+  sessionWorkItemsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
+  workItemQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
+import { threadMessagesQueryOptions } from '../hooks/useAgentControllerThreadMessages';
+import { userSessionQueryOptions } from '../hooks/useWorkspaces';
+import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
 import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
 import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
+import { linkedSessionRepository } from './domains/factory/hooks/useSessionRepository';
 import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
+import { pullRequestSubscriptionsQuery } from './domains/factory/services/githubSubscriptions';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
 import { readPinnedSessions } from './domains/workspaces/hooks/usePinnedSessions';
 import { readSessionFilters } from './domains/workspaces/hooks/useSessionFilters';
@@ -48,17 +55,29 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void;
+/** Starts a page's reads. A prefetch may return the reads a held navigation waits for. */
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<unknown>;
 
-export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
-  return function loadOnEntry(prefetch?: Prefetch, page?: LazyPageComponent) {
+/**
+ * Route loaders start a page's code and reads as the navigation begins, and a click never waits
+ * for them: the page opens at once and shows its own loading states while the reads it shares
+ * with the loader answer. Only a navigation that keeps the page on screen (`holdsNavigation`),
+ * such as a draft continuing into its thread, waits for the reads its prefetch returns.
+ */
+export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
+  return function loadOnEntry(
+    prefetch?: Prefetch,
+    page?: Pick<LazyPageComponent, 'preload'>,
+    shouldRevalidate: ShouldRevalidateFunction = () => false,
+  ) {
     if (!services) return {};
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
-        prefetch?.(services, args);
+        const reads = prefetch?.(services, args);
+        return holdsNavigation?.() ? reads : undefined;
       },
-      shouldRevalidate: () => false,
+      shouldRevalidate,
     };
   };
 }
@@ -179,6 +198,108 @@ export const prefetchDraft: Prefetch = (services, args) => {
   void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
 };
+
+/** A card's draft offers the card's own actions under the composer. */
+export const prefetchCardDraft: Prefetch = (services, args) => {
+  prefetchComposer(services, args);
+  const { factoryId, workItemId } = args.params;
+  if (!factoryId || !workItemId) return;
+  const { queryClient, api } = services;
+  void queryClient.query(workItemQueryOptions(api.baseUrl, factoryId, workItemId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+};
+
+// The loader fills in what is missing; the page's own queries refresh what is cached.
+const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
+
+/**
+ * A session's frame (its card, board and PR subscriptions) and its first message window, all
+ * read at once. A click opens the page before they answer, and the header, panel and transcript
+ * fill in from their own loading states. A draft continuing into its thread waits for the frame
+ * (the returned reads), not the transcript, which it already shows.
+ */
+export const prefetchSessionFrame: Prefetch = (services, { params, request }) => {
+  const { queryClient, api } = services;
+  const { factoryId, threadId } = params;
+  const sessionId = params.sessionId ?? threadId;
+  if (!factoryId || !sessionId || !threadId) return;
+  prefetchThreadHistory(services, request, params.sessionId, sessionId, threadId);
+  const cardReads = params.sessionId
+    ? [
+        queryClient
+          .query({
+            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...CACHED_UNLESS_INVALIDATED,
+          })
+          .catch(noop),
+        queryClient
+          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .catch(noop),
+      ]
+    : [];
+  return Promise.all([
+    ...cardReads,
+    prefetchSessionSubscriptions(services, factoryId, sessionId, threadId).catch(noop),
+  ]);
+};
+
+/**
+ * The thread's first message window, read beside the session's own metadata
+ * rather than after it: the server resolves the session's memory resource from
+ * its id, so the transcript can show before the session's details answer. A
+ * window already cached is kept (a draft seeds its new thread's), and the page
+ * re-reads it on mount for whatever the live stream missed.
+ */
+function prefetchThreadHistory(
+  { queryClient, api }: RouteLoaderServices,
+  request: Request,
+  routeSessionId: string | undefined,
+  sessionId: string,
+  threadId: string,
+) {
+  // Mirrors the chat's address: a workspace link may name another session to bind to.
+  const search = new URL(request.url).searchParams;
+  const address = routeSessionId ? (search.get('sessionId') ?? search.get('resourceId') ?? sessionId) : sessionId;
+  void queryClient
+    .query({
+      ...threadMessagesQueryOptions({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        sessionId: address,
+        threadId,
+        baseUrl: api.baseUrl,
+        isSessionThread: threadId === sessionId,
+      }),
+      ...CACHED_UNLESS_INVALIDATED,
+    })
+    .catch(noop);
+}
+
+async function prefetchSessionSubscriptions(
+  { queryClient, api }: RouteLoaderServices,
+  factoryId: string,
+  sessionId: string,
+  threadId: string,
+) {
+  const [factories, session] = await Promise.all([
+    queryClient.query({ ...factoriesQueryOptions(api.baseUrl), ...CACHED_UNLESS_INVALIDATED }).catch(() => undefined),
+    queryClient
+      .query({ ...userSessionQueryOptions(api.baseUrl, sessionId), ...CACHED_UNLESS_INVALIDATED })
+      .catch(() => undefined),
+  ]);
+  const factory = factories?.find(candidate => candidate.id === factoryId);
+  const { repository, provider } = linkedSessionRepository(factory, session);
+  if (!repository) return;
+  await queryClient
+    .query({
+      ...pullRequestSubscriptionsQuery(api.baseUrl, sessionId, threadId, provider, true),
+      ...CACHED_UNLESS_INVALIDATED,
+    })
+    .catch(noop);
+}
+
+export const reloadOnAnotherThread: ShouldRevalidateFunction = ({ currentParams, nextParams }) =>
+  currentParams.sessionId !== nextParams.sessionId || currentParams.threadId !== nextParams.threadId;
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {
   const { factoryId } = params;

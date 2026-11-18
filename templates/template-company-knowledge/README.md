@@ -8,7 +8,7 @@ A scheduled workflow (`index-knowledge`) re-indexes every 6 hours automatically.
 
 - Node.js `>= 22.13.0`
 - A Neon Postgres database (or any Postgres 11+ with the `vector` extension)
-- A Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
+- A Gateway API key — create one in the [Mastra platform dashboard](https://projects.mastra.ai)
 - A Mastra platform project with a Linear and/or Notion connection attached, and an access token for it
 
 ## Setup

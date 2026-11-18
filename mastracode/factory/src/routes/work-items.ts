@@ -36,6 +36,7 @@ import type { FactoryTransitionRequest, FactoryTransitionService } from '../rule
 import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import type { RunRepositoryResolution } from '../session/work-item-repository.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
@@ -74,7 +75,6 @@ import {
   etagDigest,
   sendJson,
   sendRevalidated,
-  sessionIdsWhere,
 } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { ProjectSessionsReader } from './project-sessions.js';
@@ -110,8 +110,13 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
-  /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
-  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  sessionRepository?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    item: Card;
+  }) => Promise<RunRepositoryResolution>;
+  /** Materialized sessions, read to report which sessions wait on someone and which session a run's thread is on. */
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn' | 'sessionOnThread'>;
   /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   projectSessions?: ProjectSessionsReader;
@@ -493,7 +498,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
         },
       }),
-      // ── List the org's work items for a project, and which are being worked ─
+      // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
@@ -531,21 +536,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 : source
                   ? cardsFiledFrom(board, source)
                   : ids && cardsWithIds(board, ids));
-          const items = part ?? board;
-          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
-          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
           // A tab that kept the board gets what moved since its cursor: a body the size of the change.
           if (list.changed) {
             const workItems = list.changed.map(toWireWorkItem);
             const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
-            return sendJson(context, movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
-              'Cache-Control': 'no-store',
-            });
+            return sendJson(context, movedBody(moved), { 'Cache-Control': 'no-store' });
           }
           const snapshot = part
             ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
-              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
-            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
+              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, unstarted?.total)
+            : boardSnapshot(board, toWireWorkItem, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           return sendRevalidated(context, snapshot);
         },
@@ -677,15 +677,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             resolved.userId,
             wireVersion,
           );
-          const names = {
-            ...body,
-            runningSessionIds: sessionIdsWhere(named, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(named, sessionId => liveSessions.parked(sessionId) !== undefined),
-          };
           // The board asks again on each feed frame; most frames change nothing it shows.
           return sendRevalidated(
             context,
-            namedBody(names, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
+            namedBody(body, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
           );
         },
       }),
@@ -926,6 +921,42 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
+        },
+      }),
+
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const item = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!item || item.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const { sessionRepository } = this.deps;
+          if (!sessionRepository) return c.json({ error: 'factory_session_repository_unavailable' }, 503);
+          const resolution = await sessionRepository({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            item,
+          });
+          return c.json(
+            resolution.status === 'resolved'
+              ? {
+                  status: resolution.status,
+                  projectRepositoryId: resolution.projectRepositoryId,
+                  slug: resolution.slug,
+                }
+              : { status: resolution.status, hint: resolution.hint },
+          );
         },
       }),
 

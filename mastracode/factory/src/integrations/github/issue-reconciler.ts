@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
+import { githubIssueIntakeSelected } from './issue-intake.js';
 import {
   githubItemSources,
   githubRulesOptions,
@@ -70,6 +71,19 @@ export function createGithubIssueReconciler(
       }
     };
 
+    // A failed selection read skips discovery only; the cards already filed still reconcile.
+    const anyProjectSelects = async (repository: ReconcileRepository, projects: readonly { orgId: string }[]) => {
+      try {
+        const selected = await Promise.all(
+          projects.map(project => githubIssueIntakeSelected(options.intake, project.orgId, repository.fullName)),
+        );
+        return selected.includes(true);
+      } catch (error) {
+        recordFailure(repository, error);
+        return false;
+      }
+    };
+
     for (const repository of repositories) {
       summary.repositories += 1;
       const authorTrust = sweepTrustLookup(options.github, repository);
@@ -111,7 +125,7 @@ export function createGithubIssueReconciler(
         // ingress leaves no card for the sweeps above to repair. Only issues
         // filed after the repository was linked are replayed, so linking a
         // repository never backfills its existing backlog.
-        if (listOpenIssues) {
+        if (listOpenIssues && (await anyProjectSelects(repository, projects))) {
           const linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
           const openIssues = await listOpenIssues({
             installationId: repository.installationId,

@@ -1,8 +1,26 @@
+import type { IntakeConfig, IntakeSelection } from '../../storage/domains/intake/base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
 import { vantaLabels } from './rules.js';
 import type { VantaRulesIngress, VantaVulnerabilityIngress } from './rules.js';
 
 export const VANTA_VULNERABILITIES_SOURCE_ID = 'vanta:vulnerabilities';
+export const SELECT_VANTA_VULNERABILITIES_MIGRATION = 'select_vanta_vulnerabilities_where_sync_was_on';
+
+/** Vulnerabilities sync only once selected in Work Intake, like every other source. */
+export function vantaVulnerabilitiesSelected(selection: IntakeSelection | undefined): boolean {
+  return Boolean(selection?.enabled && selection.sourceIds?.includes(VANTA_VULNERABILITIES_SOURCE_ID));
+}
+
+/** Orgs whose old sync switch was on with nothing selected, so selecting vulnerabilities keeps them syncing. */
+export function vantaOrgsSyncingWithoutSource(
+  configs: ReadonlyArray<{ orgId: string; config: IntakeConfig }>,
+): Map<string, string[]> {
+  return new Map(
+    configs
+      .filter(({ config }) => config.vanta?.enabled && !config.vanta.sourceIds?.length)
+      .map(({ orgId }) => [orgId, [VANTA_VULNERABILITIES_SOURCE_ID]]),
+  );
+}
 export const DEFAULT_VANTA_SYNC_INTERVAL_MS = 15 * 60_000;
 
 /** The subset of Vanta's `GET /v1/vulnerabilities` item Factory reads. */

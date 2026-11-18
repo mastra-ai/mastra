@@ -1,6 +1,6 @@
+import { searchQuery } from '@mastra/factory/work-items/search-words';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
@@ -41,21 +41,18 @@ function useUnstartedSearch(factoryId: string | undefined, search: string) {
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string) {
   const sessionCards = useSessionCardsQuery(factoryId);
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
-  const settled = useDebouncedValue(typed.trim(), 150);
+  // Asked as the server reads it, so `Login` and `login ` share one request and its cached answer.
+  const asked = searchQuery(typed);
+  const settled = useDebouncedValue(asked, 150);
   // Clearing the box goes back to the cached empty search at once.
-  const search = useUnstartedSearch(factoryId, typed.trim() === '' ? '' : settled);
+  const search = useUnstartedSearch(factoryId, asked === '' ? '' : settled);
   // The rail counts the empty search, so its number holds still while typing narrows the rows.
   const everything = useUnstartedSearch(factoryId, '');
   const unstarted = search.data?.cards ?? NO_CARDS;
 
-  // Kept across renders that load nothing new, so what is derived from it downstream is too.
-  const loaded = useMemo(() => [...withSessions, ...unstarted], [withSessions, unstarted]);
-
   return {
     withSessions,
     unstarted,
-    /** Every card either read loaded, for acting on a row. */
-    loaded,
     count: everything.data?.total ?? 0,
     pending: sessionCards.isLoading || search.isLoading,
     failed: sessionCards.isError || search.isError,

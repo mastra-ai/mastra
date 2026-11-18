@@ -13,7 +13,7 @@ import { BoardRules } from '../domains/boardRules/components/BoardRules';
 import { IntakeTesterDialog } from '../domains/intake/IntakeTesterDialog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-const COLUMN = 'w-full';
+const COLUMN = 'mx-auto w-full max-w-3xl';
 
 /** Every rule of a board, one lane per trigger: what it takes when an item arrives and where its cards move. */
 export function BoardRulesPage() {
@@ -49,7 +49,7 @@ export function BoardRulesPage() {
             </PageHeader.Description>
           </PageHeader>
           <div className="mt-3">
-            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an item" />
+            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an issue or pull request" />
           </div>
         </div>
       }

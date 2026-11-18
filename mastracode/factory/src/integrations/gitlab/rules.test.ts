@@ -1737,7 +1737,7 @@ describe('GitLab label and assignee changes on a card', () => {
   });
 
   it.each([
-    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] }, pullRequestTrusted: true }] },
+    { case: "the merge request's own card", mergeRequest: true, events: [{ type: 'pull_request.updated', labels: { added: ['ship'], removed: [] }, pullRequestTrusted: true, actorTrusted: true }] },
     // Neither filed nor attached: another merge request that happens to use the card's branch name.
     { case: 'a card whose session only builds on its branch', mergeRequest: false, events: [] },
   ])("hands a merge request's change to $case", async ({ mergeRequest, events }) => {
@@ -2016,7 +2016,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           .filter(entry => entry.workItemId === issue.id && entry.decision.type === 'routeEvent')
           .map(entry => entry.decision.event);
         expect(updates).toEqual([
-          { type: 'pull_request.updated', labels: { added: ['ready'], removed: [] }, pullRequestTrusted: trusted },
+          {
+            type: 'pull_request.updated',
+            labels: { added: ['ready'], removed: [] },
+            pullRequestTrusted: trusted,
+            // The author made the change themselves, so the actor's trust is theirs too.
+            actorTrusted: trusted,
+          },
         ]);
       },
     );

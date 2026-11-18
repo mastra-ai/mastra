@@ -1,5 +1,6 @@
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
+import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { slimNestedAgentChunks } from '../../stream/strip-model-snapshots';
@@ -39,13 +40,27 @@ export interface AgentStreamPublisher {
    * message list, which a `step-finish` event takes the step's content from.
    */
   publish(chunk: ChunkType<any>, messageList?: MessageList): void;
+  /** Publish an event whose durable payload and response-message diff are already shaped. */
+  publishEvent(
+    event: Omit<Event, 'id' | 'createdAt'>,
+    transport?: PubSub,
+    options?: Parameters<PubSub['publish']>[2],
+  ): Promise<void>;
+  /** Resolves once the abort subscription is installed; rejects if installation fails. */
+  readonly ready: Promise<void>;
+  /** Settle an accepted terminal in the owning reader without republishing it or scheduling cleanup. */
+  settle(status: 'suspended' | 'finished'): Promise<void>;
+  /** Clear this execution's shared stream state, using the same ownership check as automatic cleanup. */
+  cleanup(): Promise<void>;
+  /** Flush local publications and release local listeners without ending the shared run. */
+  detach(): Promise<void>;
   /**
    * The loop closed its stream. Publishes the terminal event readers wait for
    * when the loop didn't end with `finish`: `suspended` when the run paused,
    * otherwise `error`.
    */
   close(): Promise<void>;
-  /** The loop's stream errored before it could close. */
+  /** The loop's stream errored. */
   fail(reason: unknown): Promise<void>;
 }
 
@@ -65,6 +80,167 @@ export interface CreateAgentStreamPublisherOptions {
    * after the run's last event, and deleted with the topic.
    */
   record?: AgentRunRecordTarget;
+  /** Durable workers share the current execution claim's identity, not a per-worker identity. */
+  publisherId?: string;
+  /** Verify the execution claim before publishing or changing shared stream state. */
+  assertOwnership?: () => Promise<void>;
+  /** Additional authority required for shared record mutations, not event publication. */
+  assertRecordOwnership?: () => Promise<void>;
+  /** Cleanup can retain topic authority after an owned deadline revokes execution writes. */
+  assertCleanupOwnership?: () => Promise<void>;
+  /** Forward a remote abort to the worker's execution controller. */
+  onAbortRequested?: () => void;
+  /** Disable when the execution already owns a shared abort listener. */
+  listenForAbort?: boolean;
+}
+
+export interface AgentStreamProducer {
+  publishEvent(
+    event: Omit<Event, 'id' | 'createdAt'>,
+    transport?: PubSub,
+    options?: Parameters<PubSub['publish']>[2],
+  ): Promise<void>;
+  /** Release this producer handle, not the run owner's handle or abort listener. */
+  detach(): Promise<void>;
+}
+
+interface PublicationQueue {
+  initialize(pending: Promise<void>): void;
+  enqueue(task: () => Promise<void>, propagateError?: boolean): Promise<void>;
+  publish(
+    event: Omit<Event, 'id' | 'createdAt'>,
+    transport: PubSub,
+    assertOwnership?: () => Promise<void>,
+    options?: Parameters<PubSub['publish']>[2],
+  ): Promise<void>;
+  flush(): Promise<void>;
+}
+
+export interface AgentStreamPublisherCoordinator {
+  attachEventProducer(options: {
+    publisherId: string;
+    pubsub: PubSub;
+    assertOwnership: () => Promise<void>;
+  }): AgentStreamProducer;
+  attachOwner(options: Omit<CreateAgentStreamPublisherOptions, 'runId'>): AgentStreamPublisher;
+  listenForAbort(
+    pubsub: PubSub,
+    onAbortRequested: () => boolean | void,
+  ): {
+    ready: Promise<void>;
+    detach(): Promise<void>;
+  };
+  detach(): Promise<void>;
+}
+
+/** One local publisher per run; execution-bound handles retain their own authority and release state. */
+export function createAgentStreamPublisherCoordinator(
+  runId: string,
+  logger?: IMastraLogger,
+): AgentStreamPublisherCoordinator {
+  const producers = new Map<string, { producer: AgentStreamProducer; publications: PublicationQueue }>();
+  const owners = new Map<string, AgentStreamPublisher>();
+  const listeners = new Set<() => Promise<void>>();
+
+  // Keep independent output and lifecycle lanes: abort dispatch never waits on either queue.
+  const createPublicationQueue = (): PublicationQueue => {
+    let pending = Promise.resolve();
+    const enqueue = (task: () => Promise<void>, propagateError = false) => {
+      const next = pending.then(task);
+      pending = next.catch(error => {
+        logger?.warn?.(`[AgentStream:${runId}] failed to publish stream event`, { error });
+      });
+      return propagateError ? next : pending;
+    };
+    return {
+      initialize(initial) {
+        pending = initial;
+      },
+      enqueue,
+      publish(event, transport, assertOwnership, options) {
+        return enqueue(async () => {
+          await assertOwnership?.();
+          await transport.publish(AGENT_STREAM_TOPIC(runId), event, options);
+        }, true);
+      },
+      flush: () => pending,
+    };
+  };
+
+  const coordinator: AgentStreamPublisherCoordinator = {
+    attachEventProducer({ publisherId, pubsub, assertOwnership }) {
+      const existing = producers.get(publisherId);
+      if (existing) return existing.producer;
+      const publications = createPublicationQueue();
+      let released = false;
+      const producer: AgentStreamProducer = {
+        async publishEvent(event, transport = pubsub, options) {
+          if (!released) await publications.publish(event, transport, assertOwnership, options);
+        },
+        async detach() {
+          released = true;
+          await publications.flush();
+        },
+      };
+      producers.set(publisherId, { producer, publications });
+      return producer;
+    },
+    attachOwner(options) {
+      const publisherId = options.publisherId ?? globalThis.crypto.randomUUID();
+      const existing = owners.get(publisherId);
+      if (existing) return existing;
+      const handle = createOwnerHandle(
+        { ...options, runId, publisherId },
+        createPublicationQueue(),
+        coordinator.listenForAbort,
+        () => {
+          if (!producers.size) return;
+          // Stop this execution's producer, but only drain older or sibling handles.
+          return Promise.allSettled([
+            producers.get(publisherId)?.producer.detach(),
+            ...Array.from(producers.values(), ({ publications }) => publications.flush()),
+          ]).then(() => {});
+        },
+      );
+      owners.set(publisherId, handle);
+      return handle;
+    },
+    listenForAbort(pubsub, onAbortRequested) {
+      let released = false;
+      let unsubscribe: (() => Promise<void>) | undefined;
+      const ready = subscribeToAbortRequests(pubsub, runId, () => {
+        if (released) return false;
+        return onAbortRequested();
+      }).then(stop => {
+        unsubscribe = stop;
+      });
+      let detached: Promise<void> | undefined;
+      const detach = () => {
+        released = true;
+        return (detached ??= (async () => {
+          await ready.catch(() => {});
+          await unsubscribe?.().catch(() => {});
+          unsubscribe = undefined;
+          listeners.delete(detach);
+        })());
+      };
+      listeners.add(detach);
+      return { ready, detach };
+    },
+    async detach() {
+      await Promise.all([
+        ...Array.from(listeners, detach => detach()),
+        ...Array.from(producers.values(), ({ producer }) => producer.detach()),
+        ...Array.from(owners.values(), owner => owner.detach()),
+      ]);
+    },
+  };
+  return coordinator;
+}
+
+/** Plain agents hold the full handle; durable workers only receive the capabilities they need. */
+export function createAgentStreamPublisher(options: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
+  return createAgentStreamPublisherCoordinator(options.runId, options.logger).attachOwner(options);
 }
 
 /**
@@ -81,15 +257,26 @@ export interface CreateAgentStreamPublisherOptions {
  *   once the run's snapshot is persisted (when the loop closes)
  * - anything else → `chunk`, with errors serialized so they survive JSON transports
  */
-export function createAgentStreamPublisher({
-  pubsub,
-  runId,
-  cleanupTimeoutMs,
-  logger,
-  abortSignal: callerSignal,
-  onEnd,
-  record,
-}: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
+function createOwnerHandle(
+  {
+    pubsub,
+    runId,
+    cleanupTimeoutMs,
+    logger,
+    abortSignal: callerSignal,
+    onEnd,
+    record,
+    publisherId = globalThis.crypto.randomUUID(),
+    assertOwnership,
+    assertRecordOwnership,
+    assertCleanupOwnership = assertOwnership,
+    onAbortRequested,
+    listenForAbort = true,
+  }: CreateAgentStreamPublisherOptions,
+  publications: PublicationQueue,
+  listen: AgentStreamPublisherCoordinator['listenForAbort'],
+  drainProducers: () => Promise<void> | undefined,
+): AgentStreamPublisher {
   const { controller, detach } = createRunAbortController(callerSignal);
   const abort = (reason?: unknown) => {
     if (!controller.signal.aborted) controller.abort(reason ?? new Error('Aborted'));
@@ -100,38 +287,41 @@ export function createAgentStreamPublisher({
   // Listen for abort requests until the run ends. Subscribing is async; a
   // request published before the subscription lands is missed, like one sent
   // to a run that already finished.
-  let stopListening: (() => Promise<void>) | undefined;
-  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => {
-    // A request that lands while the subscription is being released has
-    // nothing left to stop; leave it unconfirmed.
-    if (ended) return false;
-    abort();
-    return true;
-  })
-    .then(unsubscribe => {
-      stopListening = unsubscribe;
-    })
-    .catch(error => {
-      logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
-    });
+  const listener = listenForAbort
+    ? listen(pubsub, () => {
+        // A request racing listener release has nothing left to stop.
+        if (ended) return false;
+        abort();
+        onAbortRequested?.();
+        return true;
+      })
+    : undefined;
+  const ready = listener?.ready ?? Promise.resolve();
+  void ready.catch(error => {
+    logger?.warn?.('[AgentStream:' + runId + '] failed to listen for abort requests', { error });
+  });
   const stopAbortListener = async () => {
-    // A segment that ends on a suspension can leave a sibling tool call of the same step running. Keep forwarding the
-    // caller's abort until it settles, so aborting the run (e.g. at shutdown) still reaches that tool.
+    // A suspended segment can leave a sibling tool running. Keep forwarding the caller's abort until it settles.
     whenRunStepsSettle(callerSignal, detach);
-    const pending = listening;
-    listening = undefined;
-    await pending;
-    await stopListening?.().catch(() => {});
-    stopListening = undefined;
+    await listener?.detach();
   };
 
   let runningRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Stamped on every record this publisher writes, so cleanup can tell its own run from a later one. */
-  const publisherId = globalThis.crypto.randomUUID();
   const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
     if (!record) return;
-    const { cache, ...owner } = record;
-    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }).catch(error => {
+    await assertOwnership?.();
+    await assertRecordOwnership?.();
+    const { cache, key, ...owner } = record;
+    try {
+      if (owner.resourceId === undefined || owner.threadId === undefined) {
+        const current = await readAgentRunRecord(cache, owner.agentId, runId, key);
+        if (current?.publisherId === publisherId) {
+          owner.resourceId ??= current.resourceId;
+          owner.threadId ??= current.threadId;
+        }
+      }
+      await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }, key);
+    } catch (error) {
       logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
       if (status === 'running' && !ended && !runningRetryTimer) {
         runningRetryTimer = setTimeout(() => {
@@ -142,11 +332,12 @@ export function createAgentStreamPublisher({
         }, 1000);
         runningRetryTimer.unref?.();
       }
-    });
+    }
   };
 
   // The record goes first, so a reader that sees any event can authorize.
-  let queue: Promise<void> = writeRecord('running')();
+  publications.initialize(writeRecord('running')());
+  const enqueue = publications.enqueue;
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
@@ -188,42 +379,56 @@ export function createAgentStreamPublisher({
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 
-  const enqueue = (task: () => Promise<void>) => {
-    queue = queue.then(task).catch(error => {
-      logger?.warn?.(`[AgentStream:${runId}] failed to publish stream event`, { error });
-    });
-    return queue;
+  const canCleanup = async () => {
+    try {
+      await assertCleanupOwnership?.();
+      // As with plain runs, a later publisher's record prevents old cleanup.
+      if (record) {
+        const current = await readAgentRunRecord(record.cache, record.agentId, runId, record.key);
+        if (current && current.publisherId !== publisherId) return false;
+      }
+      return true;
+    } catch {
+      // Leave state to its TTL when ownership cannot be verified.
+      return false;
+    }
+  };
+
+  const cleanup = async () => {
+    await publications.flush().catch(() => {});
+    if (!(await canCleanup())) return;
+    const draining = drainProducers();
+    if (draining) {
+      await draining;
+      // A resumed execution may take over while the old transport is draining.
+      if (!(await canCleanup())) return;
+    }
+    if (runningRetryTimer) clearTimeout(runningRetryTimer);
+    runningRetryTimer = undefined;
+    for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
+      void pubsub.clearTopic(topic).catch(() => {});
+    }
+    if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId, record.key).catch(() => {});
   };
 
   const scheduleCleanup = () => {
-    const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
-      void (async () => {
-        // A finished run's id can be claimed again before this fires, and the topic and
-        // record then belong to that run. Only clear state this publisher wrote.
-        if (record) {
-          let current;
-          try {
-            current = await readAgentRunRecord(record.cache, record.agentId, runId);
-          } catch {
-            // The cache is unreadable, so there is no way to tell whose run this is. Leave
-            // the state to its TTL rather than risk deleting a live run's record.
-            return;
-          }
-          if (current && current.publisherId !== publisherId) return;
-        }
-        // The run's control and ack topics end with it too; a transport that keeps
-        // streams (Redis Streams) would otherwise hold them until its idle TTL.
-        for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
-          void pubsub.clearTopic(topic).catch(() => {});
-        }
-        if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
-      })();
-    });
+    const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => void cleanup());
     timer?.unref?.();
   };
 
+  const detachPublisher = async () => {
+    if (!ended) {
+      ended = true;
+      if (runningRetryTimer) clearTimeout(runningRetryTimer);
+      runningRetryTimer = undefined;
+      await stopAbortListener();
+      onEnd?.();
+    }
+    await publications.flush();
+  };
+
   const end = async (fallbackError: () => unknown) => {
-    if (ended) return queue;
+    if (ended) return publications.flush();
     ended = true;
     if (runningRetryTimer) clearTimeout(runningRetryTimer);
     runningRetryTimer = undefined;
@@ -236,7 +441,7 @@ export function createAgentStreamPublisher({
         await enqueue(writeRecord('suspended'));
         // The run resumes on the same topic; keep its history. Its record
         // and log expire with their TTL if it is never resumed.
-        return queue;
+        return publications.flush();
       }
       const error = toError(lastError ?? fallbackError());
       await enqueue(() => emitErrorEvent(pubsub, runId, error));
@@ -245,10 +450,29 @@ export function createAgentStreamPublisher({
     scheduleCleanup();
   };
 
+  const initialized = Promise.all([ready, publications.flush()]).then(() => {});
+  // Chunk producers need not await readiness; subscription failures are logged above.
+  void initialized.catch(() => {});
+
   return {
     runId,
     abortSignal: controller.signal,
     abort,
+    ready: initialized,
+    async settle(status) {
+      await enqueue(async () => {
+        if (runningRetryTimer) clearTimeout(runningRetryTimer);
+        runningRetryTimer = undefined;
+        await writeRecord(status)();
+        finished = status === 'finished';
+      }, true);
+    },
+    cleanup,
+    detach: detachPublisher,
+    async publishEvent(event, transport = pubsub, options) {
+      if (ended) return;
+      await publications.publish(event, transport, assertOwnership, options);
+    },
     publish(chunk, messageList) {
       if (ended) return;
       switch (chunk.type) {
