@@ -1816,6 +1816,9 @@ export function createDurableToolCallStep() {
           backgroundTask: { taskId, status },
         },
       });
+      // A queued call that shutdown reaches before it starts, in the foreground or the background, is left for
+      // recovery.
+      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       // Background task dispatch via the shared dispatch ladder with the
       // durable policy: steps replay under at-least-once redelivery, so an
       // already-running task is restarted to reattach hooks and
@@ -2234,8 +2237,6 @@ export function createDurableToolCallStep() {
 
       // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
       // running until the tool body settles, even after the abort grace hands control back to the loop.
-      // A queued call that shutdown reaches before it starts is left for recovery.
-      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       const settleRunTool = startRunStep(registryEntry);
       // Shutdown keeps the run's claim while a tool body runs, so a result it returns in time is checkpointed.
       const settleToolCall = startToolCall(registryEntry);

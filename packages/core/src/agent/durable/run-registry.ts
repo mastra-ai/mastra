@@ -276,7 +276,8 @@ export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
 /**
  * Called by the durable steps before a model request or a tool call starts. A run that shutdown asked to stop once
  * its tool calls finished stops here. Before a model request its earlier tool results were checkpointed by the steps
- * before this one; a tool call that has not started yet is left for recovery to run.
+ * before this one, so shutdown can abandon it now. A tool call that has not started yet is left for recovery to run;
+ * it waits without ending shutdown's wait, so the calls still running can finish and be checkpointed.
  */
 export async function stopAtShutdownBoundary(
   entry: RunRegistryEntry | undefined,
@@ -291,7 +292,7 @@ export async function stopAtShutdownBoundary(
     if (lost.aborted) resolve();
     else lost.addEventListener('abort', () => resolve(), { once: true });
   });
-  reached();
+  if (before === 'model-request') reached();
   await stopped;
   ownership.throwIfLost();
 }
