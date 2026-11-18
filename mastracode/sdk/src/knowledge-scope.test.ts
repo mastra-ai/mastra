@@ -1,3 +1,5 @@
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -57,5 +59,49 @@ describe('resolveKnowledgeSessionScopes', () => {
     expect(resolveKnowledgeSessionScopes({ factoryProjectId: 'proj-1' } as never)).toEqual(closed);
     expect(resolveKnowledgeSessionScopes({ factoryProjectId: 'proj-1', factoryOrgId: '   ' } as never)).toEqual(closed);
     expect(resolveKnowledgeSessionScopes({ factoryOrgUnresolved: true } as never)).toEqual(closed);
+  });
+
+  it('acts as a fixed org scope alone, so a session compiles and reads on an instance that declares only that org', async () => {
+    const storage = new InMemoryStore();
+    const knowledge = new Knowledge({
+      storage,
+      scopes: { ...knowledgeMemoryScopes(), 'org:$orgId': { access: [{ principal: 'self', role: 'editor' }] } },
+    });
+    const store = (await storage.getStore('knowledge'))!;
+    const provenance = { author: 'host' };
+    const org = (
+      await store.materializeScope({ address: 'org:plat', declaration: 'org:$orgId', name: 'Org', provenance })
+    ).scope;
+    await store.createPage({ parentId: org.id, name: 'Handbook', provenance });
+    const state = { factoryOrgId: 'fac', factoryProjectId: 'p1' } as never;
+
+    const session = resolveKnowledgeSessionScopes(state, [], 'org:plat');
+    expect(session).toEqual({ resolved: true, scopes: ['org:plat'] });
+    const read = await knowledge.readScopeFor(session.resolved ? session.scopes : []);
+    const { pages } = await store.listPages({ read, scopeId: org.id });
+    expect(pages.map(page => page.name)).toEqual(['Handbook']);
+
+    // Without it, the session's own project: tag is undeclared there and every run fails to compile.
+    const own = resolveKnowledgeSessionScopes(state);
+    await expect(knowledge.readScopeFor(own.resolved ? own.scopes : [])).rejects.toThrow(/project:p1/);
+  });
+
+  it('refuses a fixed scope that is not one org: address, and a host project: tag beside it', () => {
+    const state = { factoryOrgId: 'fac', factoryProjectId: 'p1' } as never;
+    for (const fixed of ['project:p1', 'resource:u1', 'org:a:b', 'org:']) {
+      expect(resolveKnowledgeSessionScopes(state, [], fixed)).toEqual({
+        resolved: false,
+        reason: `Fixed scope ${fixed} is not an org: scope address.`,
+      });
+    }
+    expect(resolveKnowledgeSessionScopes(state, ['project:p1'], 'org:plat')).toEqual({
+      resolved: false,
+      reason: "Scope project:p1 can't be held with the fixed org:plat.",
+    });
+    expect(resolveKnowledgeSessionScopes(state, ['org:other'], 'org:plat')).toEqual({
+      resolved: false,
+      reason: "Scope org:other conflicts with this Factory session's org:plat.",
+    });
+    expect(resolveKnowledgeSessionScopes(undefined, [], 'org:plat')).toEqual({ resolved: true, scopes: [] });
   });
 });

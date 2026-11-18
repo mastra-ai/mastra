@@ -25,6 +25,7 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { isFixedOrgScope } from '@mastra/code-sdk/knowledge-scope';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -305,6 +306,12 @@ export interface MastraFactoryConfig {
    * key for its read surfaces. Omitted, Knowledge stays off.
    */
   knowledge?: Knowledge;
+  /**
+   * A fixed `org:` scope address, such as `'org:acme'`, that every project's sessions and Knowledge page
+   * act as instead of their own `org:` and `project:` scopes. Set it for a Knowledge instance that
+   * declares only one org; all projects then share that org's Knowledge.
+   */
+  knowledgeOrgScope?: string;
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -682,6 +689,11 @@ export class MastraFactory {
         "MastraFactory: 'storage' is required. Pass a FactoryStorage backend — e.g. " +
           "new PgFactoryStorage({ connectionString }) from '@mastra/pg' for deployments, or " +
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
+      );
+    }
+    if (config.knowledgeOrgScope !== undefined && !isFixedOrgScope(config.knowledgeOrgScope)) {
+      throw new Error(
+        `MastraFactory: 'knowledgeOrgScope' must be one org: scope address such as 'org:acme'; got '${config.knowledgeOrgScope}'.`,
       );
     }
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
@@ -2025,6 +2037,7 @@ export class MastraFactory {
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
+        knowledgeOrgScope: this.#config.knowledgeOrgScope,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase and work-item signals, when work
         // items are on, come after it.
@@ -2342,6 +2355,7 @@ export class MastraFactory {
             deploymentModelProviders,
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.id,
+            knowledgeOrgScope: this.#config.knowledgeOrgScope,
             configVersion,
             boardRegistry: boards,
             intakeEvaluator: this.#forcedIntake,

@@ -1,5 +1,5 @@
 ---
-'@mastra/code-sdk': patch
+'@mastra/code-sdk': minor
 ---
 
-resolveKnowledgeSessionScopes accepts any object with the Factory org and project fields, so Factory's Knowledge page can resolve scopes the same way agent sessions do.
+Added `knowledgeOrgScope`: a fixed `org:` scope Factory sessions act as instead of their own `org:` and `project:` scopes. `resolveKnowledgeSessionScopes` takes it as a third argument and accepts any object with the Factory org and project fields.

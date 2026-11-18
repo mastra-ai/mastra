@@ -160,6 +160,7 @@ export interface FactoryApiRoutesDeps {
   /** App skills from `MastraFactory({ skills })`. */
   skills?: readonly InlineSkill[];
   knowledgeKey?: string;
+  knowledgeOrgScope?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
@@ -1020,6 +1021,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
+          knowledgeOrgScope: deps.knowledgeOrgScope,
         }).routes()
       : []),
     ...(deps.factoryReady

@@ -54,6 +54,8 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   knowledge: (key: string) => Promise<Knowledge | undefined>;
   /** Host-selected Knowledge key. Requests cannot override it. */
   defaultKnowledgeKey?: string;
+  /** Host-fixed `org:` scope; passed to the session resolver so the page reads what sessions hold. */
+  knowledgeOrgScope?: string;
 }
 
 interface ResolvedView {
@@ -147,7 +149,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
     try {
       // The same resolver a Factory session's runs use, so the page reads exactly what an agent there holds.
-      const session = resolveKnowledgeSessionScopes({ factoryOrgId: tenant.orgId, factoryProjectId: projectId });
+      const session = resolveKnowledgeSessionScopes(
+        { factoryOrgId: tenant.orgId, factoryProjectId: projectId },
+        [],
+        this.deps.knowledgeOrgScope,
+      );
       if (!session.resolved) {
         return { response: c.json({ error: 'organization_required', message: session.reason }, 403) };
       }

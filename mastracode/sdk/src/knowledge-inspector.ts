@@ -251,17 +251,20 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   #identityKey = opaqueToken();
 
   readonly #hostScopes: readonly string[];
+  readonly #fixedOrgScope?: string;
 
   constructor(input: {
     knowledge: Knowledge;
     store: KnowledgeStorage;
     session: Session<MastraCodeState>;
     hostScopes?: readonly string[];
+    fixedOrgScope?: string;
   }) {
     this.#knowledge = input.knowledge;
     this.#store = input.store;
     this.#session = input.session;
     this.#hostScopes = input.hostScopes ?? [];
+    this.#fixedOrgScope = input.fixedOrgScope;
     this.#session.subscribe(event => {
       if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
         this.#invalidate();
@@ -441,7 +444,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
   async #binding(): Promise<Binding> {
     // Session tags come from the same resolver the code agent's run scopes use.
-    const session = resolveKnowledgeSessionScopes(this.#session.state.get(), this.#hostScopes);
+    const session = resolveKnowledgeSessionScopes(this.#session.state.get(), this.#hostScopes, this.#fixedOrgScope);
     const sessionResourceId = this.#session.identity.getResourceId();
     if (!session.resolved) {
       // An unresolved session is its own identity: handles minted under the
@@ -721,6 +724,8 @@ export async function createKnowledgeInspector(input: {
   session: Session<MastraCodeState>;
   /** The host's `knowledge.scopes`, so the inspector reads what the code agent writes. */
   hostScopes?: readonly string[];
+  /** The host's `knowledgeOrgScope`, passed to the same resolver. */
+  fixedOrgScope?: string;
 }): Promise<KnowledgeInspector | undefined> {
   let selected: Knowledge | undefined;
   if (typeof input.knowledge === 'string') {
@@ -742,5 +747,6 @@ export async function createKnowledgeInspector(input: {
     store,
     session: input.session,
     hostScopes: input.hostScopes,
+    fixedOrgScope: input.fixedOrgScope,
   });
 }

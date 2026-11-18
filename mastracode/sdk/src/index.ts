@@ -381,9 +381,14 @@ export interface MastraCodeConfig {
   /**
    * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `'org:acme'`. What a
    * run may do on each comes from the Knowledge instance's scope declarations. Factory sessions
-   * always add `org:` and `project:` scopes.
+   * always add `org:` and `project:` scopes, unless `knowledgeOrgScope` is set.
    */
   scopes?: string[];
+  /**
+   * A fixed `org:` scope address, such as `'org:acme'`, that Factory sessions act as instead of their
+   * own `org:` and `project:` scopes: for a Knowledge instance that declares only one org.
+   */
+  knowledgeOrgScope?: string;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -1403,7 +1408,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             const controller = requestContext.get('controller') as
               | AgentControllerRequestContext<MastraCodeState>
               | undefined;
-            const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
+            const session = resolveKnowledgeSessionScopes(
+              controller?.state,
+              knowledgeHostScopes,
+              config?.knowledgeOrgScope,
+            );
             return [...scopes, ...(session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes))];
           },
         }
@@ -1981,6 +1990,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         mastra: controller.getMastra(),
         session,
         hostScopes: knowledgeHostScopes,
+        fixedOrgScope: config?.knowledgeOrgScope,
       }),
     observability,
     // Without local tracing or Mastra Code cloud credentials every exporter above
