@@ -32,7 +32,7 @@ CONFIDENT_API_KEY=confident_proj_xxxxxxxxxxxxx
 CONFIDENT_OTEL_ENDPOINT=https://eu.otel.confident-ai.com/v1/traces
 ```
 
-### Zero-Config Setup
+### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -53,7 +53,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -119,7 +119,7 @@ const result = await mastra.getAgent('assistant').generate('How do you make the 
 })
 ```
 
-Your metadata is merged with the fields Mastra sets itself, such as `runId`. Tags apply to the root span, so they land on the trace rather than on individual spans.
+Your metadata is merged with the fields Mastra sets itself, such as `runId`. Tags apply to the root span, which means they apply to the trace rather than to individual spans.
 
 ## Lifecycle
 
@@ -135,11 +135,11 @@ In a long-running server, shut down during graceful shutdown rather than per req
 
 ## Threads and trace properties
 
-This exporter maps Mastra's own tracing surface, so trace metadata and tags come from `tracingOptions` as shown above.
+This exporter maps Mastra's own tracing surface, so trace metadata and tags come from the `tracingOptions` passed to the traced call.
 
 Grouping turns into [threads](https://www.confident-ai.com/docs/llm-tracing/features/threads) and setting trace-level properties such as user IDs use `confident-trace`'s SDK instrumentation, which attaches to Mastra directly rather than through an exporter. See the [Mastra integration guide](https://www.confident-ai.com/docs/integrations/third-party/mastra) for that setup.
 
-Choose one or the other. Do not use both at once.
+Choose one or the other. Don't use both at once.
 
 ## Related
 

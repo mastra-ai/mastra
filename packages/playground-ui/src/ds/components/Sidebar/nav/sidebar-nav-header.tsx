@@ -39,7 +39,7 @@ export function SidebarNavHeader({
       {showTitle ? (
         <>
           {icon ? (
-            <span aria-hidden="true" className={cn('flex shrink-0 pl-3 [&_svg]:size-4', toneClassName)}>
+            <span aria-hidden="true" className={cn('flex shrink-0 pl-3 [&_svg]:size-icon-md', toneClassName)}>
               {icon}
             </span>
           ) : null}

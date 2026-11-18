@@ -249,6 +249,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       // It must never write snapshot rows to the user's storage. Registering Mastra (done by
       // the agent) lets it read storage to suppress noise, while this keeps writes off.
       shouldPersistSnapshot: () => false,
+      // Never stored, so only the agent call that owns it can cancel it.
+      localCancellationOnly: true,
       validateInputs: false,
     },
   })

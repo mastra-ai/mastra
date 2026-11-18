@@ -24,7 +24,7 @@ If you have scripts or tools that consume the OpenAPI spec, update the URL:
 
 The `CloudflareDeployer` constructor now accepts standard `wrangler.json` property names instead of custom camelCase variants. This change aligns the deployer with Cloudflare's official configuration format and provides access to all wrangler configuration options.
 
-Deprecated fields are automatically migrated at runtime with console warnings, but you should update your code to use the new field names.
+Deprecated fields are automatically migrated at runtime with console warnings, but update your code to use the new field names.
 
 ```diff
   const deployer = new CloudflareDeployer({

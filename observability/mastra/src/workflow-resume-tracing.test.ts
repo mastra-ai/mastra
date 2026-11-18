@@ -1,10 +1,10 @@
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow, createEventedWorkflow } from '@mastra/core/workflows';
 import type { WorkflowOptions } from '@mastra/core/workflows';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Observability } from './default';
@@ -271,6 +271,166 @@ describe('workflow resume span linkage', () => {
       expectControlFlowSegments(endedSpans(), kind, true, expectedResumeOutcomes(action));
       for (const span of original) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
       expectNoOrphans();
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  /** A sampler whose decisions are scripted, so a resume that samples again is visible. */
+  function scriptedSampler(decisions: boolean[]) {
+    let calls = 0;
+    return {
+      sampling: {
+        type: SamplingStrategyType.CUSTOM,
+        sampler: () => {
+          calls++;
+          return decisions.shift() ?? true;
+        },
+      },
+      calls: () => calls,
+    };
+  }
+
+  const buildSampledHost = (
+    engine: 'default' | 'evented',
+    sampling: ReturnType<typeof scriptedSampler>['sampling'],
+  ) => {
+    const storage = new MockStore();
+    const workflow = makeWorkflow(engine);
+    const host = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'workflow-resume-sampling', exporters: [exporter], sampling } },
+      }),
+    });
+    return { storage, workflow, host };
+  };
+
+  it.each(['default', 'evented'] as const)(
+    '%s resume keeps a sampled run recorded without sampling again',
+    async engine => {
+      const sampler = scriptedSampler([true, false]);
+      const { workflow, host } = buildSampledHost(engine, sampler.sampling);
+      try {
+        if (engine === 'evented') await host.startWorkers();
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        const original = endedSpans().find(span => span.type === SpanType.WORKFLOW_RUN)!;
+        expect(original).toBeDefined();
+
+        const resumed = await workflow.createRun({ runId: run.runId });
+        expect((await resumed.resume({ resumeData: { approved: true } })).status).toBe('success');
+
+        // The original run decided the trace's sampling; the resume continues that decision.
+        expect(sampler.calls(), 'sampler decisions').toBe(1);
+        const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        expect(roots.map(span => span.outcome)).toEqual(['suspend', 'success']);
+        expect(roots[1]).toMatchObject({ traceId: original.traceId, parentSpanId: original.id });
+        expectNoOrphans();
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
+
+  it.each(['default', 'evented'] as const)('%s resume keeps an unsampled run unrecorded', async engine => {
+    const sampler = scriptedSampler([false, true]);
+    const { storage, workflow, host } = buildSampledHost(engine, sampler.sampling);
+    try {
+      if (engine === 'evented') await host.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      expect(await readTracingContext(storage, run.runId)).toEqual({ sampled: false });
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      expect((await resumed.resume({ resumeData: { approved: true } })).status).toBe('success');
+
+      // A resume that sampled again would record a `(resumed)` root with no original to hang under.
+      expect(sampler.calls(), 'sampler decisions').toBe(1);
+      expect(endedSpans()).toEqual([]);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  // The resume saves its trace context before the engine runs. The engine has to listen for the
+  // run's end before that save completes, or a cancel that lands meanwhile leaves the resume pending.
+  it('evented resume returns when another caller cancels the run as it starts', async () => {
+    const { storage, workflow, host } = buildSampledHost('evented', { type: SamplingStrategyType.ALWAYS });
+    try {
+      await host.startWorkers();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const canceller = await workflow.createRun({ runId: run.runId });
+      const runEnded = new Promise<void>(resolve => {
+        void host.pubsub.subscribe('workflows-finish', async event => {
+          if (event.runId === run.runId) resolve();
+        });
+      });
+      const store = (await storage.getStore('workflows'))!;
+      const saveState = store.updateWorkflowState.bind(store);
+      let canceledDuringSave = false;
+      vi.spyOn(store, 'updateWorkflowState').mockImplementation(async args => {
+        // The resume's save of its trace context: the cancel completes while this write is in flight.
+        if (args.opts.tracingContext && args.opts.expectedStatus === 'running') {
+          canceledDuringSave = true;
+          await canceller.cancel();
+          await runEnded;
+        }
+        return saveState(args);
+      });
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      const outcome = await Promise.race([
+        resumed.resume({ resumeData: { approved: true } }),
+        new Promise(resolve => setTimeout(() => resolve('resume() still pending'), 1_000)),
+      ]);
+
+      expect(canceledDuringSave).toBe(true);
+      expect(outcome).toMatchObject({ status: 'canceled' });
+    } finally {
+      vi.restoreAllMocks();
+      // A resume that is still pending would hold shutdown for its whole drain budget.
+      await host.shutdown({ drainTimeout: 100 });
+    }
+  });
+
+  it('default resume of an unsampled run joins the trace its caller names', async () => {
+    const sampler = scriptedSampler([false, true]);
+    const { workflow, host } = buildSampledHost('default', sampler.sampling);
+    try {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      const traceId = 'a'.repeat(32);
+      const tracingOptions = { traceId, parentSpanId: 'b'.repeat(16) };
+      expect((await resumed.resume({ resumeData: { approved: true }, tracingOptions })).status).toBe('success');
+
+      const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(roots.map(span => span.traceId)).toEqual([traceId]);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  // Only the default engine's start() takes tracingOptions, so only it can hide a run's input.
+  it("default resume keeps the original run's hidden input", async () => {
+    const { workflow, host } = buildSampledHost('default', { type: SamplingStrategyType.ALWAYS });
+    try {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {}, tracingOptions: { hideInput: true } })).status).toBe('suspended');
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      expect((await resumed.resume({ resumeData: { approved: true } })).status).toBe('success');
+
+      const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(roots).toHaveLength(2);
+      // The trace hid its inputs when it started; the resumed segment belongs to that trace.
+      expect(roots.map(span => span.input)).toEqual([undefined, undefined]);
     } finally {
       await host.shutdown();
     }

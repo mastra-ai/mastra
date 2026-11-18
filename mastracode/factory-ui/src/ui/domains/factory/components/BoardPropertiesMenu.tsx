@@ -45,7 +45,7 @@ export function BoardPropertiesMenu({
     <PropertiesMenu
       label="Board properties"
       variant="default"
-      icon={<IconFilter1 size={15} aria-hidden />}
+      icon={<IconFilter1 aria-hidden />}
       changedCount={changes.length}
       changes={changes}
       onReset={view.resetProperties}

@@ -3,6 +3,7 @@
 @import '@mastra/playground-ui/sources.css';
 
 @source '.';
+@source '../../shared';
 
 /* The host draws the surface around the iframe and frames it in its chat: the widget drops its card
    surface (corners, fill and shadow) and sits directly on the host's background. Scoped to `#root`

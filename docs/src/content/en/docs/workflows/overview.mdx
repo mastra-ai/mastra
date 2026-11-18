@@ -18,7 +18,7 @@ Workflows let you define complex task sequences with clear, structured steps ins
 
 ## When to use workflows
 
-Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
+Use workflows for tasks that are defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
 ## Core principles
 
@@ -367,7 +367,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 ### Workflow result type
 
-Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always safely access `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
+Both `run.start()` and `stream.result` return a discriminated union based on the `status` property, which can be `success`, `failed`, `suspended`, `tripwire`, or `paused`. You can always read `result.status`, `result.input`, `result.steps`, and optionally `result.state` regardless of the status.
 
 Additionally, depending on the status, different properties are available:
 
@@ -609,7 +609,7 @@ For type-safe request context schema validation, see [Schema Validation](/docs/s
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](https://mastra.ai/blog/building-an-ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see the [Workflow Guide](https://mastra.ai/blog/building-an-ai-recruiter), which walks through the core concepts with a practical example.
 
 - [Workflow State](/docs/workflows/workflow-state)
 - [Control Flow](/docs/workflows/control-flow)

@@ -7,7 +7,7 @@ export interface TreeIconProps {
 }
 
 export const TreeIcon = React.forwardRef<HTMLSpanElement, TreeIconProps>(({ className, children }, ref) => (
-  <span ref={ref} className={cn('flex shrink-0 items-center [&>svg]:size-3.5', className)}>
+  <span ref={ref} className={cn('flex shrink-0 items-center [&>svg]:size-icon-sm', className)}>
     {children}
   </span>
 ));

@@ -55,7 +55,10 @@ export class MastraGateway extends MastraModelGateway {
 
   private getBaseUrl(): string {
     const raw = this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-    return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
+    // Trim trailing slashes with a loop; the equivalent /\/+$/ regex is quadratic on long runs of '/'.
+    let end = raw.length;
+    while (end > 0 && raw[end - 1] === '/') end--;
+    return raw.slice(0, end).replace(/\/v1$/, '');
   }
 
   override shouldEnable(): boolean {

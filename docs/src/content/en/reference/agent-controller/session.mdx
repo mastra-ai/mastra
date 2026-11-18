@@ -147,6 +147,17 @@ unsubscribe()
 
 Returns: `() => void`
 
+#### `initialStateEvents()`
+
+Return what a subscriber joining mid-run is missing, as ordinary events the session never emits itself. The list holds a `message_start` for the reply in flight, the latest `om_status` for the active thread, and a `usage_update` whose `total` is the thread's token total. Deliver them to the joining subscriber right before calling `subscribe()`, in the same synchronous block, so no live event lands between the two.
+
+```typescript
+for (const event of session.initialStateEvents()) send(event)
+const unsubscribe = session.subscribe(send)
+```
+
+Returns: `AgentControllerEvent[]`
+
 ### Messages and run control
 
 #### `sendMessage({ content, files?, requestContext?, author? })`

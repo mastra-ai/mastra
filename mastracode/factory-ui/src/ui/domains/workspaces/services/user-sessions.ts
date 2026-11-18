@@ -7,9 +7,6 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export const USER_SESSION_BRANCH_PREFIX = 'user/';
-export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
-
 export interface FactoryUserSessionOwner {
   id: string;
   name: string;
@@ -65,7 +62,7 @@ export async function listUserSessions(
 }
 
 export type CreateUserSessionOptions = (
-  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { branch: string; baseBranch?: string; sessionId?: string; title?: never }
   | { sessionId: string; title: string; branch?: never; baseBranch?: never }
 ) & {
   /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */

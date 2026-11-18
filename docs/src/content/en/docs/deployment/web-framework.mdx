@@ -20,7 +20,7 @@ Integration guides:
 
 ## With Next.js on Vercel
 
-If you've integrated Mastra with Next.js and plan to deploy to Vercel, make sure your `next.config.ts` sets `serverExternalPackages: ["@mastra/*"]`. The [Next.js guide](/integrations/frameworks/next-js) adds it during setup. If your config doesn't have it, add it:
+If you've integrated Mastra with Next.js and plan to deploy to Vercel, ensure your `next.config.ts` sets `serverExternalPackages: ["@mastra/*"]`. The [Next.js guide](/integrations/frameworks/next-js) adds it during setup. If your config doesn't have it, add it:
 
 ```typescript {4} title="next.config.ts"
 import type { NextConfig } from 'next'
@@ -34,7 +34,7 @@ export default nextConfig
 
 ## With Astro on Vercel
 
-If you've integrated Mastra with Astro [by following our guide](/integrations/frameworks/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
+If you've integrated Mastra with Astro [by following the Astro integration guide](/integrations/frameworks/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from 'astro/config'
@@ -48,7 +48,7 @@ export default defineConfig({
 
 ## With Astro on Netlify
 
-If you've integrated Mastra with Astro [by following our guide](/integrations/frameworks/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
+If you've integrated Mastra with Astro [by following the Astro integration guide](/integrations/frameworks/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from 'astro/config'

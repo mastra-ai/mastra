@@ -994,7 +994,7 @@ To abort a run you no longer hold a handle to, use the `runId` with [`durableAge
 
 ## Extended usage example
 
-### Mastra Format (Default)
+### Mastra format (default)
 
 ```ts title="index.ts"
 import { stepCountIs } from 'ai-v5'
@@ -1044,9 +1044,9 @@ Exceeding a budget fails with a `MastraTimeoutError`, which carries a `timeoutTy
 
 Nested `timeout` settings are merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override keeps a call-time `firstChunkMs`.
 
-### AI SDK v5+ Format
+### AI SDK v5+ format
 
-To use the stream with AI SDK v5 (and later), you can convert it using our utility function `toAISdkStream`.
+To use the stream with AI SDK v5 (and later), you can convert it using the `toAISdkStream` utility.
 
 ```ts title="index.ts"
 import { stepCountIs, createUIMessageStreamResponse } from 'ai'
@@ -1065,7 +1065,7 @@ return createUIMessageStreamResponse({
 })
 ```
 
-### Using Callbacks
+### Using callbacks
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
@@ -1095,7 +1095,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### Advanced example with Options
+### Advanced example with options
 
 ```ts title="index.ts"
 import { z } from 'zod'

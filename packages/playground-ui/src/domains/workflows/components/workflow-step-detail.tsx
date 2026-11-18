@@ -22,10 +22,10 @@ export function WorkflowStepDetailContent({ requestContext }: { requestContext: 
       <div className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && (
-            <IconListBullets className="size-4" style={{ color: BADGE_COLORS.map }} />
+            <IconListBullets className="size-icon-md" style={{ color: BADGE_COLORS.map }} />
           )}
           {stepDetail.type === 'nested-graph' && (
-            <WorkflowIcon className="size-4" style={{ color: BADGE_COLORS.workflow }} />
+            <WorkflowIcon className="size-icon-md" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
             <Txt variant="subheading" tone="ink">
@@ -39,7 +39,7 @@ export function WorkflowStepDetailContent({ requestContext }: { requestContext: 
           </div>
         </div>
         <button onClick={closeStepDetail} className="rounded p-1 hover:bg-fill-subtle" aria-label="Close">
-          <IconCrossMedium className="size-4 text-muted-foreground" />
+          <IconCrossMedium className="size-icon-md text-muted-foreground" />
         </button>
       </div>
 

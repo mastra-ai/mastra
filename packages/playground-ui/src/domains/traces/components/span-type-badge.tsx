@@ -32,7 +32,7 @@ export function SpanTypeBadge({ type, spanUI }: SpanTypeBadgeProps) {
           <span
             data-slot="span-type-badge"
             style={style}
-            className="flex size-5 shrink-0 items-center justify-center rounded-md [&_svg]:size-3"
+            className="flex size-5 shrink-0 items-center justify-center rounded-md [&_svg]:size-icon-xs"
           />
         }
       >

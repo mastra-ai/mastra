@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -46,6 +47,16 @@ function LoadingProbe() {
 function ErrorProbe() {
   const { error } = useChatModels();
   return <div>{error ? 'error' : 'ok'}</div>;
+}
+
+function renderDraft(probes: ReactNode) {
+  return renderWithProviders(
+    <ChatSessionContext.Provider value={draftSession}>
+      <ChatConnectionContext.Provider value={{ status: 'connecting' }}>
+        <ChatModelsProvider>{probes}</ChatModelsProvider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>,
+  );
 }
 
 describe('ChatModelsProvider', () => {
@@ -127,13 +138,7 @@ describe('ChatModelsProvider', () => {
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    renderDraft(<ActiveModelProbe />);
 
     expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
   });
@@ -153,13 +158,7 @@ describe('ChatModelsProvider', () => {
       }),
     );
 
-    const { client } = renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <LoadingProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    const { client } = renderDraft(<LoadingProbe />);
 
     expect(await screen.findByText('loading')).toBeVisible();
     resolveDefault();
@@ -177,14 +176,12 @@ describe('ChatModelsProvider', () => {
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-          <ErrorProbe />
-          <LoadingProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
+    renderDraft(
+      <>
+        <ActiveModelProbe />
+        <ErrorProbe />
+        <LoadingProbe />
+      </>,
     );
 
     expect(await screen.findByText('ready')).toBeVisible();

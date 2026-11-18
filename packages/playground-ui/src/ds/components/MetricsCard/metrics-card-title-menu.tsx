@@ -42,7 +42,7 @@ export function MetricsCardTitleMenu<V extends string>({
           }
         >
           {title}
-          <IconChevronDownMedium className="size-3.5 text-muted-foreground" />
+          <IconChevronDownMedium className="size-icon-sm text-muted-foreground" />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start">
           <DropdownMenu.RadioOptions options={options} value={value} onValueChange={onValueChange} closeOnSelect />
