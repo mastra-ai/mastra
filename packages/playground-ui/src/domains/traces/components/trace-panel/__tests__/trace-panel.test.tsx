@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TRACE_ID, panelTraceSpans, spanDetailById } from '../../__tests__/fixtures/trace-span-panel';
 import { TracePanel } from '../index';
-import type { TracePanelRootProps } from '../index';
+import type { TracePanelFrameProps, TracePanelRootProps } from '../index';
 import { panelScorers, skillSignalTraceSpans } from './fixtures/trace-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -37,14 +37,30 @@ const MCP_APP_TOOLS_LOOKUP = '/api/mcp/v0/servers';
 const serveMcpAppToolsLookup = () =>
   server.use(http.get(`${TEST_BASE_URL}${MCP_APP_TOOLS_LOOKUP}`, () => HttpResponse.json({ servers: [] })));
 
-/** The root as a host mounts it: selection is the host's state, the parts sit in a drawer frame, a dialog next to it. */
+/** The main column most compositions below use: search, layout switch and the span tree. */
+const spanTree = (props: Partial<Parameters<typeof TracePanel.Spans>[0]> = {}) => (
+  <TracePanel.Main
+    toolbar={<TracePanel.SpansToolbar search={<TracePanel.Search />} actions={<TracePanel.SpanViewSwitch />} />}
+    spans={<TracePanel.Spans {...props} />}
+  />
+);
+
+type PanelProps = Partial<TracePanelRootProps> & Omit<TracePanelFrameProps, 'title'> & { initialSpanId?: string };
+
+/** A host: span selection is its state, the slots are whatever it composes. */
 function Panel({
-  children,
-  dialog,
   initialSpanId,
   onSpanSelect,
+  variant,
+  size,
+  depth,
+  banner,
+  header,
+  summary,
+  body,
+  dialogs,
   ...props
-}: Partial<TracePanelRootProps> & { children: ReactNode; dialog?: ReactNode; initialSpanId?: string }) {
+}: PanelProps) {
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
   return (
     <TracePanel
@@ -58,72 +74,73 @@ function Panel({
       onClose={() => {}}
       {...props}
     >
-      <TracePanel.Frame>{children}</TracePanel.Frame>
-      {dialog}
+      <TracePanel.Frame
+        variant={variant}
+        size={size}
+        depth={depth}
+        banner={banner}
+        header={header}
+        summary={summary}
+        body={body ?? <TracePanel.Body main={spanTree()} />}
+        dialogs={dialogs}
+      />
     </TracePanel>
   );
 }
 
-/** The span tree, which every composition below draws in the main column. */
-const SpanTree = (props: Partial<Parameters<typeof TracePanel.Spans>[0]>) => (
-  <TracePanel.Main>
-    <TracePanel.SpansToolbar>
-      <TracePanel.Search />
-      <TracePanel.SpanViewSwitch />
-    </TracePanel.SpansToolbar>
-    <TracePanel.Spans {...props} />
-  </TracePanel.Main>
-);
-
 const render = (ui: ReactNode) => renderWithProviders(<TestLinkProvider>{ui}</TestLinkProvider>);
-
-/** A span row in the tree, not the open span panel's header that repeats its title. */
-const treeRow = (title: string) => screen.getByLabelText(`View details for span ${title}`);
+const treeRow = (title: string) => screen.findByLabelText(`View details for span ${title}`);
 
 describe('TracePanel', () => {
-  describe('when the host composes the panel with the data it loaded', () => {
+  describe('when the host fills every slot with the data it loaded', () => {
     const composeEverything = () =>
       render(
-        <Panel initialSpanId="child1">
-          <TracePanel.Header>
-            <TracePanel.Navigation onPrevious={() => {}} onNext={() => {}} />
-            <TracePanel.TraceId />
-            <TracePanel.Actions>
-              <TracePanel.DownloadButton onDownload={() => {}} />
-              <TracePanel.CloseButton />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-          <TracePanel.Summary />
-          <TracePanel.Body>
-            <TracePanel.Side defaultView="messages">
-              <TracePanel.SideHeader>
-                <TracePanel.SideTabs>
-                  <TracePanel.MessagesTab />
-                  <TracePanel.FeedbackTab count={2} />
-                </TracePanel.SideTabs>
-              </TracePanel.SideHeader>
-              <TracePanel.Messages spans={panelTraceSpans.spans} />
-              <TracePanel.Feedback>
-                <p>Host feedback</p>
-              </TracePanel.Feedback>
-            </TracePanel.Side>
-            <SpanTree traceSpans={panelTraceSpans.spans} />
-            <TracePanel.SpanPanel>
-              <TracePanel.SpanDetail span={spanDetailById.child1?.span} traceSpans={panelTraceSpans.spans} />
-            </TracePanel.SpanPanel>
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          initialSpanId="child1"
+          header={
+            <TracePanel.Header
+              navigation={<TracePanel.Navigation onPrevious={() => {}} onNext={() => {}} />}
+              title={<TracePanel.TraceId />}
+              actions={
+                <>
+                  <TracePanel.DownloadButton onDownload={() => {}} />
+                  <TracePanel.CloseButton />
+                </>
+              }
+            />
+          }
+          summary={
+            <TracePanel.Summary
+              entity={<TracePanel.Entity entityHref="/agents/weather-agent" />}
+              status={<TracePanel.Status />}
+              stats={<TracePanel.Stats />}
+            />
+          }
+          body={
+            <TracePanel.Body
+              side={
+                <TracePanel.Side
+                  messages={<TracePanel.Messages spans={panelTraceSpans.spans} />}
+                  feedback={<p>Host feedback</p>}
+                  feedbackCount={2}
+                />
+              }
+              main={spanTree({ traceSpans: panelTraceSpans.spans })}
+              span={<TracePanel.SpanDetail span={spanDetailById.child1?.span} traceSpans={panelTraceSpans.spans} />}
+            />
+          }
+        />,
       );
 
     it('draws the span tree from the spans given to the root', async () => {
       serveMcpAppToolsLookup();
       composeEverything();
 
-      expect(await screen.findByLabelText('View details for span Root agent run')).toBeTruthy();
-      expect(treeRow('Second tool call')).toBeTruthy();
+      expect(await treeRow('Root agent run')).toBeTruthy();
+      expect(await treeRow('Second tool call')).toBeTruthy();
     });
 
-    it('shows the selected span record given to the span detail', async () => {
+    it('shows the selected span record given to the span slot', async () => {
       serveMcpAppToolsLookup();
       composeEverything();
 
@@ -132,7 +149,7 @@ describe('TracePanel', () => {
       expect(within(detail).getByText('session-42')).toBeTruthy();
     });
 
-    it('reconstructs the turn from the full trace given to the Messages part', async () => {
+    it('reconstructs the turn from the full trace given to the messages slot', async () => {
       serveMcpAppToolsLookup();
       composeEverything();
 
@@ -141,13 +158,38 @@ describe('TracePanel', () => {
       expect(await within(messages).findByText('No rain is expected.')).toBeTruthy();
     });
 
-    it('shows what the host renders in the Feedback part on its tab', async () => {
+    it('offers one side tab per filled view slot, with its count', async () => {
+      serveMcpAppToolsLookup();
+      composeEverything();
+
+      await screen.findByTestId('messages-panel');
+
+      // The span detail has tabs of its own: only the side column's tab list is read.
+      const sideTabs = screen.getByRole('tab', { name: 'Messages' }).closest<HTMLElement>('[role="tablist"]');
+      if (!sideTabs) throw new Error('the side column has no tab list');
+
+      expect(
+        within(sideTabs)
+          .getAllByRole('tab')
+          .map(tab => tab.textContent),
+      ).toEqual(['Messages', 'Feedback (2)']);
+    });
+
+    it('shows what the host put in the feedback slot on its tab', async () => {
       serveMcpAppToolsLookup();
       composeEverything();
 
       fireEvent.click(await screen.findByRole('tab', { name: /Feedback/ }));
 
       expect(await screen.findByText('Host feedback')).toBeTruthy();
+    });
+
+    it('summarizes what ran and how it ended from the root span', async () => {
+      serveMcpAppToolsLookup();
+      composeEverything();
+
+      expect(await screen.findByLabelText('Trace status')).toBeTruthy();
+      expect(screen.getByRole('link', { name: /Weather Agent/ }).getAttribute('href')).toBe('/agents/weather-agent');
     });
 
     it('asks the network for nothing but the chat renderer’s MCP app tools', async () => {
@@ -162,136 +204,170 @@ describe('TracePanel', () => {
     });
   });
 
-  describe('when the host frames the panel inline', () => {
-    it('draws it where it is mounted, as a card rather than a drawer', async () => {
-      render(
-        <TracePanel traceId={TRACE_ID} spans={panelTraceSpans.spans} onClose={() => {}}>
-          <TracePanel.Frame variant="inline">
-            <TracePanel.Header>
-              <TracePanel.TraceId />
-            </TracePanel.Header>
-            <TracePanel.Body>
-              <SpanTree />
-            </TracePanel.Body>
-          </TracePanel.Frame>
-        </TracePanel>,
-      );
+  describe('when the host leaves a slot empty', () => {
+    it('draws no side column without the side slot', async () => {
+      render(<Panel />);
 
-      expect(await screen.findByLabelText('View details for span Root agent run')).toBeTruthy();
-      expect(screen.queryByRole('dialog')).toBeNull();
-      expect(screen.getByRole('region', { name: `Trace ${TRACE_ID}` })).toBeTruthy();
-    });
-  });
-
-  describe('when the host leaves a part out', () => {
-    it('draws no side column without TracePanel.Side', async () => {
-      render(
-        <Panel>
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
-      );
-
-      await screen.findByLabelText('View details for span Root agent run');
+      await treeRow('Root agent run');
 
       expect(document.querySelector('[data-trace-side-column]')).toBeNull();
-      expect(screen.queryByRole('tab', { name: /Messages/ })).toBeNull();
+      expect(screen.queryByRole('tab')).toBeNull();
     });
 
-    it('draws no span column without TracePanel.SpanPanel, even with a span selected', async () => {
-      render(
-        <Panel initialSpanId="child1">
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
-      );
+    it('draws no span column without the span slot, even with a span selected', async () => {
+      render(<Panel initialSpanId="child1" />);
 
-      await screen.findByLabelText('View details for span Root agent run');
+      await treeRow('Root agent run');
 
       expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
     });
 
-    it('offers no download without TracePanel.DownloadButton', async () => {
+    it('draws no span column while no span is selected, even with the span slot', async () => {
+      // A host element: it would show if the column did, since nothing in it reads the selection.
+      render(<Panel body={<TracePanel.Body main={spanTree()} span={<p>Host span detail</p>} />} />);
+
+      await treeRow('Root agent run');
+
+      expect(screen.queryByText('Host span detail')).toBeNull();
+    });
+
+    it('draws the span slot once the reader opens a span', async () => {
+      render(<Panel body={<TracePanel.Body main={spanTree()} span={<p>Host span detail</p>} />} />);
+
+      fireEvent.click(await treeRow('First tool call'));
+
+      expect(await screen.findByText('Host span detail')).toBeTruthy();
+    });
+
+    it('offers no tab for a side view slot left empty', async () => {
       render(
-        <Panel>
-          <TracePanel.Header>
-            <TracePanel.Actions>
-              <TracePanel.CloseButton />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel body={<TracePanel.Body side={<TracePanel.Side scores={<p>Host scores</p>} />} main={spanTree()} />} />,
       );
 
-      await screen.findByLabelText('View details for span Root agent run');
+      await screen.findByText('Host scores');
+
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Scores']);
+    });
+
+    it('draws no header without the header slot', async () => {
+      render(<Panel />);
+
+      await treeRow('Root agent run');
+
+      expect(screen.queryByRole('button', { name: 'Close trace' })).toBeNull();
+    });
+
+    it('offers no download without the download action', async () => {
+      render(<Panel header={<TracePanel.Header actions={<TracePanel.CloseButton />} />} />);
+
+      await treeRow('Root agent run');
 
       expect(screen.queryByRole('button', { name: 'Download trace JSON' })).toBeNull();
     });
+
+    it('draws only the summary parts the host put in', async () => {
+      render(<Panel summary={<TracePanel.Summary status={<TracePanel.Status />} />} />);
+
+      expect(await screen.findByLabelText('Trace status')).toBeTruthy();
+      expect(screen.queryByText('Weather Agent')).toBeNull();
+    });
   });
 
-  describe('when the host adds its own parts', () => {
+  describe('when the host puts its own elements in the slots', () => {
     it('renders its action among the standard ones', async () => {
       render(
-        <Panel>
-          <TracePanel.Header>
-            <TracePanel.Actions>
-              <button type="button">Replay trace</button>
-              <TracePanel.CloseButton />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          header={
+            <TracePanel.Header
+              actions={
+                <>
+                  <button type="button">Replay trace</button>
+                  <TracePanel.CloseButton />
+                </>
+              }
+            />
+          }
+        />,
       );
 
       expect(await screen.findByRole('button', { name: 'Replay trace' })).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Close trace' })).toBeTruthy();
     });
 
-    it('opens its own side view from its own tab', async () => {
+    it('renders its banner above the header', async () => {
       render(
-        <Panel>
-          <TracePanel.Body>
-            <TracePanel.Side defaultView="feedback">
-              <TracePanel.SideHeader>
-                <TracePanel.SideTabs>
-                  <TracePanel.FeedbackTab />
-                  <TracePanel.SideTab value="notes" label="Notes" icon={<span />} />
-                </TracePanel.SideTabs>
-              </TracePanel.SideHeader>
-              <TracePanel.Feedback>
-                <p>Host feedback</p>
-              </TracePanel.Feedback>
-              <TracePanel.SideContent value="notes">
-                <p>Host notes</p>
-              </TracePanel.SideContent>
-            </TracePanel.Side>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel banner={<p>Opened from feedback</p>} header={<TracePanel.Header title={<TracePanel.TraceId />} />} />,
       );
 
-      fireEvent.click(await screen.findByRole('tab', { name: /Notes/ }));
+      const banner = await screen.findByText('Opened from feedback');
+      const heading = screen.getByRole('heading', { name: /Trace/ });
+
+      expect(banner.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders its own side column in place of the standard one', async () => {
+      render(<Panel body={<TracePanel.Body side={<aside>Host notes</aside>} main={spanTree()} />} />);
 
       expect(await screen.findByText('Host notes')).toBeTruthy();
-      expect(screen.queryByText('Host feedback')).toBeNull();
+    });
+
+    it('renders its notices above the spans', async () => {
+      render(
+        <Panel
+          body={
+            <TracePanel.Body main={<TracePanel.Main notices={<p>Sampled trace</p>} spans={<TracePanel.Spans />} />} />
+          }
+        />,
+      );
+
+      const notice = await screen.findByText('Sampled trace');
+      const firstRow = await treeRow('Root agent run');
+
+      expect(notice.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders its cell at the end of each span row', async () => {
+      render(
+        <Panel
+          body={
+            <TracePanel.Body
+              main={
+                <TracePanel.Main
+                  spans={<TracePanel.Spans renderRowTrailing={({ span }) => <span>cost of {span.name}</span>} />}
+                />
+              }
+            />
+          }
+        />,
+      );
+
+      expect(await screen.findByText('cost of First tool call')).toBeTruthy();
+    });
+
+    it('renders its element above the span rows', async () => {
+      render(
+        <Panel
+          body={<TracePanel.Body main={<TracePanel.Main spans={<TracePanel.Spans leading={<p>Legend</p>} />} />} />}
+        />,
+      );
+
+      expect(await screen.findByText('Legend')).toBeTruthy();
+    });
+  });
+
+  describe('when the host frames the panel inline', () => {
+    it('draws it where it is mounted, as a card rather than a drawer', async () => {
+      render(<Panel variant="inline" header={<TracePanel.Header title={<TracePanel.TraceId />} />} />);
+
+      expect(await treeRow('Root agent run')).toBeTruthy();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByRole('region', { name: `Trace ${TRACE_ID}` })).toBeTruthy();
     });
   });
 
   describe('when the host hands the full trace to the span tree', () => {
     it('badges the run a skill signal started with that skill', async () => {
-      render(
-        <Panel>
-          <TracePanel.Body>
-            <SpanTree traceSpans={skillSignalTraceSpans} />
-          </TracePanel.Body>
-        </Panel>,
-      );
+      render(<Panel body={<TracePanel.Body main={spanTree({ traceSpans: skillSignalTraceSpans })} />} />);
 
       const badge = await waitFor(() => {
         const element = document.querySelector('[data-slot="span-signal-badge"]');
@@ -306,15 +382,9 @@ describe('TracePanel', () => {
   describe('when the reader opens and closes a span', () => {
     it('reports the selection to the host', async () => {
       const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
-      render(
-        <Panel onSpanSelect={onSpanSelect}>
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
-      );
+      render(<Panel onSpanSelect={onSpanSelect} />);
 
-      fireEvent.click(await screen.findByLabelText('View details for span First tool call'));
+      fireEvent.click(await treeRow('First tool call'));
 
       expect(onSpanSelect).toHaveBeenLastCalledWith('child1');
     });
@@ -322,14 +392,13 @@ describe('TracePanel', () => {
     it('closes the span through the span detail', async () => {
       const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
       render(
-        <Panel initialSpanId="child1" onSpanSelect={onSpanSelect}>
-          <TracePanel.Body>
-            <SpanTree />
-            <TracePanel.SpanPanel>
-              <TracePanel.SpanDetail span={spanDetailById.child1?.span} />
-            </TracePanel.SpanPanel>
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          initialSpanId="child1"
+          onSpanSelect={onSpanSelect}
+          body={
+            <TracePanel.Body main={spanTree()} span={<TracePanel.SpanDetail span={spanDetailById.child1?.span} />} />
+          }
+        />,
       );
 
       fireEvent.click(await screen.findByRole('button', { name: 'Close span' }));
@@ -339,40 +408,30 @@ describe('TracePanel', () => {
   });
 
   describe('when the host can start scorers', () => {
-    it('starts the picked scorer on the root span and opens the Scores view', async () => {
+    const composeScoring = (side: ReactNode) => {
       const onTriggerScorer = vi.fn(() => Promise.resolve());
       render(
-        <Panel dialog={<TracePanel.ScoreDialog scorers={panelScorers} onTriggerScorer={onTriggerScorer} />}>
-          <TracePanel.Header>
-            <TracePanel.Actions>
-              <TracePanel.ScoreButton />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-          <TracePanel.Body>
-            <TracePanel.Side defaultView="feedback">
-              <TracePanel.SideHeader>
-                <TracePanel.SideTabs>
-                  <TracePanel.FeedbackTab />
-                  <TracePanel.ScoresTab />
-                </TracePanel.SideTabs>
-              </TracePanel.SideHeader>
-              <TracePanel.Feedback>
-                <p>Host feedback</p>
-              </TracePanel.Feedback>
-              <TracePanel.Scores>
-                <p>Host scores</p>
-              </TracePanel.Scores>
-            </TracePanel.Side>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          header={<TracePanel.Header actions={<TracePanel.ScoreButton />} />}
+          dialogs={<TracePanel.ScoreDialog scorers={panelScorers} onTriggerScorer={onTriggerScorer} />}
+          body={<TracePanel.Body side={side} main={spanTree()} />}
+        />,
       );
+      return { onTriggerScorer };
+    };
 
+    const scoreWithHelpfulness = async () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
       const dialog = await screen.findByRole('dialog', { name: 'Score trace' });
       fireEvent.click(within(dialog).getByRole('combobox', { name: 'Select scorer' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Helpfulness' }));
       fireEvent.click(within(dialog).getByRole('button', { name: 'Start scoring' }));
+    };
+
+    it('starts the picked scorer on the root span', async () => {
+      const { onTriggerScorer } = composeScoring(undefined);
+
+      await scoreWithHelpfulness();
 
       await waitFor(() =>
         expect(onTriggerScorer).toHaveBeenCalledWith({
@@ -381,22 +440,32 @@ describe('TracePanel', () => {
           spanId: 'root01',
         }),
       );
+    });
+
+    it('opens the Scores view once the scorer started', async () => {
+      composeScoring(<TracePanel.Side feedback={<p>Host feedback</p>} scores={<p>Host scores</p>} />);
+      await screen.findByText('Host feedback');
+
+      await scoreWithHelpfulness();
+
       expect(await screen.findByText('Host scores')).toBeTruthy();
+    });
+
+    it('stays on the open view when the side column offers no Scores', async () => {
+      composeScoring(<TracePanel.Side feedback={<p>Host feedback</p>} />);
+      await screen.findByText('Host feedback');
+
+      await scoreWithHelpfulness();
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
+      expect(screen.getByText('Host feedback')).toBeTruthy();
     });
   });
 
   describe('when the host can download the trace', () => {
     it('downloads it through onDownload', async () => {
       const onDownload = vi.fn<(traceId: string) => void>();
-      render(
-        <Panel>
-          <TracePanel.Header>
-            <TracePanel.Actions>
-              <TracePanel.DownloadButton onDownload={onDownload} />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-        </Panel>,
-      );
+      render(<Panel header={<TracePanel.Header actions={<TracePanel.DownloadButton onDownload={onDownload} />} />} />);
 
       fireEvent.click(await screen.findByRole('button', { name: 'Download trace JSON' }));
 
@@ -409,27 +478,25 @@ describe('TracePanel', () => {
       const [root, childOne] = panelTraceSpans.spans;
       if (!root || !childOne) throw new Error('fixture spans missing');
       render(
-        <Panel searchQuery="first" onSearchQueryChange={() => {}}>
-          <TracePanel.Body>
-            <SpanTree results={{ results: [root, childOne], payloadOnlyMatchIds: new Set() }} />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          searchQuery="first"
+          onSearchQueryChange={() => {}}
+          body={
+            <TracePanel.Body
+              main={spanTree({ results: { results: [root, childOne], payloadOnlyMatchIds: new Set() } })}
+            />
+          }
+        />,
       );
 
-      await screen.findByLabelText('View details for span First tool call');
+      await treeRow('First tool call');
 
       expect(screen.queryByLabelText('View details for span Second tool call')).toBeNull();
     });
 
     it('reports what the reader types through onSearchQueryChange', async () => {
       const onSearchQueryChange = vi.fn<(query: string) => void>();
-      render(
-        <Panel searchQuery="" onSearchQueryChange={onSearchQueryChange}>
-          <TracePanel.Body>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
-      );
+      render(<Panel searchQuery="" onSearchQueryChange={onSearchQueryChange} />);
 
       fireEvent.change(await screen.findByRole('searchbox', { name: 'Search spans' }), { target: { value: 'tool' } });
 
@@ -438,31 +505,37 @@ describe('TracePanel', () => {
   });
 
   describe('when the host says the thread has more turns', () => {
-    it('opens the full thread through its side action', async () => {
+    it('opens the full thread through the side column’s action', async () => {
       serveMcpAppToolsLookup();
       const onOpenFullThread = vi.fn();
       render(
-        <Panel>
-          <TracePanel.Body>
-            <TracePanel.Side defaultView="messages">
-              <TracePanel.SideHeader>
-                <TracePanel.SideTabs>
-                  <TracePanel.MessagesTab />
-                </TracePanel.SideTabs>
-                <TracePanel.SideActions>
-                  <TracePanel.OpenFullThreadButton onClick={onOpenFullThread} />
-                </TracePanel.SideActions>
-              </TracePanel.SideHeader>
-              <TracePanel.Messages spans={panelTraceSpans.spans} />
-            </TracePanel.Side>
-            <SpanTree />
-          </TracePanel.Body>
-        </Panel>,
+        <Panel
+          body={
+            <TracePanel.Body
+              side={
+                <TracePanel.Side
+                  messages={<TracePanel.Messages spans={panelTraceSpans.spans} />}
+                  actions={<TracePanel.OpenFullThreadButton onClick={onOpenFullThread} />}
+                />
+              }
+              main={spanTree()}
+            />
+          }
+        />,
       );
 
       fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
 
       expect(onOpenFullThread).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('when the trace has no spans', () => {
+    it('says so in place of the main column', async () => {
+      render(<Panel spans={[]} />);
+
+      expect(await screen.findByText('No spans found for this trace.')).toBeTruthy();
+      expect(screen.queryByRole('searchbox', { name: 'Search spans' })).toBeNull();
     });
   });
 });

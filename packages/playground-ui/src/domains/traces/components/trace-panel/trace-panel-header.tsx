@@ -18,11 +18,24 @@ import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
 
-export type TracePanelHeaderProps = ComponentProps<typeof DataPanel.Header>;
+export interface TracePanelHeaderProps {
+  /** Before the title, e.g. `TracePanel.Navigation`. */
+  navigation?: ReactNode;
+  /** Typically `TracePanel.TraceId`, or `TracePanel.PageHeading` on a trace page. */
+  title?: ReactNode;
+  /** Trailing controls, e.g. `TracePanel.ScoreButton`, `TracePanel.DownloadButton`, `TracePanel.CloseButton`. */
+  actions?: ReactNode;
+}
 
-/** A header row of the drawer; the navigation row holds `Navigation`, `TraceId` and `Actions`. */
-export function TracePanelHeader(props: TracePanelHeaderProps) {
-  return <DataPanel.Header {...props} />;
+/** The header row: navigation and title on the left, actions on the right. */
+export function TracePanelHeader({ navigation, title, actions }: TracePanelHeaderProps) {
+  return (
+    <DataPanel.Header>
+      {navigation}
+      {title}
+      {actions && <DataPanel.HeaderActions>{actions}</DataPanel.HeaderActions>}
+    </DataPanel.Header>
+  );
 }
 
 export interface TracePanelNavigationProps {
@@ -89,13 +102,6 @@ export function TracePanelPageHeading({
       )}
     </DataPanel.HeaderContent>
   );
-}
-
-export type TracePanelActionsProps = ComponentProps<typeof DataPanel.HeaderActions>;
-
-/** The trailing controls of a header row; any element fits alongside the standard actions. */
-export function TracePanelActions(props: TracePanelActionsProps) {
-  return <DataPanel.HeaderActions {...props} />;
 }
 
 /** Closes the drawer through the root's `onClose`, set apart from the actions before it. */
@@ -221,10 +227,17 @@ export function TracePanelScoreDialog({ scorers, isLoadingScorers, onTriggerScor
   );
 }
 
-export type TracePanelSummaryProps = TracePanelSummaryContentProps;
+export interface TracePanelSummaryProps {
+  /** What ran, e.g. `TracePanel.Entity`. */
+  entity?: ReactNode;
+  /** How it ended, e.g. `TracePanel.Status`. */
+  status?: ReactNode;
+  /** Timing, tokens and cost on the right, e.g. `TracePanel.Stats`. */
+  stats?: ReactNode;
+}
 
-/** What ran and how it ended on the left; timing, tokens and cost on the right. */
-export function TracePanelSummary({ usage, entityHref, LinkComponent }: TracePanelSummaryProps) {
+/** The summary row: what ran and how it ended on the left, the numbers on the right. Placeholders while the trace loads. */
+export function TracePanelSummary({ entity, status, stats }: TracePanelSummaryProps) {
   const { rootSpan, isLoading } = useTracePanel();
   if (!rootSpan) {
     if (!isLoading) return null;
@@ -240,20 +253,45 @@ export function TracePanelSummary({ usage, entityHref, LinkComponent }: TracePan
   }
   return (
     <DataPanel.Header>
-      <DataPanel.Metadata>
-        <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />
-        <TraceStatusMeta rootSpan={rootSpan} />
-      </DataPanel.Metadata>
-      <div className="ml-auto flex min-w-0">
-        <TraceSummaryDescription
-          rootSpan={rootSpan}
-          usage={usage}
-          entityHref={entityHref}
-          LinkComponent={LinkComponent}
-          showEntity={false}
-          showStatus={false}
-        />
-      </div>
+      {(entity || status) && (
+        <DataPanel.Metadata>
+          {entity}
+          {status}
+        </DataPanel.Metadata>
+      )}
+      {stats && <div className="ml-auto flex min-w-0">{stats}</div>}
     </DataPanel.Header>
   );
+}
+
+export interface TracePanelEntityProps {
+  /** When set with `LinkComponent`, the entity name links to the entity's page. */
+  entityHref?: string;
+  LinkComponent?: LinkComponent;
+}
+
+/** The entity the trace ran (agent, workflow…), from the root span. */
+export function TracePanelEntity({ entityHref, LinkComponent }: TracePanelEntityProps) {
+  const { rootSpan } = useTracePanel();
+  if (!rootSpan) return null;
+  return <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />;
+}
+
+/** How the trace ended, from the root span. */
+export function TracePanelStatus() {
+  const { rootSpan } = useTracePanel();
+  if (!rootSpan) return null;
+  return <TraceStatusMeta rootSpan={rootSpan} />;
+}
+
+export interface TracePanelStatsProps {
+  /** Token and estimated-cost totals of the trace. */
+  usage?: TraceUsageSummary;
+}
+
+/** When the trace started, how long it took, its tokens and cost. */
+export function TracePanelStats({ usage }: TracePanelStatsProps) {
+  const { rootSpan } = useTracePanel();
+  if (!rootSpan) return null;
+  return <TraceSummaryDescription rootSpan={rootSpan} usage={usage} showEntity={false} showStatus={false} />;
 }

@@ -5,9 +5,12 @@ import { cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testin
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TraceDataPanelView } from '../trace-data-panel-view';
-import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
-import { rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { FullTracePanel } from './compositions/full-trace-panel';
+import type { FullTracePanelProps } from './compositions/full-trace-panel';
+import { rootSpanFixture } from './fixtures/trace-spans';
+
+// jsdom has no layout, so it ships no scrollIntoView (the open span's row is brought into view).
+Element.prototype.scrollIntoView = vi.fn();
 
 let queryClient: QueryClient;
 beforeEach(() => {
@@ -26,7 +29,7 @@ const render = (ui: ReactNode) =>
 
 const withEntityType = (entityType: string) => rootSpanFixture.map(span => ({ ...span, entityType }));
 
-const props = (entityType: string): TraceDataPanelViewProps => ({
+const props = (entityType: string): FullTracePanelProps => ({
   traceId: 'trace-1',
   spans: withEntityType(entityType),
   onClose: vi.fn(),
@@ -86,25 +89,25 @@ const sideWidthPercent = (px: number) => (px / GROUP_WIDTH) * 100;
 const expectSideWidth = (px: number) =>
   waitFor(() => expect(Number(sidePanelFlexGrow())).toBeCloseTo(sideWidthPercent(px)));
 
-describe('TraceDataPanelView — default side column width', () => {
+describe('TracePanel, fully composed — default side column width', () => {
   it('starts the side column at 480px for agent traces', async () => {
-    render(<TraceDataPanelView {...props('agent')} />);
+    render(<FullTracePanel {...props('agent')} />);
 
     await expectSideWidth(480);
   });
 
   it('starts the side column at 320px for non-agent traces', async () => {
-    render(<TraceDataPanelView {...props('workflow_run')} />);
+    render(<FullTracePanel {...props('workflow_run')} />);
 
     await expectSideWidth(320);
   });
 });
 
-describe('TraceDataPanelView — persisted widths', () => {
+describe('TracePanel, fully composed — persisted widths', () => {
   it('restores the side column width, in pixels, stored for the trace entity type', async () => {
     localStorage.setItem(storageKey('agent'), JSON.stringify({ side: 700 }));
 
-    render(<TraceDataPanelView {...props('agent')} />);
+    render(<FullTracePanel {...props('agent')} />);
 
     await expectSideWidth(700);
   });
@@ -112,7 +115,7 @@ describe('TraceDataPanelView — persisted widths', () => {
   it('does not apply a width stored for another entity type', async () => {
     localStorage.setItem(storageKey('agent'), JSON.stringify({ side: 700 }));
 
-    render(<TraceDataPanelView {...props('scorer')} />);
+    render(<FullTracePanel {...props('scorer')} />);
 
     await expectSideWidth(320);
   });
@@ -120,7 +123,7 @@ describe('TraceDataPanelView — persisted widths', () => {
   it('falls back to the default width when the stored value is corrupted', async () => {
     localStorage.setItem(storageKey('agent'), '{not json');
 
-    render(<TraceDataPanelView {...props('agent')} />);
+    render(<FullTracePanel {...props('agent')} />);
 
     await expectSideWidth(480);
   });
@@ -130,7 +133,7 @@ describe('TraceDataPanelView — persisted widths', () => {
       throw new DOMException('denied', 'SecurityError');
     });
 
-    render(<TraceDataPanelView {...props('agent')} />);
+    render(<FullTracePanel {...props('agent')} />);
 
     await expectSideWidth(480);
     getItem.mockRestore();
@@ -140,11 +143,11 @@ describe('TraceDataPanelView — persisted widths', () => {
     localStorage.setItem(storageKey('agent'), JSON.stringify({ side: 700 }));
     const loading = { ...props('agent'), spans: undefined, isLoading: true, entityType: 'agent' };
 
-    const { rerender } = render(<TraceDataPanelView {...loading} />);
+    const { rerender } = render(<FullTracePanel {...loading} />);
     await expectSideWidth(700);
     const sidePanel = document.body.querySelector('[data-panel][id="trace-side"]');
 
-    rerender(<TraceDataPanelView {...props('agent')} />);
+    rerender(<FullTracePanel {...props('agent')} />);
 
     // Same columns once the spans land: no remount, so nothing shifts.
     await expectSideWidth(700);
@@ -152,7 +155,7 @@ describe('TraceDataPanelView — persisted widths', () => {
   });
 
   it('stores the side column width in pixels once it is resized', async () => {
-    render(<TraceDataPanelView {...props('agent')} />);
+    render(<FullTracePanel {...props('agent')} />);
     await expectSideWidth(480);
     // Laying the columns out is not a resize: nothing is remembered until the user moves a separator.
     expect(localStorage.getItem(storageKey('agent'))).toBeNull();
@@ -166,7 +169,7 @@ describe('TraceDataPanelView — persisted widths', () => {
   });
 });
 
-describe('TraceDataPanelView — opening a span while the drawer widens', () => {
+describe('TracePanel, fully composed — opening a span while the drawer widens', () => {
   // A browser rounds each column to whole pixels, so the measured total flips between 627px and
   // 628px from one clamped layout to the next.
   let groupWidth = 627.52;
@@ -232,10 +235,10 @@ describe('TraceDataPanelView — opening a span while the drawer widens', () => 
 
   const openSpan = async () => {
     const workflowTrace = props('workflow_run');
-    const { rerender } = render(<TraceDataPanelView {...workflowTrace} />);
+    const { rerender } = render(<FullTracePanel {...workflowTrace} />);
     await waitFor(() => expect(sidePanelFlexGrow()).toBeTruthy());
 
-    rerender(<TraceDataPanelView {...workflowTrace} spanPanelSlot={<div>span details</div>} />);
+    rerender(<FullTracePanel {...workflowTrace} initialSpanId="root" spanPanelSlot={<div>span details</div>} />);
     await screen.findByText('span details');
     await new Promise(resolve => setTimeout(resolve, 50));
   };

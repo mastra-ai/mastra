@@ -11,6 +11,7 @@ import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
 import type { TraceStreamingTimings } from '../trace-span-timeline';
 import { TraceSpanTree } from '../trace-span-tree';
+import type { TraceSpanTreeProps } from '../trace-span-tree';
 import { useTracePanel } from './trace-panel-context';
 import type { TracePanelSpan } from './trace-panel-context';
 import { Button } from '@/ds/components/Button';
@@ -43,25 +44,46 @@ function getSpanError(error: unknown): { name?: string; message: string } | unde
   return { name, message: error.message };
 }
 
-/** The main column, between the side and span columns. A trace without spans says so instead of its children. */
-export function TracePanelMain({ children }: { children: ReactNode }) {
-  const { spans, isLoading } = useTracePanel();
+export interface TracePanelMainProps {
+  /** The bar above the spans, typically a `TracePanel.SpansToolbar`. */
+  toolbar?: ReactNode;
+  /** Above the spans, e.g. `TracePanel.RootError`. */
+  notices?: ReactNode;
+  /** Typically a `TracePanel.Spans`. */
+  spans: ReactNode;
+}
+
+/** The main column: toolbar, then notices above the spans. A trace without spans says so instead. */
+export function TracePanelMain({ toolbar, notices, spans }: TracePanelMainProps) {
+  const { spans: traceSpans, isLoading } = useTracePanel();
+  if (!isLoading && !traceSpans?.length) return <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>;
   return (
-    // 384px: the timeline grid's own minimum (two 12rem columns), so its end never clips.
-    <Panel id="trace-main" minSize={384} className="flex min-h-0 min-w-0 flex-col">
-      {!isLoading && !spans?.length ? <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData> : children}
-    </Panel>
+    <>
+      {toolbar}
+      <DataPanel.Content>
+        {notices}
+        {spans}
+      </DataPanel.Content>
+    </>
   );
+}
+
+export interface TracePanelSpansToolbarProps {
+  /** Typically a `TracePanel.Search`; it fills the bar. */
+  search?: ReactNode;
+  /** At the end of the bar, e.g. `TracePanel.SpanViewSwitch`. */
+  actions?: ReactNode;
 }
 
 /**
  * The bar above the spans. The bar itself is the search field: no pill inside the square panel, the
  * bottom rule is its only edge, and keyboard focus lights that rule like a field's rim.
  */
-export function TracePanelSpansToolbar({ children }: { children: ReactNode }) {
+export function TracePanelSpansToolbar({ search, actions }: TracePanelSpansToolbarProps) {
   return (
     <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-      {children}
+      {search}
+      {actions && <div className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</div>}
     </DataPanel.Header>
   );
 }
@@ -132,8 +154,10 @@ export interface TracePanelSpansProps {
   results?: TraceSearchResult<TracePanelSpan>;
   /** Every span with its payload (`getTrace`): rows a signal started are labelled with it. */
   traceSpans?: TraceSpanRecord[];
-  /** Rendered above the spans, e.g. `TracePanel.RootError`. */
-  children?: ReactNode;
+  /** Full-width, above the span rows (both layouts). */
+  leading?: ReactNode;
+  /** A cell at the end of each row of the span tree. */
+  renderRowTrailing?: TraceSpanTreeProps['renderTrailing'];
 }
 
 /**
@@ -146,7 +170,8 @@ export function TracePanelSpans({
   streamingTimings,
   results,
   traceSpans,
-  children,
+  leading,
+  renderRowTrailing,
 }: TracePanelSpansProps) {
   const { spans, isLoading, anchorSpanId, rootSpan, selectedSpanId, selectSpan, query, spanView } = useTracePanel();
 
@@ -187,20 +212,20 @@ export function TracePanelSpans({
     featuredSpanIds,
     revealSpanId: featuredSpanIds?.at(-1),
     isLoading,
+    leadingSlot: leading,
   };
   const rootTimings =
     streamingTimings && rootSpan && !anchorSpanId ? { ...streamingTimings, startedAt: rootSpan.startedAt } : undefined;
 
   return (
-    <DataPanel.Content>
-      {children}
+    <>
       {spanView === 'timeline' ? (
         <TraceSpanTimeline {...viewProps} streamingTimings={rootTimings} />
       ) : (
-        <TraceSpanTree {...viewProps} />
+        <TraceSpanTree {...viewProps} renderTrailing={renderRowTrailing} />
       )}
       {!isLoading && hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
-    </DataPanel.Content>
+    </>
   );
 }
 

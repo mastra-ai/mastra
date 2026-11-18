@@ -12,12 +12,6 @@ export { SpanTimelineRow, type SpanTimelineRowProps } from './span-timeline-row'
 export { SpanTimingHoverCard } from './span-timing-hover-card';
 export { TraceSpanTree, type TraceSpanTreeProps } from './trace-span-tree';
 export { TraceSpanTimeline, type TraceSpanTimelineProps } from './trace-span-timeline';
-export {
-  TraceDataPanelView,
-  type TraceDataPanelViewProps,
-  type TraceDataPanelPlacement,
-  type TraceDataPanelSpan,
-} from './trace-data-panel-view';
 export { SpanDataPanelView, type SpanDataPanelViewProps } from './span-data-panel-view';
 export { TraceThreadPanelView, type TraceThreadPanelViewProps } from './trace-thread-panel-view';
 export { TraceThreadItemView, type TraceThreadItemViewProps } from './trace-thread-item-view';
@@ -38,3 +32,4 @@ export {
 export * from './thread-trace';
 export * from './trace-panel';
 export * from './span-payload';
+export * from './span-data-panel';

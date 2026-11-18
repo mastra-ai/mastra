@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-
+import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
+import type { ThreadTraceRootProps, ThreadTraceRowProps, ThreadTraceSelectedSpan } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -63,7 +65,7 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
-/** A consumer-provided messages slot that drives highlighting through the row hook. */
+/** A host's own messages slot, driving the highlight through the row hook. */
 function MessagesSlot() {
   const { traceId, highlightSpans } = useThreadTraceRow();
   return (
@@ -85,91 +87,206 @@ function RootStateProbe() {
   );
 }
 
-const renderView = ({ traceIds = TRACE_IDS, className }: { traceIds?: string[]; className?: string } = {}) =>
-  renderUI(
-    <ThreadTrace traceIds={traceIds} className={className}>
-      <ThreadTrace.List data-testid="thread-trace-list">
-        {traceIds.map((traceId, index) => (
-          <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTrace.Divider label={`Turn ${index + 1}`}>
-              <ThreadTrace.TabList>
-                <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
-                <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
-              </ThreadTrace.TabList>
-            </ThreadTrace.Divider>
-            <ThreadTrace.RowBody>
-              <ThreadTrace.Messages>
-                <ThreadTrace.TabContent value="messages">
-                  <MessagesSlot />
-                </ThreadTrace.TabContent>
-                <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
-              </ThreadTrace.Messages>
-              <ThreadTrace.Details data-testid={`details-${traceId}`}>
-                <ThreadTrace.DetailsHeader>
-                  <ThreadTrace.DetailsActions>
-                    <button type="button">Action {traceId}</button>
-                  </ThreadTrace.DetailsActions>
-                </ThreadTrace.DetailsHeader>
-                <ThreadTrace.Spans spans={spansOf(traceId)} />
-              </ThreadTrace.Details>
-            </ThreadTrace.RowBody>
-          </ThreadTrace.Row>
-        ))}
-      </ThreadTrace.List>
-      <ThreadTrace.SpanPanel data-testid="span-panel">
-        <ThreadTrace.SpanDetail span={spanADetail.span} />
-      </ThreadTrace.SpanPanel>
+type ThreadProps = Partial<ThreadTraceRootProps> & {
+  rowProps?: (traceId: string) => Partial<ThreadTraceRowProps>;
+};
+
+/** A host filling the slots of each turn; rendered without any Mastra client or React Query provider. */
+function Thread({ traceIds = TRACE_IDS, rowProps, ...props }: ThreadProps) {
+  return (
+    <ThreadTrace traceIds={traceIds} spanDetail={<ThreadTrace.SpanDetail span={spanADetail.span} />} {...props}>
+      {traceIds.map((traceId, index) => (
+        <ThreadTrace.Row
+          key={traceId}
+          traceId={traceId}
+          label={`Turn ${index + 1}`}
+          messages={<MessagesSlot />}
+          feedback={<p>Feedback of {traceId}</p>}
+          spans={<ThreadTrace.Spans spans={spansOf(traceId)} />}
+          detailsHeader={<button type="button">Action {traceId}</button>}
+          {...rowProps?.(traceId)}
+        />
+      ))}
       <RootStateProbe />
-    </ThreadTrace>,
+    </ThreadTrace>
   );
+}
+
+const renderThread = (props: ThreadProps = {}) => renderUI(<Thread {...props} />);
 
 const getRow = (traceId: string) => {
   const row = document.querySelector<HTMLElement>(`[data-trace-id="${traceId}"]`);
   if (!row) throw new Error(`row ${traceId} not found`);
   return row;
 };
+const spanColumn = () => document.querySelector('[data-slot="thread-trace-span-panel"]');
+const clickSpan = (traceId: string, name: string) => fireEvent.click(within(getRow(traceId)).getByText(name));
 
 describe('ThreadTrace', () => {
-  describe('root and list', () => {
-    it('renders rows in the given order and merges the root className', async () => {
-      const { container } = renderView({ className: 'custom-root' });
-      await screen.findByText('Chef agent run');
+  describe('when the host lays out its turns', () => {
+    it('draws them in the given order and keeps the root className', async () => {
+      const { container } = renderThread({ className: 'custom-root' });
+      await screen.findAllByText('Chef agent run');
 
       const rows = [...container.querySelectorAll<HTMLElement>('[data-trace-id]')].map(row => row.dataset.traceId);
       expect(rows).toEqual(['trace-a', 'trace-b']);
       expect(container.firstElementChild?.className).toContain('custom-root');
-      expect(screen.getByTestId('thread-trace-list')).toBeTruthy();
     });
-  });
 
-  describe('when the spans come from the props', () => {
-    // Rendered without any Mastra client or React Query provider: a part that fetched would throw.
-    it('draws every turn from them alone', async () => {
-      renderView();
+    it('draws every turn from the spans given to its spans slot', async () => {
+      renderThread();
 
       expect(await within(getRow('trace-a')).findByText('Recipe lookup')).toBeTruthy();
       expect(within(getRow('trace-b')).getByText('Chef agent follow-up')).toBeTruthy();
     });
+
+    it('names each turn by its label', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+
+      expect(within(getRow('trace-b')).getByRole('group', { name: 'Turn 2' })).toBeTruthy();
+    });
+
+    it('renders what the host put in the details header', async () => {
+      renderThread();
+
+      expect(await screen.findByRole('button', { name: 'Action trace-a' })).toBeTruthy();
+    });
+  });
+
+  describe('when the host fills only some view slots of a turn', () => {
+    it('offers one tab per filled slot', async () => {
+      renderThread({ rowProps: () => ({ feedback: undefined, scores: <p>Scores</p> }) });
+      await screen.findAllByText('Chef agent run');
+
+      expect(
+        within(getRow('trace-a'))
+          .getAllByRole('tab')
+          .map(tab => tab.textContent),
+      ).toEqual(['Messages', 'Scores']);
+    });
+  });
+
+  describe('when the reader opens a turn’s Feedback tab', () => {
+    it('swaps the messages for that turn’s feedback and leaves the span tree in place', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+
+      fireEvent.click(within(getRow('trace-a')).getByRole('tab', { name: 'Feedback' }));
+
+      expect(within(getRow('trace-a')).getByText('Feedback of trace-a')).toBeTruthy();
+      expect(within(getRow('trace-a')).queryByText('Messages for trace-a')).toBeNull();
+      expect(within(getRow('trace-a')).getByText('Chef agent run')).toBeTruthy();
+      expect(within(getRow('trace-b')).getByText('Messages for trace-b')).toBeTruthy();
+    });
+
+    it('renders no feedback before its tab opens', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+
+      expect(screen.queryByText(/Feedback of/)).toBeNull();
+    });
+  });
+
+  describe('when the host controls a turn’s tab', () => {
+    function ControlledTab({ onTabChange }: { onTabChange: (tab: string) => void }) {
+      const [tab, setTab] = useState('feedback');
+      return (
+        <Thread
+          traceIds={['trace-a']}
+          rowProps={() => ({
+            tab,
+            onTabChange: next => {
+              setTab(next);
+              onTabChange(next);
+            },
+          })}
+        />
+      );
+    }
+
+    it('opens the tab it asks for', async () => {
+      renderUI(<ControlledTab onTabChange={() => {}} />);
+
+      expect(await screen.findByText('Feedback of trace-a')).toBeTruthy();
+    });
+
+    it('reports the tab the reader opens', async () => {
+      const onTabChange = vi.fn<(tab: string) => void>();
+      renderUI(<ControlledTab onTabChange={onTabChange} />);
+      await screen.findByText('Feedback of trace-a');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+      expect(onTabChange).toHaveBeenCalledWith('messages');
+    });
+  });
+
+  describe('when the reader opens a span', () => {
+    it('opens the span slot beside the conversation and marks its turn active', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+      expect(spanColumn()).toBeNull();
+
+      clickSpan('trace-a', 'Chef agent run');
+
+      expect(await screen.findByRole('region', { name: 'Chef agent run' })).toBeTruthy();
+      expect(screen.getAllByRole('separator')).toHaveLength(1);
+      expect(getRow('trace-a').dataset.active).toBe('true');
+      expect(getRow('trace-b').dataset.active).toBeUndefined();
+      expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
+    });
+
+    it('closes it when the same span is clicked again', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+      clickSpan('trace-a', 'Chef agent run');
+      await screen.findByRole('region', { name: 'Chef agent run' });
+
+      clickSpan('trace-a', 'Chef agent run');
+
+      await waitFor(() => expect(spanColumn()).toBeNull());
+    });
+
+    it('closes it from the span detail', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+      clickSpan('trace-a', 'Chef agent run');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close span' }));
+
+      await waitFor(() => expect(spanColumn()).toBeNull());
+      expect(screen.queryByRole('separator')).toBeNull();
+      expect(getRow('trace-a').dataset.active).toBeUndefined();
+    });
+
+    it('offers no previous/next span, since the span tree already navigates', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+      clickSpan('trace-a', 'Chef agent run');
+      await screen.findByRole('button', { name: 'Close span' });
+
+      expect(screen.queryByRole('button', { name: 'Go to next span' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Go to previous span' })).toBeNull();
+    });
+  });
+
+  describe('when the host leaves the span slot empty', () => {
+    it('reports the opened span but draws no span column', async () => {
+      const onSelectedSpanChange = vi.fn<(selected: ThreadTraceSelectedSpan | null) => void>();
+      renderThread({ spanDetail: undefined, onSelectedSpanChange });
+      await screen.findAllByText('Chef agent run');
+
+      clickSpan('trace-a', 'Chef agent run');
+
+      expect(onSelectedSpanChange).toHaveBeenCalledWith({ traceId: 'trace-a', spanId: 'span-a' });
+      expect(spanColumn()).toBeNull();
+    });
   });
 
   describe('when the host controls the selected span', () => {
-    it('opens the side panel on the span it selects', async () => {
-      renderUI(
-        <ThreadTrace traceIds={['trace-a']} selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}>
-          <ThreadTrace.List>
-            <ThreadTrace.Row traceId="trace-a">
-              <ThreadTrace.RowBody>
-                <ThreadTrace.Details>
-                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
-                </ThreadTrace.Details>
-              </ThreadTrace.RowBody>
-            </ThreadTrace.Row>
-          </ThreadTrace.List>
-          <ThreadTrace.SpanPanel>
-            <ThreadTrace.SpanDetail span={spanADetail.span} />
-          </ThreadTrace.SpanPanel>
-        </ThreadTrace>,
-      );
+    it('opens the span column on the span it selects', async () => {
+      renderThread({ traceIds: ['trace-a'], selectedSpan: { traceId: 'trace-a', spanId: 'span-a' } });
 
       expect(await screen.findByRole('region', { name: 'Chef agent run' })).toBeTruthy();
       expect(getRow('trace-a').dataset.active).toBe('true');
@@ -177,26 +294,11 @@ describe('ThreadTrace', () => {
 
     it('asks the host to close the span instead of closing it itself', async () => {
       const onSelectedSpanChange = vi.fn();
-      renderUI(
-        <ThreadTrace
-          traceIds={['trace-a']}
-          selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}
-          onSelectedSpanChange={onSelectedSpanChange}
-        >
-          <ThreadTrace.List>
-            <ThreadTrace.Row traceId="trace-a">
-              <ThreadTrace.RowBody>
-                <ThreadTrace.Details>
-                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
-                </ThreadTrace.Details>
-              </ThreadTrace.RowBody>
-            </ThreadTrace.Row>
-          </ThreadTrace.List>
-          <ThreadTrace.SpanPanel>
-            <ThreadTrace.SpanDetail span={spanADetail.span} />
-          </ThreadTrace.SpanPanel>
-        </ThreadTrace>,
-      );
+      renderThread({
+        traceIds: ['trace-a'],
+        selectedSpan: { traceId: 'trace-a', spanId: 'span-a' },
+        onSelectedSpanChange,
+      });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Close span' }));
 
@@ -206,153 +308,57 @@ describe('ThreadTrace', () => {
   });
 
   describe('when the selected span record is still loading', () => {
-    it('says so in the side panel', async () => {
-      renderUI(
-        <ThreadTrace traceIds={['trace-a']} selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}>
-          <ThreadTrace.List>
-            <ThreadTrace.Row traceId="trace-a">
-              <ThreadTrace.RowBody>
-                <ThreadTrace.Details>
-                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
-                </ThreadTrace.Details>
-              </ThreadTrace.RowBody>
-            </ThreadTrace.Row>
-          </ThreadTrace.List>
-          <ThreadTrace.SpanPanel>
-            <ThreadTrace.SpanDetail isLoading />
-          </ThreadTrace.SpanPanel>
-        </ThreadTrace>,
-      );
+    it('says so in the span column', async () => {
+      renderThread({
+        traceIds: ['trace-a'],
+        selectedSpan: { traceId: 'trace-a', spanId: 'span-a' },
+        spanDetail: <ThreadTrace.SpanDetail isLoading />,
+      });
 
       expect(await screen.findByText('Loading span details...')).toBeTruthy();
     });
   });
 
-  describe('row emphasis', () => {
-    it('keeps every row at full opacity, whichever is in view', async () => {
+  describe('when the host’s messages ask to highlight spans', () => {
+    it('scopes the highlight to that turn', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+
+      fireEvent.click(within(getRow('trace-a')).getByRole('button', { name: 'Highlight trace-a' }));
+
+      expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
+    });
+
+    it('clears the highlight once the opened span closes', async () => {
+      renderThread();
+      await screen.findAllByText('Chef agent run');
+      fireEvent.click(within(getRow('trace-a')).getByRole('button', { name: 'Highlight trace-a' }));
+      clickSpan('trace-a', 'Chef agent run');
+      await screen.findByRole('region', { name: 'Chef agent run' });
+
+      clickSpan('trace-a', 'Chef agent run');
+
+      await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('none;none'));
+    });
+  });
+
+  describe('when another turn scrolls into view', () => {
+    it('keeps every turn at full opacity', async () => {
       const { intersect } = stubIntersectionObserver();
-      renderView();
-      await screen.findByText('Chef agent run');
+      renderThread();
+      await screen.findAllByText('Chef agent run');
 
       act(() => intersect(getRow('trace-b')));
+
       expect(getRow('trace-a').className).not.toMatch(/opacity/);
       expect(getRow('trace-b').className).not.toMatch(/opacity/);
     });
   });
 
-  describe('selecting a span', () => {
-    it('opens the side panel for that row, marks the row active, and closes back', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-      expect(screen.queryByTestId('span-panel')).toBeNull();
-      expect(screen.queryByRole('separator')).toBeNull();
-
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      // The span column opens behind a resize handle.
-      expect(screen.getAllByRole('separator')).toHaveLength(1);
-      expect(getRow('trace-a').dataset.active).toBe('true');
-      expect(getRow('trace-b').dataset.active).toBeUndefined();
-      expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
-
-      // Re-clicking the selected span toggles it off...
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
-
-      // ...and so does the panel's close button.
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
-      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
-      expect(screen.queryByRole('separator')).toBeNull();
-      expect(getRow('trace-a').dataset.active).toBeUndefined();
-    });
-
-    it('has no prev/next buttons, since the span tree already navigates', async () => {
-      renderView();
-      await screen.findByText('Recipe lookup');
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Close span' });
-
-      expect(screen.queryByRole('button', { name: 'Go to next span' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Go to previous span' })).toBeNull();
-    });
-  });
-
-  describe('messages column tabs', () => {
-    it('swaps the messages column body per row and leaves the span tree in place', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-      const rowA = getRow('trace-a');
-      const rowB = getRow('trace-b');
-
-      fireEvent.click(within(rowA).getByRole('tab', { name: 'Extra' }));
-
-      expect(within(rowA).getByText('Extra content trace-a')).toBeTruthy();
-      expect(within(rowA).queryByRole('button', { name: 'Highlight trace-a' })).toBeNull();
-      expect(within(rowA).getByText('Chef agent run')).toBeTruthy();
-      expect(within(rowB).queryByText('Extra content trace-b')).toBeNull();
-      expect(within(rowB).getByRole('button', { name: 'Highlight trace-b' })).toBeTruthy();
-    });
-  });
-
-  describe('highlighting spans from the messages slot', () => {
-    it('scopes the highlight to that row', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-      const rowA = getRow('trace-a');
-
-      fireEvent.click(within(rowA).getByRole('button', { name: 'Highlight trace-a' }));
-
-      expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
-      await within(rowA).findByText('Recipe lookup');
-      // Closing the panel clears the highlight, so opening and closing a span resets it.
-      fireEvent.click(within(rowA).getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      fireEvent.click(within(rowA).getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('none;none'));
-    });
-  });
-
-  describe('details column', () => {
-    it('announces each turn in a divider, drops the grid borders, renders the details as a card, and renders custom actions', async () => {
-      renderView();
-      await screen.findByText('Chef agent run');
-
-      for (const [index, id] of ['trace-a', 'trace-b'].entries()) {
-        const details = screen.getByTestId(`details-${id}`);
-        const row = getRow(id);
-        const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
-        expect(within(divider).getByRole('tab', { name: 'Messages' })).toBeTruthy();
-        expect(row.className).not.toContain('border-b');
-        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).not.toContain('border-r');
-        expect(details.className).toContain('rounded-xl');
-      }
-      expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
-    });
-
-    it('keeps clamping to the Messages view height while another view is showing', async () => {
+  describe('when a turn’s span tree is taller than its messages', () => {
+    it('clamps the tree to the messages height and reveals it with Expand', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      renderView({ traceIds: ['trace-a'] });
-      await screen.findByText('Chef agent run');
-
-      const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
-
-      mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
-      fireEvent.click(screen.getByRole('tab', { name: 'Extra' }));
-
-      expect(screen.getByRole('tab', { name: 'Extra' }).getAttribute('aria-selected')).toBe('true');
-      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
-      expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
-        '300px',
-      );
-    });
-
-    it('clamps a long timeline to the messages height and expands on Expand', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      renderView({ traceIds: ['trace-a'] });
+      renderThread({ traceIds: ['trace-a'] });
       await screen.findByText('Chef agent run');
 
       const timeline = await screen.findByTestId('trace-row-timeline');
@@ -361,15 +367,29 @@ describe('ThreadTrace', () => {
 
       expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy();
+    });
 
-      // Collapsing would hide the selected span, so Collapse waits until the panel closes.
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+    it('holds Collapse back while a span of the turn is open', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      renderThread({ traceIds: ['trace-a'] });
+      await screen.findByText('Chef agent run');
+      fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+
+      clickSpan('trace-a', 'Chef agent run');
+      await screen.findByRole('region', { name: 'Chef agent run' });
+
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
-      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Collapse' });
+    });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+    it('keeps clamping to the messages height while another view is showing', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      renderThread({ traceIds: ['trace-a'] });
+      await screen.findByText('Chef agent run');
+      const timeline = await screen.findByTestId('trace-row-timeline');
+
+      mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
+      fireEvent.click(screen.getByRole('tab', { name: 'Feedback' }));
+
       expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
     });
   });
@@ -379,34 +399,19 @@ describe('ThreadTrace', () => {
     const serveMcpAppToolsLookup = () =>
       server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })));
 
-    const renderTurn = () =>
+    const renderTurn = (row: Partial<ThreadTraceRowProps> = {}) =>
       renderWithProviders(
         <TestLinkProvider>
           <ThreadTrace traceIds={['trace-a']}>
-            <ThreadTrace.List>
-              <ThreadTrace.Row traceId="trace-a">
-                <ThreadTrace.Divider label="Turn 1">
-                  <ThreadTrace.TraceLink />
-                  <ThreadTrace.TabList>
-                    <ThreadTrace.MessagesTab />
-                    <ThreadTrace.FeedbackTab />
-                    <ThreadTrace.ScoresTab />
-                  </ThreadTrace.TabList>
-                </ThreadTrace.Divider>
-                <ThreadTrace.RowBody>
-                  <ThreadTrace.Messages>
-                    <ThreadTrace.TabContent value="messages" flush>
-                      <ThreadTrace.TurnMessages spans={spansOf('trace-a')} />
-                    </ThreadTrace.TabContent>
-                    <ThreadTrace.TabContent value="feedback">Host feedback</ThreadTrace.TabContent>
-                    <ThreadTrace.TabContent value="scores">Host scores</ThreadTrace.TabContent>
-                  </ThreadTrace.Messages>
-                  <ThreadTrace.Details>
-                    <ThreadTrace.Spans spans={spansOf('trace-a')} />
-                  </ThreadTrace.Details>
-                </ThreadTrace.RowBody>
-              </ThreadTrace.Row>
-            </ThreadTrace.List>
+            <ThreadTrace.Row
+              traceId="trace-a"
+              label="Turn 1"
+              link={<ThreadTrace.TraceLink />}
+              messages={<ThreadTrace.TurnMessages spans={spansOf('trace-a')} />}
+              scores={<p>Host scores</p>}
+              spans={<ThreadTrace.Spans spans={spansOf('trace-a')} />}
+              {...row}
+            />
             <RootStateProbe />
           </ThreadTrace>
         </TestLinkProvider>,
@@ -419,7 +424,7 @@ describe('ThreadTrace', () => {
       expect(await within(getRow('trace-a')).findByText('cook pasta')).toBeTruthy();
     });
 
-    it('highlights the spans behind a message in the same row', async () => {
+    it('highlights the spans behind a message in the same turn', async () => {
       serveMcpAppToolsLookup();
       renderTurn();
       await within(getRow('trace-a')).findByText('cook pasta');
@@ -440,13 +445,13 @@ describe('ThreadTrace', () => {
       expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
     });
 
-    it('swaps in what the host renders under the Feedback and Scores tabs', async () => {
+    it('links the turn wherever the host says', async () => {
       serveMcpAppToolsLookup();
-      renderTurn();
+      renderTurn({ link: <ThreadTrace.TraceLink href="/elsewhere/trace-a" /> });
 
-      fireEvent.click(await within(getRow('trace-a')).findByRole('tab', { name: 'Scores' }));
+      const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });
 
-      expect(within(getRow('trace-a')).getByText('Host scores')).toBeTruthy();
+      expect(link.getAttribute('href')).toBe('/elsewhere/trace-a');
     });
   });
 

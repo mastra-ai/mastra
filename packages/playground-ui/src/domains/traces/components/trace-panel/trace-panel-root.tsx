@@ -33,12 +33,12 @@ export interface TracePanelRootProps {
   /** Controlled span layout (tree or timeline); starts on the tree when omitted. */
   spanView?: TraceSpanView;
   onSpanViewChange?: (view: TraceSpanView) => void;
-  /** Controlled side column view; `TracePanel.Side` falls back to its `defaultView` when omitted. */
+  /** Controlled side column view; `TracePanel.Side` falls back to its first view when this trace has no such view. */
   sideView?: string;
   onSideViewChange?: (view: string) => void;
   /** Closes the panel (`TracePanel.CloseButton`, Escape or the backdrop of `TracePanel.Frame`). */
   onClose: () => void;
-  /** Typically a `TracePanel.Frame`, then a `TracePanel.ScoreDialog` next to it. */
+  /** Typically a `TracePanel.Frame`. */
   children?: ReactNode;
 }
 

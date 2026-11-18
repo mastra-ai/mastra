@@ -124,6 +124,7 @@ function LoadedThread({
 
   return (
     <ThreadTrace
+      data-testid="thread-view-by-trace"
       traceIds={traceIds}
       selectedSpan={selectedSpan}
       onSelectedSpanChange={selected => {
@@ -131,62 +132,48 @@ function LoadedThread({
         onSelectedSpanChange?.(selected);
       }}
       onLoadOlder={onLoadOlder}
-    >
-      <ThreadTrace.List data-testid="thread-view-by-trace">
-        {turns.map((turn, index) => {
-          const rootSpanId = getTraceRootSpan(turn.spans)?.spanId;
-          return (
-            <ThreadTrace.Row key={turn.traceId} traceId={turn.traceId}>
-              <ThreadTrace.Divider label={`Turn ${index + 1}`}>
-                <ThreadTrace.TraceLink />
-                <ThreadTrace.TabList>
-                  <ThreadTrace.MessagesTab />
-                  {withFeedback && <ThreadTrace.FeedbackTab />}
-                  <ThreadTrace.ScoresTab />
-                </ThreadTrace.TabList>
-              </ThreadTrace.Divider>
-              <ThreadTrace.RowBody>
-                <ThreadTrace.Messages>
-                  <ThreadTrace.TabContent value="messages" flush>
-                    <ThreadTrace.TurnMessages spans={turn.spans} isLoading={turn.isLoading} error={turn.error} />
-                  </ThreadTrace.TabContent>
-                  {withFeedback && (
-                    <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
-                      <TraceFeedbackTab
-                        key={turn.traceId}
-                        traceId={turn.traceId}
-                        variant="thread"
-                        feedbackOptions={feedbackOptions}
-                      />
-                    </ThreadTrace.TabContent>
-                  )}
-                  <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
-                    {rootSpanId ? (
-                      <TraceScoresTab
-                        key={turn.traceId}
-                        traceId={turn.traceId}
-                        spanId={rootSpanId}
-                        onScoreSelect={scoreId => onOpenScore(turn.traceId, scoreId)}
-                      />
-                    ) : null}
-                  </ThreadTrace.TabContent>
-                </ThreadTrace.Messages>
-                <ThreadTrace.Details>
-                  <ThreadTrace.Spans spans={turn.spans} isLoading={turn.isLoading} />
-                </ThreadTrace.Details>
-              </ThreadTrace.RowBody>
-            </ThreadTrace.Row>
-          );
-        })}
-      </ThreadTrace.List>
-      <ThreadTrace.SpanPanel>
+      spanDetail={
         <SelectedSpanDetail
           turns={turns}
           span={spanDetail.data?.span}
           isLoading={spanDetail.isLoading}
           registeredTools={registeredTools}
         />
-      </ThreadTrace.SpanPanel>
+      }
+    >
+      {turns.map((turn, index) => {
+        const rootSpanId = getTraceRootSpan(turn.spans)?.spanId;
+        return (
+          <ThreadTrace.Row
+            key={turn.traceId}
+            traceId={turn.traceId}
+            label={`Turn ${index + 1}`}
+            link={<ThreadTrace.TraceLink />}
+            messages={<ThreadTrace.TurnMessages spans={turn.spans} isLoading={turn.isLoading} error={turn.error} />}
+            feedback={
+              withFeedback && (
+                <TraceFeedbackTab
+                  key={turn.traceId}
+                  traceId={turn.traceId}
+                  variant="thread"
+                  feedbackOptions={feedbackOptions}
+                />
+              )
+            }
+            scores={
+              rootSpanId && (
+                <TraceScoresTab
+                  key={turn.traceId}
+                  traceId={turn.traceId}
+                  spanId={rootSpanId}
+                  onScoreSelect={scoreId => onOpenScore(turn.traceId, scoreId)}
+                />
+              )
+            }
+            spans={<ThreadTrace.Spans spans={turn.spans} isLoading={turn.isLoading} />}
+          />
+        );
+      })}
     </ThreadTrace>
   );
 }

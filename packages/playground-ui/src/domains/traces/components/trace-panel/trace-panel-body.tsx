@@ -1,11 +1,12 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
-import { Group, useGroupRef } from 'react-resizable-panels';
+import { Group, Panel, useGroupRef } from 'react-resizable-panels';
 import type { Layout } from 'react-resizable-panels';
 
-import { TracePanelColumnsContext } from './trace-panel-columns-context';
 import { useTracePanel } from './trace-panel-context';
+import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
+import { PanelSeparator } from '@/lib/resize/separator';
 
 /** Column widths in pixels, persisted per trace entity type. */
 type TraceColumnWidths = { side?: number; span?: number };
@@ -36,20 +37,29 @@ function writeColumnWidths(key: string, widths: TraceColumnWidths) {
 }
 
 export interface TracePanelBodyProps {
-  /** The columns, in order: typically `TracePanel.Side`, `TracePanel.Main`, then `TracePanel.SpanPanel`. */
-  children: ReactNode;
+  /** The resizable column on the left, typically a `TracePanel.Side`. */
+  side?: ReactNode;
+  /** The column in the middle, typically a `TracePanel.Main`; it takes the room the others leave. */
+  main: ReactNode;
+  /** The resizable column on the right, shown while a span is open; typically a `TracePanel.SpanDetail`. */
+  span?: ReactNode;
 }
 
 /**
- * Lays its columns out side by side. The side and span columns are resizable (down to a minimum width)
- * and keep their pixel width when the drawer resizes, remembered per trace entity type; the main column
- * takes the rest. Search matches are highlighted across every column while a query is active.
+ * Lays its slots out side by side: side, main, span. The side and span columns are resizable (down to a
+ * minimum width) and keep their pixel width when the drawer resizes, remembered per trace entity type; the
+ * main column takes the rest. Search matches are highlighted across every column while a query is active,
+ * and the first match in the span column is brought into view when it opens.
  */
-export function TracePanelBody({ children }: TracePanelBodyProps) {
-  const { query, layoutKey } = useTracePanel();
+export function TracePanelBody({ side, main, span }: TracePanelBodyProps) {
+  const { query, layoutKey, selectedSpanId } = useTracePanel();
   // A single hook call on the common ancestor covers both the span tree and the span detail, so span
   // names and payload values highlight together.
   const { ref: highlightRef } = useTextHighlight<HTMLDivElement>(query);
+  // Scoped to the span column only: a match deep in a large payload sits below the fold, and the
+  // span tree must never be scrolled by this.
+  const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(query, selectedSpanId);
+  const showSpan = !!span && !!selectedSpanId;
 
   // The side and span columns are sized in pixels: they keep their width when the drawer resizes
   // (it widens when a span opens) and when the span column comes and goes; only the main column in
@@ -126,29 +136,58 @@ export function TracePanelBody({ children }: TracePanelBodyProps) {
   };
 
   return (
-    <TracePanelColumnsContext.Provider value={{ sideWidth, spanWidth }}>
-      <div
-        ref={highlightRef}
-        data-trace-columns
-        className="flex min-h-0 flex-1"
-        onPointerDownCapture={markUserResize}
-        onKeyDownCapture={markUserResize}
-      >
-        {/* Plain Group, not PanelGroup: its flex-grow transition would lag behind the drawer
+    <div
+      ref={highlightRef}
+      data-trace-columns
+      className="flex min-h-0 flex-1"
+      onPointerDownCapture={markUserResize}
+      onKeyDownCapture={markUserResize}
+    >
+      {/* Plain Group, not PanelGroup: its flex-grow transition would lag behind the drawer
             resizing and make the pixel-sized columns visibly stretch. */}
-        <Group
-          // Default sizes are only read on mount: remount once the entity type is known.
-          key={layoutKey ?? 'unknown'}
-          groupRef={groupRef}
-          elementRef={columnsRef}
-          orientation="horizontal"
-          className="min-h-0 flex-1"
-          onLayoutChange={holdPixelWidths}
-          onLayoutChanged={persistWidths}
-        >
-          {children}
-        </Group>
-      </div>
-    </TracePanelColumnsContext.Provider>
+      <Group
+        // Default sizes are only read on mount: remount once the entity type is known.
+        key={layoutKey ?? 'unknown'}
+        groupRef={groupRef}
+        elementRef={columnsRef}
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        onLayoutChange={holdPixelWidths}
+        onLayoutChanged={persistWidths}
+      >
+        {side && (
+          <>
+            <Panel id="trace-side" minSize={280} defaultSize={sideWidth()} groupResizeBehavior="preserve-pixel-size">
+              <div className="flex h-full min-h-0 flex-col border-r border-surface-rim">{side}</div>
+            </Panel>
+            <PanelSeparator variant="pill" />
+          </>
+        )}
+        {/* 384px: the timeline grid's own minimum (two 12rem columns), so its end never clips. */}
+        <Panel id="trace-main" minSize={384} className="flex min-h-0 min-w-0 flex-col">
+          {main}
+        </Panel>
+        {showSpan && (
+          <>
+            <PanelSeparator variant="pill" />
+            <Panel
+              id="trace-span"
+              minSize={384}
+              maxSize="50%"
+              defaultSize={spanWidth()}
+              groupResizeBehavior="preserve-pixel-size"
+            >
+              <div
+                ref={scrollToMatchRef}
+                data-highlight
+                className="flex h-full min-h-0 animate-in flex-col border-l border-surface-rim duration-300 fade-in-0"
+              >
+                {span}
+              </div>
+            </Panel>
+          </>
+        )}
+      </Group>
+    </div>
   );
 }

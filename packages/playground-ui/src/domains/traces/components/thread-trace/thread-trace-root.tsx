@@ -1,11 +1,18 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { Panel } from 'react-resizable-panels';
 
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
-import { MessageScrollerProvider } from '@/ds/components/MessageScroller';
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/ds/components/MessageScroller';
 import { PanelGroup } from '@/lib/resize/panel-group';
+import { PanelSeparator } from '@/lib/resize/separator';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
@@ -20,20 +27,28 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   selectedSpan?: ThreadTraceSelectedSpan | null;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
+  /**
+   * The resizable column beside the turns, shown while a span is open; typically a
+   * `ThreadTrace.SpanDetail` fed with the open span's record.
+   */
+  spanDetail?: ReactNode;
+  /** The turns, oldest first: one `ThreadTrace.Row` per trace of `traceIds`. */
+  children?: ReactNode;
 }
 
 /**
  * Owns the interaction state of a thread rendered as its traces: the selected span (unless the host
  * controls it), the highlighted spans, which rows are expanded, and which rows are on screen. It never
  * fetches: each part gets the records it draws from the host. Layout parts read it
- * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the resizable panel group that
- * gains a span column while a span is selected.
+ * through `useThreadTrace()` / `useThreadTraceRow()`. It lays the turns out in a scrolling list and, while a
+ * span is open, its `spanDetail` slot in a resizable column beside them.
  */
 export function ThreadTraceRoot({
   traceIds,
   onLoadOlder,
   selectedSpan,
   onSelectedSpanChange,
+  spanDetail,
   className,
   children,
   ...props
@@ -130,7 +145,30 @@ export function ThreadTraceRoot({
       <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
         <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
           <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            {children}
+            <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+              {/* Visible-row tracking observes `[data-trace-id]` inside this viewport. */}
+              <MessageScroller data-slot="thread-trace-list" className="min-h-0 flex-1">
+                <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
+                  <MessageScrollerContent data-slot="thread-trace-list-inner" className="relative min-h-full gap-0">
+                    {children}
+                  </MessageScrollerContent>
+                </MessageScrollerViewport>
+              </MessageScroller>
+            </Panel>
+            {selected && spanDetail && (
+              <>
+                <PanelSeparator variant="pill" />
+                <Panel id="thread-trace-span" minSize={384} defaultSize="35%" maxSize="50%">
+                  <div
+                    data-slot="thread-trace-span-panel"
+                    // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
+                    className="flex h-full min-h-0 min-w-0 animate-in flex-col overflow-hidden border-l border-border duration-300 fade-in-0"
+                  >
+                    {spanDetail}
+                  </div>
+                </Panel>
+              </>
+            )}
           </PanelGroup>
         </div>
       </MessageScrollerProvider>

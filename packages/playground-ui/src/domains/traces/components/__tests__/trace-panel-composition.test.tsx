@@ -4,14 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TraceDataPanelView } from '../trace-data-panel-view';
-import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
-import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
+import { FullTracePanel } from './compositions/full-trace-panel';
+import type { FullTracePanelProps } from './compositions/full-trace-panel';
+import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-spans';
 import { installHighlightApi } from '@/test/highlight-api';
 import type { HighlightApiHarness } from '@/test/highlight-api';
 
 // Rendered without a Mastra client or a React Query provider: the view draws what it is given and fetches nothing.
-const baseProps: TraceDataPanelViewProps = {
+const baseProps: FullTracePanelProps = {
   traceId: 'trace-1',
   spans: rootSpanFixture,
   onClose: vi.fn(),
@@ -28,9 +28,15 @@ afterEach(() => {
   scrollIntoView.mockClear();
 });
 
-describe('TraceDataPanelView — span panel slot', () => {
-  it('renders the span panel content inside the same card, next to the trace content', () => {
-    render(<TraceDataPanelView {...baseProps} spanPanelSlot={<div data-testid="span-detail">span content</div>} />);
+describe('TracePanel, fully composed — span panel slot', () => {
+  it('renders the span panel content inside the same card, next to the trace content, once a span is open', () => {
+    render(
+      <FullTracePanel
+        {...baseProps}
+        initialSpanId="root"
+        spanPanelSlot={<div data-testid="span-detail">span content</div>}
+      />,
+    );
 
     const spanDetail = screen.getByTestId('span-detail');
     // Same card: the slot lives inside the panel's single <section> root.
@@ -40,12 +46,12 @@ describe('TraceDataPanelView — span panel slot', () => {
   });
 
   it('renders no split when the slot is omitted', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
     expect(screen.queryByTestId('span-detail')).toBeNull();
   });
 });
 
-describe('TraceDataPanelView — search highlighting', () => {
+describe('TracePanel, fully composed — search highlighting', () => {
   let harness: HighlightApiHarness;
 
   beforeEach(() => {
@@ -60,8 +66,9 @@ describe('TraceDataPanelView — search highlighting', () => {
 
   const renderWithSpanPanel = () =>
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
+        initialSpanId="root"
         spanPanelSlot={
           <div data-testid="span-detail">
             <p>agent run details</p>
@@ -76,7 +83,7 @@ describe('TraceDataPanelView — search highlighting', () => {
   };
 
   it('highlights matching span names in the timeline tree', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} />);
 
     search('weather');
 
@@ -93,7 +100,7 @@ describe('TraceDataPanelView — search highlighting', () => {
   });
 
   it('does not highlight the span type legend', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} />);
 
     search('tool');
 
@@ -128,7 +135,7 @@ describe('TraceDataPanelView — search highlighting', () => {
   });
 
   it('paints the whole name of a span matched only by its metadata', async () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} />);
 
     // 'pgvector' lives in the memory span's metadata and in no span name.
     search('pgvector');
@@ -139,7 +146,7 @@ describe('TraceDataPanelView — search highlighting', () => {
   });
 
   it('leaves a span matched by its name on the normal highlight', async () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} />);
 
     search('memory');
 
@@ -159,17 +166,17 @@ describe('TraceDataPanelView — search highlighting', () => {
   });
 });
 
-describe('TraceDataPanelView — className passthrough', () => {
+describe('TracePanel, fully composed — className passthrough', () => {
   it('applies the provided className to the panel root', () => {
-    render(<TraceDataPanelView {...baseProps} className="h-full" />);
+    render(<FullTracePanel {...baseProps} className="h-full" />);
 
     expect(document.body.querySelector('[data-slot="data-panel-popup"] section')?.className).toContain('h-full');
   });
 });
 
-describe('TraceDataPanelView — header actions', () => {
+describe('TracePanel, fully composed — header actions', () => {
   it('keeps navigation, close and every trace action visible in the header, with no overflow menu', () => {
-    render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /previous trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
@@ -180,7 +187,7 @@ describe('TraceDataPanelView — header actions', () => {
   });
 
   it('puts Score trace first, then the dataset action, with the download right after', () => {
-    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} onSaveAsDatasetItem={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} onEvaluateTrace={vi.fn()} onSaveAsDatasetItem={vi.fn()} />);
 
     const addToDataset = screen.getByRole('button', { name: 'Add to dataset' });
     const scoreTrace = screen.getByRole('button', { name: /score trace/i });
@@ -190,7 +197,7 @@ describe('TraceDataPanelView — header actions', () => {
 
   it('still saves the dataset item against the root span from the header', () => {
     const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+    render(<FullTracePanel {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
@@ -198,9 +205,9 @@ describe('TraceDataPanelView — header actions', () => {
   });
 });
 
-describe('TraceDataPanelView — trace summary description', () => {
+describe('TracePanel, fully composed — trace summary description', () => {
   it('shows the start date, duration and entity right under the heading', () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} entityHref="/agents/weather-agent/chat/new" />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} entityHref="/agents/weather-agent/chat/new" />);
 
     expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
     // 1s between the fixture's startedAt and endedAt.
@@ -209,14 +216,14 @@ describe('TraceDataPanelView — trace summary description', () => {
   });
 
   it('renders the entity as plain text when no href is provided', () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} />);
 
     expect(screen.queryByRole('link', { name: /weather-agent/ })).toBeNull();
     expect(screen.getAllByText(/weather-agent/).length).toBeGreaterThan(0);
   });
 
   it('no longer renders the old key-value metadata rows', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(screen.queryByText('Status')).toBeNull();
     expect(screen.queryByText('Ended at')).toBeNull();
@@ -225,13 +232,13 @@ describe('TraceDataPanelView — trace summary description', () => {
   });
 });
 
-describe('TraceDataPanelView — trace error', () => {
+describe('TracePanel, fully composed — trace error', () => {
   const failedSpans = [
     { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
   ];
 
   it("shows the root span's error without opening the span", () => {
-    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+    render(<FullTracePanel {...baseProps} spans={failedSpans} />);
 
     expect(screen.getByText('AI_APICallError')).toBeTruthy();
     expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
@@ -239,7 +246,7 @@ describe('TraceDataPanelView — trace error', () => {
 
   it('opens the failed span from the error', () => {
     const onSpanSelect = vi.fn();
-    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+    render(<FullTracePanel {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'View details' }));
 
@@ -247,37 +254,37 @@ describe('TraceDataPanelView — trace error', () => {
   });
 
   it('shows no error when the trace succeeded', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
   });
 });
 
-describe('TraceDataPanelView — summary row while loading', () => {
+describe('TracePanel, fully composed — summary row while loading', () => {
   it('holds the summary row with a skeleton until the root span lands', () => {
-    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+    const { rerender } = render(<FullTracePanel {...baseProps} spans={[]} isLoading />);
 
     expect(screen.getByRole('status', { name: 'Loading trace summary' })).toBeDefined();
 
-    rerender(<TraceDataPanelView {...baseProps} spans={rootSpanFixture} isLoading={false} />);
+    rerender(<FullTracePanel {...baseProps} spans={rootSpanFixture} isLoading={false} />);
 
     expect(screen.queryByRole('status', { name: 'Loading trace summary' })).toBeNull();
     expect(screen.getByLabelText(/^Started at /)).toBeDefined();
   });
 });
 
-describe('TraceDataPanelView — span selected from the URL', () => {
+describe('TracePanel, fully composed — span selected from the URL', () => {
   describe('when the trace is still loading', () => {
     it('keeps the requested span instead of clearing it', () => {
       const onSpanSelect = vi.fn();
       const { rerender } = render(
-        <TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="root" onSpanSelect={onSpanSelect} />,
+        <FullTracePanel {...baseProps} spans={[]} isLoading initialSpanId="root" onSpanSelect={onSpanSelect} />,
       );
 
       expect(onSpanSelect).not.toHaveBeenCalled();
 
       rerender(
-        <TraceDataPanelView
+        <FullTracePanel
           {...baseProps}
           spans={rootSpanFixture}
           isLoading={false}
@@ -290,15 +297,15 @@ describe('TraceDataPanelView — span selected from the URL', () => {
     });
 
     it('scrolls the requested span into view once the timeline renders', () => {
-      const { rerender } = render(<TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="root" />);
-      rerender(<TraceDataPanelView {...baseProps} spans={rootSpanFixture} isLoading={false} initialSpanId="root" />);
+      const { rerender } = render(<FullTracePanel {...baseProps} spans={[]} isLoading initialSpanId="root" />);
+      rerender(<FullTracePanel {...baseProps} spans={rootSpanFixture} isLoading={false} initialSpanId="root" />);
 
       expect(scrollIntoView).toHaveBeenCalled();
     });
 
     it('scrolls a nested span into view once its parent expands', () => {
-      const { rerender } = render(<TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="child" />);
-      rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} isLoading={false} initialSpanId="child" />);
+      const { rerender } = render(<FullTracePanel {...baseProps} spans={[]} isLoading initialSpanId="child" />);
+      rerender(<FullTracePanel {...baseProps} spans={nestedSpanFixture} isLoading={false} initialSpanId="child" />);
 
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
     });
@@ -307,16 +314,16 @@ describe('TraceDataPanelView — span selected from the URL', () => {
   describe('when the loaded trace has no such span', () => {
     it('clears the selection', () => {
       const onSpanSelect = vi.fn();
-      render(<TraceDataPanelView {...baseProps} initialSpanId="span-does-not-exist" onSpanSelect={onSpanSelect} />);
+      render(<FullTracePanel {...baseProps} initialSpanId="span-does-not-exist" onSpanSelect={onSpanSelect} />);
 
       expect(onSpanSelect).toHaveBeenCalledWith(undefined);
     });
   });
 });
 
-describe('TraceDataPanelView — the header', () => {
+describe('TracePanel, fully composed — the header', () => {
   it('names the trace by its first 6 id characters, with no ellipsis, in the side panel', () => {
-    render(<TraceDataPanelView {...baseProps} traceId="0123456789abcdef0123" />);
+    render(<FullTracePanel {...baseProps} traceId="0123456789abcdef0123" />);
 
     const heading = screen.getByRole('heading', { name: 'Trace 012345' });
     expect(heading.textContent).not.toContain('#');
@@ -325,7 +332,7 @@ describe('TraceDataPanelView — the header', () => {
 
   it('lays the side-panel header out as a navigation row and a summary row', async () => {
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={deepTraceFixture}
         traceId="0123456789abcdef0123"
@@ -369,7 +376,7 @@ describe('TraceDataPanelView — the header', () => {
   });
 
   it('drops the trace id, and every side-panel control, on the trace page', () => {
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" onPrevious={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} placement="trace-page" onPrevious={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: 'Trace Timeline' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Trace trace-' })).toBeNull();
@@ -378,24 +385,24 @@ describe('TraceDataPanelView — the header', () => {
   });
 
   it('shows the trace summary under the heading on the trace page too', () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} placement="trace-page" />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} placement="trace-page" />);
 
     expect(screen.getByLabelText('Trace status')).toBeTruthy();
     expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
   });
 
   it('opens as a wide drawer by default and honours a caller-provided size', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
     expect(screen.getByRole('dialog', { name: 'Trace trace-1' }).className).toContain('w-4/5');
 
     cleanup();
 
-    render(<TraceDataPanelView {...baseProps} size="full" />);
+    render(<FullTracePanel {...baseProps} size="full" />);
     expect(screen.getByRole('dialog', { name: 'Trace trace-1' }).className).toContain('w-full');
   });
 
   it('renders the header slot inside the drawer above the trace header', () => {
-    render(<TraceDataPanelView {...baseProps} headerSlot={<section>Feedback context</section>} />);
+    render(<FullTracePanel {...baseProps} headerSlot={<section>Feedback context</section>} />);
 
     const dialog = screen.getByRole('dialog', { name: 'Trace trace-1' });
     const slot = within(dialog).getByText('Feedback context');
@@ -404,13 +411,13 @@ describe('TraceDataPanelView — the header', () => {
   });
 
   it('offers trace-to-trace navigation as soon as either direction exists', () => {
-    render(<TraceDataPanelView {...baseProps} onNext={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} onNext={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
   });
 
   it('offers no navigation when neither direction exists', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(screen.queryByRole('button', { name: /next trace/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
@@ -423,23 +430,23 @@ describe('TraceDataPanelView — the header', () => {
       </a>
     );
 
-    const noHref = render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} />);
+    const noHref = render(<FullTracePanel {...baseProps} LinkComponent={Anchor} />);
     expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
     expect(noHref.container).toBeTruthy();
 
     cleanup();
 
-    render(<TraceDataPanelView {...baseProps} traceHref="/traces/trace-1" />);
+    render(<FullTracePanel {...baseProps} traceHref="/traces/trace-1" />);
     expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
 
     cleanup();
 
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
     expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
 
     cleanup();
 
-    render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} traceHref="/traces/trace-1" />);
+    render(<FullTracePanel {...baseProps} LinkComponent={Anchor} traceHref="/traces/trace-1" />);
     expect(screen.getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe('/traces/trace-1');
   });
 
@@ -450,17 +457,15 @@ describe('TraceDataPanelView — the header', () => {
       </a>
     );
 
-    render(
-      <TraceDataPanelView {...baseProps} placement="trace-page" LinkComponent={Anchor} traceHref="/traces/trace-1" />,
-    );
+    render(<FullTracePanel {...baseProps} placement="trace-page" LinkComponent={Anchor} traceHref="/traces/trace-1" />);
 
     expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
   });
 });
 
-describe('TraceDataPanelView — the body', () => {
+describe('TracePanel, fully composed — the body', () => {
   it('shows a tree-shaped placeholder while loading, rather than an empty trace', () => {
-    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+    render(<FullTracePanel {...baseProps} spans={[]} isLoading />);
 
     expect(screen.getAllByRole('status', { name: 'Loading spans' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No spans found for this trace.')).toBeNull();
@@ -468,7 +473,7 @@ describe('TraceDataPanelView — the body', () => {
   });
 
   it('keeps a single search field while loading, so the header does not jump when spans land', () => {
-    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+    render(<FullTracePanel {...baseProps} spans={[]} isLoading />);
 
     expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
     // The header owns the search; the tree placeholder is only span rows, not a second field.
@@ -478,14 +483,14 @@ describe('TraceDataPanelView — the body', () => {
 
   it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
     const { rerender } = render(
-      <TraceDataPanelView {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
+      <FullTracePanel {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
     );
 
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByText('feedback body')).toBeNull();
 
     rerender(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         feedbackTabSlot={() => <p>feedback body</p>}
         messagesPanelSlot={<p>messages body</p>}
@@ -497,40 +502,40 @@ describe('TraceDataPanelView — the body', () => {
   });
 
   it('says a settled trace has no spans', () => {
-    render(<TraceDataPanelView {...baseProps} spans={[]} />);
+    render(<FullTracePanel {...baseProps} spans={[]} />);
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
   });
 
   it('says the same when the spans never arrived at all', () => {
-    render(<TraceDataPanelView {...baseProps} spans={undefined} />);
+    render(<FullTracePanel {...baseProps} spans={undefined} />);
 
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
   });
 });
 
-describe('TraceDataPanelView — the actions row', () => {
+describe('TracePanel, fully composed — the actions row', () => {
   it('explains where the missing actions live, when asked to', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(screen.getByText(/available in Mastra Studio/)).toBeTruthy();
   });
 
   it('stays quiet about them when the caller asks it to', () => {
-    render(<TraceDataPanelView {...baseProps} showUnavailableFeaturesMsg={false} />);
+    render(<FullTracePanel {...baseProps} showUnavailableFeaturesMsg={false} />);
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
   });
 
   it('drops the explanation as soon as any one action is available', () => {
-    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
   it('keeps Score trace on the trace page header, without the explanation', () => {
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
+    render(<FullTracePanel {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
@@ -538,7 +543,7 @@ describe('TraceDataPanelView — the actions row', () => {
 
   it('saves the dataset item against the root span it found', () => {
     const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+    render(<FullTracePanel {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
@@ -547,7 +552,7 @@ describe('TraceDataPanelView — the actions row', () => {
 
   it('reports the evaluation request with no arguments of its own', () => {
     const onEvaluateTrace = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
+    render(<FullTracePanel {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
 
     fireEvent.click(screen.getByRole('button', { name: /score trace/i }));
 
@@ -555,10 +560,10 @@ describe('TraceDataPanelView — the actions row', () => {
   });
 });
 
-describe('TraceDataPanelView — span selection', () => {
+describe('TracePanel, fully composed — span selection', () => {
   it('toggles a span off when it is clicked again', () => {
     const onSpanSelect = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSpanSelect={onSpanSelect} />);
+    render(<FullTracePanel {...baseProps} onSpanSelect={onSpanSelect} />);
 
     const span = screen.getByText('agent run');
     fireEvent.click(span);
@@ -570,17 +575,17 @@ describe('TraceDataPanelView — span selection', () => {
 
   it('clears the selection the moment the requested span is taken away', () => {
     const onSpanSelect = vi.fn();
-    const { rerender } = render(<TraceDataPanelView {...baseProps} initialSpanId="root" onSpanSelect={onSpanSelect} />);
+    const { rerender } = render(<FullTracePanel {...baseProps} initialSpanId="root" onSpanSelect={onSpanSelect} />);
     onSpanSelect.mockClear();
 
-    rerender(<TraceDataPanelView {...baseProps} initialSpanId={undefined} onSpanSelect={onSpanSelect} />);
+    rerender(<FullTracePanel {...baseProps} initialSpanId={undefined} onSpanSelect={onSpanSelect} />);
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
   });
 
   it('clears the selection when no span was asked for, without waiting for the trace', () => {
     const onSpanSelect = vi.fn();
-    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading onSpanSelect={onSpanSelect} />);
+    render(<FullTracePanel {...baseProps} spans={[]} isLoading onSpanSelect={onSpanSelect} />);
 
     // Nothing was asked for, so there is nothing for the data to confirm.
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
@@ -588,20 +593,18 @@ describe('TraceDataPanelView — span selection', () => {
 
   it('holds a requested span while the trace is still loading', () => {
     const onSpanSelect = vi.fn();
-    render(
-      <TraceDataPanelView {...baseProps} spans={[]} isLoading initialSpanId="span-1" onSpanSelect={onSpanSelect} />,
-    );
+    render(<FullTracePanel {...baseProps} spans={[]} isLoading initialSpanId="span-1" onSpanSelect={onSpanSelect} />);
 
     // An in-flight fetch must not wipe a selection the URL asked for.
     expect(onSpanSelect).not.toHaveBeenCalled();
   });
 });
 
-describe('TraceDataPanelView — an anchored subtrace', () => {
+describe('TracePanel, fully composed — an anchored subtrace', () => {
   it('treats the anchor span as the root the panel is describing', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         anchorSpanId="child"
@@ -616,7 +619,7 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
 
   it('falls back to the span with no parent when there is no anchor', () => {
     const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
@@ -626,7 +629,7 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
   it('still names an anchored root span even when the anchor is the trace root', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         anchorSpanId="root"
@@ -640,11 +643,11 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
   });
 });
 
-describe('TraceDataPanelView — downloading the trace', () => {
+describe('TracePanel, fully composed — downloading the trace', () => {
   describe('when the reader asks for the JSON', () => {
     it('hands the trace id to the host, which loads and saves it', () => {
       const onDownloadTrace = vi.fn<(traceId: string) => void>();
-      render(<TraceDataPanelView {...baseProps} onDownloadTrace={onDownloadTrace} />);
+      render(<FullTracePanel {...baseProps} onDownloadTrace={onDownloadTrace} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Download trace JSON' }));
 
@@ -654,59 +657,59 @@ describe('TraceDataPanelView — downloading the trace', () => {
 
   describe('when the host is still downloading', () => {
     it('refuses a second download', () => {
-      render(<TraceDataPanelView {...baseProps} isDownloadingTrace />);
+      render(<FullTracePanel {...baseProps} isDownloadingTrace />);
 
       expect(screen.getByRole('button', { name: 'Download trace JSON' }).hasAttribute('data-disabled')).toBe(true);
     });
   });
 });
 
-describe('TraceDataPanelView — what the timeline shows as selected', () => {
+describe('TracePanel, fully composed — what the timeline shows as selected', () => {
   /** The timeline marks the selected span's own row; nothing else carries it. */
   const isMarked = (name: string) =>
     screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('marks the span the URL asked for', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
 
     expect(isMarked('weather tool')).toBe(true);
     expect(isMarked('agent run')).toBe(false);
   });
 
   it('marks nothing when the URL asked for a span the trace does not have', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
 
     expect(isMarked('weather tool')).toBe(false);
     expect(isMarked('agent run')).toBe(false);
   });
 
   it('drops the mark when the URL stops asking for a span', () => {
-    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    const { rerender } = render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
     expect(isMarked('weather tool')).toBe(true);
 
-    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId={undefined} />);
+    rerender(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId={undefined} />);
 
     expect(isMarked('weather tool')).toBe(false);
   });
 });
 
-describe('TraceDataPanelView — without the optional callbacks', () => {
+describe('TracePanel, fully composed — without the optional callbacks', () => {
   it('clears a missing span without a listener to tell', () => {
     expect(() =>
-      render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />),
+      render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />),
     ).not.toThrow();
   });
 
   it('selects a span without a listener to tell', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} />);
 
     expect(() => fireEvent.click(screen.getByText('weather tool'))).not.toThrow();
   });
 });
 
-describe('TraceDataPanelView — an anchor the trace does not have', () => {
+describe('TracePanel, fully composed — an anchor the trace does not have', () => {
   it('shows no trace summary rather than reaching into a span that is not there', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} anchorSpanId="ghost" />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} anchorSpanId="ghost" />);
 
     // No root span to describe, so the summary rows are left out entirely.
     expect(screen.queryByLabelText(/^Started at /)).toBeNull();
@@ -716,7 +719,7 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
   it('saves a dataset item with no root span rather than failing', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         anchorSpanId="ghost"
@@ -730,20 +733,20 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
   });
 
   it('copes with an anchor while the spans have not arrived', () => {
-    expect(() => render(<TraceDataPanelView {...baseProps} spans={undefined} anchorSpanId="child" />)).not.toThrow();
+    expect(() => render(<FullTracePanel {...baseProps} spans={undefined} anchorSpanId="child" />)).not.toThrow();
     expect(screen.getByText('No spans found for this trace.')).toBeTruthy();
   });
 });
 
-describe('TraceDataPanelView — following the spans it is given', () => {
+describe('TracePanel, fully composed — following the spans it is given', () => {
   it('re-reads the root span when the trace changes under it', () => {
     const onSaveAsDatasetItem = vi.fn();
     const { rerender } = render(
-      <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
+      <FullTracePanel {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
     );
 
     const otherRoot = [{ ...rootSpanFixture[0], spanId: 'other-root' }];
-    rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+    rerender(<FullTracePanel {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
@@ -753,7 +756,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
   it('re-reads the root span when the anchor changes under it', () => {
     const onSaveAsDatasetItem = vi.fn();
     const { rerender } = render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         anchorSpanId="root"
@@ -762,7 +765,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
     );
 
     rerender(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         anchorSpanId="child"
@@ -778,7 +781,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
   it('picks the span with no parent, wherever it sits in the list', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={[...nestedSpanFixture].reverse()}
         onSaveAsDatasetItem={onSaveAsDatasetItem}
@@ -791,32 +794,32 @@ describe('TraceDataPanelView — following the spans it is given', () => {
   });
 });
 
-describe('TraceDataPanelView — following the URL to another span', () => {
+describe('TracePanel, fully composed — following the URL to another span', () => {
   const isMarked = (name: string) =>
     screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('moves the mark when the URL names a different span', () => {
-    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="root" />);
+    const { rerender } = render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="root" />);
     expect(isMarked('agent run')).toBe(true);
 
-    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    rerender(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
 
     expect(isMarked('weather tool')).toBe(true);
     expect(isMarked('agent run')).toBe(false);
   });
 
   it('clears the mark when the URL names a span the trace lost', () => {
-    const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
+    const { rerender } = render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
     expect(isMarked('weather tool')).toBe(true);
 
-    rerender(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
+    rerender(<FullTracePanel {...baseProps} spans={nestedSpanFixture} initialSpanId="ghost" />);
 
     expect(isMarked('weather tool')).toBe(false);
     expect(isMarked('agent run')).toBe(false);
   });
 });
 
-describe('TraceDataPanelView — messages column', () => {
+describe('TracePanel, fully composed — messages column', () => {
   const messages = <div data-testid="messages-panel">messages here</div>;
   const spanDetail = <div data-testid="span-detail">span content</div>;
   const columns = () => document.body.querySelector('[data-trace-columns]') as HTMLElement;
@@ -824,7 +827,7 @@ describe('TraceDataPanelView — messages column', () => {
 
   describe('given a messages slot', () => {
     it('renders the side column beside the span tree', () => {
-      render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+      render(<FullTracePanel {...baseProps} messagesPanelSlot={messages} />);
 
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
@@ -833,7 +836,9 @@ describe('TraceDataPanelView — messages column', () => {
     });
 
     it('orders the columns messages → trace → span', () => {
-      render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} spanPanelSlot={spanDetail} />);
+      render(
+        <FullTracePanel {...baseProps} initialSpanId="root" messagesPanelSlot={messages} spanPanelSlot={spanDetail} />,
+      );
 
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
@@ -842,7 +847,7 @@ describe('TraceDataPanelView — messages column', () => {
     });
 
     it('keeps the side column while the timeline view is active', () => {
-      render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+      render(<FullTracePanel {...baseProps} messagesPanelSlot={messages} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
       expect(screen.getByTestId('messages-panel')).not.toBeNull();
@@ -853,7 +858,7 @@ describe('TraceDataPanelView — messages column', () => {
     const rootSpan = nestedSpanFixture[0];
     if (!rootSpan) throw new Error('fixture must have a root span');
 
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
 
     const rows = screen.getAllByLabelText(/^View details for span/);
     expect(rows.length).toBeGreaterThan(1);
@@ -864,7 +869,7 @@ describe('TraceDataPanelView — messages column', () => {
 
   describe('given a span panel slot', () => {
     it('orders the columns trace → span', () => {
-      render(<TraceDataPanelView {...baseProps} spanPanelSlot={spanDetail} />);
+      render(<FullTracePanel {...baseProps} initialSpanId="root" spanPanelSlot={spanDetail} />);
 
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
@@ -875,7 +880,7 @@ describe('TraceDataPanelView — messages column', () => {
 
   describe('given no messages slot', () => {
     it('renders the span tree alone', () => {
-      render(<TraceDataPanelView {...baseProps} />);
+      render(<FullTracePanel {...baseProps} />);
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
@@ -884,14 +889,14 @@ describe('TraceDataPanelView — messages column', () => {
   });
 });
 
-describe('TraceDataPanelView — timeline view', () => {
+describe('TracePanel, fully composed — timeline view', () => {
   it('offers a tree/timeline toggle next to the search field instead of Spans/Timeline tabs', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
-    const views = screen.getByRole('group', { name: 'Span view' });
-    expect(views.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' }))).toBe(true);
+    const toolbar = screen.getByRole('searchbox', { name: 'Search spans' }).parentElement;
+    expect(toolbar?.contains(screen.getByRole('group', { name: 'Span view' }))).toBe(true);
     expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('false');
 
@@ -904,7 +909,7 @@ describe('TraceDataPanelView — timeline view', () => {
   it('follows a controlled spanView and reports picks to the consumer', () => {
     const onSpanViewChange = vi.fn();
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
         spanView="timeline"
@@ -919,7 +924,7 @@ describe('TraceDataPanelView — timeline view', () => {
   });
 
   it('shows the spans as bars on a shared time axis', () => {
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} />);
 
     expect(screen.queryByLabelText('Trace time axis')).toBeNull();
     const treeRows = screen.getAllByLabelText(/^View details for span/).map(row => row.getAttribute('aria-label'));
@@ -933,7 +938,7 @@ describe('TraceDataPanelView — timeline view', () => {
 
   it('shares span selection between the timeline and tree views', () => {
     const onSpanSelect = vi.fn();
-    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSpanSelect={onSpanSelect} />);
+    render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} onSpanSelect={onSpanSelect} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
     fireEvent.click(within(screen.getByLabelText('View details for span weather tool')).getByRole('button'));
@@ -944,7 +949,7 @@ describe('TraceDataPanelView — timeline view', () => {
   });
 });
 
-describe('TraceDataPanelView — side column views', () => {
+describe('TracePanel, fully composed — side column views', () => {
   const sideColumn = () => document.body.querySelector('[data-trace-side-column]');
   const sideTabs = () => within(sideColumn() as HTMLElement).getAllByRole('tab');
   const pickView = (name: RegExp) => {
@@ -959,7 +964,7 @@ describe('TraceDataPanelView — side column views', () => {
 
   it('keeps every tab in the side column, under a bordered header, whatever slots are provided', () => {
     render(
-      <TraceDataPanelView
+      <FullTracePanel
         {...baseProps}
         messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
         scoresTabSlot={() => <div>trace scores here</div>}
@@ -975,7 +980,7 @@ describe('TraceDataPanelView — side column views', () => {
   });
 
   it('renders no side column when no slot is provided', () => {
-    render(<TraceDataPanelView {...baseProps} />);
+    render(<FullTracePanel {...baseProps} />);
 
     expect(sideColumn()).toBeNull();
   });
@@ -987,7 +992,7 @@ describe('TraceDataPanelView — side column views', () => {
           scores for {traceId}/{rootSpanId}
         </div>
       ));
-      render(<TraceDataPanelView {...baseProps} scoresTabSlot={scoresTabSlot} scoresTabBadge={3} />);
+      render(<FullTracePanel {...baseProps} scoresTabSlot={scoresTabSlot} scoresTabBadge={3} />);
 
       expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
       expect(within(sideColumn() as HTMLElement).getByText('scores for trace-1/root')).toBeTruthy();
@@ -999,7 +1004,7 @@ describe('TraceDataPanelView — side column views', () => {
     it('shows the feedback — with the trace id and no span id — under a "Feedback" tab carrying the badge', () => {
       const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
       render(
-        <TraceDataPanelView
+        <FullTracePanel
           {...baseProps}
           feedbackTabSlot={feedbackTabSlot}
           feedbackTabBadge={<span data-testid="feedback-badge" />}
@@ -1016,7 +1021,7 @@ describe('TraceDataPanelView — side column views', () => {
   describe('given messages, feedback and scores slots', () => {
     const renderAll = () =>
       render(
-        <TraceDataPanelView
+        <FullTracePanel
           {...baseProps}
           messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
           feedbackTabSlot={() => <div>trace feedback here</div>}
@@ -1062,7 +1067,7 @@ describe('TraceDataPanelView — side column views', () => {
     it('shows the requested view and reports a pick to the consumer', async () => {
       const onSideViewChange = vi.fn();
       render(
-        <TraceDataPanelView
+        <FullTracePanel
           {...baseProps}
           messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
           scoresTabSlot={() => <div>trace scores here</div>}
@@ -1082,7 +1087,7 @@ describe('TraceDataPanelView — side column views', () => {
   describe('the summary row', () => {
     it('leaves scores and feedback to the side column tabs', () => {
       render(
-        <TraceDataPanelView
+        <FullTracePanel
           {...baseProps}
           scoresTabSlot={() => <div>scores</div>}
           scoresTabBadge={3}
@@ -1098,7 +1103,7 @@ describe('TraceDataPanelView — side column views', () => {
   });
 });
 
-describe('TraceDataPanelView — span search', () => {
+describe('TracePanel, fully composed — span search', () => {
   const searchField = () => screen.getByRole('searchbox', { name: /search spans/i }) as HTMLInputElement;
 
   const typeSearch = (value: string) => {
@@ -1113,20 +1118,20 @@ describe('TraceDataPanelView — span search', () => {
     );
 
   it('renders the search field when the trace has spans', () => {
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} />);
 
     expect(searchField()).toBeTruthy();
   });
 
   it('renders no search field when the trace has no spans', () => {
-    render(<TraceDataPanelView {...baseProps} spans={[]} />);
+    render(<FullTracePanel {...baseProps} spans={[]} />);
 
     expect(screen.getByText(/no spans found for this trace/i)).toBeTruthy();
     expect(screen.queryByRole('searchbox', { name: /search spans/i })).toBeNull();
   });
 
-  const renderDeep = (props: Partial<TraceDataPanelViewProps> = {}) =>
-    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} {...props} />);
+  const renderDeep = (props: Partial<FullTracePanelProps> = {}) =>
+    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} {...props} />);
 
   const allNames = [
     'agent run',
@@ -1308,7 +1313,7 @@ describe('TraceDataPanelView — span search', () => {
     // A branch subtree is what `getBranch` returns: the anchor plus its
     // descendants, without the trace root.
     const branch = deepTraceFixture.filter(span => ['gen-1', 'tool-1', 'http-1', 'mem-1'].includes(span.spanId));
-    render(<TraceDataPanelView {...baseProps} spans={branch} anchorSpanId="gen-1" />);
+    render(<FullTracePanel {...baseProps} spans={branch} anchorSpanId="gen-1" />);
 
     typeSearch('Lyon');
 

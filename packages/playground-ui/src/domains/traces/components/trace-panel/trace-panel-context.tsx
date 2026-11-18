@@ -47,8 +47,3 @@ export function useTracePanel(): TracePanelContextValue {
   if (!context) throw new Error('TracePanel parts must be rendered inside <TracePanel>.');
   return context;
 }
-
-/** Picks the side view to show among the ones offered, falling back to the first. */
-export function pickSideView(chosen: string | undefined, offered: string[]): string | undefined {
-  return chosen !== undefined && offered.includes(chosen) ? chosen : offered[0];
-}

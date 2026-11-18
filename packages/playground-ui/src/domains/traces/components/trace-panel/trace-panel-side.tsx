@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Panel } from 'react-resizable-panels';
 
-import { TraceMessagesPanel } from '../trace-messages-panel';
-import type { TraceMessagesPanelProps } from '../trace-messages-panel';
-import { useTracePanelColumns } from './trace-panel-columns-context';
+import { TraceThreadItemView } from '../trace-thread-item-view';
+import type { TraceThreadItemViewProps } from '../trace-thread-item-view';
 import { useTracePanel } from './trace-panel-context';
+import type { TraceSideView } from './trace-panel-context';
 import { TracePanelSideContext, useTracePanelSide } from './trace-panel-side-context';
 import { Button } from '@/ds/components/Button';
 import { DataPanel } from '@/ds/components/DataPanel';
@@ -16,22 +15,50 @@ import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
 import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
-import { PanelSeparator } from '@/lib/resize/separator';
+import { cn } from '@/utils/cn';
 
 export interface TracePanelSideProps {
-  /** The view shown until the reader or the root picks another (e.g. `messages`). */
-  defaultView?: string;
-  /** Typically a `TracePanel.SideHeader` above one content part per tab. */
-  children: ReactNode;
+  /** The Messages view, typically a `TracePanel.Messages`. */
+  messages?: ReactNode;
+  /** The Feedback view: whatever feedback UI the host renders with its data (e.g. `FeedbackThread`). */
+  feedback?: ReactNode;
+  /** Shown after the Feedback label, e.g. `Feedback (3)`. */
+  feedbackCount?: ReactNode;
+  /** The Scores view: whatever scores UI the host renders with its data (e.g. `TraceScoresListView`). */
+  scores?: ReactNode;
+  /** Shown after the Scores label. */
+  scoresCount?: ReactNode;
+  /** At the end of the tab row, e.g. `TracePanel.OpenFullThreadButton`. */
+  actions?: ReactNode;
+  /** The view shown until the reader or the root picks another; defaults to the first one offered. */
+  defaultView?: TraceSideView;
+}
+
+interface SideViewSlot {
+  value: TraceSideView;
+  label: string;
+  icon: ReactNode;
+  count?: ReactNode;
+  content: ReactNode;
+  /** The view brings its own padding. */
+  flush?: boolean;
 }
 
 /**
- * The resizable column next to the span tree, holding one view at a time (Messages, Feedback, Scores,
- * or the host's own), switched by the tabs of its `TracePanel.SideHeader`. Render it first in `TracePanel.Body`.
+ * The column next to the spans, one view at a time: one tab per view slot the host filled, in the order
+ * Messages, Feedback, Scores. A view picked for another trace, or by the root (Scores once a scorer
+ * started), falls back to the first one offered when this trace has no such view.
  */
-export function TracePanelSide({ defaultView, children }: TracePanelSideProps) {
-  const { sideView, setSideView } = useTracePanel();
-  const { sideWidth } = useTracePanelColumns();
+export function TracePanelSide({
+  messages,
+  feedback,
+  feedbackCount,
+  scores,
+  scoresCount,
+  actions,
+  defaultView,
+}: TracePanelSideProps) {
+  const { sideView, setSideView, isLoading } = useTracePanel();
   // Mirrors the column's `@max-[501px]` container query: the layout collapses in CSS, but tooltips
   // render in a portal outside the container, so they need the width in JS.
   const [element, setElement] = useState<HTMLDivElement | null>(null);
@@ -43,143 +70,81 @@ export function TracePanelSide({ defaultView, children }: TracePanelSideProps) {
     return () => observer.disconnect();
   }, [element]);
 
+  const views: SideViewSlot[] = [];
+  if (messages)
+    views.push({ value: 'messages', label: 'Messages', icon: <IconChatBubble7 />, content: messages, flush: true });
+  if (feedback)
+    views.push({
+      value: 'feedback',
+      label: 'Feedback',
+      icon: <IconChatBubble7Plus />,
+      count: feedbackCount,
+      content: feedback,
+    });
+  if (scores)
+    views.push({ value: 'scores', label: 'Scores', icon: <ScorersIcon />, count: scoresCount, content: scores });
+  const chosen = sideView ?? defaultView;
+  const active = views.find(view => view.value === chosen) ?? views[0];
+
   return (
-    <TracePanelSideContext.Provider value={{ view: sideView ?? defaultView, setView: setSideView, compact }}>
-      <Panel id="trace-side" minSize={280} defaultSize={sideWidth()} groupResizeBehavior="preserve-pixel-size">
-        <div className="flex h-full min-h-0 flex-col border-r border-surface-rim">
-          <div
-            ref={setElement}
-            data-trace-side-column
-            className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
-          >
-            {children}
-          </div>
-        </div>
-      </Panel>
-      <PanelSeparator variant="pill" />
+    <TracePanelSideContext.Provider value={{ compact }}>
+      <div
+        ref={setElement}
+        data-trace-side-column
+        className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      >
+        {/* Whether a tab exists can depend on the spans, so the tabs wait for them; otherwise the
+            column flickers as the first tab changes. */}
+        {isLoading ? (
+          <DataPanel.Header className="border-b border-surface-rim">
+            <div aria-hidden className="flex h-control-sm items-center gap-2">
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+          </DataPanel.Header>
+        ) : (
+          <Tabs<string> defaultTab={active?.value ?? ''} value={active?.value ?? ''} onValueChange={setSideView}>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-surface-rim">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {views.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compact ? view.label : undefined}>
+                      <Icon size="xs">{view.icon}</Icon>
+                      <span className="@max-[501px]:sr-only">
+                        {view.label}
+                        {view.count != null && <> ({view.count})</>}
+                      </span>
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
+              {actions && <div className="flex shrink-0 items-center whitespace-nowrap">{actions}</div>}
+            </DataPanel.Header>
+          </Tabs>
+        )}
+        {!isLoading && active && (
+          <DataPanel.Content className={active.flush ? 'p-0' : undefined}>{active.content}</DataPanel.Content>
+        )}
+      </div>
     </TracePanelSideContext.Provider>
   );
 }
 
-export interface TracePanelSideHeaderProps {
-  /** Typically `TracePanel.SideTabs`, then `TracePanel.SideActions`. */
-  children: ReactNode;
-}
+export type TracePanelMessagesProps = TraceThreadItemViewProps;
 
-/** The tab row of the side column. While the spans load it holds placeholders, so the tabs don't flicker in. */
-export function TracePanelSideHeader({ children }: TracePanelSideHeaderProps) {
-  const { isLoading } = useTracePanel();
-  const { view, setView } = useTracePanelSide();
-  if (isLoading) {
-    return (
-      <DataPanel.Header className="border-b border-surface-rim">
-        <div aria-hidden className="flex h-control-sm items-center gap-2">
-          <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-5 w-20 rounded-full" />
-        </div>
-      </DataPanel.Header>
-    );
-  }
+/** The Messages view: the trace as the agent turn it recorded, rebuilt from the full spans it is given (`getTrace`). */
+export function TracePanelMessages({ className, ...props }: TracePanelMessagesProps) {
   return (
-    <Tabs<string> defaultTab={view ?? ''} value={view ?? ''} onValueChange={setView}>
-      {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
-          so in a wrapping row it would push the actions onto a second line. */}
-      <DataPanel.Header className="flex-nowrap border-b border-surface-rim">{children}</DataPanel.Header>
-    </Tabs>
-  );
-}
-
-/** The side column's tabs, one per view the host composed. */
-export function TracePanelSideTabs({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-w-0 flex-1">
-      <TabList variant="pill-ghost" size="sm">
-        {children}
-      </TabList>
+    <div data-testid="messages-panel" className={cn('flex h-full min-h-0 flex-col', className)}>
+      <TraceThreadItemView {...props} />
     </div>
   );
 }
 
-export interface TracePanelSideTabProps {
-  /** The view the tab opens; matches a `TracePanel.SideContent` of the same value. */
-  value: string;
-  label: string;
-  icon: ReactNode;
-  /** Shown after the label, e.g. `Feedback (3)`. */
-  count?: ReactNode;
-}
-
-/** One tab of the side column; its label collapses to the icon (with a tooltip) when the column is narrow. */
-export function TracePanelSideTab({ value, label, icon, count }: TracePanelSideTabProps) {
-  const { compact } = useTracePanelSide();
-  return (
-    <Tab value={value} tooltip={compact ? label : undefined}>
-      <Icon size="xs">{icon}</Icon>
-      <span className="@max-[501px]:sr-only">
-        {label}
-        {count != null && <> ({count})</>}
-      </span>
-    </Tab>
-  );
-}
-
-type PresetTabProps = Pick<TracePanelSideTabProps, 'count'>;
-
-export function TracePanelMessagesTab() {
-  return <TracePanelSideTab value="messages" label="Messages" icon={<IconChatBubble7 />} />;
-}
-
-export function TracePanelFeedbackTab({ count }: PresetTabProps) {
-  return <TracePanelSideTab value="feedback" label="Feedback" icon={<IconChatBubble7Plus />} count={count} />;
-}
-
-export function TracePanelScoresTab({ count }: PresetTabProps) {
-  return <TracePanelSideTab value="scores" label="Scores" icon={<ScorersIcon />} count={count} />;
-}
-
-/** Trailing controls of the side column's tab row (e.g. "Open full thread"). */
-export function TracePanelSideActions({ children }: { children: ReactNode }) {
-  return <div className="flex shrink-0 items-center whitespace-nowrap">{children}</div>;
-}
-
-export interface TracePanelSideContentProps {
-  value: string;
-  /** Drops the content padding, for views that bring their own (e.g. the messages). */
-  flush?: boolean;
-  children: ReactNode;
-}
-
-/** What the side column shows while its tab is the open one. */
-export function TracePanelSideContent({ value, flush, children }: TracePanelSideContentProps) {
-  const { isLoading } = useTracePanel();
-  const { view } = useTracePanelSide();
-  if (isLoading || view !== value) return null;
-  return <DataPanel.Content className={flush ? 'p-0' : undefined}>{children}</DataPanel.Content>;
-}
-
-export type TracePanelMessagesProps = Omit<TraceMessagesPanelProps, 'className'>;
-
-/** The Messages view: the trace as the agent turn it recorded, rebuilt from the full spans it is given (`getTrace`). */
-export function TracePanelMessages(props: TracePanelMessagesProps) {
-  return (
-    <TracePanelSideContent value="messages" flush>
-      <TraceMessagesPanel {...props} />
-    </TracePanelSideContent>
-  );
-}
-
-/** The Feedback view: whatever feedback UI the host renders with its data (e.g. `FeedbackThread`). */
-export function TracePanelFeedback({ children }: { children: ReactNode }) {
-  return <TracePanelSideContent value="feedback">{children}</TracePanelSideContent>;
-}
-
-/** The Scores view: whatever scores UI the host renders with its data (e.g. `TraceScoresListView`). */
-export function TracePanelScores({ children }: { children: ReactNode }) {
-  return <TracePanelSideContent value="scores">{children}</TracePanelSideContent>;
-}
-
 export interface TracePanelOpenFullThreadButtonProps {
-  /** Opens the trace's whole thread; the host renders it (e.g. in a stacked `TraceThreadPanelView`). */
+  /** Opens the trace's whole thread; the host renders it (e.g. in a stacked `TraceThreadPanel`). */
   onClick: () => void;
 }
 

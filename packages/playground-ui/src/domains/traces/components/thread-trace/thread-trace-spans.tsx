@@ -38,7 +38,7 @@ export interface ThreadTraceSpansProps extends Omit<ComponentProps<'div'>, 'chil
 /**
  * The span tree of a row, clamped (and faded) to the messages column while the row is collapsed.
  * Clicking the fade or its Expand button expands it; a Collapse button sits under the expanded tree
- * (hidden while a span of the row is open). Clamping needs the measured height of `ThreadTrace.Messages`.
+ * (hidden while a span of the row is open). Clamping needs the measured height of the row's messages column.
  */
 export function ThreadTraceSpans({
   spans = NO_SPANS,
