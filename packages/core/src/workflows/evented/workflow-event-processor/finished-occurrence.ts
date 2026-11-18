@@ -6,6 +6,9 @@ type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; met
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);
 
+/** The branch statuses a parallel or conditional entry counts as finished when it aggregates. */
+const BRANCH_DONE_STATUSES = new Set(['success', 'skipped', 'suspended']);
+
 /**
  * What a worker does with a delivery of a step occurrence: run the step, drop
  * the delivery because the occurrence already finished and the run moved on,
@@ -70,8 +73,9 @@ function isFinal(record: StoredRecord | undefined, step: LeafEntry, stepGuards: 
  * after the step saved its result and before the next step was published.
  * A top-level step shows that through the run's active path. A branch
  * continues only when a restart dispatched it, since the restart is then what
- * recovers the run, and only while the run's active path is still inside the
- * branch's parallel or conditional entry. Any other finished delivery is
+ * recovers the run, only while the run's active path is still inside the
+ * branch's parallel or conditional entry, and only when the restart read every
+ * sibling branch (`siblings`) as finished. Any other finished delivery is
  * dropped.
  *
  * `stepGuards` tells whether the store has workflow step guards. Records they
@@ -86,6 +90,7 @@ export function finishedOccurrence({
   snapshot,
   stepGuards,
   guarded,
+  siblings,
 }: {
   step: LeafEntry;
   executionPath: number[];
@@ -94,6 +99,8 @@ export function finishedOccurrence({
   snapshot: WorkflowRunState | null | undefined;
   stepGuards: boolean;
   guarded: boolean;
+  /** For a branch of a parallel or conditional entry, the ids of the entry's other branches. */
+  siblings?: string[];
 }): FinishedOccurrence {
   const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
   const stored = snapshot?.context[leafId] as StoredRecord | undefined;
@@ -154,10 +161,14 @@ export function finishedOccurrence({
   // The next leaf records itself as the active path when it starts. Sibling branches overwrite
   // that path, so for a branch it only tells whether the run went past the branch's parallel or
   // conditional entry, and only a restart (the run's recovery) continues from a branch.
+  // A sibling the restart read as unfinished ends the entry itself when it finishes, and it then
+  // sees this branch's saved result, so continuing here as well would end the entry twice.
   const notMovedOn =
     executionPath.length === 1
       ? samePath(snapshot.activePaths, executionPath)
-      : restartTarget && snapshot.activePaths?.[0] === executionPath[0];
+      : restartTarget &&
+        snapshot.activePaths?.[0] === executionPath[0] &&
+        (siblings ?? []).every(id => BRANCH_DONE_STATUSES.has(restart?.stepResults?.[id]?.status as string));
 
   return notMovedOn ? { continueFrom: stored as StepResult<any, any, any, any> } : 'drop';
 }

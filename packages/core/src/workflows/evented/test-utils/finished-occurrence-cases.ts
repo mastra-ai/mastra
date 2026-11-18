@@ -441,8 +441,8 @@ export function describeFinishedOccurrenceCases({
       );
 
       // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
-      // message arrives. Which replica goes on depends on whether A saved b's result before B's
-      // restart handled finished branch a: then B ends the parallel and A's step end is dropped.
+      // message arrives. B's restart read b as running, so its message for finished branch a leaves
+      // ending the parallel to b's step end.
       deliverStepEnd();
       await dBlocked.promise;
       const before = b.published.length;
@@ -454,6 +454,104 @@ export function describeFinishedOccurrenceCases({
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
     }, 20_000);
+
+    // Technical: B's restart read branch a as finished and b as running, and dispatched both. Its
+    // delivery for a continued from a's saved result and aggregated after A had saved b, while A's
+    // step end for b aggregated too, so both replicas ended the entry and ran c and d.
+    it.each(['parallel', 'conditional'] as const)(
+      '%s: goes on past the entry once when a restart read one branch finished and the other running',
+      async kind => {
+        const executions: string[] = [];
+        const bRan = deferred<void>();
+        const build = (replica: string) => {
+          const report: Report = async id => {
+            executions.push(`${replica}:${id}`);
+            if (replica === 'A' && id === 'b') bRan.resolve();
+          };
+          const a = work('a', report);
+          const b = work('b', report);
+          const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() });
+          const entry =
+            kind === 'parallel'
+              ? workflow.parallel([a, b])
+              : workflow.branch([
+                  [async () => true, a],
+                  [async () => true, b],
+                ]);
+          return entry
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: Num,
+                execute: async () => {
+                  await report('c');
+                  return { n: 1 };
+                },
+              }),
+            )
+            .then(work('d', report))
+            .commit();
+        };
+
+        // A runs b first and then a, so the run's stored active steps name a when B restarts it.
+        // b's step end and, later, the entry's step end wait in A's broker queue.
+        const bEndQueued = deferred<void>();
+        const deliverBEnd = deferred<void>();
+        const entryEndQueued = deferred<void>();
+        const deliverEntryEnd = deferred<void>();
+        const a = await startReplica(build('A'), event => {
+          if (event.type === 'workflow.step.run' && samePath(event, [0, 0]) && !event.data.restart) {
+            return bRan.promise;
+          }
+          if (event.type === 'workflow.step.end' && samePath(event, [0, 1])) {
+            bEndQueued.resolve();
+            return deliverBEnd.promise;
+          }
+          if (event.type === 'workflow.step.end' && samePath(event, [0])) {
+            entryEndQueued.resolve();
+            return deliverEntryEnd.promise;
+          }
+          return undefined;
+        });
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await bEndQueued.promise;
+        await expect.poll(async () => (await storedRun(run.runId))?.context.a?.status).toBe('success');
+
+        // B restarts the run and dispatches both branches. Their messages are held back.
+        const restartMessages = { a: deferred<Event>(), b: deferred<Event>() };
+        const b = await startReplica(build('B'), event => {
+          const branch = samePath(event, [0, 0]) ? 'a' : samePath(event, [0, 1]) ? 'b' : undefined;
+          const restart = event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined;
+          if (event.type !== 'workflow.step.run' || !branch || !restart?.isParallelOrConditionalRestarted) {
+            return undefined;
+          }
+
+          restartMessages[branch].resolve(copyEvent(event));
+          return 'drop';
+        });
+        void (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => [restartMessages.a, restartMessages.b].forEach(held => held.reject(error)));
+        const heldA = await restartMessages.a.promise;
+        const heldB = await restartMessages.b.promise;
+
+        // A saves b's result and ends the entry, and B's message for a arrives before A goes on.
+        deliverBEnd.resolve();
+        await entryEndQueued.promise;
+        const before = b.published.length;
+        expect(await b.mastra.handleWorkflowEvent(heldA)).toEqual({ ok: true });
+        expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
+
+        deliverEntryEnd.resolve();
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+        expect(await b.mastra.handleWorkflowEvent(heldB)).toEqual({ ok: true });
+        expect(stepEventsOf(b.published.slice(before), run.runId)).toEqual([]);
+        expect(executions).toEqual(['A:b', 'A:a', 'A:c', 'A:d']);
+      },
+      20_000,
+    );
 
     /** The first entries `crashAfterSavingFirst` runs before `second`: a step, or a loop whose last iteration ends it. */
     const firstEntries = {
