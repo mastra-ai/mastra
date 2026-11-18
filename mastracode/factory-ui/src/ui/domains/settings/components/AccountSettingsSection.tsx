@@ -1,11 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsItem, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsItem,
+  SettingsRow,
+  SettingsSkeleton,
+  SettingsValue,
+} from '@mastra/playground-ui/new/settings';
 
 import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -25,14 +30,6 @@ function authProviderLabel(provider: string | undefined): string {
       .split('-')
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ')
-  );
-}
-
-function AccountValue({ children }: { children: string }) {
-  return (
-    <Txt tone="muted" as="span" variant="caption" className="truncate">
-      {children}
-    </Txt>
   );
 }
 
@@ -101,13 +98,13 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
     >
       <SettingsContainer>
         <SettingsItem title="Name" description="From your sign-in provider.">
-          <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
+          <SettingsValue>{user?.name ?? 'Not provided'}</SettingsValue>
         </SettingsItem>
         <SettingsItem title="Email" description="From your sign-in provider.">
-          <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
+          <SettingsValue>{user?.email ?? 'Not provided'}</SettingsValue>
         </SettingsItem>
         <SettingsItem title="Authentication" description="How you signed in.">
-          <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
+          <SettingsValue>{authProviderLabel(state.provider)}</SettingsValue>
         </SettingsItem>
         {user?.userId && (
           <SettingsItem title="Account ID" description="Useful when contacting support.">

@@ -1,0 +1,29 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { SettingsValue } from './index';
+
+afterEach(cleanup);
+
+describe('SettingsValue', () => {
+  it('shows the full value on hover, so a truncated one stays readable', () => {
+    render(<SettingsValue>ada.lovelace@analytical-engines.example.com</SettingsValue>);
+
+    expect(screen.getByText('ada.lovelace@analytical-engines.example.com').getAttribute('title')).toBe(
+      'ada.lovelace@analytical-engines.example.com',
+    );
+  });
+
+  it('shows a number in full on hover', () => {
+    render(<SettingsValue>{42}</SettingsValue>);
+
+    expect(screen.getByText('42').getAttribute('title')).toBe('42');
+  });
+
+  it('keeps a hover text it was given', () => {
+    render(<SettingsValue title="Signed in with WorkOS">WorkOS</SettingsValue>);
+
+    expect(screen.getByText('WorkOS').getAttribute('title')).toBe('Signed in with WorkOS');
+  });
+});

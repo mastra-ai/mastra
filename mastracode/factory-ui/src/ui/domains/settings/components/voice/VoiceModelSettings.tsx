@@ -1,8 +1,7 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsRow, SettingsValue } from '@mastra/playground-ui/new/settings';
 
 import type { VoiceChoice, VoiceSettingsResponse } from '../../../../../api/types';
 import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
@@ -84,9 +83,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
         </Select>
       </SettingsRow>
       <SettingsItem title="In use for you" description="What the mic uses right now">
-        <Txt as="span" variant="caption">
-          {inUseLabel(settings)}
-        </Txt>
+        <SettingsValue>{inUseLabel(settings)}</SettingsValue>
       </SettingsItem>
     </SettingsContainer>
   );
