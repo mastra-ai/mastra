@@ -3,13 +3,21 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
 
 /**
  * ElevenLabs scenario. Nothing here spends credits unless
- * `MASTRA_SMOKE_ELEVENLABS_ALLOW_SPEAK=1`.
+ * `MASTRA_SMOKE_ELEVENLABS_ALLOW_SPEAK=1` or `MASTRA_SMOKE_ELEVENLABS_ALLOW_MUSIC=1`.
  *
  * - Text-to-speech and speech-to-text bill per character and per minute. With
- *   the flag set, the scenario speaks one short sentence, transcribes the audio
+ *   ALLOW_SPEAK, the scenario speaks one short sentence, transcribes the audio
  *   back, checks the words survived, and deletes the history item the speech
  *   created. Without it, both tools are probed with a synthetic voice and an
  *   unknown model, which ElevenLabs rejects before doing any work.
+ * - Voice cloning: with ALLOW_SPEAK, the spoken sentence is cloned into a
+ *   `<runId>` voice, which is then deleted. Without it, cloning is tried with a
+ *   sample that isn't audio (any voice that still gets created is deleted) and
+ *   the voice delete is probed.
+ * - Music: composition plans are free, so one is always drafted. Composing
+ *   bills per second; with ALLOW_MUSIC the scenario composes a 3-second
+ *   instrumental from that plan, otherwise compose is probed with an unknown
+ *   model.
  * - Conversational AI agents get a real create → get → update → delete
  *   lifecycle (an agent costs nothing until it takes a call).
  * - History items, dubbing projects, conversations, and knowledge-base
@@ -82,7 +90,10 @@ export const elevenlabsScenario: Scenario = {
     const firstVoice = voices?.voices[0]?.voice_id;
     await getFirstOrProbe('get voice', 'elevenlabs_get_voice', 'voice_id', firstVoice);
     await getFirstOrProbe('get voice settings', 'elevenlabs_get_voice_settings', 'voice_id', firstVoice);
-    const spokenHistoryItem = await runAudio(firstVoice);
+    const spoken = await runAudio(firstVoice);
+    const spokenHistoryItem = spoken?.historyItemId;
+    await runVoiceClone(spoken?.audio);
+    await runMusic();
     const ownedVoice = voices?.voices.find(v => v.is_owner)?.voice_id;
     if (ownedVoice && tools['elevenlabs_get_voice_settings']) {
       try {
@@ -225,8 +236,10 @@ export const elevenlabsScenario: Scenario = {
     }
     return steps;
 
-    /** Speaks a sentence and transcribes it back; returns the history item the speech created. */
-    async function runAudio(voiceId: string | undefined): Promise<string | undefined> {
+    /** Speaks a sentence and transcribes it back; returns the audio and the history item it created. */
+    async function runAudio(
+      voiceId: string | undefined,
+    ): Promise<{ audio: string; historyItemId?: string } | undefined> {
       if (process.env.MASTRA_SMOKE_ELEVENLABS_ALLOW_SPEAK !== '1' || !voiceId) {
         steps.push(
           await probeTool(call, tools, 'text to speech (probe)', 'elevenlabs_text_to_speech', {
@@ -271,7 +284,76 @@ export const elevenlabsScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('speech to text (round trip)', 'elevenlabs_speech_to_text', 'fail', errorMessage(error)));
       }
-      return speech.history_item_id;
+      return { audio: speech.audio, historyItemId: speech.history_item_id };
+    }
+
+    /** Clones the spoken sample into a run-tagged voice and deletes it again. */
+    async function runVoiceClone(sample: string | undefined) {
+      if (!tools['elevenlabs_clone_voice']) {
+        steps.push(makeStep('clone voice', 'elevenlabs_clone_voice', 'skip', 'tool not in project toolset'));
+        return;
+      }
+      let voiceId: string | undefined;
+      try {
+        // Without a real sample, send bytes that aren't audio; ElevenLabs should refuse them.
+        const out = await call<{ voice_id: string }>('elevenlabs_clone_voice', {
+          name: runId,
+          samples: [sample ?? Buffer.from('not audio').toString('base64')],
+          description: 'Automated @mastra/connect smoke test. Safe to delete.',
+        });
+        voiceId = out.voice_id;
+        steps.push(makeStep(sample ? 'clone voice' : 'clone voice (probe)', 'elevenlabs_clone_voice', 'pass', voiceId));
+      } catch (error) {
+        const msg = errorMessage(error);
+        const expected = !sample && /status=(400|422)/.test(msg);
+        steps.push(
+          makeStep(
+            sample ? 'clone voice' : 'clone voice (probe)',
+            'elevenlabs_clone_voice',
+            expected ? 'pass' : 'fail',
+            expected ? `expected error (endpoint exercised): ${msg.slice(0, 120)}` : msg,
+          ),
+        );
+      }
+
+      if (!voiceId) {
+        steps.push(
+          await probeTool(call, tools, 'delete voice (probe)', 'elevenlabs_delete_voice', { voice_id: SYNTHETIC_ID }),
+        );
+        return;
+      }
+      try {
+        await call('elevenlabs_delete_voice', { voice_id: voiceId });
+        steps.push(makeStep('delete cloned voice', 'elevenlabs_delete_voice', 'pass'));
+      } catch (error) {
+        log.error(`elevenlabs: leaked cloned voice ${voiceId} (${runId}); delete it manually`, errorMessage(error));
+        steps.push(makeStep('delete cloned voice', 'elevenlabs_delete_voice', 'fail', errorMessage(error)));
+      }
+    }
+
+    /** Drafts a free composition plan, then composes it only when music is allowed. */
+    async function runMusic() {
+      const plan = await step<{ composition_plan: Record<string, unknown> }>(
+        'create composition plan',
+        'elevenlabs_create_composition_plan',
+        { prompt: 'A calm three-second piano chord, instrumental.', music_length_ms: 3_000 },
+      );
+      if (process.env.MASTRA_SMOKE_ELEVENLABS_ALLOW_MUSIC !== '1' || !plan) {
+        steps.push(
+          await probeTool(call, tools, 'compose music (probe)', 'elevenlabs_compose_music', {
+            prompt: 'A calm piano chord.',
+            music_length_ms: 3_000,
+            model_id: 'music_v999',
+          }),
+        );
+        return;
+      }
+      await step<{ size_bytes: number; media_type: string }>(
+        'compose music',
+        'elevenlabs_compose_music',
+        { composition_plan: plan.composition_plan, output_format: 'mp3_22050_32' },
+        out => `${out.size_bytes} bytes of ${out.media_type}`,
+      );
     }
 
     async function runDictionary() {

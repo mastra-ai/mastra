@@ -97,7 +97,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     canonicalPage: 'voice/elevenlabs.mdx',
     ownership: 'handwritten-with-partial',
     summary:
-      'convert text to speech, transcribe audio and video, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
+      'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
     emit: true,
   },
   fireflies: {

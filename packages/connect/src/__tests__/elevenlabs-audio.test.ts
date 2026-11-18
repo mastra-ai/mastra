@@ -12,13 +12,19 @@ import { isValidationError } from '@mastra/core/tools';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
+import type { cloneVoiceInputSchema, cloneVoiceTool } from '../providers/elevenlabs/tools/clone-voice.js';
+import type { composeMusicInputSchema, composeMusicTool } from '../providers/elevenlabs/tools/compose-music.js';
+import type {
+  createCompositionPlanInputSchema,
+  createCompositionPlanTool,
+} from '../providers/elevenlabs/tools/create-composition-plan.js';
 import type { speechToTextInputSchema, speechToTextTool } from '../providers/elevenlabs/tools/speech-to-text.js';
 import { tools } from '../tools.js';
 
-// The ElevenLabs text-to-speech and speech-to-text tools are hand-written (the
-// upstream templates have no audio actions). Both move binary audio through
-// the platform proxy: text-to-speech downloads it, speech-to-text uploads it in
-// a multipart form. These tests run the tools through the public `tools()`
+// The ElevenLabs speech, voice-cloning, and music tools are hand-written (the
+// upstream templates have no audio actions). They move binary audio through
+// the platform proxy: text-to-speech and music download it, speech-to-text and
+// voice cloning upload it in a multipart form. These tests run the tools through the public `tools()`
 // resolver against a real HTTP server standing in for the Mastra platform, and
 // check what crossed the wire in each direction.
 
@@ -86,6 +92,20 @@ async function parseForm(request: RecordedRequest): Promise<FormData> {
   }).formData();
 }
 
+const compositionPlan = {
+  positive_global_styles: ['lo-fi', 'mellow'],
+  negative_global_styles: ['vocals'],
+  sections: [
+    {
+      section_name: 'Intro',
+      positive_local_styles: ['vinyl crackle'],
+      negative_local_styles: [],
+      duration_ms: 10_000,
+      lines: [],
+    },
+  ],
+};
+
 type Chunk = Record<string, unknown>;
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -117,6 +137,14 @@ describe('ElevenLabs audio tools through the platform proxy', () => {
         return response.end(audioBytes);
       }
       if (url.pathname === `${proxyPrefix}/v1/speech-to-text`) return sendJson(200, transcript);
+      if (url.pathname === `${proxyPrefix}/v1/voices/add`) {
+        return sendJson(200, { voice_id: 'c38kUX8pkfYO2kHyqfFy', requires_verification: false });
+      }
+      if (url.pathname === `${proxyPrefix}/v1/music/plan`) return sendJson(200, compositionPlan);
+      if (url.pathname === `${proxyPrefix}/v1/music`) {
+        response.writeHead(200, { 'content-type': 'audio/mpeg' });
+        return response.end(audioBytes);
+      }
       return sendJson(404, { error: `unexpected request ${request.method} ${url.pathname}` });
     });
     server.listen(0, '127.0.0.1');
@@ -138,7 +166,13 @@ describe('ElevenLabs audio tools through the platform proxy', () => {
   async function resolveTools() {
     return tools({
       providers: ['elevenlabs'],
-      allowTools: ['elevenlabs_text_to_speech', 'elevenlabs_speech_to_text'],
+      allowTools: [
+        'elevenlabs_text_to_speech',
+        'elevenlabs_speech_to_text',
+        'elevenlabs_clone_voice',
+        'elevenlabs_create_composition_plan',
+        'elevenlabs_compose_music',
+      ],
       projectId: 'proj_test',
       client: { accessToken: 'test-platform-token', baseUrl },
     })();
@@ -148,6 +182,26 @@ describe('ElevenLabs audio tools through the platform proxy', () => {
     // The resolver types its record loosely; narrow to the tool it registers.
     const tool = (await resolveTools()).elevenlabs_speech_to_text as ReturnType<typeof speechToTextTool> | undefined;
     if (!tool?.execute) throw new Error('elevenlabs_speech_to_text was not resolved');
+    return tool.execute(input, { requestContext: new RequestContext() });
+  }
+
+  async function cloneVoice(input: z.input<typeof cloneVoiceInputSchema>) {
+    const tool = (await resolveTools()).elevenlabs_clone_voice as ReturnType<typeof cloneVoiceTool> | undefined;
+    if (!tool?.execute) throw new Error('elevenlabs_clone_voice was not resolved');
+    return tool.execute(input, { requestContext: new RequestContext() });
+  }
+
+  async function composeMusic(input: z.input<typeof composeMusicInputSchema>) {
+    const tool = (await resolveTools()).elevenlabs_compose_music as ReturnType<typeof composeMusicTool> | undefined;
+    if (!tool?.execute) throw new Error('elevenlabs_compose_music was not resolved');
+    return { tool, result: await tool.execute(input, { requestContext: new RequestContext() }) };
+  }
+
+  async function createPlan(input: z.input<typeof createCompositionPlanInputSchema>) {
+    const tool = (await resolveTools()).elevenlabs_create_composition_plan as
+      | ReturnType<typeof createCompositionPlanTool>
+      | undefined;
+    if (!tool?.execute) throw new Error('elevenlabs_create_composition_plan was not resolved');
     return tool.execute(input, { requestContext: new RequestContext() });
   }
 
@@ -284,6 +338,81 @@ describe('ElevenLabs audio tools through the platform proxy', () => {
     ['both', { audio: audioBytes.toString('base64'), source_url: 'https://example.com/call.mp3' }],
   ])('rejects %s of audio and source_url without calling ElevenLabs', async (_label, input) => {
     const result = await transcribe(input);
+
+    expect(isValidationError(result)).toBe(true);
+    expect(proxied()).toHaveLength(0);
+  });
+
+  it('clones a voice from several samples, uploading each one intact', async () => {
+    const second = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x0d, 0x0a, 0x2d, 0x2d, 0xff, 0x00]);
+
+    const result = await cloneVoice({
+      name: 'Support narrator',
+      samples: [audioBytes.toString('base64'), second.toString('base64')],
+      sample_format: 'wav',
+      description: 'Recorded with consent for the support line.',
+      labels: { accent: 'british' },
+      remove_background_noise: true,
+    });
+
+    expect(result).toEqual({ voice_id: 'c38kUX8pkfYO2kHyqfFy', requires_verification: false });
+
+    const form = await parseForm(proxied()[0]!);
+    expect(Object.fromEntries([...form.entries()].filter(([name]) => name !== 'files'))).toEqual({
+      name: 'Support narrator',
+      description: 'Recorded with consent for the support line.',
+      labels: '{"accent":"british"}',
+      remove_background_noise: 'true',
+    });
+    const files = form.getAll('files') as File[];
+    expect(files.map(file => file.name)).toEqual(['sample-1.wav', 'sample-2.wav']);
+    expect(Buffer.from(await files[0]!.arrayBuffer())).toEqual(audioBytes);
+    expect(Buffer.from(await files[1]!.arrayBuffer())).toEqual(second);
+  });
+
+  it('holds voice cloning for approval with the requireApproval setting the docs recommend', async () => {
+    const resolved = await tools({
+      providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } },
+      projectId: 'proj_test',
+      client: { accessToken: 'test-platform-token', baseUrl },
+    })();
+
+    const approval = (key: string) => (resolved[key] as { requireApproval?: boolean } | undefined)?.requireApproval;
+    expect(approval('elevenlabs_clone_voice')).toBe(true);
+    expect(approval('elevenlabs_text_to_speech')).toBeFalsy();
+  });
+
+  it('composes a song from an edited plan, passing the plan through unchanged', async () => {
+    const plan = await createPlan({ prompt: 'A mellow lo-fi intro', music_length_ms: 10_000 });
+    expect(plan).toEqual({ composition_plan: compositionPlan });
+
+    const { tool, result } = await composeMusic({ composition_plan: plan.composition_plan, model_id: 'music_v1' });
+
+    expect(result).toEqual({
+      audio: audioBytes.toString('base64'),
+      media_type: 'audio/mpeg',
+      size_bytes: audioBytes.length,
+    });
+    expect(JSON.stringify(tool.toModelOutput?.(result as never))).not.toContain(audioBytes.toString('base64'));
+
+    const [planRequest, composeRequest] = proxied();
+    expect(JSON.parse(planRequest!.body.toString('utf8'))).toEqual({
+      prompt: 'A mellow lo-fi intro',
+      music_length_ms: 10_000,
+    });
+    expect(composeRequest?.query.has('output_format')).toBe(false);
+    expect(JSON.parse(composeRequest!.body.toString('utf8'))).toEqual({
+      composition_plan: compositionPlan,
+      model_id: 'music_v1',
+    });
+  });
+
+  it.each([
+    ['neither prompt nor plan', {}],
+    ['both prompt and plan', { prompt: 'jazz', composition_plan: compositionPlan }],
+    ['a plan with a prompt-only length', { composition_plan: compositionPlan, music_length_ms: 30_000 }],
+  ])('rejects %s without calling ElevenLabs', async (_label, input) => {
+    const { result } = await composeMusic(input);
 
     expect(isValidationError(result)).toBe(true);
     expect(proxied()).toHaveLength(0);

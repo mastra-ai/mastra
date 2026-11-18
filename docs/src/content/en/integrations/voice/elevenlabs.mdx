@@ -12,7 +12,7 @@ import ElevenlabsConnectTools from "@site/src/components/connect/generated/eleve
 
 Use ElevenLabs with Mastra in two ways:
 
-- **Agent tools** let an agent convert text to speech, transcribe recordings, and manage ElevenLabs conversational AI agents, voices, and pronunciation dictionaries through [Mastra Connect](/docs/mastra-platform/connect). The agent decides when to call them, and your ElevenLabs API key stays on Mastra Platform.
+- **Agent tools** let an agent convert text to speech, transcribe recordings, clone voices, compose music, and manage ElevenLabs conversational AI agents, voices, and pronunciation dictionaries through [Mastra Connect](/docs/mastra-platform/connect). The agent decides when to call them, and your ElevenLabs API key stays on Mastra Platform.
 - **[Voice](#voice)** adds text-to-speech and speech-to-text to an agent with `ElevenLabsVoice`, for speaking and listening directly in your application.
 
 ## Connect
@@ -20,6 +20,31 @@ Use ElevenLabs with Mastra in two ways:
 Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
 
 <ElevenlabsConnectTools />
+
+### Require approval for voice cloning
+
+`elevenlabs_clone_voice` copies a real person's voice from recordings of them. Only clone a voice with its owner's consent, and require a person to approve each clone before it runs:
+
+```typescript title="src/mastra/agents/elevenlabs-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const elevenlabsAgent = new Agent({
+  id: 'elevenlabs-agent',
+  name: 'ElevenLabs agent',
+  instructions: 'You narrate messages, transcribe recordings, and compose music with ElevenLabs.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: tools({
+    providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } },
+  }),
+})
+```
+
+The agent still calls the other ElevenLabs tools without asking. See [Human-in-the-loop](/docs/agents/human-in-the-loop) for how to approve or decline a call.
+
+### Audio results
+
+`elevenlabs_text_to_speech` and `elevenlabs_compose_music` return the audio base64-encoded in the tool result, so your code can save or play it. The model sees only a one-line summary of the audio, which keeps the bytes out of its context.
 
 ## Voice
 
