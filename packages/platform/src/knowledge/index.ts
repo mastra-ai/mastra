@@ -205,7 +205,7 @@ export class PlatformKnowledge extends Knowledge {
     // instance, even with Platform observability off; it's narrower than the general token.
     const token =
       options.accessToken ??
-      process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN ??
+      (process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN?.trim() || undefined) ??
       process.env.MASTRA_PLATFORM_ACCESS_TOKEN ??
       process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;

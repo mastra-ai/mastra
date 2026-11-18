@@ -261,6 +261,9 @@ it("authenticates with the deploy's Knowledge-only token before the general Plat
     await list();
     // An explicit token still wins.
     await list({ accessToken: 'explicit' });
+    // An empty Knowledge token (e.g. `MASTRA_KNOWLEDGE_ACCESS_TOKEN=` in a .env file) counts as unset.
+    process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN = ' ';
+    await list();
     delete process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN;
     await list();
   } finally {
@@ -274,6 +277,7 @@ it("authenticates with the deploy's Knowledge-only token before the general Plat
     'Bearer knowledge-token',
     'Bearer knowledge-token',
     'Bearer explicit',
+    'Bearer platform-token',
     'Bearer platform-token',
   ]);
 });
