@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -22,6 +23,7 @@ export function SessionMenuItems({
   pinned,
   onPinChange,
   onDelete,
+  onRename,
   onRegenerateTitle,
   regeneratingTitle,
   onAnswerApproval,
@@ -36,6 +38,7 @@ export function SessionMenuItems({
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
   onDelete?: () => void;
+  onRename?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
   onAnswerApproval?: (decision: 'approve' | 'decline') => void;
@@ -76,6 +79,12 @@ export function SessionMenuItems({
         {pinned ? <IconUnpin /> : <IconPin />}
         {pinned ? 'Unpin' : 'Pin session'}
       </Menu.Item>
+      {onRename ? (
+        <Menu.Item onClick={onRename}>
+          <IconPencil />
+          Rename
+        </Menu.Item>
+      ) : null}
       {onRegenerateTitle ? (
         <Menu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
           <IconArrowRotateClockwise className={cn(regeneratingTitle && 'animate-spin')} />

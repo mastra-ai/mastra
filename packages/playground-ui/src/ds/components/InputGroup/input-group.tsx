@@ -268,7 +268,7 @@ function InputGroupText({ className, ...props }: InputGroupTextProps) {
     <span
       className={cn(
         'flex items-center gap-2 text-caption text-muted-foreground [&_svg]:pointer-events-none',
-        "[&_svg:not([class*='size-'])]:size-4",
+        "[&_svg:not([class*='size-'])]:size-icon-md",
         className,
       )}
       {...props}

@@ -935,7 +935,13 @@ export type AgentControllerEvent =
           error?: string;
         }
     ))
-  | { type: 'usage_update'; usage: TokenUsage }
+  | {
+      type: 'usage_update';
+      /** This step's usage. */
+      usage: TokenUsage;
+      /** The active thread's running total after this step. Absent from servers that predate it. */
+      total?: TokenUsage;
+    }
   | { type: 'info'; message: string }
   | {
       type: 'error';

@@ -33,8 +33,11 @@ function turn(body: ChatRequest) {
 describeForAllEngines('Concurrent conversations preserve replies and isolate cancellation (COR-1409)', engine => {
   const getMock = useLoopScenarioAimock();
 
-  for (const variant of ['same-resource', 'same-thread', 'abort'] as const) {
-    it(`${variant}: neither conversation loses or steals the other reply`, async () => {
+  for (const variant of ['same-resource', 'same-thread', 'same-thread-generate', 'abort'] as const) {
+    const sameThread = variant === 'same-thread' || variant === 'same-thread-generate';
+    it(`${variant}: neither conversation loses or steals the other reply`, async ({ skip }) => {
+      // Inngest is not covered by the #30069 fix and still interleaves. Its generate() variant has not been run there.
+      if (variant === 'same-thread-generate' && engine === 'inngest') skip();
       const llm = getMock();
       for (const run of [0, 1]) {
         for (const done of [0, 1]) {
@@ -62,12 +65,14 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
         [gate(), gate()],
         [gate(), gate()],
       ];
+      const started: string[] = [];
       const commits: string[] = [];
       const step = createTool({
         id: 'step',
         description: 'Commit a step for this conversation.',
         inputSchema: z.object({ run: z.number().int().min(0).max(1), n: z.number().int().min(1).max(2) }),
         execute: async ({ run, n }, context) => {
+          started.push(`${run}:${n}`);
           entered[run]![n - 1]!.release();
           await released[run]![n - 1]!.promise;
           context?.abortSignal?.throwIfAborted();
@@ -79,14 +84,17 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
       const { agent } = await createSharedAgent(llm, { engine, memory, tools: { step } });
       const resource = randomUUID();
       const threads = [randomUUID(), randomUUID()];
-      if (variant === 'same-thread') threads[1] = threads[0]!;
+      if (sameThread) threads[1] = threads[0]!;
       const runs: Awaited<ReturnType<typeof agent.stream>>[] = [];
       const drains: Promise<{ types: string[]; text: string }>[] = [];
       const start = async (run: number) => {
-        const result = await agent.stream(`run ${run}`, {
-          memory: { thread: threads[run]!, resource },
-          maxSteps: 5,
-        });
+        const options = { memory: { thread: threads[run]!, resource }, maxSteps: 5 };
+        if (variant === 'same-thread-generate') {
+          // generate() has no stream to read; a returned result is a finished run.
+          const { text } = await agent.generate(`run ${run}`, options);
+          return { types: ['finish'], text };
+        }
+        const result = await agent.stream(`run ${run}`, options);
         runs[run] = result;
         const output = isDurableEngineVariant(engine) ? result.output : result;
         const drain = (async () => {
@@ -106,9 +114,10 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
       try {
         await entered[0]![0]!.promise;
         second = start(1);
-        // Plain/fs queue a shared thread. Durable engines interleave its runs.
-        const serialized = variant === 'same-thread' && !isDurableEngineVariant(engine);
-        const interleaved = variant === 'same-thread' && isDurableEngineVariant(engine);
+        // A second run on a busy thread waits for the first (#30069). Inngest has its own
+        // stream() that does not take the thread yet, so its runs still interleave.
+        const serialized = sameThread && engine !== 'inngest';
+        const interleaved = sameThread && engine === 'inngest';
         if (!serialized) await entered[1]![0]!.promise;
         released[0]![0]!.release();
         await entered[0]![1]!.promise;
@@ -123,6 +132,11 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
           released[1]![1]!.release();
         } else {
           released[0]![1]!.release();
+        }
+        if (serialized) {
+          // The second run must not have called a tool while the first held the thread.
+          await first;
+          expect(started).toEqual(['0:1', '0:2']);
         }
         if (!serialized && !interleaved) {
           released[1]![0]!.release();
@@ -151,12 +165,10 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
                 message.role === 'assistant' &&
                 message.content.parts?.some(part => part.type === 'text' && part.text === 'finished 2 steps'),
             );
-            expect(users).toHaveLength(variant === 'same-thread' ? 2 : 1);
+            expect(users).toHaveLength(sameThread ? 2 : 1);
             // COR-1409: every engine persists one assistant message per run, not per tool step.
-            expect(messages.filter(message => message.role === 'assistant')).toHaveLength(
-              variant === 'same-thread' ? 2 : 1,
-            );
-            expect(answers).toHaveLength(variant === 'same-thread' ? 2 : 1);
+            expect(messages.filter(message => message.role === 'assistant')).toHaveLength(sameThread ? 2 : 1);
+            expect(answers).toHaveLength(sameThread ? 2 : 1);
             expect(JSON.stringify(users)).toContain(`run ${run}`);
             if (variant === 'same-resource') expect(JSON.stringify(messages)).not.toContain(`run ${1 - run}`);
             if (serialized)

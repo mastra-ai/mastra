@@ -155,7 +155,7 @@ subscription.abort({ clearPendingSignals: true })
 
 Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed and a later message can start a run. With shared PubSub, the clear request reaches the owning process but clears only its local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuations are separate, so aborting the original doesn't cancel them.
 
-## AgentController and Session
+## AgentController and session
 
 Most applications use the `Agent` methods directly. AgentController's `Session` wraps them and manages the subscription:
 

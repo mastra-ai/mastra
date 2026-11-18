@@ -23,7 +23,7 @@ Complete this migration in the same change that bumps your Mastra packages, and 
 
 ### From OTEL-based Telemetry (0.x)
 
-If you're using the old `telemetry:` configuration in Mastra, the system has been completely redesigned.
+If you're using the old `telemetry:` configuration in Mastra, the system has been redesigned.
 
 **Before (0.x with OTEL telemetry):**
 
@@ -118,7 +118,7 @@ Key changes:
 1. Use explicit `configs:` with `MastraStorageExporter`, `MastraPlatformExporter`, and `SensitiveDataFilter`
 1. Export types change from string literals (`'otlp'`) to exporter class instances (`new OtelExporter()`)
 
-### From AI Tracing
+### From AI tracing
 
 If you already upgraded to AI tracing (the intermediate system), you need to install the new package and use the explicit configuration.
 
@@ -285,7 +285,7 @@ node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/out
 
 #### After (v1)
 
-Simply remove the `instrumentation.mjs` file and configure observability in your Mastra instance:
+Remove the `instrumentation.mjs` file and configure observability in your Mastra instance:
 
 ```typescript
 // src/mastra/index.ts

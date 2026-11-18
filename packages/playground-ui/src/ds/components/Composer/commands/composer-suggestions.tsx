@@ -50,7 +50,7 @@ export function ComposerSuggestions({
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
               >
-                <IconArrowLeft size={14} aria-hidden />
+                <IconArrowLeft className="size-icon-sm" aria-hidden />
                 <span>{contextLabel}</span>
               </button>
             </div>
@@ -89,7 +89,7 @@ export function ComposerSuggestions({
                         )}
                         {item.active && (
                           <span className="flex shrink-0 items-center gap-1">
-                            <IconCheckmark2Medium size={13} aria-hidden />
+                            <IconCheckmark2Medium className="size-icon-sm" aria-hidden />
                             Current
                           </span>
                         )}

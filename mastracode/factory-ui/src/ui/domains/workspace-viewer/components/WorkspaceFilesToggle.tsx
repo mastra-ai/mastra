@@ -10,10 +10,10 @@ import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 import { IconSidebarSimpleRightWide } from '@mastra/playground-ui/icons/central/IconSidebarSimpleRightWide';
 
 export function WorkspaceFilesToggle() {
-  const { open, setOpen, workspacePath, canDock } = useWorkspacePanel();
+  const { open, setOpen, hasContent, canDock } = useWorkspacePanel();
   const [size, setSize] = useState<WorkspacePanelSize>('compact');
 
-  if (!workspacePath) return null;
+  if (!hasContent) return null;
 
   const setPopoverOpen = (next: boolean) => {
     if (next) setSize('compact');

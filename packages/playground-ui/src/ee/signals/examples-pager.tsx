@@ -1,7 +1,7 @@
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 
 export const EXAMPLES_PAGE_SIZE = 5;
 
@@ -22,7 +22,7 @@ export function ExamplesPager({
   return (
     <nav aria-label="Example pages" className="mt-3 flex items-center gap-3">
       <Button
-        icon={<IconChevronLeft />}
+        icon={<IconChevronLeftMedium />}
         size="sm"
         disabled={page <= 1}
         onClick={() => onOffsetChange((page - 2) * EXAMPLES_PAGE_SIZE)}
@@ -33,7 +33,7 @@ export function ExamplesPager({
         Page {page} of {totalPages}
       </Txt>
       <Button
-        icon={<IconChevronRight />}
+        icon={<IconChevronRightMedium />}
         size="sm"
         disabled={page >= totalPages}
         onClick={() => onOffsetChange(page * EXAMPLES_PAGE_SIZE)}

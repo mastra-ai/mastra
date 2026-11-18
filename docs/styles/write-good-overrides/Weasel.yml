@@ -1,0 +1,25 @@
+extends: existence
+message: "'%s' is a weasel word!"
+ignorecase: true
+level: warning
+# Frequency and quantity words from the upstream rule (`several`, `usually`,
+# `mostly`, `various`, `substantially`, `relatively`, `significantly`,
+# `largely`, `fairly`) are intentionally omitted. In technical docs they
+# describe real behavior or frequency, and replacing them either loses
+# information or invents false precision.
+tokens:
+  - clearly
+  - completely
+  - exceedingly
+  - excellent
+  - extremely
+  - huge
+  - interestingly
+  - is a number
+  - obviously
+  - quite
+  - remarkably
+  - surprisingly
+  - tiny
+  - vast
+  - very

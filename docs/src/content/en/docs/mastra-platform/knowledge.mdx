@@ -1,0 +1,99 @@
+---
+title: "Knowledge | Mastra platform"
+description: "Provision a hosted Knowledge instance on Mastra platform, import pages from Linear, Notion, Confluence, Zendesk, or Fireflies, and connect agents with PlatformKnowledge."
+packages:
+  - "@mastra/core"
+  - "@mastra/platform"
+draft: true
+---
+
+# Knowledge
+
+Mastra platform Knowledge hosts the pages your agents search, read, and write. It's a managed version of [Knowledge](/docs/knowledge/overview): the platform runs the database, keeps pages in sync with your other tools through importers, and lets you browse the pages your agents write.
+
+:::note
+Knowledge isn't enabled for every organization yet, and its API may change between releases. If **Knowledge** doesn't appear in your project's sidebar, contact Mastra support.
+:::
+
+## Provision Knowledge
+
+Each project can have one Knowledge instance. Only organization admins can provision it.
+
+1. Open your project in the [Mastra platform](https://projects.mastra.ai) and select **Knowledge**.
+1. Select **Provision Knowledge**.
+1. Choose the project. Optionally, choose the tools to import from.
+
+The platform creates a database for the instance. You can leave the page while it does. If the database can't be created, the page shows the error and a link to contact support.
+
+## Import from your tools
+
+An importer syncs documents from a connected tool into Knowledge as pages. Importers support Linear, Notion, Confluence, Zendesk, and Fireflies.
+
+1. On the project's **Importers** page, select **Add importer**.
+1. Choose the source and the connected account. If you haven't connected the tool yet, connect it from the dialog.
+1. Choose a schedule.
+
+The **Repeat** setting runs an importer manually, hourly, daily, or weekly. Choose **Custom** to enter a cron expression instead. Schedules use UTC, and an importer can run at most every 5 minutes.
+
+On the importer's page, select **Run now** to start a run, or stop a run that's going. Stopping a run also pauses its schedule. **Paused** stops scheduled runs, but **Run now** still works.
+
+## Connect an agent
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/platform
+```
+
+`PlatformKnowledge` needs the instance ID and an access token, and throws when either is missing. To run locally, copy the instance ID from the **Connect an agent** dialog, [create an access token](/docs/mastra-platform/access-tokens#create-an-access-token), and add both to your `.env` file:
+
+```bash title=".env"
+MASTRA_KNOWLEDGE_INSTANCE_ID=your-instance-id
+MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+```
+
+When you deploy to Mastra platform, the platform sets these values for you. See [When you deploy to Mastra platform](#when-you-deploy-to-mastra-platform).
+
+Give the agent a `PlatformKnowledge` instance and the [scopes](/docs/knowledge/scopes-and-access) its runs use. The Knowledge page shows your organization's scope when you select **Connect an agent**:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { PlatformKnowledge } from '@mastra/platform'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer from the knowledge base.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge: new PlatformKnowledge({
+    tools: true,
+  }),
+  scopes: ['org:your-org-id'],
+})
+```
+
+`tools: true` gives the agent tools to search and read pages (`knowledge_search`, `knowledge_read`) and to write them (`knowledge_page`, `knowledge_note`). Leave `tools` out for a read-only agent. To learn how agents use these tools, see [Agents and tools](/docs/knowledge/agents-and-tools).
+
+Set `scopes` on the agent, not on `PlatformKnowledge`. The platform owns the scope declarations, so `PlatformKnowledge` doesn't accept a `scopes` option.
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `MASTRA_KNOWLEDGE_INSTANCE_ID` | Required. The ID of the Knowledge instance. |
+| `MASTRA_KNOWLEDGE_ACCESS_TOKEN` | A token that only works for Knowledge. `PlatformKnowledge` uses it first when it's set. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | A Mastra platform [access token](/docs/mastra-platform/access-tokens). Used when `MASTRA_KNOWLEDGE_ACCESS_TOKEN` isn't set. Falls back to `MASTRA_PLATFORM_SECRET_KEY`. |
+| `MASTRA_KNOWLEDGE_API_URL` | Optional. The Knowledge API URL. Defaults to `https://knowledge-api.mastra.ai`. |
+
+You can also pass these values as the `instanceId`, `accessToken`, and `apiUrl` options.
+
+### When you deploy to Mastra platform
+
+When you deploy a server to the project, the platform sets `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_ACCESS_TOKEN` for you. The agent needs no extra configuration.
+
+## Related
+
+- [Knowledge overview](/docs/knowledge/overview)
+- [Scopes and access](/docs/knowledge/scopes-and-access)
+- [Agents and tools](/docs/knowledge/agents-and-tools)
+- [Access tokens](/docs/mastra-platform/access-tokens)

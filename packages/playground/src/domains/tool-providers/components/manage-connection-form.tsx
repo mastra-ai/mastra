@@ -7,10 +7,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
-import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
+import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { toast } from '@mastra/playground-ui/utils/toast';
 
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDisconnectConnection } from '@mastra/react/hooks/tool-providers';
 import { Unplug } from 'lucide-react';
 import { useState } from 'react';
@@ -71,7 +71,7 @@ export const ManageConnectionForm = ({
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
             className="-mt-1 -ml-1.5 w-fit text-muted-foreground"
-            icon={<IconChevronLeft />}
+            icon={<IconChevronLeftMedium />}
           >
             Connections
           </Button>

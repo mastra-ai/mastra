@@ -179,11 +179,18 @@ const pageView = () => screen.getByRole('region', { name: 'Selected page' });
 
 describe('KnowledgePageExplorer page view', () => {
   describe('when a page is open', () => {
-    it('shows the page instead of the graph', () => {
+    it('opens the page in a drawer over the graph', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
-      expect(pageView()).toBeTruthy();
-      expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
+      expect(screen.getByTestId('knowledge-graph-container').contains(pageView())).toBe(true);
       expect(screen.getByRole('tab', { name: 'Page' }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('closes the page drawer back to the graph, keeping the selection', () => {
+      renderWithProviders(<Host initial="refund" initialView="page" />);
+      fireEvent.click(within(pageView()).getByRole('button', { name: 'Close page' }));
+      expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(screen.getByRole('region', { name: 'Page details' })).toBeTruthy();
     });
 
     it('returns to the graph from the toggle, keeping the selection', () => {
@@ -214,13 +221,14 @@ describe('KnowledgePageExplorer page view', () => {
       await userEvent.hover(view.getByTestId('knowledge-page-title'));
       expect((await screen.findByRole('tooltip')).textContent).toBe('org:acme#policies/refund');
       await userEvent.unhover(view.getByTestId('knowledge-page-title'));
-      const version = view.getByTestId('knowledge-page-version');
-      expect(Array.from(version.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
-        'In Acme',
-        expect.stringMatching(/^Updated .+$/),
-      ]);
+      const details = within(view.getByRole('region', { name: 'Details' }));
+      const terms = details.getAllByRole('term').map(term => term.textContent);
+      const values = details.getAllByRole('definition').map(value => value.textContent);
+      expect(terms).toEqual(['Scope', 'Updated', 'By', 'Created', 'Version']);
+      expect(values[0]).toBe('Acme');
+      expect(values[2]).toBe('admin');
+      expect(values[4]).toBe('v3');
       expect(view.getByRole('heading', { name: 'Refund Policy' }).parentElement?.textContent).toContain('v3');
-      expect(version.textContent).toContain('Updated by admin');
       const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(crumbs.getAllByRole('button').map(button => button.textContent)).toEqual(['Acme', 'Policies']);
     });

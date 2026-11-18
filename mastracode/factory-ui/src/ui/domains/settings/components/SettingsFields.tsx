@@ -36,7 +36,11 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >
-        {muted ? <IconVolumeOff aria-hidden className="size-4" /> : <IconVolumeFull aria-hidden className="size-4" />}
+        {muted ? (
+          <IconVolumeOff aria-hidden className="size-icon-md" />
+        ) : (
+          <IconVolumeFull aria-hidden className="size-icon-md" />
+        )}
       </button>
 
       <Select

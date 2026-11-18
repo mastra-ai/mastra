@@ -38,13 +38,14 @@ export function WorkspaceFilesProvider({ page, children }: { page?: WorkspacePan
   const readsChanges = panelToggle?.open === true || (Boolean(workspacePath) && awakeWorkspace === workspacePath);
   const setOpen = (next: boolean) => setToggled({ layoutRevision, open: next });
 
-  const docked = open && canDock && Boolean(workspacePath);
+  const hasContent = Boolean(workspacePath && threadId) || page !== undefined;
+  const docked = open && canDock && hasContent;
   const hasDocked = canDock || layoutRevision > 0;
   const moved = layoutRevision > 0 || toggled !== undefined;
 
   return (
     <WorkspacePanelContext.Provider
-      value={{ open, setOpen, workspacePath, threadId, canDock, docked, hasDocked, readsChanges, page }}
+      value={{ open, setOpen, hasContent, workspacePath, threadId, canDock, docked, hasDocked, readsChanges, page }}
     >
       <div
         ref={chatRef}

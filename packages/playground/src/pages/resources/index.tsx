@@ -1,8 +1,8 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 import { IconCloudUpload } from '@mastra/playground-ui/icons/central/IconCloudUpload';
 import { IconEarth } from '@mastra/playground-ui/icons/central/IconEarth';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -38,7 +38,7 @@ const resources = [
   {
     title: 'Community',
     description: 'Join the Mastra Discord community for help, discussion, and collaboration.',
-    icon: IconBubbleWide,
+    icon: IconChatBubble7,
     href: 'https://discord.gg/mastra-ai',
     external: true,
   },
@@ -83,7 +83,7 @@ export default function Resources() {
                   {resource.title}
                 </Txt>
                 {resource.external && (
-                  <IconSquareArrowTopRight className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                  <IconSquareArrowTopRight className="ml-auto size-icon-sm text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
               <Txt variant="caption" tone="muted">

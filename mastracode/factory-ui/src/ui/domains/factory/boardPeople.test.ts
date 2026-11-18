@@ -86,8 +86,8 @@ describe('board person filters', () => {
       'github:monalisa',
       'github:octocat',
     ]);
-    expect(participants.find(participant => participant.id === 'github:octocat')?.avatarUrl).toContain(
-      'github.com/octocat.png',
+    expect(participants.find(participant => participant.id === 'github:octocat')?.avatarUrl).toBe(
+      'https://avatars.githubusercontent.com/octocat?s=64',
     );
     expect(participants.some(participant => participant.name === 'user-current')).toBe(false);
   });
@@ -103,6 +103,6 @@ describe('board person filters', () => {
     expect(participants.map(participant => participant.id)).not.toContain('github:octocat');
     const you = participants.find(participant => participant.id === 'factory:user-octo');
     expect(you?.name).toBe('Octo Cat');
-    expect(you?.avatarUrl).toContain('github.com/octocat.png');
+    expect(you?.avatarUrl).toBe('https://avatars.githubusercontent.com/octocat?s=64');
   });
 });

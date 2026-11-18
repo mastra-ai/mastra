@@ -117,7 +117,7 @@ export const ComposerModelWarning = () => {
           data-testid="composer-model-stale-warning"
           role="alert"
         >
-          <IconExclamationTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <IconExclamationTriangle className="mt-0.5 size-icon-xs shrink-0" />
           <Txt as="span" variant="caption" className="min-w-0 break-words">
             {modelWarning || (
               <>
@@ -132,7 +132,7 @@ export const ComposerModelWarning = () => {
       )}
       {showProviderWarning && (
         <div className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground">
-          <IconExclamationTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <IconExclamationTriangle className="mt-0.5 size-icon-xs shrink-0" />
           <Txt as="span" variant="caption" className="min-w-0 break-words">
             Set{' '}
             <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">

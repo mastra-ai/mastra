@@ -1008,6 +1008,7 @@ export const API_ROUTE_METADATA = {
       "state",
       "stepId",
       "stepResults",
+      "storageVersion",
       "validateInputs"
     ],
     "hasQuery": false,
@@ -2114,7 +2115,6 @@ export const API_ROUTE_METADATA = {
       "page",
       "pagination",
       "rootSource",
-      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2196,7 +2196,6 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "orderBy",
       "page",
-      "textSearch",
       "timeRange",
       "where"
     ],

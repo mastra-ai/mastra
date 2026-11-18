@@ -28,7 +28,7 @@ const store = new MongoDBVector({
 })
 ```
 
-### Custom Embedding Field Path
+### Custom embedding field path
 
 If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
 
@@ -464,7 +464,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity with full-text results through MongoDB's server-side `$rankFusion`. The feature requires MongoDB 8.0 or later and is generally available from 8.1. MongoDB Atlas 8.0.x supports it where enabled, although enablement may require a support case. A full-text search index must exist. Managed indexes create one automatically, while bring-your-own collections require an explicit `createSearchIndex()` call.
+Runs a hybrid search that fuses vector similarity with full-text results through MongoDB's server-side `$rankFusion`. The feature requires MongoDB 8.0 or later and is available from 8.1. MongoDB Atlas 8.0.x supports it where enabled, although enablement may require a support case. A full-text search index must exist. Managed indexes create one automatically, while bring-your-own collections require an explicit `createSearchIndex()` call.
 
 <PropertiesTable
   content={[
@@ -557,7 +557,7 @@ const results = await store.hybridQuery({
 })
 ```
 
-`hybridQuery()` requires MongoDB 8.0 or later for the `$rankFusion` stage, which is generally available from 8.1. On 8.0.x, the stage runs where enabled, including MongoDB Atlas, but enablement may require a support case. If your deployment is older or lacks `$rankFusion`, run `query()` and `textQuery()` separately before merging the results client-side.
+`hybridQuery()` requires MongoDB 8.0 or later for the `$rankFusion` stage, which is available from 8.1. On 8.0.x, the stage runs where enabled, including MongoDB Atlas, but enablement may require a support case. If your deployment is older or lacks `$rankFusion`, run `query()` and `textQuery()` separately before merging the results client-side.
 
 ### `describeIndex()`
 
@@ -742,7 +742,7 @@ try {
 }
 ```
 
-## Automated Embedding
+## Automated embedding
 
 MongoDB can generate the embeddings for you. Create the index with `autoEmbed` and a Voyage AI model, write plain text through `documents`, and search with `queryText`. No embedding provider runs in your application, and no vectors travel through it.
 
@@ -908,7 +908,7 @@ await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
 
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
-- Regularly monitor index and collection statistics to ensure efficient search.
+- Monitor index and collection statistics to ensure efficient search.
 - When indexing existing collections, ensure all documents have the required `embedding` field.
 
 ## Usage example
