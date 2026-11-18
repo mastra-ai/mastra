@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { settingsRowLabelClassName } from './settings-row-label';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
+import { IconLock } from '@/ds/icons/central/IconLock';
 import { cn } from '@/lib/utils';
 
 export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -12,7 +13,6 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   htmlFor?: string;
   children?: ReactNode;
   tone?: 'default' | 'destructive';
-  /** A setting someone can see but not change: its control is disabled, but the row looks like any other. */
   viewOnly?: boolean;
   required?: boolean;
   errorMsg?: ReactNode;
@@ -45,6 +45,17 @@ const sideHeadingClassName =
  */
 const sideControlClassName =
   'flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:shrink-0 sm:self-stretch sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55';
+
+export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
+  if (!viewOnly) return children;
+  return (
+    <>
+      <IconLock className="size-icon-md shrink-0" aria-hidden />
+      <span className="sr-only">View only: </span>
+      {children}
+    </>
+  );
+}
 
 /**
  * One setting the person changes: a label, an optional one-line description, and the control that changes it. The
@@ -98,9 +109,13 @@ export function SettingsRow({
       {children != null && (
         <div
           data-slot="settings-row-control"
-          className={cn('min-w-0', !controlBelow && sideControlClassName, viewOnly && 'text-body-sm')}
+          className={cn(
+            'min-w-0',
+            !controlBelow && sideControlClassName,
+            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
+          )}
         >
-          {children}
+          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
         </div>
       )}
     </Field>

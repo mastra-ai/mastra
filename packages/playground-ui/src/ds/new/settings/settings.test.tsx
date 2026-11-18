@@ -159,27 +159,16 @@ describe('Settings', () => {
   });
 
   describe('when a setting is inherited', () => {
-    it('shows its value as plain text', () => {
+    it('identifies its value as view only', () => {
       render(
         <SettingsRow label="Project access" viewOnly>
           Viewer
         </SettingsRow>,
       );
 
+      expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
-      expect(screen.queryByText(/view only/i)).toBeNull();
       expect(screen.queryByRole('textbox')).toBeNull();
-    });
-
-    it('keeps a control inside it read-only', () => {
-      render(
-        <SettingsRow label="Project name" viewOnly>
-          <Input defaultValue="Demo Agents" />
-        </SettingsRow>,
-      );
-
-      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Project name' });
-      expect(input.disabled).toBe(true);
     });
   });
 

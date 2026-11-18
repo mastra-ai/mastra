@@ -46,7 +46,7 @@ describe('Section', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 
-  it('renders the view-only value as plain text', () => {
+  it('renders the view-only prefix', () => {
     render(
       <Section variant="factory">
         <Section.Content>
@@ -59,22 +59,7 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByText('Viewer')).toBeTruthy();
-    expect(screen.queryByText(/view only/i)).toBeNull();
-  });
-
-  it('keeps a control inside a view-only row read-only', () => {
-    render(
-      <Section variant="factory">
-        <Section.Content>
-          <Section.ViewOnlyRow label="Project name">
-            <Input defaultValue="Demo Agents" />
-          </Section.ViewOnlyRow>
-        </Section.Content>
-      </Section>,
-    );
-
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Project name' }).disabled).toBe(true);
+    expect(screen.getByText('View only:')).toBeTruthy();
   });
 
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {

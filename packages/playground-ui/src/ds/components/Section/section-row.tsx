@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import type { FieldProps } from '@/ds/components/Field';
+import { SettingsRowControl } from '@/ds/new/settings/settings-row';
 import { settingsRowLabelClassName } from '@/ds/new/settings/settings-row-label';
 import { cn } from '@/lib/utils';
 
@@ -52,8 +53,14 @@ function SectionRowBase({
         <FieldError className="mt-1">{errorMsg}</FieldError>
       </div>
       {children != null && (
-        <div data-slot="section-control" className={cn('min-w-0 sm:justify-self-end', viewOnly && 'text-body-sm')}>
-          {children}
+        <div
+          data-slot="section-control"
+          className={cn(
+            'min-w-0 sm:justify-self-end',
+            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
+          )}
+        >
+          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
         </div>
       )}
     </Field>

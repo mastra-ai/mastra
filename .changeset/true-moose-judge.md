@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Settings rows that can't be changed now look like every other row. A `viewOnly` row shows its value as plain text without a lock icon, and the label of a `viewOnly` or `disabled` row is no longer dimmed: only a disabled control looks disabled.
+The title of a view-only or disabled settings row is no longer dimmed, so it matches every other row. A disabled destructive row keeps its red title. The row's value and control look the same as before.
