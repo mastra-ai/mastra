@@ -83,7 +83,7 @@ export function markEagerSandboxStart(sandbox: object): void {
  * Times every real start of `sandbox`:
  * - the provider's part (lease and boot, up to the onStart hook), so a slow or failing provider is
  *   told apart from slow or failing repository setup;
- * - the whole start, up to the end of the onStart hook (`mastra_factory_session_ready_ms`), with
+ * - the whole start, up to the end of the onStart hook (`mastra_factory_sandbox_ready_ms`), with
  *   failures included. `kind` is `first` for a session's first sandbox and `resume` for later starts;
  * - how long the first caller other than the eager start waited for it
  *   (`mastra_factory_session_sandbox_wait_ms`): the start-up time someone actually waits through.
@@ -127,7 +127,7 @@ export function instrumentSandboxStart(sandbox: object, provider: string, hadSan
         });
       }
       if (real) {
-        factoryMetrics().observe('sandbox', 'mastra_factory_session_ready_ms', now - start.startedAt, {
+        factoryMetrics().observe('sandbox', 'mastra_factory_sandbox_ready_ms', now - start.startedAt, {
           kind: start.kind,
           outcome,
         });

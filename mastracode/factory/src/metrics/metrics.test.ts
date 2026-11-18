@@ -54,7 +54,7 @@ describe('resolveMetricsConfig', () => {
   });
 
   it('parses all, lists and unknown names, with env winning', () => {
-    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(5);
+    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(6);
     const config = resolveMetricsConfig({ groups: ['process'] }, { FACTORY_METRICS: 'sandbox, intake,nope' })!;
     expect([...config.groups]).toEqual(['sandbox', 'intake']);
     expect(config.unknownGroups).toEqual(['nope']);
@@ -436,7 +436,7 @@ describe('review follow-ups', () => {
     await metrics.tick();
     metrics.stop();
 
-    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms_count')).toMatchObject({
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_ready_ms_count')).toMatchObject({
       value: 1,
       labels: { kind: 'first', outcome: 'ok' },
     });
@@ -461,7 +461,7 @@ describe('review follow-ups', () => {
     await metrics.tick();
     metrics.stop();
 
-    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms')?.labels).toMatchObject({
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_ready_ms')?.labels).toMatchObject({
       kind: 'resume',
       outcome: 'error',
     });
