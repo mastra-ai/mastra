@@ -102,5 +102,6 @@ export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }
   if (!segment.carried) return true;
   const parent = (stepSpanData as { parentSpanId?: unknown } | undefined)?.parentSpanId;
   if (segment.adoptsOpenSteps) return parent !== segment.endedStepsOf;
-  return typeof parent === 'string' && [segment.modelSpanData?.id, segment.agentSpanData?.id].includes(parent);
+  // A step whose parents are not exported names none, so it cannot be told apart and ends as before.
+  return typeof parent !== 'string' || [segment.modelSpanData?.id, segment.agentSpanData?.id].includes(parent);
 }
