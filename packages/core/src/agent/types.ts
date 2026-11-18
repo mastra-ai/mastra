@@ -220,8 +220,6 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId?: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
-      /** See the thread-targeted member's `storeOnAccept`. */
-      storeOnAccept?: boolean;
       /**
        * Validated, but does not change the scopes of the run receiving the signal:
        * a run's scopes are fixed when it starts.
@@ -234,16 +232,6 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
-      /**
-       * Store a user message as soon as it is accepted (woken, delivered, or queued) rather than
-       * when the run first saves it, so a transcript reloaded from storage shows it right away.
-       * The sender does not wait for the write; the run waits for it before its next model request.
-       * Skipped for read-only memory, a failed `MEMORY_WRITE` check, and gateway-managed memory.
-       *
-       * The message stays stored even if an input processor later rejects or rewrites it: the row
-       * is the message as sent until the turn's own save replaces it.
-       */
-      storeOnAccept?: boolean;
       /**
        * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
        * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.

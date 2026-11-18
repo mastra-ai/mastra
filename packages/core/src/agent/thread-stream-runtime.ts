@@ -47,7 +47,6 @@ import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
-import { storeAcceptedSignal } from './store-accepted-signal';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
 import { AGENT_THREAD_KEY_SEPARATOR, agentThreadStreamKey, agentThreadStreamTopicForKey } from './thread-stream-topic';
@@ -7968,9 +7967,6 @@ export class AgentThreadStreamRuntime {
         queueOwnerId: target.queueOwnerId,
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      if (target.storeOnAccept) {
-        storeAcceptedSignal({ agent, signal: queuedSignal, resourceId, threadId, streamOptions: queuedStreamOptions });
-      }
       const control = this.#ensureThreadControlSubscription(state, pubsub, key);
       this.#publishPendingUserMessage(pubsub, key, runId ?? queuedRunId, queuedSignal, 'queued');
       this.#notifyThreadEvents(state);
@@ -8211,9 +8207,6 @@ export class AgentThreadStreamRuntime {
         if (activeRecord.agent.id === agent.id) {
           if (scopeMismatch(runId)) return refuseScopes(runId);
           this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
-          if (target.storeOnAccept) {
-            storeAcceptedSignal({ agent, signal, resourceId, threadId, streamOptions: activeRecord.streamOptions });
-          }
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
@@ -8248,19 +8241,6 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#notifyPendingSignals(state, key, signal);
-          if (target.storeOnAccept) {
-            storeAcceptedSignal({
-              agent,
-              signal,
-              resourceId,
-              threadId,
-              streamOptions: target.ifIdle?.streamOptions,
-              admitted: pendingAdmission.outcome.then(
-                admission => admission.action === 'local',
-                () => false,
-              ),
-            });
-          }
           const accepted = pendingAdmission.outcome.then(async admission => {
             if (admission.action === 'local') {
               // The reserved run owns the lease and takes this signal from the pre-run queue.
@@ -8327,9 +8307,6 @@ export class AgentThreadStreamRuntime {
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key, signal);
-          if (target.storeOnAccept) {
-            storeAcceptedSignal({ agent, signal, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
-          }
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
@@ -8408,9 +8385,6 @@ export class AgentThreadStreamRuntime {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      if (target.storeOnAccept) {
-        storeAcceptedSignal({ agent, signal, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
-      }
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
@@ -8581,9 +8555,6 @@ export class AgentThreadStreamRuntime {
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId, threadLeaseOwner(reservedRunId));
-      if (target.storeOnAccept) {
-        storeAcceptedSignal({ agent, signal, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
-      }
       try {
         const output = toModelOutput<OUTPUT>(
           await agent.stream(signal, {
