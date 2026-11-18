@@ -51,6 +51,19 @@ describe('SettingsValue', () => {
     expect(screen.getByText('Owner').parentElement?.hasAttribute('title')).toBe(false);
   });
 
+  it('sets a version in the mono face only when asked', () => {
+    // jsdom loads no Tailwind CSS, so the font shows only as the design-system class.
+    render(
+      <>
+        <SettingsValue mono>1.32.0</SettingsValue>
+        <SettingsValue>Ada Lovelace</SettingsValue>
+      </>,
+    );
+
+    expect(screen.getByText('1.32.0').classList).toContain('font-mono');
+    expect(screen.getByText('Ada Lovelace').classList).not.toContain('font-mono');
+  });
+
   it('keeps a hover text it was given', () => {
     render(<SettingsValue title="Signed in with WorkOS">WorkOS</SettingsValue>);
 
