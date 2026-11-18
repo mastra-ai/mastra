@@ -15,7 +15,9 @@ Settings now show read-only values one way across apps: `CopyField` for values p
 
 ```tsx
 // Before
-<CopyInput value={id} label="project ID" disabled={!canView} />
+<CopyInput value={id} label="project ID" disabled={!canView} />;
 // After: there's no disabled state; don't render the value when it can't be copied
-{canView && <CopyField value={id} label="project ID" />}
+{
+  canView && <CopyField value={id} label="project ID" />;
+}
 ```
