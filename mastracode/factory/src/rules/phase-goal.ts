@@ -8,6 +8,8 @@ export const PHASE_GOAL_METADATA_KEY = 'phaseGoal';
 
 export interface PhaseGoalRecord {
   phaseKey: string;
+  /** The board `phaseKey` lives on. Absent from records stamped before boards were recorded. */
+  boardKey?: string;
   goalId: string;
   threadId: string;
   sessionId: string;
@@ -18,7 +20,7 @@ export type GoalAgent = Pick<Agent, 'getObjective' | 'setObjective' | 'updateObj
 export function phaseGoalOf(metadata: Record<string, unknown> | null | undefined): PhaseGoalRecord | undefined {
   const value = metadata?.[PHASE_GOAL_METADATA_KEY];
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const { phaseKey, goalId, threadId, sessionId } = value as Record<string, unknown>;
+  const { phaseKey, boardKey, goalId, threadId, sessionId } = value as Record<string, unknown>;
   if (
     typeof phaseKey !== 'string' ||
     typeof goalId !== 'string' ||
@@ -27,7 +29,7 @@ export function phaseGoalOf(metadata: Record<string, unknown> | null | undefined
   ) {
     return undefined;
   }
-  return { phaseKey, goalId, threadId, sessionId };
+  return { phaseKey, goalId, threadId, sessionId, ...(typeof boardKey === 'string' ? { boardKey } : {}) };
 }
 
 /**
@@ -76,10 +78,20 @@ export function createPhaseGoalEnder(options: {
   /** The thread objective store, used when the session is not open. */
   store: () => Promise<PhaseGoalStore | undefined>;
 }) {
-  return async (args: { orgId: string; workItemId: string; toStage: string }): Promise<void> => {
+  return async (args: {
+    orgId: string;
+    workItemId: string;
+    fromBoard: string;
+    toBoard: string;
+    toStage: string;
+  }): Promise<void> => {
     const item = await options.workItems.get({ orgId: args.orgId, id: args.workItemId });
     const goal = phaseGoalOf(item?.metadata);
-    if (!goal || goal.phaseKey === args.toStage) return;
+    if (!goal) return;
+    // On another board a phase of the same name is a different phase, so the goal's board decides
+    // too. A record stamped before boards were recorded was made where the card came from.
+    const goalBoard = goal.boardKey ?? args.fromBoard;
+    if (goal.phaseKey === args.toStage && goalBoard === args.toBoard) return;
     await endPhaseGoal(goal, options);
   };
 }

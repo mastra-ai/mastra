@@ -25,7 +25,7 @@ import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
-import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
+import { TranscriptLoading } from '../components/TranscriptLoading';
 import { useChatSessionContext } from './useChatSessionContext';
 import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey';
 
@@ -249,12 +249,12 @@ export function ChatMessageBoundary({
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
   const { sessionError } = useChatSessionContext();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
+  const { preparing } = useChatMessagePreparation();
 
   if (sessionError) return <ChatMessageFeedback error={sessionError} />;
 
   if (preparing) {
-    return showPreparation ? <SessionPrepareSteps historyInitializing={historyInitializing} /> : null;
+    return showPreparation ? <TranscriptLoading /> : null;
   }
 
   if (value.threadId && value.error) {

@@ -1,0 +1,4 @@
+{
+  "temperature": ["google/gemma-4-26b-a4b-it"],
+  "structuredOutput": ["google/gemma-4-26b-a4b-it"]
+}

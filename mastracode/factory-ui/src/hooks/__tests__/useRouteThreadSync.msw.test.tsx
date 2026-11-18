@@ -24,7 +24,7 @@ const transcript: ChatTranscriptApi = {
   busy: false,
   phase: 'awaiting',
   initializing: false,
-  historyInitializing: false,
+  loadingHistory: false,
   initialHistoryReady: true,
   localUser: vi.fn(),
   failLocalUser: vi.fn(),

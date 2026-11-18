@@ -150,7 +150,7 @@ await store4.init() // Call init explicitly
 
 ## Additional notes
 
-### Collection Management
+### Collection management
 
 The storage implementation handles collection creation and management automatically. It creates the following collections:
 
@@ -207,7 +207,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Connection Management
+### Connection management
 
 The `close()` method closes the MongoDB client connection. Call this when shutting down your application:
 

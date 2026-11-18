@@ -98,7 +98,7 @@ The PgVector class provides vector search using [PostgreSQL](https://www.postgre
 
 ## Constructor examples
 
-### Connection String
+### Connection string
 
 ```ts
 import { PgVector } from '@mastra/pg'
@@ -109,7 +109,7 @@ const vectorStore = new PgVector({
 })
 ```
 
-### Host/Port/Database Configuration
+### Host, port, and database configuration
 
 ```ts
 const vectorStore = new PgVector({
@@ -122,7 +122,7 @@ const vectorStore = new PgVector({
 })
 ```
 
-### Advanced Configuration
+### Advanced configuration
 
 ```ts
 const vectorStore = new PgVector({
@@ -273,7 +273,7 @@ const vectorStore = new PgVector({
 ]}
 />
 
-#### Memory Requirements
+#### Memory requirements
 
 HNSW indexes require substantial shared memory during construction. For 100K vectors:
 
@@ -628,26 +628,26 @@ try {
 
 ## Index configuration guide
 
-### Performance Optimization
+### Performance optimization
 
-#### IVFFlat Tuning
+#### IVFFlat tuning
 
 - **lists parameter**: Set to `sqrt(n) * 2` where n is the number of vectors
 - More lists = better accuracy but slower build time
-- Fewer lists = faster build but potentially lower accuracy
+- Fewer lists = faster build but lower accuracy in some cases
 
-#### HNSW Tuning
+#### HNSW tuning
 
 - **m parameter**:
   - 8-16: Moderate accuracy, lower memory
   - 16-32: High accuracy, moderate memory
-  - 32-64: Very high accuracy, high memory
+  - 32-64: High accuracy, high memory
 - **efConstruction**:
   - 32-64: Fast build, good quality
   - 64-128: Slower build, better quality
   - 128-256: Slowest build, best quality
 
-### Index Recreation Behavior
+### Index recreation behavior
 
 The system automatically detects configuration changes and only rebuilds indexes when necessary:
 
@@ -657,7 +657,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 ## Best practices
 
-- Regularly evaluate your index configuration to ensure optimal performance.
+- Evaluate your index configuration to ensure optimal performance.
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - **Monitor index performance** using `describeIndex()` to track usage
 - Rebuild indexes periodically to maintain efficiency, especially after substantial data changes

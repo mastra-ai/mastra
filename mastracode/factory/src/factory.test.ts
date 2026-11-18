@@ -724,13 +724,31 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
-  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
-    const knowledge = { key: 'mastra', instance };
+  it('mounts a bare Knowledge instance and serves its reads under the instance id', async () => {
+    const knowledge = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
 
-    expect(config.knowledge).toEqual(knowledge);
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'shared' }),
+    );
+  });
+
+  it('still mounts the { key, instance } form and serves its reads under that key', async () => {
+    const instance = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
+    const knowledge = { key: 'legacy', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'legacy' }),
+    );
   });
 
   it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {

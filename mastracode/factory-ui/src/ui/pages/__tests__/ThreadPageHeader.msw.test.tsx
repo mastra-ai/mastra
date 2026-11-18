@@ -1,6 +1,6 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -218,7 +218,7 @@ describe('ThreadPage header', () => {
     expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
   });
 
-  it("shows the next card's stage as soon as its session opens, before the card's refresh answers", async () => {
+  it("opens the next card's session at once, then shows its stage when the card answers", async () => {
     stubThreadRoute();
     const nextSessionId = 'sess-3';
     const nextPath = `/factories/${FACTORY_ID}/workspaces/${nextSessionId}/threads/${nextSessionId}`;
@@ -246,7 +246,7 @@ describe('ThreadPage header', () => {
         if (new URL(request.url).searchParams.get('sessionId') !== nextSessionId) {
           return HttpResponse.json({ workItems: [workItem] });
         }
-        if (router.state.location.pathname === nextPath) await nextCard.promise;
+        await nextCard.promise;
         return HttpResponse.json({ workItems: [nextItem] });
       }),
     );
@@ -254,10 +254,18 @@ describe('ThreadPage header', () => {
     const header = await findPageHeader();
     expect(await within(header).findByRole('button', { name: 'Change stage from Building' })).toBeInTheDocument();
 
-    await router.navigate(nextPath);
+    const navigation = router.navigate(nextPath);
 
-    expect(await screen.findByRole('button', { name: 'Change stage from Planning' })).toBeInTheDocument();
+    // The page moves before the next card answers, and the previous card's stage goes with it.
+    await waitFor(() => expect(router.state.location.pathname).toBe(nextPath));
+    await act(() => navigation);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Change stage from Building' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Change stage from Planning' })).not.toBeInTheDocument();
+
     nextCard.resolve();
+    expect(await screen.findByRole('button', { name: 'Change stage from Planning' })).toBeInTheDocument();
   });
 
   it('titles a user session with its own name', async () => {
@@ -383,12 +391,14 @@ describe('ThreadPage header', () => {
     const { sessionGate } = stubThreadRoute({ gateSession: true });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 
-    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
+    const user = userEvent.setup();
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
+    await user.type(within(composer).getByRole('textbox', { name: 'Message' }), 'Draft while the session resolves');
+    expect(within(composer).getByRole('button', { name: 'Send message' })).toBeDisabled();
 
     sessionGate.resolve();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(composer).getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
   });
 });

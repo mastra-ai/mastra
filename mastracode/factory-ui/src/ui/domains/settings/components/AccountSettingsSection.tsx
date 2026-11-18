@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
+import { CopyField } from '@mastra/playground-ui/components/CopyField';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
@@ -111,12 +111,12 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
         </SettingsItem>
         {user?.userId && (
           <SettingsItem title="Account ID" description="Useful when contacting support.">
-            <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
+            <CopyField value={user.userId} label="account ID" className="w-full sm:w-55" />
           </SettingsItem>
         )}
         {user?.organizationId && (
           <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
-            <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
+            <CopyField value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
           </SettingsItem>
         )}
       </SettingsContainer>

@@ -394,6 +394,9 @@ export interface FactoryStageChange {
   workItemId: string;
   fromStage: string | undefined;
   toStage: string;
+  /** The boards the move left and entered. Named in the notice when they differ. */
+  fromBoard?: string;
+  toBoard?: string;
 }
 
 /**
@@ -417,9 +420,17 @@ export function createStageChangeNotifier({
     const resolved = await reporting();
     if (!resolved) return;
     const { label, ref } = await workItemReference(workItems, change);
-    const summary = change.fromStage
-      ? `${label} moved from ${change.fromStage} to ${change.toStage}.`
-      : `${label} moved to ${change.toStage}.`;
+    // On another board a phase of the same name is a different phase: a board change names both
+    // boards so the notice never reads as staying put.
+    const movedBoards =
+      change.fromBoard !== undefined && change.toBoard !== undefined && change.fromBoard !== change.toBoard;
+    const summary = movedBoards
+      ? change.fromStage
+        ? `${label} moved from ${change.fromStage} on the ${change.fromBoard} board to ${change.toStage} on the ${change.toBoard} board.`
+        : `${label} moved to ${change.toStage} on the ${change.toBoard} board.`
+      : change.fromStage
+        ? `${label} moved from ${change.fromStage} to ${change.toStage}.`
+        : `${label} moved to ${change.toStage}.`;
     const notification: Omit<SendNotificationSignalInput, 'source'> = {
       kind: 'stage',
       priority: 'low',
@@ -431,6 +442,7 @@ export function createStageChangeNotifier({
         'work-item': ref,
         ...(change.fromStage ? { 'from-stage': change.fromStage } : {}),
         'to-stage': change.toStage,
+        ...(movedBoards ? { 'from-board': change.fromBoard!, 'to-board': change.toBoard! } : {}),
       },
     };
     for (const subscriber of subscribers) {

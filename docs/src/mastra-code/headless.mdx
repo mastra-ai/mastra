@@ -7,7 +7,7 @@ packages:
 
 # Headless mode
 
-Mastra Code can run non-interactively — both from your shell and programmatically from Node or CI. Both paths share one core runner, `runMC`. The CLI is a thin adapter over it.
+Mastra Code can run non-interactively, both from your shell and programmatically from Node or CI. Both paths share one core runner, `runMC`. The CLI is a thin adapter over it.
 
 - **CLI**: `mastracode --prompt "..."` parses flags, bootstraps Mastra Code, runs the task, prints output, and exits with a status code.
 - **Programmatic**: you bootstrap Mastra Code once with [`createMastraCode()`](/reference), then call `runMC()` to run a task as an async-iterable that also resolves to a typed result.
@@ -44,12 +44,12 @@ echo "Summarize the repo" | mastracode --prompt -
 | `--output`, `-o <mode>` | Output mode: `human` (default), `json`, or `jsonl` |
 | `--model`, `-m <id>` | Model override (e.g. a `provider/model` id). Takes precedence over the pack's model for the active mode |
 | `--pack <id>` | Start with a model pack: a built-in pack id (e.g. `anthropic`, `openai`), `custom:<name>`, or a bare custom-pack name. Applies the pack like `/models` → Activate (mode models, subagent models, model route) and makes it the default pack; also takes precedence over `MASTRACODE_MODEL_ID` |
-| `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted. `fast` selects Explore mode |
+| `--mode <build\|plan\|fast>` | Execution mode. Defaults to `build` if omitted. `fast` selects Explore mode |
 | `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `--settings <path>` | Path to a `settings.json` file (default: global settings) |
 | `--help`, `-h` | Show usage |
 
-`--continue` and `--thread` cannot be used together.
+`--continue` and `--thread` can't be used together.
 
 ### Output modes
 
@@ -91,7 +91,7 @@ mastracode -c --prompt "Continue where you left off"
 
 ## Programmatic usage
 
-Bootstrap Mastra Code with [`createMastraCode()`](/reference), then pass the returned `controller` and `session` to `runMC()`. `createMastraCode()` is async; `runMC()` is synchronous and returns a run handle immediately. Pass `planApprovalStartsGoal: false` because `runMC()`'s default `autoApprovePolicy` approves submitted plans without starting a goal, so the agent shouldn't be told one will start.
+Bootstrap Mastra Code with [`createMastraCode()`](/reference), then pass the returned `controller` and `session` to `runMC()`. `createMastraCode()` is async. `runMC()` is synchronous and returns a run handle immediately. Pass `planApprovalStartsGoal: false` because `runMC()`'s default `autoApprovePolicy` approves submitted plans without starting a goal, so the agent shouldn't be told one will start.
 
 ```typescript title="src/run.ts"
 import { createMastraCode, runMC } from 'mastracode'
@@ -114,7 +114,7 @@ const result = await run.result
 console.log(result.status, result.text)
 ```
 
-`runMC` never calls `process.exit` and never writes to global streams, so it is safe to embed in CI scripts and servers.
+`runMC` never calls `process.exit` and never writes to global streams, so it's safe to embed in CI scripts and servers.
 
 ### The run handle
 
@@ -175,7 +175,7 @@ Both `for await (const event of run)` and `await run.result` work on the same ru
 
 A resolution policy decides how the run resumes `tool_approval_required` and `tool_suspended` events when there is no human in the loop. The default is `autoApprovePolicy`, which reproduces the historical headless behavior: approve every tool, auto-resolve sandbox and `submit_plan` suspensions, and answer any other suspension with a "use your best judgment" instruction.
 
-Two built-in policies and a resolver are exported:
+The package exports a resolver and these built-in policies:
 
 | Export | Behavior |
 | - | - |
@@ -220,5 +220,5 @@ const result = await run.result
 
 ## Next steps
 
-- [Customization](/customization) — extend Mastra Code with custom modes, tools, and subagents.
-- [API reference](/reference) — full `createMastraCode()` options and return values.
+- [Customization](/customization): extend Mastra Code with custom modes, tools, and subagents.
+- [API reference](/reference): full `createMastraCode()` options and return values.
