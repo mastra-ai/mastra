@@ -159,6 +159,16 @@ To preselect the device-code flow (for example in scripts or remote shells where
 export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
 ```
 
+### Codex Fast
+
+Append `:fast` to a supported OpenAI model ID to request priority processing when you use Codex sign-in:
+
+```sh
+mastracode --model openai/gpt-5.3:fast
+```
+
+`:fast` changes the request, not the model. Omit the suffix to use the default service tier. The suffix doesn't request priority when you use an OpenAI API key.
+
 ### Authentication priority for anthropic
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
