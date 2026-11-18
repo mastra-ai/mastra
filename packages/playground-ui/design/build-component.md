@@ -163,7 +163,7 @@ What is this pixel?
 - [ ] Text uses roles, icons use `icon-*` tokens, lengths are scale steps, transitions name their properties and respect reduced motion
 - [ ] No `useMemo`, `useCallback`, `setState` in an effect, `as` cast, or barrel import
 - [ ] Every `useEffect` or `useLayoutEffect` syncs with something outside React, and no ref callback or `useSyncExternalStore` could replace it
-- [ ] `node packages/playground-ui/scripts/check-color-usage.mjs --report --component <Name>` shows no legacy or foundation tokens
+- [ ] `node packages/playground-ui/scripts/check-color-usage.mjs --report --component <Name>` shows no legacy or foundation tokens (the report reads git-tracked files, so `git add` the new component first)
 - [ ] `pnpm --filter ./packages/playground-ui lint`, `typecheck`, and `test` pass
 - [ ] Stories render every variant and state in both themes on every surface the component sits on
 - [ ] The call sites use the new component, and a `minor` changeset describes it
