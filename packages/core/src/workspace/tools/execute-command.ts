@@ -139,6 +139,41 @@ function resolveCommandCwd(cwd: string | undefined, defaultCwd: string | undefin
   return defaultCwd ? path.posix.join(defaultCwd, cwd) : cwd;
 }
 
+/**
+ * Validate an operator-configured background lifetime value (ms). `undefined` means "not
+ * configured", `0` means "no limit", and anything else must be a positive integer.
+ */
+function validateBackgroundTimeoutMs(value: number | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative integer number of milliseconds`);
+  }
+  return value;
+}
+
+/**
+ * Effective lifetime for a background command, in milliseconds. `undefined` means no timer
+ * (today's behavior). The model's `timeout` (already converted to ms) wins over the
+ * configured default. A configured maximum caps whichever value applies, and also bounds an
+ * explicit `0` or an omission with no default, so a configured ceiling always holds.
+ */
+function resolveBackgroundTimeoutMs(
+  requestedMs: number | undefined,
+  defaultTimeoutMs: number | undefined,
+  maxTimeoutMs: number | undefined,
+): number | undefined {
+  const fallback = validateBackgroundTimeoutMs(defaultTimeoutMs, 'backgroundProcesses.defaultTimeoutMs');
+  const ceiling = validateBackgroundTimeoutMs(maxTimeoutMs, 'backgroundProcesses.maxTimeoutMs');
+  const base = requestedMs ?? fallback;
+  if (ceiling) return base ? Math.min(base, ceiling) : ceiling;
+  return base;
+}
+
+/** Human-readable lifetime for the background stop note: whole seconds when possible, else ms. */
+function formatDurationMs(ms: number): string {
+  return ms % 1000 === 0 ? `${ms / 1000} seconds` : `${ms}ms`;
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command } = input;
@@ -218,6 +253,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     const bgConfig = toolConfig?.backgroundProcesses;
+    // Background-only lifetime limit: the model's timeout wins over the configured default,
+    // and a configured maximum caps whichever applies. Undefined keeps today's behavior.
+    const effectiveTimeoutMs = resolveBackgroundTimeoutMs(timeout, bgConfig?.defaultTimeoutMs, bgConfig?.maxTimeoutMs);
 
     // Resolve abort signal: undefined = use context signal (from agent), null/false = disabled
     const bgAbortSignal =
@@ -239,7 +277,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
     handle = await sandbox.processes.spawn(command, {
       cwd: effectiveCwd,
-      timeout: timeout ?? undefined,
+      timeout: effectiveTimeoutMs,
       abortSignal: bgAbortSignal,
       // A background process collects output rather than being driven over stdin,
       // so close stdin at spawn. Otherwise `rg`/`grep`/`cat` with no path argument
@@ -274,6 +312,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
               stderrTruncated: result.stderrTruncated,
               stdoutDroppedBytes: result.stdoutDroppedBytes,
               stderrDroppedBytes: result.stderrDroppedBytes,
+              timedOut: result.timedOut,
               killedByAbort: handle.killedByAbort,
               toolCallId,
               ...owner,
@@ -296,7 +335,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     span.end({ success: true }, { pid: Number(handle.pid) || undefined });
-    return `Started background process (PID: ${handle.pid})`;
+    const started = `Started background process (PID: ${handle.pid})`;
+    return effectiveTimeoutMs
+      ? `${started}. It will be stopped after ${formatDurationMs(effectiveTimeoutMs)}.`
+      : started;
   }
 
   // Foreground mode: execute and wait for completion
@@ -429,7 +471,7 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.`;
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running. The workspace may still impose its own default or maximum lifetime on a background process.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({

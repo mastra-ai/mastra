@@ -169,6 +169,12 @@ export interface BackgroundProcessExitMeta extends BackgroundProcessMeta {
   stdoutDroppedBytes?: number;
   stderrDroppedBytes?: number;
   /**
+   * True when the process was stopped because its lifetime limit elapsed (an explicit
+   * `timeout`, or the configured default/ceiling). False for normal exits and for
+   * `kill_process`.
+   */
+  timedOut?: boolean;
+  /**
    * True when the process was killed because the abort signal fired (for example the user
    * cancelled the run). False for normal exits and for `kill_process`.
    */
@@ -194,6 +200,19 @@ export interface BackgroundProcessConfig {
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
    */
   abortSignal?: AbortSignal | null | false;
+  /**
+   * Default lifetime for background commands, in milliseconds. Applied when the model
+   * omits `timeout`. `0` or unset means no default (today's behavior: the process runs
+   * until it exits or is killed).
+   */
+  defaultTimeoutMs?: number;
+  /**
+   * Hard ceiling for background commands, in milliseconds. Bounds an explicit model
+   * `timeout` and `defaultTimeoutMs`, and also bounds an explicit `timeout: 0` or an
+   * omission with no default, so a configured ceiling always applies. `0` or unset
+   * means no ceiling.
+   */
+  maxTimeoutMs?: number;
 }
 
 // =============================================================================

@@ -281,6 +281,124 @@ describe('execute_command tool', () => {
       expect(result).toBe('Started background process (PID: 42)');
     });
 
+    describe('lifetime limits', () => {
+      function setup(config?: Record<string, unknown>) {
+        const handle = createMockHandle({ pid: '42' });
+        const spawn = vi.fn().mockResolvedValue(handle);
+        const sandbox = createMockSandbox({ processes: { spawn } });
+        const workspace = new Workspace({
+          sandbox,
+          ...(config && {
+            tools: { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: config } },
+          }),
+        });
+        return { spawn, workspace };
+      }
+
+      it.each([
+        {
+          name: 'applies defaultTimeoutMs when the model omits timeout',
+          config: { defaultTimeoutMs: 600_000 },
+          input: {},
+          expected: 600_000,
+        },
+        {
+          name: 'lets the model timeout (seconds) win over the default',
+          config: { defaultTimeoutMs: 600_000 },
+          input: { timeout: 30 },
+          expected: 30_000,
+        },
+        {
+          name: 'caps a larger model timeout at maxTimeoutMs',
+          config: { maxTimeoutMs: 60_000 },
+          input: { timeout: 600 },
+          expected: 60_000,
+        },
+        {
+          name: 'caps a larger default at maxTimeoutMs',
+          config: { defaultTimeoutMs: 600_000, maxTimeoutMs: 60_000 },
+          input: {},
+          expected: 60_000,
+        },
+        {
+          name: 'applies maxTimeoutMs with nothing requested or defaulted',
+          config: { maxTimeoutMs: 60_000 },
+          input: {},
+          expected: 60_000,
+        },
+        { name: 'leaves the timeout undefined with no config', config: undefined, input: {}, expected: undefined },
+        {
+          name: 'keeps an explicit timeout of 0 with no ceiling',
+          config: undefined,
+          input: { timeout: 0 },
+          expected: 0,
+        },
+        {
+          name: 'bounds an explicit timeout of 0 with a ceiling',
+          config: { maxTimeoutMs: 60_000 },
+          input: { timeout: 0 },
+          expected: 60_000,
+        },
+      ])('$name', async ({ config, input, expected }) => {
+        const { spawn, workspace } = setup(config as Record<string, unknown> | undefined);
+        await executeCommandWithBackgroundTool.execute(
+          { command: 'node server.js', background: true, ...input },
+          { workspace },
+        );
+        expect(spawn).toHaveBeenCalledTimes(1);
+        expect(spawn.mock.calls[0][1].timeout).toBe(expected);
+      });
+
+      it('rejects a negative or non-integer limit', async () => {
+        const { workspace } = setup({ defaultTimeoutMs: -1 });
+        await expect(
+          executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace }),
+        ).rejects.toThrow(RangeError);
+      });
+
+      it('notes the applied lifetime in the tool result only when a limit applies', async () => {
+        const limited = setup({ defaultTimeoutMs: 600_000 });
+        await expect(
+          executeCommandWithBackgroundTool.execute(
+            { command: 'node server.js', background: true },
+            { workspace: limited.workspace },
+          ),
+        ).resolves.toBe('Started background process (PID: 42). It will be stopped after 600 seconds.');
+
+        const unlimited = setup();
+        await expect(
+          executeCommandWithBackgroundTool.execute(
+            { command: 'node server.js', background: true },
+            { workspace: unlimited.workspace },
+          ),
+        ).resolves.toBe('Started background process (PID: 42)');
+      });
+
+      it('forwards timedOut to the background onExit callback', async () => {
+        const onExit = vi.fn();
+        const handle = createMockHandle({
+          pid: '42',
+          waitResult: {
+            exitCode: 124,
+            success: false,
+            stdout: '',
+            stderr: '',
+            executionTimeMs: 10,
+            timedOut: true,
+          },
+        });
+        const sandbox = createMockSandbox({ processes: { spawn: vi.fn().mockResolvedValue(handle) } });
+        const workspace = new Workspace({
+          sandbox,
+          tools: { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: { onExit } } },
+        });
+
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() => expect(onExit).toHaveBeenCalled());
+        expect(onExit).toHaveBeenCalledWith(expect.objectContaining({ pid: '42', timedOut: true }));
+      });
+    });
+
     it('runs foreground when background is not set', async () => {
       const sandbox = createMockSandbox({
         executeCommand: vi.fn().mockResolvedValue({
