@@ -283,6 +283,7 @@ import type {
 } from './durable/types';
 import { DurableProcessorRebuildError } from './durable/utils/resolve-runtime';
 import { restoreCompletionPolicy } from './durable/utils/restore-completion';
+import { normalizeResumeGenerateArgs } from './durable/utils/resume-generate-args';
 import { deadlineMessageListState, runDurableDeadlineOutputPass } from './durable/workflows/finalize-run';
 import { hydrateMessageListState, loadMessageListStateForResume } from './durable/workflows/shared/message-list-state';
 import {
@@ -11592,8 +11593,27 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<MastraModelOutput<OUTPUT>> {
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
+    if (this.#resolveExecutionEngine())
+      return this.#resumeDurableStream(resumeData, streamOptions as DurableAgentResumeOptions<TOutput>);
     return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+  }
+
+  async #resumeDurableStream(
+    resumeData: unknown,
+    streamOptions?: DurableAgentResumeOptions<TOutput> & { runId?: string },
+  ): Promise<MastraModelOutput<TOutput>> {
+    const runId = streamOptions?.runId;
+    if (!runId) {
+      throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
+    }
+    const { runId: _runId, ...resumeOptions } = streamOptions;
+    const result = await this.resume(runId, resumeData, {
+      ...resumeOptions,
+      // Close when the resumed workflow suspends again so the caller's reader terminates.
+      closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
+    });
+    return result.output;
   }
 
   /**
@@ -11811,6 +11831,28 @@ export class Agent<
     }
   }
 
+  async #resumeDurableGenerate(args: unknown[]): Promise<FullOutput<TOutput>> {
+    const { runId, resumeData, options } = normalizeResumeGenerateArgs<DurableAgentResumeOptions<TOutput>>(args);
+    const result = await this.resume(runId, resumeData, {
+      ...options,
+      closeOnSuspend: true,
+    });
+    let suspended = false;
+    try {
+      const fullOutput = await drainAgentOutput(result.output);
+      suspended = fullOutput.finishReason === 'suspended';
+      if (suspended) {
+        await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
+      }
+      if (!fullOutput.runId) {
+        fullOutput.runId = result.runId;
+      }
+      return fullOutput;
+    } finally {
+      if (!suspended) result.cleanup();
+    }
+  }
+
   /**
    * Resumes a previously suspended generate execution.
    * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
@@ -11849,12 +11891,17 @@ export class Agent<
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
   async resumeGenerate<OUTPUT = TOutput>(
-    resumeData: any,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: PublicStructuredOutputOptions<any>;
-      toolCallId?: string;
-    } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<FullOutput<OUTPUT>> {
+    ...args: [
+      resumeData: any,
+      options?: AgentExecutionOptionsBase<any> & {
+        structuredOutput?: PublicStructuredOutputOptions<any>;
+        toolCallId?: string;
+      } & { model?: DynamicArgument<MastraModelConfig> },
+      legacyOptions?: DurableAgentResumeOptions<TOutput>,
+    ]
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
+    if (this.#resolveExecutionEngine()) return this.#resumeDurableGenerate(args);
+    const [resumeData, options] = args;
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });

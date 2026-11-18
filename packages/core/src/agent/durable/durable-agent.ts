@@ -41,7 +41,7 @@ import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } fro
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
-import { drainAgentOutput, resolveRunId } from '../helpers';
+import { resolveRunId } from '../helpers';
 import type { MessageListInput } from '../message-list';
 import { MessageList } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
@@ -92,7 +92,6 @@ import type {
   DurableAgenticWorkflowInput,
   RunRegistryEntry,
 } from './types';
-import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import type { createDurableAgenticWorkflow } from './workflows';
 import { hydrateMessageListState, latestMessageListState } from './workflows/shared/message-list-state';
 
@@ -1475,30 +1474,7 @@ export class DurableAgent<
     options?: DurableAgentStreamOptions<TOutput>,
   ) => Promise<DurableAgentStreamResult<TOutput>>;
 
-  /**
-   * Override the inherited `resumeStream()` so that callers using the base
-   * `Agent` API (including `approveToolCall` / `declineToolCall`) are routed
-   * through the durable `resume()` path instead of the regular Agent's
-   * snapshot-based resume.
-   *
-   * Returns just the `MastraModelOutput` (matching the base Agent's return
-   * type) while internally delegating to `this.resume()`.
-   */
-  override async resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>> {
-    const runId = streamOptions?.runId;
-    if (!runId) {
-      throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
-    }
-    const { runId: _runId, ...resumeOptions } = streamOptions;
-    const result = await this.resume(runId, resumeData, {
-      ...resumeOptions,
-      // Close the stream when the workflow re-suspends so the caller's
-      // `for await` loop terminates. Without this the stream stays open
-      // indefinitely when the resumed turn hits another suspend point.
-      closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
-    } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
-    return result.output;
-  }
+  declare resumeStream: (resumeData: any, streamOptions?: any) => Promise<MastraModelOutput<TOutput>>;
 
   /**
    * Generate a complete response from the agent using durable execution.
@@ -1542,39 +1518,18 @@ export class DurableAgent<
    * through. The same `EventedAgent` caveat about fire-and-forget snapshot
    * persistence noted on `generate()` applies if the resumed turn suspends.
    */
-  async resumeGenerate(
-    resumeData: unknown,
-    options: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2] & { runId: string },
-  ): Promise<FullOutput<TOutput>>;
-  /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
-  async resumeGenerate(
-    runId: string,
-    resumeData: unknown,
-    options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
-  ): Promise<FullOutput<TOutput>>;
-  async resumeGenerate(...args: unknown[]): Promise<FullOutput<TOutput>> {
-    const { runId, resumeData, options } = normalizeResumeGenerateArgs(args);
-    const result = await this.resume(runId, resumeData, {
-      ...(options ?? {}),
-      closeOnSuspend: true,
-    } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
-    let suspended = false;
-    try {
-      const fullOutput = (await drainAgentOutput(result.output)) as FullOutput<TOutput>;
-      suspended = fullOutput.finishReason === 'suspended';
-      if (suspended) {
-        await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
-      }
-      if (!fullOutput.runId) {
-        (fullOutput as { runId?: string }).runId = result.runId;
-      }
-      return fullOutput;
-    } finally {
-      if (!suspended) {
-        result.cleanup();
-      }
-    }
-  }
+  declare resumeGenerate: {
+    (
+      resumeData: unknown,
+      options: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2] & { runId: string },
+    ): Promise<FullOutput<TOutput>>;
+    /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
+    (
+      runId: string,
+      resumeData: unknown,
+      options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
+    ): Promise<FullOutput<TOutput>>;
+  };
 
   /**
    * A replay from an offset can start past the marker of the execution that
