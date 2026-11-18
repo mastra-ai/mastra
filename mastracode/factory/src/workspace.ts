@@ -939,20 +939,35 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // A sandbox that takes no GitHub token (credential vault, or vault mode
     // unknown) gets every Factory token removed from its overlay instead, so
     // the provider's placeholder `GH_TOKEN` is what its commands see.
-    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean) => {
+    // Returns whether the credential reached the sandbox.
+    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean): boolean => {
       if (!sandboxAcceptsGithubToken(target)) {
         target.setEnv?.(env =>
           Object.fromEntries(Object.entries(env).filter(([name]) => !/^GH_TOKEN(_\d+)?$/.test(name))),
         );
         setSessionEnvironmentNote(session.sessionId, null);
-        return;
+        return false;
       }
       if (!target.setEnv) {
         if (required) throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-        return;
+        return false;
       }
       target.setEnv(env => withGithubTokens(env, token, pat));
       setSessionEnvironmentNote(session.sessionId, pat ? null : (githubGroupTokens.get(workspaceId)?.note ?? null));
+      return true;
+    };
+    // A withheld credential leaves the registration empty, non-PAT and stale,
+    // so a later token-mode start never reinstalls a credential chosen for a
+    // different role.
+    const recordGithubToken = (
+      registration: GithubTokenRegistration,
+      token: string,
+      pat: boolean,
+      installed: boolean,
+    ) => {
+      registration.ghToken = installed ? token : '';
+      registration.patInstalled = installed && pat;
+      registration.tokenIssuedAt = installed ? Date.now() : 0;
     };
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
@@ -1034,6 +1049,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Learn the credential-vault mode before setup decides whether the
       // sandbox may hold a GitHub token.
       await learnSandboxGithubAuth(args.sandbox);
+      // The overlay survives VM replacement; clear a token left by an earlier
+      // token-mode start before setup runs its first command here.
+      if (githubProvider && !sandboxAcceptsGithubToken(requireExec(args.sandbox))) {
+        installGithubTokens(requireExec(args.sandbox), '', false, false);
+      }
       let setupError: SetupCommandError | undefined;
       try {
         await guardedSetup(args);
@@ -1094,10 +1114,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // constructing context and reject the current one.
         existingRegistration.target = target;
         existingRegistration.inject = (freshToken, pat = false) => {
-          installGithubTokens(target, freshToken, pat, true);
-          existingRegistration.ghToken = freshToken;
-          existingRegistration.patInstalled = pat;
-          existingRegistration.tokenIssuedAt = Date.now();
+          recordGithubToken(existingRegistration, freshToken, pat, installGithubTokens(target, freshToken, pat, true));
         };
         // A minted token may have expired while the VM was away; re-mint it
         // instead of reinstalling it over the fresh one setup just used.
@@ -1116,9 +1133,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const refreshed = withheldPat ? true : await refreshStaleGithubToken().catch(() => false);
         if (!refreshed) {
           // Reinstalling the same credential must not reset its age.
-          const { tokenIssuedAt } = existingRegistration;
-          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
-          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+          const { tokenIssuedAt, ghToken } = existingRegistration;
+          existingRegistration.inject(ghToken, existingRegistration.patInstalled);
+          if (ghToken && existingRegistration.ghToken) existingRegistration.tokenIssuedAt = tokenIssuedAt;
         }
         await finishStart();
         return;
@@ -1140,10 +1157,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       installGithubTokens(target, ghCliToken, ghCliPat !== null, false);
       const tokenRegistration: GithubTokenRegistration = {
         inject: (freshToken, pat = false) => {
-          installGithubTokens(target, freshToken, pat, true);
-          tokenRegistration.ghToken = freshToken;
-          tokenRegistration.patInstalled = pat;
-          tokenRegistration.tokenIssuedAt = Date.now();
+          recordGithubToken(tokenRegistration, freshToken, pat, installGithubTokens(target, freshToken, pat, true));
         },
         patKind,
         ghToken: ghCliToken,

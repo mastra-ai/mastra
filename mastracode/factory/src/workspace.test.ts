@@ -2714,6 +2714,54 @@ describe('GitHub session workspace preparation', () => {
       expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
     });
 
+    it('never reinstalls a PAT that was withheld while the sandbox was in vault mode', async () => {
+      mocks.vault = true;
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      mocks.runBindingRole = 'review';
+      await reuse();
+      mocks.runBindingRole = 'work';
+      await reuse().catch(() => {});
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      mocks.setEnv.mockClear();
+      await sandbox.start();
+
+      expect(lastGhToken()).not.toBe('ghp_reviewer');
+    });
+
+    it('clears a token left by an earlier token-mode start before setup runs a command', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      mocks.vault = false;
+      const { workspace } = await createLocalFactory();
+      // A setup command makes the start probe its marker with a sandbox command.
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = true;
+      mocks.setEnv.mockClear();
+      sandbox.exec.mockClear();
+      await sandbox.start();
+
+      const firstClear = mocks.setEnv.mock.invocationCallOrder[0];
+      expect(firstClear).toBeDefined();
+      expect(sandbox.exec).toHaveBeenCalled();
+      expect(firstClear!).toBeLessThan(sandbox.exec.mock.invocationCallOrder[0]!);
+      expect(lastGhToken()).toBeUndefined();
+    });
+
     it('installs tokens as before when the platform reports a non-vault sandbox', async () => {
       mocks.vault = false;
       mocks.githubPat = 'ghp_org_pat';
