@@ -18,25 +18,29 @@ import {
   RECOVER_RUN_SUSPENDED_ERROR_ID,
   RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
   markErrorForStreamRejection,
+  RECOVER_SHUTDOWN_ERROR_ID,
 } from './constants';
 import type {
   DurableAgentActiveRun,
   DurableAgentListActiveRunsOptions,
   DurableAgentListActiveRunsResult,
 } from './durable-agent';
+import type { UntrackedRunLiveness } from './execution-fence';
 import {
   ExecutionFence,
   fencePubSub,
   readRunGeneration,
   resolveLeaseProvider,
   supportsRunFencing,
+  RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
-import type { UntrackedRunLiveness } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { createSupersededEventFilter, emitAbortEvent } from './stream-adapter';
 import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
+import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
+import { latestMessageListState } from './workflows/shared/message-list-state';
 
 export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
 type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
@@ -58,27 +62,6 @@ export interface DurableWorkflowOptions {
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   logger: IMastraLogger;
   guardrailLogger?: IMastraLogger;
-}
-
-/** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
-export function latestMessageListState(snapshot: {
-  value?: Record<string, any>;
-  state?: Record<string, any>;
-  context?: Record<string, any>;
-}): unknown {
-  // Evented checkpoints keep the latest setState under context.__state;
-  // value can still contain the transcript from the start of the iteration.
-  if (snapshot.context?.__state?.messageListState) return snapshot.context.__state.messageListState;
-  // The default engine persists workflow state under `value`.
-  if (snapshot.value?.messageListState) return snapshot.value.messageListState;
-  if (snapshot.state?.messageListState) return snapshot.state.messageListState;
-  let latest: { at: number; value: unknown } | undefined;
-  for (const step of Object.values(snapshot.context ?? {})) {
-    const value = step?.output?.messageListState;
-    const at = step?.endedAt ?? step?.startedAt ?? 0;
-    if (value && (!latest || at >= latest.at)) latest = { at, value };
-  }
-  return latest?.value;
 }
 
 export class DurableExecutionEngine {
@@ -696,6 +679,18 @@ export class DurableExecutionEngine {
         details: { agentName, runId },
       });
     }
+    // Duplicate recovery takes precedence over a live execution. Even force
+    // recovery must not replace an execution still running in this process.
+    const localExecution = ExecutionFence.getLocalActive(runId);
+    if (localExecution && !localExecution.isLost()) {
+      throw new MastraError({
+        id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" recover(${runId}): this process is still executing the run. Wait for it to finish instead of recovering it.`,
+        details: { agentName, runId },
+      });
+    }
     const token = crypto.randomUUID();
     localRecoveryClaims.set(key, token);
     return () => {
@@ -703,12 +698,105 @@ export class DurableExecutionEngine {
     };
   }
 
+  async recoveryStore(runId: string, agentName: string, guardrailLogger: IMastraLogger): Promise<WorkflowsStorage> {
+    if (!this.mastra) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agentName}" recover() requires the agent to be registered on a Mastra instance.`,
+        details: { agentName, runId },
+      });
+    }
+    this.assertRecoveryActive();
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${agentName}" recover() requires persistent storage to load the run snapshot. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+        details: { agentName, runId },
+      });
+    }
+    await this.warnIfUnfenced(store, 'workflows', guardrailLogger);
+    return store;
+  }
+
+  assertRecoveryActive(): void {
+    if (this.mastra?.__shuttingDown) {
+      throw new MastraError({
+        id: RECOVER_SHUTDOWN_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: 'Durable recovery stopped because Mastra is shutting down',
+      });
+    }
+  }
+
+  shouldReportRecoveryFailure(error: unknown): boolean {
+    const id = (error as { id?: string } | undefined)?.id;
+    return (
+      id !== RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID &&
+      id !== RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID &&
+      id !== RECOVER_RUN_SUSPENDED_ERROR_ID &&
+      id !== RECOVER_RUN_NOT_ACTIVE_ERROR_ID &&
+      id !== RECOVER_SHUTDOWN_ERROR_ID
+    );
+  }
+
+  async restartRun(
+    workflow: DurableWorkflow,
+    fence: ExecutionFence,
+    pubsub: PubSub,
+    workflowEngine: 'default' | 'evented',
+    logger: IMastraLogger,
+    resourceId: string | undefined,
+    requestContext: RequestContext,
+    observabilityContext: ObservabilityContext,
+  ) {
+    fence.throwIfLost();
+    this.assertRecoveryActive();
+    await this.ensureEngineWorkersStarted(workflowEngine, logger);
+    fence.throwIfLost();
+    this.assertRecoveryActive();
+    const run = await this.raceFenceLoss(workflow.createRun({ runId: fence.runId, resourceId, pubsub }), fence);
+    fence.throwIfLost();
+    this.assertRecoveryActive();
+    const result = await this.raceFenceLoss(run.restart({ requestContext, ...observabilityContext }), fence);
+    fence.throwIfLost();
+    return result;
+  }
+
+  async recoverySupersededFrom(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    snapshot: WorkflowRunState,
+    pubsub: PubSub,
+    logger: IMastraLogger,
+  ): Promise<number | undefined> {
+    try {
+      const stepIndex = await this.loadUncheckpointedStepIndex(workflowsStore, runId, snapshot);
+      return stepIndex === undefined ? undefined : await this.supersededFrom(pubsub, runId, stepIndex);
+    } catch (error) {
+      logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
+      return undefined;
+    }
+  }
+
   async loadRecoverableSnapshot(
     workflowsStore: WorkflowsStorage,
     runId: string,
     agentId: string,
     agentName: string,
-  ): Promise<{ snapshot: WorkflowRunState; workflowInput: DurableAgenticWorkflowInput }> {
+  ): Promise<{
+    snapshot: WorkflowRunState;
+    workflowInput: DurableAgenticWorkflowInput;
+    finishPublishedBeforeCrash: boolean;
+    originalSpansEnded: boolean;
+  }> {
     const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
       throw new MastraError({
@@ -795,7 +883,17 @@ export class DurableExecutionEngine {
       });
     }
 
-    return { snapshot, workflowInput };
+    const finishPublishedBeforeCrash = snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+    // Spans from a segment after resume lived only in the lost process.
+    const resumed = Object.values(snapshot.context ?? {}).some(
+      result => result && typeof result === 'object' && 'resumedAt' in result && result.resumedAt != null,
+    );
+    return {
+      snapshot,
+      workflowInput,
+      finishPublishedBeforeCrash,
+      originalSpansEnded: finishPublishedBeforeCrash || resumed,
+    };
   }
 
   async loadSuspendedRequestContextValue(
