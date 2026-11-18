@@ -54,16 +54,17 @@ Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1
 
 | Status | Common codes | Meaning |
 | - | - | - |
-| `400` | `unsupported_model_endpoint` | Invalid request, or the model isn't available on this endpoint. |
+| `400` | `unsupported_model_endpoint` | Malformed JSON or body, or the model isn't available on this endpoint. |
 | `401` | | Missing, invalid, expired, or revoked key. |
 | `402` | `insufficient_credit`, `spend_limit_reached` | Out of credit, or a spend cap was reached. |
 | `403` | `model_not_allowed`, `byok_connection_inactive` | Key or policy doesn't allow the request. |
 | `404` | `model_not_found` | Unknown model ID. |
 | `409` | | A request with the same ID is already in progress. |
 | `413` | | The input exceeds the model's context window. |
-| `429` | `rate_limited` | A rate limit was hit, or spend capacity is held by in-flight requests. Retry after `retry-after`. |
+| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. |
+| `429` | `rate_limit_exceeded`, `provider_rate_limited` | A Gateway or provider rate limit was hit, or spend capacity is held by in-flight requests. Retry after `retry-after`. |
 | `502` | | The provider failed after the request may have been sent. |
-| `503` | `upstream_unavailable` | No route could serve the request. |
+| `503` | `exhausted` | No route could serve the request. |
 | `504` | `deadline_exceeded` | The request timed out. |
 
 Include `x-request-id` when contacting support.
