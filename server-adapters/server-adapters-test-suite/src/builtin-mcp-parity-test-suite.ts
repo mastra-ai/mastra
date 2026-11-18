@@ -360,6 +360,7 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
             'get_thread',
             'get_trace',
             'get_trace_trajectory',
+            'get_working_memory',
             'list_feedback',
             'list_logs',
             'list_messages',
@@ -367,8 +368,6 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
             'list_scores',
             'list_threads',
             'list_traces',
-            'save_messages',
-            'search_memory',
             'update_thread',
           ].sort(),
         );

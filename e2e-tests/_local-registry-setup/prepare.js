@@ -96,6 +96,9 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
 
     stripWorkspaceTrustPolicy(monorepoDir);
 
+    const timestamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+    const snapshotVersion = `0.0.0-${tag}-${timestamp}`;
+
     console.log('Updating workspace dependencies to use * instead of ^');
     await (async function updateWorkspaceDependencies() {
       // Update workspace dependencies to use ^ instead of *
@@ -115,7 +118,10 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         // warns about every mismatched @mastra/* peer, so point internal peers at the snapshot itself.
         for (const peer of Object.keys(parsed?.peerDependencies || {})) {
           if (peer.startsWith('@mastra/') && workspaceNames.has(peer)) {
-            parsed.peerDependencies[peer] = 'workspace:*';
+            // pnpm publish rewrites `workspace:*` to this same version, but only for linked packages; a peer
+            // the workspace keeps unlinked (see overrides in pnpm-workspace.yaml) would fail to resolve.
+            const linked = parsed.dependencies?.[peer] || parsed.devDependencies?.[peer];
+            parsed.peerDependencies[peer] = linked ? 'workspace:*' : snapshotVersion;
           }
         }
 
@@ -139,8 +145,6 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     // Give every publishable package the same snapshot version, matching what
     // `changeset version --snapshot` produced. Internal dependencies are `workspace:`
     // ranges at this point, and pnpm publish rewrites them to this version.
-    const timestamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-    const snapshotVersion = `0.0.0-${tag}-${timestamp}`;
     console.log(`Setting publishable package versions to ${snapshotVersion}`);
     const allPackages = await execAsync('pnpm ls -r --depth -1 --json', {
       cwd: monorepoDir,

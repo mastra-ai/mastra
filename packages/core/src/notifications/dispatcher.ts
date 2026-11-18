@@ -53,20 +53,24 @@ function delayedDeliveryTarget({
   streamOptions,
   requireClaimedOwner,
   scopes,
+  idleBehavior,
 }: {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentSignalIfIdleOptions['streamOptions'];
   requireClaimedOwner: boolean;
   scopes?: string[];
+  /** The originating send asked an idle thread to persist, never wake. */
+  idleBehavior?: 'persist';
 }): SendAgentSignalOptions {
   const scoped = scopes?.length ? { scopes } : {};
-  if (!streamOptions && !requireClaimedOwner) return { resourceId, threadId, ...scoped };
+  if (!streamOptions && !requireClaimedOwner && !idleBehavior) return { resourceId, threadId, ...scoped };
   return {
     resourceId,
     threadId,
     ...scoped,
     ifIdle: {
+      ...(idleBehavior ? { behavior: idleBehavior } : {}),
       ...(requireClaimedOwner ? { requireClaimedOwner: true } : {}),
       ...(streamOptions ? { streamOptions } : {}),
     },
@@ -224,6 +228,7 @@ async function sendNotificationRecord({
     streamOptions,
     requireClaimedOwner: routing?.requireClaimedOwner === true,
     scopes: routing?.scopes,
+    ...(routing?.idleBehavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
   });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
@@ -291,6 +296,11 @@ async function sendNotificationSummary({
         streamOptions: decision.streamOptions,
         requireClaimedOwner,
         scopes: sharedScopes(records),
+        // A summary wakes for the records that asked to wake; only a batch where
+        // every record asked to persist keeps the thread asleep.
+        ...(records.every(record => readNotificationRoutingRequirement(record.metadata)?.idleBehavior === 'persist')
+          ? { idleBehavior: 'persist' as const }
+          : {}),
       });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started; let it

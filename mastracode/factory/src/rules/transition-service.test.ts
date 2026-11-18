@@ -23,8 +23,9 @@ import {
 } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { decisionOvertaken } from './decision-applicability.js';
+import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
@@ -558,6 +559,42 @@ async function ruleDecisionKeys(storage: WorkItemsStorage, orgId: string) {
   return rows.map(row => row.idempotencyKey).filter(key => !key.startsWith('factory-stage:'));
 }
 
+describe('route filing past the first phase', () => {
+  it("jumps the first phase's declared moves only from the first phase", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'yard',
+      title: 'Yard',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'doing' },
+        doing: { title: 'Doing', kind: 'resting', next: 'backlog' },
+        review: { title: 'Review', kind: 'resting' },
+      },
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'route-filing-test',
+      boards: boardRegistryOf([board]),
+    });
+
+    // Filing lands the card the route's way: Backlog declares no move to Review, yet the filing goes.
+    const filed = await createItem(storage, { board: board.id, stages: ['backlog'] });
+    expect(await service.transition({ ...request(filed, { stage: 'review' }), routeFiling: true })).toMatchObject({
+      status: 'accepted',
+      stage: 'review',
+    });
+
+    // A card another actor already moved on follows the board's graph again, filing flag or not —
+    // a stale filing retry must not teleport it from wherever it sits now.
+    const moved = await createItem(storage, { board: board.id, stages: ['doing'], sourceKey: '2' });
+    expect(
+      await service.transition({ ...request(moved, { stage: 'review', identity: 'request-2' }), routeFiling: true }),
+    ).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    expect(await storage.get({ orgId: 'org-1', id: moved.id })).toMatchObject({ stages: ['doing'] });
+  });
+});
+
 describe('FactoryTransitionService', () => {
   it.each(['github-issue', 'slack-thread'] as const)(
     'does not auto-start %s on manual intake entry even with candidate metadata',
@@ -778,6 +815,7 @@ describe('FactoryTransitionService', () => {
       item: { id: item.id, stages: ['planning'] },
     });
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    await finishQueuedRunsForTests(storage);
 
     const moved = await service.transition({
       ...request(
@@ -1781,7 +1819,8 @@ describe('FactoryTransitionService', () => {
     ).resolves.toMatchObject({
       status: 'rejected',
       code: 'invalid_transition',
-      reason: 'The work item belongs to board "release", not "work".',
+      // A person naming another board asks for a cross-board move; here the board does not exist.
+      reason: 'Board "work" is not installed.',
     });
   });
 });
@@ -2113,6 +2152,7 @@ describe('phase semantics', () => {
       });
       assert(triaged.status === 'accepted');
       expect(triaged.decisions[0]).toMatchObject({ role: 'bot', prepareBinding: true });
+      await finishQueuedRunsForTests(storage);
 
       const done = await service.transition({
         ...request(item, { board: board.id, stage: 'done', expectedRevision: triaged.revision, identity: 'human-2' }),
@@ -2389,7 +2429,78 @@ describe('onTransitionCommitted', () => {
       workItemId: item.id,
       fromStage: 'approval',
       toStage: 'shipped',
+      fromBoard: 'release',
+      toBoard: 'release',
     });
+  });
+
+  async function goalSetup(stamp: Record<string, unknown>) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const phases = () => ({
+      inbox: { title: 'Inbox', kind: 'resting' as const, next: 'triage' },
+      triage: { title: 'Triage', kind: 'working' as const, runner: { context: 'triage' }, next: 'inbox' },
+    });
+    const work = defineBoard({ id: 'work', title: 'Work', initialPhase: 'inbox', phases: phases() });
+    const preview = defineBoard({ id: 'preview', title: 'Preview', initialPhase: 'inbox', phases: phases() });
+    const item = await createItem(storage, {
+      board: 'work',
+      stages: ['triage'],
+      metadata: { [PHASE_GOAL_METADATA_KEY]: stamp },
+    });
+    const updateObjectiveOptions = vi.fn();
+    const agent = {
+      getObjective: vi.fn(async () => ({ id: String(stamp.goalId), status: 'active' })),
+      setObjective: vi.fn(),
+      updateObjectiveOptions,
+    };
+    const ender = createPhaseGoalEnder({
+      workItems: storage,
+      agentFor: async () => agent as never,
+      store: async () => undefined,
+    });
+    // Wrapped so a test can await the ender's own run: the service never awaits the hook.
+    const committed = vi.fn(async (args: Parameters<typeof ender>[0]) => {
+      await ender(args);
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'goal-test',
+      boards: boardRegistryOf([work, preview]),
+      onTransitionCommitted: committed,
+    });
+    return { item, service, committed, updateObjectiveOptions };
+  }
+
+  it("ends the old board's phase goal when the card moves to a same-named phase on another board", async () => {
+    // A stamp from before boards were recorded names no board: it was made where the card came from.
+    const { item, service, updateObjectiveOptions } = await goalSetup({
+      phaseKey: 'triage',
+      goalId: 'g1',
+      threadId: 't1',
+      sessionId: 's1',
+    });
+
+    const result = await service.transition(request(item, { board: 'preview', stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    await vi.waitFor(() => expect(updateObjectiveOptions).toHaveBeenCalledWith({ threadId: 't1', status: 'done' }));
+  });
+
+  it("keeps a goal the destination's runner already stamped for the new board", async () => {
+    const { item, service, committed, updateObjectiveOptions } = await goalSetup({
+      phaseKey: 'triage',
+      boardKey: 'preview',
+      goalId: 'g2',
+      threadId: 't2',
+      sessionId: 's2',
+    });
+
+    const result = await service.transition(request(item, { board: 'preview', stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    await vi.waitFor(() => expect(committed).toHaveBeenCalledOnce());
+    await committed.mock.results[0]!.value;
+    expect(updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
   it('says nothing for a rejected transition or a same-stage commit', async () => {
@@ -2473,7 +2584,7 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it('re-reviews from Done with the PR review runner, and supersedes a live pass on re-entry', async () => {
+  it('re-reviews from Done with the PR review runner, and re-enters for a fresh pass once the last one is done', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const done = await prCard(storage, {
       stages: ['done'],
@@ -2490,6 +2601,12 @@ describe('pull request cards on the Work board', () => {
     expect(fromDone.decisions[0]).not.toHaveProperty('cancelInFlight');
 
     const reviewing = (await storage.get({ orgId: 'org-1', id: done.id }))!;
+    // A person cannot restart the pass while it is still queued.
+    await expect(
+      service.transition({ ...request(reviewing, { stage: 'pr-review', identity: 'too-soon' }), reenter: true }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'card_busy' });
+
+    await finishQueuedRunsForTests(storage);
     const again = await service.transition({
       ...request(reviewing, { stage: 'pr-review', identity: 'again' }),
       reenter: true,
@@ -3139,3 +3256,138 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
     });
   },
 );
+
+describe('a person moving a busy card', () => {
+  /** A card a person just moved into Planning: its plan run is queued and nothing has picked it up. */
+  async function queuedCard({ runInFlight = false } = {}) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    let started = false;
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      // The queued run, once picked up, is the one in flight.
+      runInFlight: async () => started && runInFlight,
+    });
+    const created = await createItem(storage, { stages: ['intake'] });
+    await expect(
+      service.transition({
+        ...request(created, { stage: 'planning', identity: 'into-planning' }),
+        cause: 'board_drag',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+    const item = (await storage.get({ orgId: 'org-1', id: created.id }))!;
+    const queued = await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id });
+    started = true;
+    return { storage, service, item, queued };
+  }
+
+  it('refuses a move into a working phase while a run is queued for the card', async () => {
+    const { storage, service, item, queued } = await queuedCard();
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'into-building' }),
+      cause: 'board_drag',
+    });
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'card_busy',
+      reason: "Another run can't start while this card is busy.",
+    });
+    const after = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(after).toMatchObject({ stages: ['planning'], revision: item.revision });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual(queued);
+  });
+
+  it('refuses a move into a working phase while a run is in flight on the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const runInFlight = vi.fn(async () => true);
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, runInFlight });
+    const item = await createItem(storage, { stages: ['planning'] });
+
+    const result = await service.transition({ ...request(item, { stage: 'execute' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(runInFlight).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', workItemId: item.id }));
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual([]);
+  });
+
+  it("refuses re-entering the card's own working phase while it is busy, so the run is not restarted", async () => {
+    const { storage, service, item, queued } = await queuedCard();
+
+    const result = await service.transition({
+      ...request(item, { stage: 'planning', identity: 'reenter' }),
+      cause: 'board_drag',
+      reenter: true,
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id })).toEqual(queued);
+  });
+
+  it('accepts the move once nothing is in flight or queued for the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      runInFlight: async () => false,
+    });
+    const item = await createItem(storage, { stages: ['planning'] });
+
+    await expect(
+      service.transition({ ...request(item, { stage: 'execute' }), cause: 'board_drag' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it.each(['intake', 'done', 'canceled'])(
+    'lets a person move a busy card into %s, which starts no run',
+    async stage => {
+      const { service, item } = await queuedCard({ runInFlight: true });
+
+      await expect(
+        service.transition({ ...request(item, { stage, identity: `into-${stage}` }), cause: 'board_drag' }),
+      ).resolves.toMatchObject({ status: 'accepted', stage });
+    },
+  );
+
+  it("leaves an agent's move of a busy card to the board", async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute', identity: 'agent-handoff' }),
+        actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+        ingress: { type: 'agent', identity: 'agent-handoff' },
+        cause: 'plan approved',
+        planApproved: true,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it("leaves a rule's move of a busy card to the board", async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute' }),
+        actor: { type: 'system', id: 'factory-intake-route' },
+        ingress: { type: 'rule', identity: `work-item:${item.id}:route` },
+        cause: 'route',
+        // Only the plan gate, not the busy rule, holds a rule's move out of Planning.
+        planApproved: true,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it('lets a run start record the card entering its lane while the card is busy', async () => {
+    const { service, item } = await queuedCard({ runInFlight: true });
+
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute', identity: 'start:kickoff-1:transition' }),
+        cause: 'run_start',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+});

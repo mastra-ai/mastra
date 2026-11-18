@@ -34,6 +34,8 @@ Push for the smallest change that fixes the reported problem, with proportionate
 
 ## Checkout
 
+Work in the Target repository's checkout (the Factory environment lists each repository's directory). When the Factory system prompt says this session is filed under another repository, pass the Target repository as `repository` to `source_control_create_change_request`.
+
 1. Fetch the work branch the session is on (`git rev-parse --abbrev-ref HEAD`) from `origin` and reset the checkout to `origin/<branch>`. If it does not exist on `origin`, the builder never pushed: request changes saying so.
 2. Record the full head SHA (`git rev-parse HEAD`). That is the only head you review and test. Determine the base with `git merge-base HEAD origin/<default branch>` and review `base...HEAD`.
 3. The `factory-work-item` signal shows the self-review round (`Self-review rounds used: x of y`), the last self-review verdict with the head it covered, and its findings. On a later round, confirm each earlier blocking finding is fixed on this head. Then look for new problems only in what changed since the previous round, and only for blocking findings or regressions. Do not widen the review or raise follow-ups as required changes. Carry the previous report's unresolved follow-ups into this report's **Follow-ups**, because each verdict replaces the stored report.

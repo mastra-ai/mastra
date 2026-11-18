@@ -1,6 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { AlertTriangleIcon, LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
@@ -24,6 +23,11 @@ import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconLock } from '@/ds/icons/central/IconLock';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { controlIconOnly, controlIconState } from '@/ds/primitives/control-icon';
 import { controlHeight, controlSpacing } from '@/ds/primitives/control-size';
@@ -136,7 +140,7 @@ type ChipContext = {
   draft: boolean;
   /** Filter already removed from the value, playing its exit: segments are inert labels. */
   leaving: boolean;
-  /** The field allows a single operator, so the operator segment is not shown. */
+  /** The field allows a single operator and does not require its label to stay visible. */
   operatorImplied: boolean;
 };
 
@@ -212,8 +216,11 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
-  const validationMessage = !draft && typeof item.value === 'string' ? field?.validateInput?.(item.value) : undefined;
-  const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
+  const validationMessage =
+    !draft && operator?.arity !== 'none' && typeof item.value === 'string'
+      ? field?.validateInput?.(item.value)
+      : undefined;
+  const operatorImplied = field ? !field.alwaysShowOperator && ctx.getFieldOperators(field).length === 1 : false;
   const label = [
     field?.label ?? item.fieldId,
     operatorImplied ? '' : (operator?.label ?? item.operatorId),
@@ -241,7 +248,7 @@ export function FilterBarChip({
       <FilterBarChipValue />
       {validationMessage && (
         <span className={cn(segmentClass, 'text-destructive-foreground')} title={validationMessage}>
-          <AlertTriangleIcon aria-hidden="true" />
+          <IconExclamationTriangle aria-hidden="true" />
         </span>
       )}
       {removable && <FilterBarChipRemove />}
@@ -281,7 +288,7 @@ export function FilterBarChip({
             className={cn(segmentClass, 'pr-0 text-muted-foreground [--filter-bar-segment-padding:0.5rem_0]')}
             title="This filter is locked"
           >
-            <LockIcon />
+            <IconLock />
           </span>
         )}
         {content}
@@ -323,7 +330,7 @@ type SegmentSearchInputProps<T> = {
 /** The search/free-text input at the top of a segment popup. */
 function SegmentSearchInput<T>({
   placeholder,
-  icon: Icon = SearchIcon,
+  icon: Icon = IconMagnifyingGlass,
   inputMode,
   onKeyDown,
 }: SegmentSearchInputProps<T>) {
@@ -378,7 +385,11 @@ function SegmentCombobox<T>({
   if (chip.readOnly || chip.draft || chip.leaving) {
     return (
       <span
-        className={cn(segmentClass, isField && 'text-foreground')}
+        className={cn(
+          segmentClass,
+          isField && 'text-foreground',
+          segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+        )}
         style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
         title={fullLabel}
       >
@@ -422,7 +433,11 @@ function SegmentCombobox<T>({
             tabIndex={segment === 'value' ? 0 : -1}
             aria-label={`${ariaLabel}: ${fullLabel}`}
             title={fullLabel}
-            className={cn(editableSegmentClass, isField && 'text-foreground')}
+            className={cn(
+              editableSegmentClass,
+              isField && 'text-foreground',
+              segment === 'operator' && chip.field?.alwaysShowOperator && 'shrink-0',
+            )}
             style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
         }
@@ -647,7 +662,7 @@ function FreeTextValueInput({
   return (
     <>
       <SegmentSearchInput<FilterBarOption>
-        icon={step.hasSuggestions ? SearchIcon : PencilIcon}
+        icon={step.hasSuggestions ? IconMagnifyingGlass : IconPencil}
         inputMode={inputMode}
         placeholder={freeTextPlaceholder(step, noun)}
         onKeyDown={(event, highlighted) => {
@@ -713,7 +728,7 @@ export function FilterBarChipRemove() {
     // Keep the × on screen so it folds away with the other segments.
     return (
       <span className={removeSegmentClass}>
-        <XIcon />
+        <IconCrossMedium />
       </span>
     );
   }
@@ -732,7 +747,7 @@ export function FilterBarChipRemove() {
         ctx.focusAfterRemove(chip.index);
       }}
     >
-      <XIcon />
+      <IconCrossMedium />
     </button>
   );
 }

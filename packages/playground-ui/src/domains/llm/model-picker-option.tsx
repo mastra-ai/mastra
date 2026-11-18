@@ -1,8 +1,8 @@
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ModelPickerModel, ModelPickerProvider } from './model-picker-types';
 import { Badge } from '@/ds/components/Badge';
 import { CommandItem } from '@/ds/components/Command';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { formatModelName } from '@/utils/model';
 
 interface ModelPickerOptionProps {
@@ -39,7 +39,7 @@ export function ModelPickerOption({
           Default
         </Badge>
       ) : null}
-      {selected ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+      {selected ? <IconCheckmark2Medium aria-hidden className="ml-auto shrink-0" /> : null}
     </CommandItem>
   );
 }

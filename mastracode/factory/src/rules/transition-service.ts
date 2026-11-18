@@ -1,3 +1,4 @@
+import { BUSY_CARD_MOVE_REFUSAL, phaseMayStartRun } from '../boards/busy-card.js';
 import { DEFAULT_BOARD_ID, REVIEW_CONTEXT } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
 import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
@@ -11,6 +12,7 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { isRunBearingDecision } from './run-bearing.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleActor,
@@ -66,7 +68,28 @@ export interface FactoryTransitionRequest {
    * may name any phase on the card's board regardless of the board's next phases, working ones
    * included. The phase's `autoStart` and the dispatcher's approval check decide whether its run starts.
    */
-  eventRoute?: { routeId: string };
+  eventRoute?: {
+    routeId: string;
+  };
+  /**
+   * The move answers an outside author's pull request event. The move stands — a rule or a
+   * provider's default decided it — but any run the destination phase queues is compute and code
+   * execution on that author's say-so: it must wait for a person, however the phase starts.
+   */
+  untrustedPullRequestEvent?: boolean;
+  /**
+   * Internal: intake filing moves a fresh card from the board's first phase to the phase its
+   * route names. Like `eventRoute` the target is admin-authored, so the first phase's next
+   * phases don't restrict it — but only while the card still sits in that first phase; every
+   * other check (phase, card shape, consent) still applies.
+   */
+  routeFiling?: boolean;
+  /**
+   * Internal, with `eventRoute` only: the installed board the route moves the card to, at `stage`.
+   * `board` stays the card's current board. The target board's next phases don't restrict the
+   * move; its phase, card shape and policy checks still apply, and its phase's runner starts.
+   */
+  toBoard?: string;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -105,6 +128,8 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     fromStage: string | undefined;
     toStage: string;
+    fromBoard: string;
+    toBoard: string;
   }) => Promise<void> | void;
   /**
    * Called after a transition commits out of the last phase that runs in a
@@ -128,6 +153,12 @@ export interface FactoryTransitionServiceOptions {
    * `onTerminalStage` or `onContextLeft` before returning (default 30s). The
    * cleanup continues in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
+  /**
+   * Whether a run is in flight on the card's sessions. With a run queued for the card, it makes the
+   * card busy, and a person's move into a phase that may start a run is refused while it is.
+   * Without it only a queued run counts.
+   */
+  runInFlight?: (card: { orgId: string; factoryProjectId: string; workItemId: string }) => Promise<boolean>;
   /**
    * Called after a person moves a Work card from Intake or Triage into Planning or
    * Building, which approves the work. Fire-and-forget: failures are swallowed, the committed transition never
@@ -208,11 +239,14 @@ interface TransitionConsentOptions {
  * Whether moving a card from `from` to `to` hands it to the board's builder for the first time: `to`
  * runs in the seat of the board's build phase ({@link boardFlow}), and `from` is a resting phase or a
  * working phase of another seat that is no review (Work: Intake or Triage into Planning or Building).
+ * On a cross-board move `from` is the source board's phase — a same-named destination phase is a
+ * different one — while the build seat is always the destination board's. Roles compare across
+ * boards because they are names.
  */
-function acceptsWork(board: InstalledBoard, from: string, to: string): boolean {
+function acceptsWork(board: InstalledBoard, fromBoard: InstalledBoard, from: string, to: string): boolean {
   const buildRole = boardFlow(board).buildRole;
   if (!buildRole || board.roleForPhase(to) !== buildRole) return false;
-  const fromPhase = board.phases[from];
+  const fromPhase = fromBoard.phases[from];
   if (!fromPhase || fromPhase.kind === 'terminal') return false;
   if (fromPhase.kind === 'resting') return true;
   const fromRole = fromPhase.runner.context;
@@ -252,12 +286,24 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
 // A run that starts after its own agent's move is queued onto that agent's run instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
-  if (request.cause === 'run_start') return true;
+  // A run-start cause marks an agent landing the card where its run already is — on its own
+  // board. A cross-board request is never that, and its destination runner still queues.
+  const sameBoard = request.toBoard === undefined || request.toBoard === request.board;
+  if (request.cause === 'run_start' && sameBoard) return true;
   if (decision.type === 'invokeSkill' && decision.startsAfterOwnMove === true) return false;
   return request.actor.type === 'agent' && request.actor.role === decision.role;
 }
 
-function stageTransitionMessage(fromStage: FactoryRuleStage, toStage: FactoryRuleStage): string {
+// On a board change the phase names alone can read as no move at all ("from triage to triage"),
+// so the notice names both boards whenever the card crosses them.
+function stageTransitionMessage(
+  fromStage: FactoryRuleStage,
+  toStage: FactoryRuleStage,
+  boards?: { from: string; to: string },
+): string {
+  if (boards) {
+    return `This work was moved from the ${fromStage} stage on the ${boards.from} board to the ${toStage} stage on the ${boards.to} board.`;
+  }
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
 
@@ -295,6 +341,7 @@ export class FactoryTransitionService {
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
   readonly #audit: AuditRecorder | undefined;
+  readonly #runInFlight: FactoryTransitionServiceOptions['runInFlight'];
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#configVersion = options.configVersion;
@@ -306,6 +353,7 @@ export class FactoryTransitionService {
     this.#onContextLeft = options.onContextLeft;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
+    this.#runInFlight = options.runInFlight;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -333,6 +381,15 @@ export class FactoryTransitionService {
       await this.#recordTransition(request, undefined, rejection);
       return rejection;
     }
+    // A person naming another board moves the card there: the same cross-board commit a
+    // card-move rule makes, under the caller's own name. Runs the old board queued for the
+    // card are superseded inside the commit itself; what this move queues stays.
+    if (isHumanTransition(request) && !request.eventRoute && request.toBoard === undefined) {
+      const itemBoard = boardForWorkItem(item);
+      if (request.board !== itemBoard) {
+        request = { ...request, board: itemBoard, toBoard: request.board };
+      }
+    }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
@@ -348,7 +405,10 @@ export class FactoryTransitionService {
     if (!onTransitionCommitted || result.status !== 'accepted') return;
     // Board-neutral: `currentStage` only knows the built-in rule stages.
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.stage === fromStage) return;
+    // A board change is a stage change even under the same phase name: on another board that
+    // name is a different phase, and the one the card left must end its goal.
+    const movedBoards = request.toBoard !== undefined && request.toBoard !== request.board;
+    if (result.stage === fromStage && !movedBoards) return;
     // Inside the chain so a synchronous throw is isolated the same way an async rejection is.
     void Promise.resolve()
       .then(() =>
@@ -358,6 +418,8 @@ export class FactoryTransitionService {
           workItemId: item.id,
           fromStage,
           toStage: result.stage,
+          fromBoard: request.board,
+          toBoard: request.toBoard ?? request.board,
         }),
       )
       .catch(error => {
@@ -375,7 +437,9 @@ export class FactoryTransitionService {
     // Board-neutral, like the stage notification: `currentStage` only knows the
     // built-in rule stages and would drop custom-board phases.
     const from = item && item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
+    // A board-only move keeps the phase name yet moves the card: it is audited like any move.
+    const movedBoards = request.toBoard !== undefined && request.toBoard !== request.board;
+    if (result.status === 'accepted' && result.stage === from && !request.reenter && !movedBoards) return;
     const outcome =
       result.status === 'accepted'
         ? { action: 'factory.work_item.stage_moved' as const, to: result.stage, revision: result.revision }
@@ -402,6 +466,9 @@ export class FactoryTransitionService {
           cause: request.cause,
           configVersion: this.#configVersion,
           ...(from ? { from } : {}),
+          ...(request.toBoard !== undefined && request.toBoard !== request.board
+            ? { fromBoard: request.board, toBoard: request.toBoard }
+            : {}),
           ...(request.reenter ? { reenter: true } : {}),
           ...detail,
         },
@@ -446,8 +513,8 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    const board = boards.get(request.board);
-    if (!board) {
+    const fromBoard = boards.get(request.board);
+    if (!fromBoard) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -455,8 +522,26 @@ export class FactoryTransitionService {
         `Board "${request.board}" is not installed.`,
       );
     }
+    if (request.toBoard !== undefined && !request.eventRoute && !isHumanTransition(request)) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Only a card-move rule or a person can move a card to another board.',
+      );
+    }
+    const targetBoard = request.toBoard ?? request.board;
+    const board = targetBoard === request.board ? fromBoard : boards.get(targetBoard);
+    if (!board) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        `Board "${targetBoard}" is not installed.`,
+      );
+    }
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
-    if (!fromStage || !Object.prototype.hasOwnProperty.call(board.phases, fromStage)) {
+    if (!fromStage || !Object.prototype.hasOwnProperty.call(fromBoard.phases, fromStage)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -477,10 +562,24 @@ export class FactoryTransitionService {
     if (cardShapeRejection) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', cardShapeRejection);
     }
+    // Filing jumps the first phase's declared edges only from that phase: a card another actor
+    // moved in between follows the board's graph again.
+    const filesPastEdges = request.routeFiling === true && fromStage === fromBoard.initialPhase;
     if (
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
-      (!request.eventRoute && !board.allowsTransition(fromStage, request.stage))
+      (!request.eventRoute &&
+        board === fromBoard &&
+        !filesPastEdges &&
+        !board.allowsTransition(fromStage, request.stage))
     ) {
+      if (board !== fromBoard) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `The ${board.name} board has no phase ${request.stage}.`,
+        );
+      }
       const nextStages = [...new Set((board.transitions[fromStage] ?? []).map(transition => transition.to))];
       const nextStagesReason =
         nextStages.length > 0
@@ -494,8 +593,47 @@ export class FactoryTransitionService {
       );
     }
 
+    // A person's cross-board move takes live work, not finished cards, and lands it where work can
+    // continue: a finished card stays where it finished, and finishing belongs to the card's own board.
+    const crossesBoards = board !== fromBoard;
+    if (crossesBoards && !request.eventRoute) {
+      if (fromBoard.isTerminal(fromStage)) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `The work item is finished on the ${fromBoard.name} board and stays there.`,
+        );
+      }
+      if (board.isTerminal(request.stage)) {
+        return this.#commitRejection(
+          request,
+          transitionId,
+          'invalid_transition',
+          `A card finishes on its own board; move it to a non-terminal ${board.name} phase instead.`,
+        );
+      }
+    }
+
+    if (
+      isHumanTransition(request) &&
+      !request.initialEntry &&
+      // Leaving the board strands whatever run is queued or underway, so every cross-board move of
+      // a busy card is refused — whatever cause it names, even into a phase sharing the old one's
+      // name or a phase that starts nothing itself.
+      (crossesBoards ||
+        (request.cause !== 'run_start' &&
+          (fromStage !== request.stage || request.reenter === true) &&
+          phaseMayStartRun(board.phaseKind(request.stage)))) &&
+      (await this.#cardBusy(request))
+    ) {
+      return this.#commitRejection(request, transitionId, 'card_busy', BUSY_CARD_MOVE_REFUSAL);
+    }
+
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
-    const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
+    // Crossing boards is always a move: a same-named phase on another board is a different phase.
+    const humanMove =
+      request.actor.type === 'human' && (fromStage !== request.stage || crossesBoards) && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
     const entersWorking = board.isWorking(request.stage);
     const seatRole = board.roleForPhase(request.stage);
@@ -521,7 +659,7 @@ export class FactoryTransitionService {
         acceptedAt: item.acceptedAt,
         metadata: item.metadata,
       },
-      board: request.board,
+      board: board.id,
       itemRevision: item.revision,
       source,
       fromStage,
@@ -539,7 +677,7 @@ export class FactoryTransitionService {
           // A phase with an exit tool holds the card until the tool succeeds (for submit_plan, with
           // an approved plan; autoApprove only decides whether it approves itself). Then the agent,
           // or the board's own rule for the tool, moves the card. A person can move it any time.
-          const fromPhase = board.phases[fromStage];
+          const fromPhase = fromBoard.phases[fromStage];
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
@@ -581,15 +719,33 @@ export class FactoryTransitionService {
           const run = phaseRunDecision(board, request.stage, contextBase, {
             initialEntry: request.initialEntry,
             reenter: request.reenter,
+            boardEntry: crossesBoards,
           });
           const validated = validateFactoryRuleDecisions(run ? [run] : [], contextBase.causalChain.length).filter(
             decision => {
-              assertFactoryDecisionTarget(decision, boards, itemBoard);
+              assertFactoryDecisionTarget(decision, boards, board.id);
               return !(startsRun(decision) && runAlreadyUnderway(request, decision));
             },
           );
+          // An outside author's pull request event may move the card, but the run it queues is
+          // compute and code execution on that author's say-so: it waits for a person, even in a
+          // phase that starts on its own.
+          if (request.untrustedPullRequestEvent) {
+            for (const decision of validated) {
+              if (
+                decision.type === 'invokeSkill' ||
+                (decision.type === 'sendMessage' && decision.prepareBinding === true)
+              ) {
+                decision.untrustedPullRequestEvent = true;
+              }
+            }
+          }
           if (humanMove) {
-            const message = stageTransitionMessage(fromStage, request.stage);
+            const message = stageTransitionMessage(
+              fromStage,
+              request.stage,
+              crossesBoards ? { from: fromBoard.name, to: board.name } : undefined,
+            );
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
               skill.precedingMessage = message;
@@ -609,7 +765,7 @@ export class FactoryTransitionService {
           return {
             outcome: 'accepted' as const,
             intents: {
-              accepted: isHumanTransition(request) && acceptsWork(board, fromStage, request.stage),
+              accepted: isHumanTransition(request) && acceptsWork(board, fromBoard, fromStage, request.stage),
             },
             decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };
@@ -633,6 +789,16 @@ export class FactoryTransitionService {
       boards,
       fromStage,
     );
+  }
+
+  /** A run in flight on the card's sessions, or one queued for it: what the board shows as busy. */
+  async #cardBusy(request: FactoryTransitionRequest): Promise<boolean> {
+    const queued = await this.#storage.listDeferredDecisions(request.orgId, request.factoryProjectId, {
+      statuses: ['pending', 'retry', 'leased'],
+      workItemId: request.workItemId,
+    });
+    if (queued.some(decision => isRunBearingDecision(decision.decision))) return true;
+    return (await this.#runInFlight?.(request)) ?? false;
   }
 
   async #commitRejection(
@@ -669,9 +835,11 @@ export class FactoryTransitionService {
       workItemId: request.workItemId,
       expectedRevision: request.expectedRevision,
       destinationStage: request.stage,
+      ...(request.toBoard !== undefined && request.toBoard !== request.board
+        ? { destinationBoard: request.toBoard }
+        : {}),
       actorId: actorId(request.actor),
-      ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
-      configVersion: this.#configVersion,
+      ingress: { identity: request.ingress.identity, transitionId },
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
     });
@@ -703,8 +871,9 @@ export class FactoryTransitionService {
         });
     }
     // Only an installed board's declaration releases resources; an unknown board or phase never does.
-    const board = result.status === 'accepted' ? boards?.get(request.board) : undefined;
+    const board = result.status === 'accepted' ? boards?.get(request.toBoard ?? request.board) : undefined;
     if (board && result.status === 'accepted') {
+      const crossesBoards = request.toBoard !== undefined && request.toBoard !== request.board;
       const hooks = {
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
@@ -716,10 +885,12 @@ export class FactoryTransitionService {
         const onTerminalStage = this.#onTerminalStage;
         if (onTerminalStage) await this.#bounded(() => onTerminalStage({ ...hooks, stage: result.stage }));
       } else if (fromStage !== undefined && this.#onContextLeft) {
-        const context = board.roleForPhase(fromStage);
+        const context = boards?.get(request.board)?.roleForPhase(fromStage);
         const toContext = board.roleForPhase(result.stage);
         const onContextLeft = this.#onContextLeft;
-        if (context !== undefined && context !== toContext) {
+        // Leaving the board leaves its context even under the same role name; the hook keeps a
+        // session the card's new phase still holds.
+        if (context !== undefined && (crossesBoards || context !== toContext)) {
           await this.#bounded(() => onContextLeft({ ...hooks, context, toContext }));
         }
       }

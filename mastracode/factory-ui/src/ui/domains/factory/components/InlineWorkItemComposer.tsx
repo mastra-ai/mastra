@@ -3,13 +3,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, X } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useRef, useState } from 'react';
 
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
 interface InlineWorkItemComposerProps {
   stage: BoardStageId;
@@ -96,7 +97,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           onClick={close}
           disabled={submitting}
         >
-          <X aria-hidden />
+          <IconCrossMedium aria-hidden />
         </Button>
         <Button
           type="submit"
@@ -105,7 +106,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           aria-label={`Add work item to ${stageLabel}`}
           disabled={!trimmedTitle || submitting}
         >
-          {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <Check aria-hidden />}
+          {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <IconCheckmark2Medium aria-hidden />}
         </Button>
       </div>
       {error ? (

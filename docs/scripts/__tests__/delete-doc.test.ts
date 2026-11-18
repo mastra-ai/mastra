@@ -523,6 +523,7 @@ describe('deleteDocument', () => {
     vi.spyOn(fs, 'writeFile').mockImplementation(async (...args) => {
       if (!failedOnce && String(args[0]).endsWith('old-page-link.ts')) {
         failedOnce = true
+        await originalWrite(...args)
         throw new Error('JS link write failed')
       }
       return await originalWrite(...args)
@@ -537,6 +538,22 @@ describe('deleteDocument', () => {
     const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
     expect(result.success).toBe(true)
     expect(await fixture.read('src/components/old-page-link.ts')).toBe("export const OLD_PAGE = '/docs/replacement'\n")
+  })
+
+  test('percent-encodes quotes in an external replacement so quoted routes stay valid', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({
+      'src/components/old-page-link.ts': "export const OLD_PAGE = '/docs/old/page'\n",
+    })
+    process.chdir(fixture.tempDir)
+
+    const result = await deleteDocument('/docs/old/page', "https://example.org/user's-guide", { verbose: false })
+
+    expect(result.success).toBe(true)
+    expect(await fixture.read('src/components/old-page-link.ts')).toBe(
+      "export const OLD_PAGE = 'https://example.org/user%27s-guide'\n",
+    )
   })
 
   test('reports both the original error and rollback failures', async () => {

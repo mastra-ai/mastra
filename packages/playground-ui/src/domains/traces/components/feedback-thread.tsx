@@ -1,5 +1,5 @@
-import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
-import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
+import type { FeedbackItem } from '@mastra/client-js';
+import type { FeedbackListItem, FeedbackListResponse } from '@mastra/react/hooks/feedback';
 import { useState } from 'react';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
@@ -23,11 +23,18 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { formatDate } from '@/utils/date-format';
 
 type FeedbackThreadProps = {
-  feedbackData?: ListFeedbackResponse | null;
+  /** Rows flagged `isPending` are not stored yet: they show "Sending…" and get no actions. */
+  feedbackData?: FeedbackListResponse | null;
   isLoadingFeedbackData?: boolean;
   onPageChange?: (page: number) => void;
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
@@ -67,7 +74,7 @@ function formatBody(fb: FeedbackItem): string {
 
 type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
   variant: CommentVariant;
-  items: FeedbackItem[];
+  items: FeedbackListItem[];
   onRequestDelete?: (feedbackId: string) => void;
   isDeleting: boolean;
 };
@@ -89,16 +96,23 @@ function FeedbackItems({
       <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
-    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed');
-    const canDelete = Boolean(onRequestDelete && feedbackId);
+    // A pending comment has no stored record yet, so there is nothing to review or delete.
+    const status = fb.isPending ? (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
+        Sending…
+      </Txt>
+    ) : (
+      <FeedbackReviewStatusBadge status={fb.reviewStatus} />
+    );
+    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && !fb.isPending && fb.reviewStatus !== 'reviewed');
+    const canDelete = Boolean(onRequestDelete && feedbackId && !fb.isPending);
     const actions = feedbackId && (canMarkReviewed || canDelete) && (
       <CommentItemActions>
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
               <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
-                <EllipsisIcon />
+                <IconDotGrid1x3Horizontal />
               </Button>
             }
           />
@@ -109,7 +123,7 @@ function FeedbackItems({
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
                 <Icon size="xs">
-                  <ClipboardCheck />
+                  <IconClipboard2 />
                 </Icon>
                 Mark reviewed
               </DropdownMenu.Item>
@@ -117,7 +131,7 @@ function FeedbackItems({
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
                 <Icon size="xs">
-                  <Trash2 />
+                  <TrashIcon />
                 </Icon>
                 Delete feedback
               </DropdownMenu.Item>
@@ -229,7 +243,7 @@ export function FeedbackThread({
           />
           <InputGroupAddon align="inline-end">
             <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
-              <ArrowUp />
+              <IconArrowUp />
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -264,7 +278,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
-            icon={<ChevronLeft />}
+            icon={<IconChevronLeftMedium />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -273,7 +287,7 @@ export function FeedbackThread({
             Previous
           </Button>
           <Button
-            icon={<ChevronRight />}
+            icon={<IconChevronRightMedium />}
             size="sm"
             variant="ghost"
             disabled={!hasMore}
@@ -299,7 +313,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<TrashIcon />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

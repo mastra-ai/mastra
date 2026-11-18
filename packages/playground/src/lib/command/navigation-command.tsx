@@ -11,8 +11,18 @@ import {
 } from '@mastra/playground-ui/components/CommandPalette';
 import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconChip } from '@mastra/playground-ui/icons/central/IconChip';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconLayersThree } from '@mastra/playground-ui/icons/central/IconLayersThree';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconSidebarSimpleLeftWide } from '@mastra/playground-ui/icons/central/IconSidebarSimpleLeftWide';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgents } from '@mastra/react/hooks/agents';
@@ -20,19 +30,7 @@ import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useProcessors } from '@mastra/react/hooks/processors';
 import { useTools } from '@mastra/react/hooks/tools';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import {
-  Cpu,
-  EyeIcon,
-  GaugeIcon,
-  Layers3Icon,
-  PackageIcon,
-  PanelLeftIcon,
-  RouteIcon,
-  SearchIcon,
-  SlidersHorizontalIcon,
-} from 'lucide-react';
 import React from 'react';
-
 import { useNavigationCommand } from './use-navigation-command';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
@@ -139,7 +137,7 @@ const CommandResults = ({
           sidebar.toggleSidebar();
           closeCommand();
         }}
-        icon={<PanelLeftIcon />}
+        icon={<IconSidebarSimpleLeftWide />}
         title="Toggle sidebar"
         subtitle="Studio layout"
       />
@@ -295,7 +293,7 @@ const ProcessorResults = ({
             key={processor.id}
             value={`processor ${displayName} ${processor.id} ${targetPath}`}
             onSelect={() => handleSelect(targetPath)}
-            icon={<Cpu />}
+            icon={<IconChip />}
             title={displayName}
             subtitle={processor.isWorkflow ? 'Workflow processor' : 'Processor'}
             path={targetPath}
@@ -357,7 +355,7 @@ const ObservabilityResults = ({
         <CommandPaletteItem
           value="observability traces telemetry signals /traces"
           onSelect={() => handleSelect('/traces')}
-          icon={<EyeIcon />}
+          icon={<IconEyeOpen />}
           title="Traces"
           subtitle="Runtime traces"
           path="/traces"
@@ -366,7 +364,7 @@ const ObservabilityResults = ({
         <CommandPaletteItem
           value="metrics usage latency performance tokens /metrics"
           onSelect={() => handleSelect('/metrics')}
-          icon={<GaugeIcon />}
+          icon={<IconGauge />}
           title="Metrics"
           subtitle="Runtime metrics"
           path="/metrics"
@@ -375,7 +373,7 @@ const ObservabilityResults = ({
         <CommandPaletteItem
           value="logs events runtime /logs"
           onSelect={() => handleSelect('/logs')}
-          icon={<EyeIcon />}
+          icon={<IconEyeOpen />}
           title="Logs"
           subtitle="Runtime logs"
           path="/logs"
@@ -393,7 +391,7 @@ const ObservabilityResults = ({
                 key={id}
                 value={`${agent.name} ${id} traces agent observability telemetry`}
                 onSelect={() => handleSelect(path)}
-                icon={<EyeIcon />}
+                icon={<IconEyeOpen />}
                 title={agent.name}
                 subtitle="Agent traces"
                 path={path}
@@ -414,7 +412,7 @@ const ObservabilityResults = ({
                 key={id}
                 value={`${workflow.name} ${id} traces workflow observability telemetry`}
                 onSelect={() => handleSelect(path)}
-                icon={<EyeIcon />}
+                icon={<IconEyeOpen />}
                 title={workflow.name}
                 subtitle="Workflow traces"
                 path={path}
@@ -450,7 +448,7 @@ const EvaluationResults = ({
             key={id}
             value={`scorer score evaluation ${name} ${id} ${paths.scorerLink(id)}`}
             onSelect={() => handleSelect(paths.scorerLink(id))}
-            icon={<GaugeIcon />}
+            icon={<IconGauge />}
             title={name}
             subtitle="Evaluation scorer"
             path={paths.scorerLink(id)}
@@ -524,7 +522,7 @@ export const NavigationCommand = () => {
             {
               name: 'Templates',
               url: '/templates',
-              Icon: PackageIcon,
+              Icon: IconPackage,
               isOnMastraPlatform: false,
             },
           ]
@@ -544,14 +542,14 @@ export const NavigationCommand = () => {
     pathCount + agentEntries.length + workflowEntries.length + toolingCount + evaluationCount + observabilityCount;
 
   const scopeOptions: ScopeOption[] = [
-    { id: 'all', label: 'All', icon: <SearchIcon />, count: allCount },
-    { id: 'paths', label: 'Paths', icon: <RouteIcon />, count: pathCount },
+    { id: 'all', label: 'All', icon: <IconMagnifyingGlass />, count: allCount },
+    { id: 'paths', label: 'Paths', icon: <IconDirection1 />, count: pathCount },
     { id: 'agents', label: 'Agents', icon: <AgentIcon />, count: agentEntries.length },
     { id: 'workflows', label: 'Workflows', icon: <WorkflowIcon />, count: workflowEntries.length },
-    { id: 'tooling', label: 'Tooling', icon: <Layers3Icon />, count: toolingCount },
-    { id: 'evaluation', label: 'Evaluation', icon: <GaugeIcon />, count: evaluationCount },
-    { id: 'observability', label: 'Intelligence', icon: <EyeIcon />, count: observabilityCount },
-    { id: 'settings', label: 'Studio', icon: <SlidersHorizontalIcon />, count: settingsCount },
+    { id: 'tooling', label: 'Tooling', icon: <IconLayersThree />, count: toolingCount },
+    { id: 'evaluation', label: 'Evaluation', icon: <IconGauge />, count: evaluationCount },
+    { id: 'observability', label: 'Intelligence', icon: <IconEyeOpen />, count: observabilityCount },
+    { id: 'settings', label: 'Studio', icon: <IconSettingsSliderHor />, count: settingsCount },
   ];
 
   const showPaths = activeScope === 'all' || activeScope === 'paths';

@@ -8,7 +8,7 @@ import {
   SettingsNoticeRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { Plus, RotateCcw } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { useRef, useState } from 'react';
 
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
@@ -19,6 +19,7 @@ import type { RepositoryProviders } from '../../settings/components/environment/
 import { useEnvironmentSave } from '../../settings/components/environment/useEnvironmentSave';
 import type { FactoryProject } from '../services/github';
 import { AddRepositoryPicker } from './AddRepositoryPicker';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject }) {
   const sidePanel = useSidePanelDrawer();
@@ -37,7 +38,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const addRepository = (
     <DrawerTrigger
       render={
-        <Button ref={addButton} type="button" size="sm" icon={<Plus />} disabled={mutationPending}>
+        <Button ref={addButton} type="button" size="sm" icon={<IconPlusMedium />} disabled={mutationPending}>
           Add repository
         </Button>
       }
@@ -73,7 +74,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<RotateCcw />}
+                  icon={<IconArrowRotateCounterClockwise />}
                   disabled={environmentQuery.isFetching}
                   onClick={() => void environmentQuery.refetch()}
                 >

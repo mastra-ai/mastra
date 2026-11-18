@@ -48,7 +48,7 @@ const text = await output.text
 cleanup()
 ```
 
-### Plain Agent stream configuration
+### Plain agent stream configuration
 
 The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
 
@@ -123,6 +123,14 @@ Returns: `DurableAgent`
     description:
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`. Pass a predicate that includes `running` to keep crash-recovery checkpoints for manual `listActiveRuns()` / `recoverActiveRuns()` without enabling automatic recovery. Mastra logs a warning when a predicate excludes `suspended` or `paused`, or excludes `running` while `recovery.durableAgents` is `'auto'`.",
   },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
+  },
 ]}
 />
 
@@ -182,6 +190,14 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     isOptional: true,
     description:
       'Accepted for API symmetry with `createDurableAgent`, but ignored: the evented engine requires the full snapshot set (`pending`, `paused`, `suspended`, `running`) because the initial `running` write creates the base row that suspend-merges and multi-worker coordination build on. A warning is logged if set.',
+  },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
   },
 ]}
 />
@@ -246,6 +262,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     isOptional: true,
     description:
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`.",
+  },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description: 'Experimental. How new runs of this agent are stored. See `storageVersion` on `createDurableAgent`.',
+    defaultValue: '1',
   },
   {
     name: 'cleanupTimeoutMs',
@@ -349,7 +372,7 @@ A failed cache write loses only that event from the cache. It has no `index`, an
 
 An evented agent (`createEventedAgent()`) on a cross-process PubSub, such as Redis Streams, can use the default in-memory server cache when its steps run in the process that started the run. That process numbers the events. Use a shared cache such as `RedisServerCache` on the `Mastra` instance when steps run in another process, such as a dedicated worker started with `workers: true`. That process can't share the in-memory counter, so its events aren't numbered and an offset can't skip them. Mastra logs a warning in the worker when this happens. Also use a shared cache when an observer reconnects through another process, such as a different server replica, because it can't replay from the starting process's in-memory cache.
 
-By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+By default `observe()` waits indefinitely for events. If the process running the run dies, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
 ```typescript
 const { output } = await durableAgent.observe(runId, {
@@ -417,7 +440,7 @@ Returns: `boolean`. `true` when this process aborted the run locally or can see 
 
 #### `abortThreadStream({ threadId, resourceId?, expectedRunId? })`
 
-Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
+Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. When this process runs the thread's active run, the abort applies here. When this process has observed the run through `subscribeToThread()`, the abort request is published to the process executing the run, and nothing stops in this process. When the process never saw the run, it looks the run up in the background through the thread's lease and asks the process executing it to stop, publishing the request over the shared PubSub. That lookup runs asynchronously. The method returns before the lookup finishes. The server route [`POST /agents/:agentId/threads/abort`](/reference/server/routes#thread-cancellation-routes) awaits the lookup when the abort wasn't resolved in this process, which is how it reports whether a run on another process was asked to stop.
 
 Pass `expectedRunId` when the request must only stop a specific run. If another queued run becomes active before the request is handled, the method returns `false` without aborting the successor. Omit `expectedRunId` to abort whichever run is active when the request is handled.
 
@@ -429,7 +452,7 @@ const aborted = durableAgent.abortThreadStream({
 })
 ```
 
-Returns: `boolean`. `false` when this process has no active run recorded for the thread or the active run doesn't match `expectedRunId`. No abort request is sent in either case.
+Returns: `boolean`. `true` when this process aborted the run, or when the abort request was published to the process executing it. A published request doesn't confirm that the other process stopped the run. `false` is this process's own result: it had no run of the thread's to stop, the active run didn't match `expectedRunId`, or `localOnly: true` kept the abort local and left a run owned by another process alone. An `expectedRunId` mismatch and `localOnly: true` leave the run running by design. Otherwise `false` doesn't rule out a forwarded abort: the background lookup still publishes an abort request to the process holding the lease when it finishes, or finds nothing to publish. A failed lookup or publish is logged as a warning through the Mastra logger. Use the thread-abort route above when you need the forwarded outcome reported.
 
 ### Recovery
 

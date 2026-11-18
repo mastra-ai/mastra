@@ -65,6 +65,31 @@ describe('invocation ownership observation', () => {
     expect(observe).toHaveBeenCalledOnce();
   });
 
+  it('leaves a slow local read to the fence instead of a deadline', async () => {
+    let lose!: (error: DurableExecutionFenceError) => void;
+    const ownership = guard({
+      details,
+      observe: () => new Promise(() => {}),
+      subscribe: listener => {
+        lose = listener;
+        return () => {};
+      },
+    });
+    let outcome: unknown = 'pending';
+    const checked = ownership.check().then(
+      () => (outcome = 'resolved'),
+      error => (outcome = error),
+    );
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+    expect(ownership.isLost()).toBe(false);
+    expect(outcome).toBe('pending');
+
+    lose(superseded());
+    await checked;
+    expect(outcome).toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+
   it.each(['initial', 'periodic', 'final'])('bounds a hung %s read and ignores its late completion', async boundary => {
     let complete!: () => void;
     const hung = new Promise<void>(resolve => {

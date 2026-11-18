@@ -1,11 +1,14 @@
 extends: existence
 message: "Avoid first-person plural ('%s'). Refer to Mastra as 'Mastra' and the reader as 'you'."
-level: warning
-ignorecase: true
+level: error
+ignorecase: false
+# `let's` is intentionally omitted: every match in the docs is the product name
+# "Let's Encrypt". The region-slug pattern skips values like `us-central1`.
 tokens:
   - '\bwe\b'
-  - '\bus\b'
+  - '\bWe\b'
+  - '\bus\b[^-]'
   - '\bour\b'
+  - '\bOur\b'
   - '\bours\b'
-  - "let's"
   - 'let us'

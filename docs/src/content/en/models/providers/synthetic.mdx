@@ -7,7 +7,7 @@ description: "Browse Synthetic model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 
-Access 12 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 8 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "synthetic/hf:MiniMaxAI/MiniMax-M3"
+  model: "synthetic/hf:Qwen/Qwen3.8-27B"
 });
 
 // Generate a response
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 65536,
-    "inputCost": 0.6,
-    "outputCost": 1.2
-  },
   {
     "model": "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "imageInput": true,
@@ -82,16 +70,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "synthetic/hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
-    "imageInput": false,
+    "model": "synthetic/hf:moonshotai/Kimi-K3.1-Pro",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 524288,
     "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 1
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "synthetic/hf:openai/gpt-oss-120b",
@@ -104,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.1,
     "outputCost": 0.1
+  },
+  {
+    "model": "synthetic/hf:Qwen/Qwen3.8-27B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.45,
+    "outputCost": 3.6
   },
   {
     "model": "synthetic/hf:zai-org/GLM-4.7-Flash",
@@ -158,7 +158,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.synthetic.new/openai/v1",
-    id: "synthetic/hf:MiniMaxAI/MiniMax-M3",
+    id: "synthetic/hf:Qwen/Qwen3.8-27B",
     apiKey: process.env.SYNTHETIC_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -179,7 +179,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "synthetic/hf:zai-org/GLM-5.3-Flash"
-      : "synthetic/hf:MiniMaxAI/MiniMax-M3";
+      : "synthetic/hf:Qwen/Qwen3.8-27B";
   }
 });
 ```

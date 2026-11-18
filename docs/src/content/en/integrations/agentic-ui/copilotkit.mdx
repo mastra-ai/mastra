@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # CopilotKit
 
-[CopilotKit](https://www.copilotkit.ai/) provides React components to quickly integrate customizable AI copilots into your application. Combined with Mastra, you can build AI apps with bidirectional state synchronization and interactive UIs.
+[CopilotKit](https://www.copilotkit.ai/) provides React components to integrate customizable AI copilots into your application. Combined with Mastra, you can build AI apps with bidirectional state synchronization and interactive UIs.
 
 CopilotKit talks to Mastra through the [AG-UI protocol](https://docs.ag-ui.com/). The `@ag-ui/mastra` package exposes your Mastra agents as an AG-UI endpoint, and CopilotKit's React hooks and components consume it. This unlocks a spectrum of experiences on top of ordinary chat: [generative UI, human-in-the-loop, and frontend tools](#generative-ui), plus deploying the same agent to [messaging channels like Slack](#channels).
 
@@ -281,7 +281,7 @@ export default function Page() {
 }
 ```
 
-Because Mastra streams tool-call arguments incrementally, the `render` function is called repeatedly as the arguments arrive, so the UI can paint progressively while the agent works.
+Because Mastra streams tool-call arguments incrementally, the `render` function runs as the arguments arrive, so the UI can paint progressively while the agent works.
 
 #### Components as tools
 
@@ -307,7 +307,7 @@ The agent invokes `callout` like any other tool, and CopilotKit renders `Callout
 
 #### State rendering
 
-Render UI from the agent's state and re-render as it streams. On Mastra, agent state is the agent's working memory, streamed to the client as it changes. Read it with `useAgent`; `agent.state` is reactive, so the component updates automatically:
+Render UI from the agent's state and re-render as it streams. On Mastra, agent state is the agent's working memory, streamed to the client as it changes. Read it with `useAgent`. Because `agent.state` is reactive, the component updates automatically:
 
 ```tsx title="app/page.tsx"
 import { useAgent } from '@copilotkit/react-core/v2'
@@ -504,7 +504,7 @@ channel.onMention(async ({ thread }) => {
 await channel.start()
 ```
 
-The agent receives ordinary AG-UI input and emits ordinary AG-UI events; the platform mechanics stay behind the adapter, so the same Mastra agent runs unchanged across every channel. Rich messages are written as JSX and rendered to each platform's native format (Block Kit on Slack, for example), so an interactive card degrades gracefully where a platform has no equivalent.
+The agent receives ordinary AG-UI input and emits ordinary AG-UI events; the platform mechanics stay behind the adapter, so the same Mastra agent runs unchanged across every channel. Rich messages are written as JSX and rendered to each platform's native format (Block Kit on Slack, for example). An interactive card therefore degrades gracefully where a platform has no equivalent.
 
 ### Slack
 

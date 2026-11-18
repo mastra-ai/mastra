@@ -7,6 +7,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DATASET_ID, dataset, items } from './fixtures/dataset-items';
 import { StudioFrame } from '@/components/layout';
+import {
+  noAgents,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import DatasetPage from '@/pages/datasets/dataset';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -89,6 +94,11 @@ beforeEach(() => {
       HttpResponse.json({ versions: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
     ),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments`, () => HttpResponse.json({ experiments: [] })),
+    // The experiment target pickers load these. Left unhandled, each request fails and the client
+    // retries it with backoff past the end of the test, after jsdom is gone.
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
   );
 });
 

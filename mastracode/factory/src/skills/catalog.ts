@@ -16,7 +16,9 @@ import type { InlineSkill } from '@mastra/core/skills';
 import { validateSkillContent } from '@mastra/core/skills';
 import type { SkillSource } from '@mastra/core/workspace';
 
-import type { SkillOverrideRecord } from '../storage/domains/skill-overrides/base.js';
+import type { ProjectSkillNames } from '../boards/project-boards.js';
+import type { StoredBoardScope } from '../storage/domains/boards/base.js';
+import type { SkillOverrideRecord, SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
   FACTORY_SKILL_NAMES,
   FACTORY_SKILLS_MOUNT,
@@ -27,6 +29,9 @@ import {
 /** Where a skill comes from: shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. */
 export type FactorySkillOrigin = 'bundled' | 'folder' | 'code';
 
+/** Where a listed skill comes from: an original's origin, or `project` for a skill the project created. */
+export type FactorySkillCatalogOrigin = FactorySkillOrigin | 'project';
+
 export interface FactorySkillInfo {
   name: string;
   description: string;
@@ -34,13 +39,15 @@ export interface FactorySkillInfo {
   content: string;
   /** Frontmatter fields besides `name` and `description` (license, user-invocable, …), so an editor can keep them. */
   frontmatter?: Record<string, unknown>;
-  origin: FactorySkillOrigin;
+  origin: FactorySkillCatalogOrigin;
   /** True for the skills Factory ships, including when the app overrides one. */
   builtIn: boolean;
   /** Set when the SKILL.md fails the runtime's parsing/validation, so the agent will not be able to load it. */
   error?: string;
   /** Set when the project has an edited copy; `description` and `content` then come from the edit. */
   edited?: { updatedBy: string; updatedAt: string };
+  /** Set for a skill the project created (`origin: 'project'`): who saved it last, and when. */
+  created?: { updatedBy: string; updatedAt: string };
   /** True when the code, folder, or bundled SKILL.md changed since the project's edit was made. */
   originalChanged?: boolean;
 }
@@ -120,33 +127,73 @@ export async function readFactorySkillOriginals(
   return originals;
 }
 
+/** The catalog entry of a skill the project created, from its stored row. */
+export function createdSkillInfo(created: SkillOverrideRecord): FactorySkillInfo {
+  return {
+    name: created.skillName,
+    ...parseSkillMarkdown(created.skillName, created.content),
+    origin: 'project',
+    builtIn: false,
+    created: { updatedBy: created.updatedBy, updatedAt: created.updatedAt.toISOString() },
+  };
+}
+
+/** The catalog entry of a code, folder, or bundled skill, showing the project's `edit` of it when it has one. */
+export function originalSkillInfo(
+  name: string,
+  { raw, origin }: FactorySkillOriginal,
+  edit?: SkillOverrideRecord,
+): FactorySkillInfo {
+  const builtIn = FACTORY_SKILL_NAMES.has(name);
+  if (!edit) return { name, ...parseSkillMarkdown(name, raw), origin, builtIn };
+  return {
+    name,
+    ...parseSkillMarkdown(name, edit.content),
+    origin,
+    builtIn,
+    edited: { updatedBy: edit.updatedBy, updatedAt: edit.updatedAt.toISOString() },
+    originalChanged: hashSkillContent(raw) !== edit.baseHash,
+  };
+}
+
 /**
  * List the skills the Factory skill mount serves, sorted by name. With a
  * project's `overrides`, edited skills show the edited text, who edited them,
- * and whether the original changed since. Edits of skills that no longer
- * exist are not listed, matching what sessions load.
+ * and whether the original changed since, and the project's created skills
+ * are listed with origin `project`. Edits of skills that no longer exist are
+ * not listed, matching what sessions load. A created skill whose name an app
+ * skill later takes is listed as that skill's edit.
  */
 export async function listFactorySkills(
   codeSkills: readonly InlineSkill[] = [],
   overrides: readonly SkillOverrideRecord[] = [],
 ): Promise<FactorySkillInfo[]> {
   const edits = new Map(overrides.map(override => [override.skillName, override]));
-  const skills: FactorySkillInfo[] = [];
-  for (const [name, { raw, origin }] of await readFactorySkillOriginals(codeSkills)) {
-    const edit = edits.get(name);
-    const builtIn = FACTORY_SKILL_NAMES.has(name);
-    if (!edit) {
-      skills.push({ name, ...parseSkillMarkdown(name, raw), origin, builtIn });
-      continue;
-    }
-    skills.push({
-      name,
-      ...parseSkillMarkdown(name, edit.content),
-      origin,
-      builtIn,
-      edited: { updatedBy: edit.updatedBy, updatedAt: edit.updatedAt.toISOString() },
-      originalChanged: hashSkillContent(raw) !== edit.baseHash,
-    });
-  }
-  return skills;
+  const originals = await readFactorySkillOriginals(codeSkills);
+  const created = overrides.filter(override => override.kind === 'created' && !originals.has(override.skillName));
+  return [
+    ...created.map(createdSkillInfo),
+    ...[...originals].map(([name, original]) => originalSkillInfo(name, original, edits.get(name))),
+  ].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/**
+ * Reads the skills each project created, for its boards' runners. A created skill an app skill later
+ * shadows still counts: a runner naming it finds the app's skill.
+ */
+export function projectSkillNamesOf(
+  storage: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'list'>,
+): ProjectSkillNames {
+  const projectScope = (scope: StoredBoardScope) => ({ orgId: scope.orgId, projectId: scope.factoryProjectId });
+  return {
+    revision: async scope => {
+      await storage.ensureReady();
+      return storage.revision(projectScope(scope));
+    },
+    names: async scope => {
+      await storage.ensureReady();
+      const overrides = await storage.list(projectScope(scope));
+      return new Set(overrides.filter(override => override.kind === 'created').map(override => override.skillName));
+    },
+  };
 }

@@ -1,7 +1,9 @@
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconServer1 } from '@mastra/playground-ui/icons/central/IconServer1';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { CheckCircleIcon, DatabaseIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 import {
@@ -70,12 +72,12 @@ export function ExperimentsFilterBar({
   const fields = useMemo<FilterBarField[]>(
     () => [
       // Listed first so free text lands on it by default.
-      { id: SEARCH_FIELD_ID, label: 'Search', icon: SearchIcon, search: true, operators: ['contains'] },
+      { id: SEARCH_FIELD_ID, label: 'Search', icon: IconMagnifyingGlass, search: true, operators: ['contains'] },
       ...targetFields,
       {
         id: STATUS_FIELD_ID,
         label: 'Status',
-        icon: CheckCircleIcon,
+        icon: IconCircleCheck,
         color: hueAccentColor('orange'),
         operators: ['is'],
         strict: true,
@@ -84,7 +86,7 @@ export function ExperimentsFilterBar({
       {
         id: DATASET_FIELD_ID,
         label: 'Dataset',
-        icon: DatabaseIcon,
+        icon: IconServer1,
         color: hueAccentColor('blue'),
         operators: ['is'],
         strict: true,

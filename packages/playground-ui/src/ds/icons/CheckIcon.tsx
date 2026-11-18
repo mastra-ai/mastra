@@ -1,7 +1,14 @@
 import React from 'react';
 
 export const CheckIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+  <svg
+    width="13.5"
+    height="13.5"
+    viewBox="-0.75 -0.75 13.5 13.5"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

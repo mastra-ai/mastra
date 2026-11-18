@@ -274,7 +274,8 @@ The `GoogleUser` type extends the base `EEUser` interface with Google-specific f
   {
     name: 'expiresAt',
     type: 'Date',
-    description: 'Verified ID token expiration time, when available.',
+    description:
+      'Verified ID token expiration time for bearer ID-token users, or the session expiration time for SSO cookie users, when available.',
     isOptional: true,
   },
   {

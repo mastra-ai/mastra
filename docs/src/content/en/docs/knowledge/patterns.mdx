@@ -17,7 +17,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::warning
 
-Access is checked on every tool call, but Knowledge can't yet guarantee that data never reaches a run outside the scopes that hold it, or that an agent never repeats something across scopes. Read these patterns as what Knowledge is designed for, and don't rely on it to isolate sensitive data yet.
+Give each agent only the scopes its pattern needs. Knowledge has no guardrails yet against an agent leaking content between scopes it can access, so give one agent more than one scope only when that's acceptable. See [Keep scopes apart](/docs/knowledge/scopes-and-access#keep-scopes-apart).
 
 :::
 
@@ -62,7 +62,7 @@ await agent.generate(message, {
 })
 ```
 
-A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). As the warning at the top says, Knowledge doesn't yet guarantee this isolation, so don't rely on it for sensitive customer data.
+A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). An agent with both `tenant:acme` and `tenant:globex` could leak Acme's content into a Globex page, so use a separate agent for each tenant when they must stay apart.
 
 ## A policy every agent follows
 

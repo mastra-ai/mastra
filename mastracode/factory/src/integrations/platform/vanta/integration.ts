@@ -7,7 +7,12 @@ import { loose } from '../../../routes/route.js';
 import type { FactoryIntegration, IntegrationContext } from '../../base.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { attachVantaRules } from '../../vanta/rules.js';
-import { createVantaSync, DEFAULT_VANTA_SYNC_INTERVAL_MS, VANTA_VULNERABILITIES_SOURCE_ID } from '../../vanta/sync.js';
+import {
+  createVantaSync,
+  DEFAULT_VANTA_SYNC_INTERVAL_MS,
+  VANTA_VULNERABILITIES_SOURCE_ID,
+  vantaVulnerabilitiesSelected,
+} from '../../vanta/sync.js';
 import type { VantaVulnerability } from '../../vanta/sync.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
@@ -131,7 +136,7 @@ export class PlatformVantaIntegration implements FactoryIntegration {
       listVulnerabilities: async orgId => this.listVulnerabilitiesForOrg(orgId, await projects.listAll()),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>
-        (await intake.getConfig({ orgId, integrationIds: [this.id] }))[this.id]?.enabled ?? false,
+        vantaVulnerabilitiesSelected((await intake.getConfig({ orgId, integrationIds: [this.id] }))[this.id]),
       boundProjectIds: async orgId =>
         (await intake.listBindings({ orgId, integrationId: this.id })).map(binding => binding.factoryProjectId),
       ingest,

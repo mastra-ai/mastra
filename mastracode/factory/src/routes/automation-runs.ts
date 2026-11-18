@@ -79,8 +79,6 @@ export interface AutomationRunRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing `commitRuleEvaluation`. */
   workItems: WorkItemsStorage;
-  /** Config version stamped on the committed rule evaluation. */
-  configVersion: string;
   /** The project's boards, whose phases name the roles a run can start in; defaults to the built-in boards. */
   boards?: BoardRegistry | ProjectBoardSource;
 }
@@ -183,7 +181,7 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { workItems, configVersion } = this.deps;
+    const { workItems } = this.deps;
     const contract = FACTORY_ROUTE_CONTRACTS.workItemAutomationRun;
 
     return [
@@ -240,8 +238,7 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
             workItemId: item.id,
-            ingress: { identity: idempotencyKey, triggerType: 'external-orchestrator.invoke-skill' },
-            configVersion,
+            ingress: { identity: idempotencyKey },
             expectedRevision: request.expectedRevision,
             actor: { type: 'system', id: 'factory-external-orchestrator' },
             outcome: { status: 'accepted' },

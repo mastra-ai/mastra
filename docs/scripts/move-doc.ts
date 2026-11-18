@@ -211,7 +211,7 @@ const dedupeRedirectsBySource = (redirects: Redirect[]): Redirect[] => {
     const redirect = redirects[index]
     if (seen.has(redirect.source)) continue
     seen.add(redirect.source)
-    deduped.unshift({ ...redirect, permanent: true })
+    deduped.unshift(redirect)
   }
 
   return deduped
@@ -349,7 +349,12 @@ const updateMdxLinks = async (
       const quotedRouteRegex = new RegExp(`(['"\`])(?:${escapeRegExp(oldBasePath)})(#[^'"\`\\s]*)?\\1`, 'g')
       updatedContent = updatedContent.replace(quotedRouteRegex, (_match, quote, linkHash = '') => {
         const finalHash = newHash || linkHash
-        return `${quote}${newBasePath}${finalHash}${quote}`
+        // Percent-encode quote characters so an external replacement URL cannot end the string early.
+        const safePath = `${newBasePath}${finalHash}`.replace(
+          /['"`]/g,
+          char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+        )
+        return `${quote}${safePath}${quote}`
       })
     })
 
@@ -477,7 +482,7 @@ const updateRedirects = async (
 ): Promise<string[]> => {
   const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
-  let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
+  let redirects = config.redirects
 
   if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
@@ -511,7 +516,7 @@ const updateRedirects = async (
       return { ...redirect, destination: `${newPathBase}${newHash || destHash || ''}`, permanent: true }
     }
 
-    return { ...redirect, permanent: true }
+    return redirect
   })
 
   if (oldPath !== newPath) {
