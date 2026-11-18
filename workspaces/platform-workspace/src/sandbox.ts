@@ -200,7 +200,7 @@ interface CreateSandboxResponse {
   /**
    * `true` when the platform provisioned the sandbox in credential-vault mode.
    * A fresh provision reports it only when `true`; reattach responses report
-   * it once the platform echoes it there (mastra-ai/platform#5029).
+   * it once the platform echoes it there (mastra-ai/platform#5133).
    */
   vault?: boolean;
   /** `true` when `POST /sandbox` reattached a live sandbox instead of provisioning one. */
