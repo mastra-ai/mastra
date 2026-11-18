@@ -224,7 +224,10 @@ describe('Settings', () => {
 
       expect(document.activeElement?.textContent).toBe('General');
       expect((await screen.findByRole('tooltip')).textContent).toBe('Stored in this browser.');
-      // The icon is decoration: the heading's name stays the title.
+      // The info icon sits inside the same trigger, hidden from assistive tech: the heading's name stays the title.
+      const icon = document.activeElement?.querySelector('[data-slot="icon"]');
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+      expect(icon?.querySelector('svg')).toBeTruthy();
       screen.getByRole('heading', { name: 'General' });
     });
   });
