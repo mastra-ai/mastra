@@ -65,6 +65,7 @@ function seedOnboarding(step: OnboardingStep, draft?: OnboardingDraft) {
 
 /** The open section: its card carries the section heading; done and next rows do not. */
 async function findActiveSection(name: 'Codebase' | 'Work' | 'Accounts' | 'Model') {
+  await screen.findByRole('button', { name: /^(Account menu for .+|Theme)$/ });
   await screen.findByRole('heading', { name, level: 2 });
   return within(screen.getByRole('region', { name }));
 }
@@ -212,9 +213,11 @@ function registerIntake(initial: Record<string, unknown> = {}) {
 
 /** Create factory, once the Model section has resolved every required choice. */
 async function enabledCreateButton() {
-  const button = await screen.findByRole('button', { name: 'Create factory' });
-  await waitFor(() => expect(button).toBeEnabled());
-  return button;
+  return waitFor(() => {
+    const button = screen.getByRole('button', { name: 'Create factory' });
+    expect(button).toBeEnabled();
+    return button;
+  });
 }
 
 beforeEach(() => sessionStorage.clear());
@@ -268,7 +271,7 @@ describe('Draft Factory onboarding', () => {
     const accounts = await findActiveSection('Accounts');
     expect(await accounts.findByRole('radio', { name: 'Company account' })).toBeChecked();
     await chooseProvider(user, 'OpenAI', modelSection);
-    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(modelSection.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     expect(writes).toEqual([]);
     expect(within(screen.getByRole('region', { name: 'Work' })).getByText('GitHub')).toBeInTheDocument();
 
@@ -281,7 +284,7 @@ describe('Draft Factory onboarding', () => {
     expect(codebase.getByText('team/backend')).toBeInTheDocument();
     expect(codebase.getByText('develop')).toBeInTheDocument();
 
-    expect(await reopened.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(reopened.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     await chooseProvider(user, 'Anthropic', reopened);
     await reopened.findByRole('combobox');
     expect(writes).toEqual([]);
@@ -396,7 +399,7 @@ describe('Draft Factory onboarding', () => {
     seedOnboarding('model', { modelScope: 'factory', repository: otherRepo, workConfirmed: true, model });
     const view = renderOnboarding();
     const modelSection = await findActiveSection('Model');
-    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(modelSection.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     view.unmount();
     persistOnboardingStep('vcs');
     renderOnboarding();
@@ -426,7 +429,7 @@ describe('Draft Factory onboarding', () => {
     const user = userEvent.setup();
     renderOnboarding();
     const modelSection = await findActiveSection('Model');
-    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(modelSection.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
 
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     await findActiveSection('Work');
@@ -477,7 +480,8 @@ describe('Draft Factory onboarding', () => {
     seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
     renderOnboarding();
 
-    const work = within(await screen.findByRole('region', { name: 'Work' }));
+    await findActiveSection('Model');
+    const work = within(screen.getByRole('region', { name: 'Work' }));
     expect(await work.findByText("Couldn't check connections")).toBeInTheDocument();
     expect(work.queryByText('Set up later')).not.toBeInTheDocument();
   });
@@ -681,7 +685,8 @@ describe('Draft Factory onboarding', () => {
 
       view.unmount();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Change codebase' }));
+      await findActiveSection('Model');
+      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: finalRepo.fullName }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
       await user.click(await enabledCreateButton());
@@ -747,7 +752,7 @@ describe('Personal Factory model', () => {
     const modelSection = await findActiveSection('Model');
     const accounts = await findActiveSection('Accounts');
     expect(await accounts.findByRole('radio', { name: 'Company account' })).toBeChecked();
-    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(modelSection.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     expect(readOnboardingDraft().repository).toEqual(repo);
     expect(writes).toEqual([]);
   });
@@ -899,7 +904,7 @@ describe('Account presets', () => {
     seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'hybrid', model });
     renderOnboarding();
     const modelSection = await findActiveSection('Model');
-    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(modelSection.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     const sessions = within(modelSection.getByRole('group', { name: 'Your sessions' }));
     expect(await sessions.findByRole('button', { name: 'Choose a provider' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
@@ -965,7 +970,7 @@ describe('Account presets', () => {
     renderOnboarding();
     const account = within(await screen.findByRole('group', { name: 'Your account' }));
     await chooseProvider(user, 'OpenAI', account);
-    expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
+    await waitFor(() => expect(account.getByRole('combobox')).toHaveValue('GPT-6.1 Sol'));
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'openai/gpt-6.1-sol' });
@@ -1002,7 +1007,7 @@ describe('Account presets', () => {
     expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
 
     answerDefault();
-    expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
+    await waitFor(() => expect(account.getByRole('combobox')).toHaveValue('GPT-6.1 Sol'));
     await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'openai/gpt-6.1-sol' });
@@ -1025,7 +1030,7 @@ describe('Account presets', () => {
     view.unmount();
     renderOnboarding();
     const reloaded = await findActiveSection('Model');
-    expect(await reloaded.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(reloaded.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
     expect(readOnboardingDraft().personal).toEqual(personalModel);
     expect(reloaded.queryByRole('group', { name: 'Your sessions' })).not.toBeInTheDocument();
     await user.click(await enabledCreateButton());

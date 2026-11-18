@@ -118,7 +118,9 @@ describe('Source control connections', () => {
     async ({ status, retryable }) => {
       server.use(http.get(GITLAB_STATUS_URL, () => HttpResponse.json({ error: 'unavailable' }, { status })));
       renderSourceControl();
-      await within(sourceControl()).findByText('GitLab');
+      await waitFor(() =>
+        expect(screen.queryByRole('status', { name: 'Loading GitLab connections' })).not.toBeInTheDocument(),
+      );
       const row = rowOf('GitLab');
       const retry = within(row).queryByRole('button', { name: 'Retry' });
       if (!retryable) {

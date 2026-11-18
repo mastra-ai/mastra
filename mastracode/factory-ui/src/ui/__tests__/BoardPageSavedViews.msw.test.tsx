@@ -24,7 +24,8 @@ describe('Factory board saved views', () => {
     renderWithProviders(<RouterProvider router={router} />);
     const user = userEvent.setup();
 
-    const views = await screen.findByRole('group', { name: 'Board views' });
+    await screen.findByLabelText('Board stages');
+    const views = screen.getByRole('group', { name: 'Board views' });
     expect(within(views).getByRole('button', { name: 'All cards' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('radio', { name: 'List' })).toBeChecked();
 

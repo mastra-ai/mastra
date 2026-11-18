@@ -106,8 +106,21 @@ describe('SignInPage', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Unable to check your sign-in status');
         expect(router.state.location.pathname).toBe('/signin');
 
-        server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
+        let release = () => {};
+        const held = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        server.use(
+          http.get(AUTH_ME_URL, async () => {
+            await held;
+            return HttpResponse.json(signedOut);
+          }),
+        );
         await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(screen.getByRole('alert')).toHaveTextContent('Unable to check your sign-in status');
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled();
+
+        release();
         expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeEnabled();
         expect(router.state.location.pathname).toBe('/signin');
       },

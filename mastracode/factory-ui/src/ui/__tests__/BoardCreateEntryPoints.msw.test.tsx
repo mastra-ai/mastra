@@ -71,7 +71,14 @@ function renderWorkBoard() {
   return router;
 }
 
-const boardsNav = async () => within(await screen.findByRole('region', { name: 'Boards' }));
+const boardsNav = async () =>
+  within(
+    await waitFor(() => {
+      const boards = screen.getByRole('region', { name: 'Boards' });
+      within(boards).getByRole('link', { name: 'Work' });
+      return boards;
+    }),
+  );
 
 describe('Board entry points', () => {
   it('takes an admin from the sidebar to the new-board form', async () => {

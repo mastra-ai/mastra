@@ -248,12 +248,10 @@ describe('ProviderList credential scopes', () => {
       expect(
         await within(lists.factory()).findByText('Only organization admins can manage org-wide credentials.'),
       ).toBeInTheDocument();
+      expect(await within(lists.factory()).findByRole('button', { name: 'Anthropic actions' })).toBeDisabled();
       expect(within(lists.factory()).queryByText(ORG_SHARED_CAPTION)).not.toBeInTheDocument();
       expect(within(lists.factory()).getByRole('button', { name: 'Add provider' })).toBeDisabled();
-      expect(
-        within(rowFor('anthropic', lists.factory())).getByRole('button', { name: 'Anthropic actions' }),
-      ).toBeDisabled();
-      expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled();
+      await waitFor(() => expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled());
     });
 
     describe('custom endpoints', () => {

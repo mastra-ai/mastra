@@ -239,7 +239,8 @@ describe('VoiceInputSettings', () => {
     const user = userEvent.setup();
     renderVoiceSettings();
 
-    await user.click(await screen.findByRole('button', { name: 'Add provider' }));
+    await screen.findByRole('button', { name: 'Mistral actions' });
+    await user.click(screen.getByRole('button', { name: 'Add provider' }));
     await user.click(await screen.findByRole('button', { name: 'Add API key for Deepgram' }));
     await user.type(await screen.findByPlaceholderText('Paste API key'), 'dg-secret');
     await user.click(screen.getByRole('button', { name: 'Save' }));

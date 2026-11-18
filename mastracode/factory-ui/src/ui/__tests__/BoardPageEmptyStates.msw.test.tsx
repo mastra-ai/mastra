@@ -106,7 +106,7 @@ describe('Board empty-state actions', () => {
     renderBoard(search);
     const user = userEvent.setup();
     if (layout === 'board' && search) {
-      await screen.findByRole('button', { name: /^Board properties/ });
+      await screen.findByLabelText('Board stages');
       await openPropertiesMenu(user, 'Board properties');
       await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
       await openPropertiesMenu(user, 'Board properties');

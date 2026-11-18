@@ -32,9 +32,12 @@ export function rowFor(provider: string, container: HTMLElement = document.body)
 }
 
 export async function openAddProvider(user: UserEvent, container: HTMLElement = document.body) {
-  const add = await within(container).findByRole('button', { name: 'Add provider' });
-  await waitFor(() => expect(add).toBeEnabled());
-  await user.click(add);
+  const add = () => within(container).getByRole('button', { name: 'Add provider' });
+  await waitFor(() => {
+    expect(add().closest('[inert]')).toBeNull();
+    expect(add()).toBeEnabled();
+  });
+  await user.click(add());
   return screen.findByRole('dialog', { name: 'Add provider' });
 }
 

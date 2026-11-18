@@ -8,7 +8,8 @@ export function stageToggle(label: string, container: HTMLElement = document.bod
 
 /** Boards open as a list; Kanban is a saved view's layout. */
 export async function saveKanbanView(user: UserEvent): Promise<void> {
-  await user.click(await screen.findByRole('button', { name: 'New view' }));
+  await screen.findByLabelText('Board stages');
+  await user.click(screen.getByRole('button', { name: 'New view' }));
   await user.click(await screen.findByRole('radio', { name: 'Board' }));
   await user.click(screen.getByRole('button', { name: 'Save view' }));
   await screen.findByRole('group', { name: 'Board columns' });
