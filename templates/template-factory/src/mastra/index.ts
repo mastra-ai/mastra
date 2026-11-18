@@ -76,7 +76,7 @@ const slack = slackConfigured
       ...slackCredentials,
       mode: slackCredentials.appToken ? 'socket' : 'webhook',
       oidcRedirectBaseUrl: slackRedirectUrl,
-      uiOrigin: publicUrl,
+      uiOrigin: publicUrl ?? 'http://localhost:4111',
     })
   : undefined;
 
