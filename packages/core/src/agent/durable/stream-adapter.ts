@@ -1107,6 +1107,24 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     for (const release of [...logIndexWaiters]) release();
   };
   const ackingHandleEvent = withAck(handleEvent);
+  // Once this reader has handled a terminal event, handleEvent drops every later
+  // delivery, so the subscription only holds a transport resource (a dedicated
+  // blocking connection on Redis Streams). Release it as soon as the deliveries
+  // in flight, and their acks, have settled instead of waiting for the run's
+  // cleanupTimeoutMs. This only unsubscribes this reader: the run's history and
+  // run record stay until cleanupTimeoutMs, so observe() can still replay it.
+  // A suspend without closeOnSuspend is not terminal, so a parked reader stays
+  // subscribed for the resume. See #30479.
+  let terminalRelease: Promise<void> | undefined;
+  const releaseTerminalSubscription = () => {
+    if (!terminated || cancelled || terminalRelease) return;
+    terminalRelease = (async () => {
+      while (inFlightDeliveries.size > 0) {
+        await Promise.allSettled([...inFlightDeliveries]);
+      }
+      if (!cancelled) cleanup();
+    })();
+  };
   // A takeover may be appended while cached events are still replaying. Hold
   // deliveries (and their acknowledgments) until the attached log is reconciled.
   let bufferingReplay = !!refreshReplayFilter && offset !== 'latest';
@@ -1126,6 +1144,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     void delivery
       .finally(() => {
         inFlightDeliveries.delete(delivery);
+        if (isSubscribed) releaseTerminalSubscription();
       })
       .catch(() => {});
     if (nextLogIndex !== undefined && typeof event.index === 'number' && event.index >= nextLogIndex) {
@@ -1221,6 +1240,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Start the idle countdown only once subscribed and replay is reconciled.
           armIdleTimer();
           resolveReady();
+          // Replay may already have delivered the run's terminal event.
+          releaseTerminalSubscription();
         })
         .catch(error => {
           void pubsub.unsubscribe(topic, subscribedCallback).catch(unsubscribeError => {
