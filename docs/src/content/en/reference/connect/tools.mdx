@@ -254,7 +254,7 @@ Error handling depends on the cause:
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
 - A problem with one provider, such as a connection that needs reauthorization, logs a warning and skips that provider. The other providers' tools still load.
 
-## Code Mode
+## Code mode
 
 `codeMode()` gives the agent the connected tools through [Code Mode](/docs/agents/code-mode): the agent writes one TypeScript program that calls the tools as `external_*` functions, instead of calling each tool in its own step. Use it when tasks fan out across many calls or providers, such as listing items in one provider and looking each one up in another.
 

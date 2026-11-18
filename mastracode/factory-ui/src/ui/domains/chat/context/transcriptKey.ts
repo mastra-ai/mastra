@@ -25,12 +25,23 @@ export function useTranscriptKey(identity: TranscriptIdentity) {
   return { key, continueInto: (thread: ThreadSession) => setContinued({ identity: identityOf(thread), key }) };
 }
 
+const CONTINUES_TRANSCRIPT = 'continuesTranscript';
+
+/**
+ * Whether a navigation opens a thread inside the transcript on screen, as a draft does once its
+ * card's session starts. The page does not change, so the router may hold that navigation until
+ * the thread's header and panel can show, instead of blanking them.
+ */
+export function continuesTranscript(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && CONTINUES_TRANSCRIPT in state;
+}
+
 export function useContinueIntoThread() {
   const continueInto = useContext(TranscriptContinuationContext);
   const navigate = useNavigate();
   if (!continueInto) throw new Error('useContinueIntoThread must be used within a ChatSessionBoundary');
-  return (factoryId: string, thread: ThreadSession, state?: unknown) => {
+  return (factoryId: string, thread: ThreadSession, state?: object) => {
     continueInto(thread);
-    void navigate(threadPath(factoryId, thread), { replace: true, state });
+    void navigate(threadPath(factoryId, thread), { replace: true, state: { ...state, [CONTINUES_TRANSCRIPT]: true } });
   };
 }

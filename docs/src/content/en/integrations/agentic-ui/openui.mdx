@@ -55,7 +55,7 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<AgentInterface />
         └── library.ts
     ```
 
-    The chat route lives in `src/app/api/chat/route.ts`, the chat surface in `src/app/page.tsx`, and the component library in `src/library.ts`. The OpenUI CLI writes `src/generated/system-prompt.txt` from your library; regenerate it whenever the library changes.
+    The chat route lives in `src/app/api/chat/route.ts`, the chat surface in `src/app/page.tsx`, and the component library in `src/library.ts`. The OpenUI CLI writes `src/generated/system-prompt.txt` from your library. Regenerate it whenever the library changes.
 
     Add your OpenAI key to `.env.local`:
 
@@ -236,4 +236,4 @@ To restrict or extend the output, define your own library in `src/library.ts` an
 npx @openuidev/cli generate src/library.ts --out src/generated/system-prompt.txt
 ```
 
-The generated prompt is read by the API route and merged into the agent's `instructions`, so the agent knows exactly which components it can emit.
+The API route reads the generated prompt and merges it into the agent's `instructions`, which tells the agent exactly which components it can emit.

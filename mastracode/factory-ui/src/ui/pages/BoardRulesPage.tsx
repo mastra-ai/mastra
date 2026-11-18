@@ -13,7 +13,7 @@ import { BoardRules } from '../domains/boardRules/components/BoardRules';
 import { IntakeTesterDialog } from '../domains/intake/IntakeTesterDialog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-const COLUMN = 'w-full';
+const COLUMN = 'mx-auto w-full max-w-3xl';
 
 /** Every rule of a board, one lane per trigger: what it takes when an item arrives and where its cards move. */
 export function BoardRulesPage() {
@@ -45,13 +45,11 @@ export function BoardRulesPage() {
           <PageHeader>
             <PageHeader.Title>Rules</PageHeader.Title>
             <PageHeader.Description>
-              What happens to work items and pull requests on this board. In each lane the first matching rule wins.
-              Only Work item opened and Pull request opened create work items; every other lane only sees work items
-              already on this board, so a rule there can safely take every card.
+              What happens to issues and pull requests on this board. In each lane the first matching rule wins.
             </PageHeader.Description>
           </PageHeader>
           <div className="mt-3">
-            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an item" />
+            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an issue or pull request" />
           </div>
         </div>
       }

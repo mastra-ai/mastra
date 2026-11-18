@@ -162,7 +162,13 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
+import {
+  isMastraTool,
+  isProviderTool,
+  isApprovalExempt,
+  markAgentWorkflowTool,
+  markApprovalExempt,
+} from '../tools/toolchecks';
 import type {
   CoreTool,
   MastraToolInvocationOptions,
@@ -255,6 +261,8 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './durable/run-registry';
+import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
+import type { SegmentSpanData } from './durable/segment-spans';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './durable/stream-adapter';
 import {
   createDurableAgentStream,
@@ -7687,13 +7695,10 @@ export class Agent<
           agentBackgroundConfig: this.#backgroundTasks,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
-          toolObj,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
+        const workflowTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+        // Its results are marked `mastra.workflowTool` so tracing can show them (#30219).
+        markAgentWorkflowTool(workflowTool);
+        convertedWorkflowTools[`workflow-${workflowName}`] = workflowTool;
       }
     }
 
@@ -13204,6 +13209,19 @@ export class Agent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
       }
     }
+    // Every worker's steps report under the recovered pair and finish the MODEL_STEP the crashed
+    // execution left open. The originals' own steps stay as a suspension ended them.
+    carrySegmentSpans(
+      requestContext,
+      runId,
+      recoverAgentSpan
+        ? {
+            ...openedSegment(recoverAgentSpan, recoverModelSpan),
+            adoptsOpenSteps: true,
+            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+          }
+        : null,
+    );
     executionFence.throwIfLost();
 
     const restoredCompletion = await restoreCompletionPolicy({
@@ -13236,13 +13254,10 @@ export class Agent<
       saveQueueManager,
       requestContext,
       agentSpan: recoverAgentSpan,
-      // Same override resume() installs: steps nest under, and terminal
-      // end()/error() target, the recovered spans instead of the persisted
-      // originals ended above.
+      // Same live handles resume() installs: terminal end()/error() in this process target the
+      // recovered spans instead of the persisted originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
       // abortController/abortSignal are installed by
       // installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -13826,12 +13841,11 @@ export class Agent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult } = result.result;
-            // map-final-output, which ends the recovered spans, did not re-run.
-            // Workflow success alone cannot distinguish an agent success from a limit/block.
-            // Keep unknown until the authoritative termination is recovered (OBS-754).
-            recoverModelSpan?.end();
-            recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
+            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
+            // it ended the run's spans with, so the recovered pair ends the same way.
+            recoverModelSpan?.end({ ...tracingTermination });
+            recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
@@ -14277,10 +14291,51 @@ export class Agent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it, so a run that is already executing
-    // fails before any span or memory write is made for this call.
     const runId = resolveRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, () =>
+      this.#prepareAndStartDurableRun(messages, options, methodType, runId, requestContext),
+    );
+  }
+
+  /**
+   * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
+   * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
+   * A registered run owns the thread from then on. A run that fails before it registers gives the
+   * thread back.
+   */
+  async #onReservedThread<T>(
+    runId: string,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    const pubsub = this.getPubSub();
+    // The same options registerRun reads, so both name the same thread.
+    const reserved =
+      (await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as unknown as Agent<any, any, any, any>,
+        { memory: options?.memory, requestContext: options?.requestContext, runId },
+        pubsub,
+      )) === 'reserved';
+    try {
+      return await start();
+    } catch (error) {
+      // A thread already held under this run id belongs to whoever started the run: a signal wake,
+      // a queued message, or an earlier call with the same run id. It stays theirs to release.
+      if (reserved) agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
+      throw error;
+    }
+  }
+
+  async #prepareAndStartDurableRun(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput>,
+    methodType: 'stream' | 'generate',
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    // 1. Claim the run before preparing it, so a run that is already executing
+    // fails before any span or memory write is made for this call.
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -14490,24 +14545,21 @@ export class Agent<
       trackedEntry.workflowExecution = workflowExecution;
     }
 
-    if (methodType === 'stream') {
-      // 4b. Register with the thread-stream runtime so subscribeToThread /
-      // sendMessage subscribers receive run-registered events and stream parts.
-      // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
-      // CachingPubSub (this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub) which carries durable workflow chunks.
-      await agentThreadStreamRuntime.registerRun(
-        this as unknown as Agent<any, any, any, any>,
-        output,
-        options as AgentExecutionOptions<TOutput>,
-        this.getPubSub(),
-        {
-          continuation: closeOnSuspend ? undefined : 'across-suspension',
-          generation: executionFence.generation,
-          ownershipLost: () => executionFence.isLost(),
-          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
-        },
-      );
-    }
+    // 4b. Register both stream and generate runs so signals can find them and
+    // queued messages start when the run releases its thread.
+    // Uses the Mastra-level pubsub, not the internal durable workflow stream bus.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+      {
+        continuation: methodType === 'stream' && !closeOnSuspend ? 'across-suspension' : undefined,
+        generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+      },
+    );
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.
@@ -15166,6 +15218,8 @@ export class Agent<
     const origSpanId = entry.agentSpan?.id;
     // Spans this resume opened, ended by it alone if it turns out to have lost the run.
     const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
+    // The pair every worker's steps report under for this segment; none when it opened no spans.
+    let resumeSegment: SegmentSpanData | null = null;
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.agentForExecution as Agent<string, any, any>;
@@ -15204,12 +15258,13 @@ export class Agent<
           requestContext: resolvedOptions.requestContext,
         });
         ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
+        if (resumeAgentSpan) {
+          resumeSegment = openedSegment(resumeAgentSpan, resumeModelSpan);
+        }
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
           reg.resumeTimeToFirstTokenMs = undefined;
@@ -15219,6 +15274,7 @@ export class Agent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
       }
     }
+    carrySegmentSpans(resumeRequestContext, runId, resumeSegment);
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
     // Same default-false semantics as the initial stream() path.

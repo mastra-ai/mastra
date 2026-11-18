@@ -260,7 +260,7 @@ The worker build reads each workflow chain statically, so arguments must be reso
 
 Condition functions and `.sleep()` or `.sleepUntil()` function identifiers are called as activities named after the identifier, but the plugin only generates activities for steps and `.map()` callbacks. Register these functions yourself in `Worker.create({ activities })`, or the run fails when it reaches them. These functions receive `inputData`, `runId`, `workflowId`, `resourceId`, and `requestContext` as a plain object. They don't receive `getInitData()`.
 
-Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and appears as a separate execution in the Temporal UI. A suspended step inside a child workflow can't be resumed through the parent run.
+Nested workflows passed to `.then()` or `.parallel()` run as Temporal child workflows. Each one is registered as its own workflow type and shows up as a separate execution in the Temporal UI. A suspended step inside a child workflow can't be resumed through the parent run.
 
 An unsupported construct stops the worker build with an error that names the workflow and file:
 

@@ -108,6 +108,11 @@ export type MetricsLineChartProps = {
   className?: string;
 };
 
+function labelSide(data: Record<string, unknown>[], xKey: string, x: string) {
+  const index = data.findIndex(row => String(row[xKey]) === x);
+  return index > (data.length - 1) / 2 ? 'insideTopRight' : 'insideTopLeft';
+}
+
 export function MetricsLineChart(props: MetricsLineChartProps) {
   const { data, series, height = 210, showLegend = true, isLoading = false, className } = props;
   const root = cn(height === 'fill' && 'flex min-h-0 flex-1 flex-col', className);
@@ -214,7 +219,12 @@ function LinePlot({
             strokeDasharray="3 3"
             label={
               m.label
-                ? { value: m.label, position: 'insideTopLeft', fill: 'var(--muted-foreground)', fontSize: 11 }
+                ? {
+                    value: m.label,
+                    position: labelSide(data, xKey, m.x),
+                    fill: 'var(--muted-foreground)',
+                    fontSize: 11,
+                  }
                 : undefined
             }
           />

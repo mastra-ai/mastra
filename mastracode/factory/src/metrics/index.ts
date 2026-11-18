@@ -6,7 +6,7 @@ import { asMonitorablePubSub, connectMonitor, redisProbeCollector, redisStatsCol
 import type { RedisMonitorClient } from './collectors/redis.js';
 import { intakeCollector, keepIntakeSource } from './intake.js';
 import type { FactoryMetrics, MetricsCollector, MetricsTargets } from './metrics.js';
-import { sessionStartsCollector } from './sandbox.js';
+import { sandboxStartsCollector } from './sandbox.js';
 
 export { METRIC_GROUPS, metricsService, resolveMetricsConfig } from './config.js';
 export type { FactoryMetricsOptions, MetricGroup } from './config.js';
@@ -75,7 +75,7 @@ export function startFactoryMetrics(
         sink.emit('mastra_factory_sandboxes_active', countRunningSessionSandboxes());
       },
     });
-    collectors.push(sessionStartsCollector());
+    collectors.push(sandboxStartsCollector());
   }
 
   if (metrics.enabled('intake')) {

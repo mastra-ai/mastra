@@ -1,5 +1,117 @@
 # @mastra/core
 
+## 1.85.0
+
+### Minor Changes
+
+- Session streams opened with `displayState=false` now start with the session's current state as ordinary events (the reply in flight as `message_start`, the latest memory status as `om_status`, and the thread's token total) instead of starting empty. Clients that keep display-state snapshots are unaffected. ([#30727](https://github.com/mastra-ai/mastra/pull/30727))
+
+  `Session.initialStateEvents()` returns those events for any other transport that needs the same catch-up. `usage_update` events now also carry `total`, the running token total after the step, so clients no longer have to add up per-step usage.
+
+### Patch Changes
+
+- Agents with input or output processors make fewer storage reads per call. ([#30720](https://github.com/mastra-ai/mastra/pull/30720))
+
+  Each `generate()` or `stream()` call runs short internal workflows to prepare the call and to run processors. These workflows are never stored, but they still read a cancellation status from storage before and between their steps. Those reads always came back empty. With two input processors and one output processor on PostgreSQL, a call made 25 status reads, and 14 of them were these empty reads. These workflows no longer read the status. Canceling the call still stops them.
+
+  Your own workflows keep their checks, including workflows you pass as processors. They still stop when another server cancels the run.
+
+- Update provider registry and model documentation with latest models and providers ([`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f))
+
+- Fixed tool calls running without their required approval after a resume. When the model called several tools in one response and one of them suspended or waited for approval, a later tool call from that response could run after the resume without asking. This affected `requireToolApproval` functions passed at call time on `Agent`, and every approval policy on agents created with `createEventedAgent`. Such calls now ask for approval. Agents created with `createEventedAgent` also no longer ask for approval of a call that a `requireToolApproval` function does not match. ([#30605](https://github.com/mastra-ai/mastra/pull/30605))
+
+  On `Agent`, a `requireToolApproval` function is not stored with the run. When a run is resumed without passing it again, every tool call that starts after the resume now asks for approval, including calls the function would not have matched. Pass the same `requireToolApproval` to `resumeStream()` or `approveToolCall()` to keep per-call decisions.
+
+  A tool that called `suspend()` on a version older than 1.50.0 and is resumed after the upgrade no longer receives the payload it suspended with. If that tool also requires approval, it asks for approval again and then runs without the data it was resumed with, so it can suspend once more.
+
+- Fixed storage logs ignoring the Mastra logger. `new Mastra({ logger })`, `logger: false` and `mastra.setLogger()` now reach each domain inside a storage adapter (memory, workflows, schedules and the rest), not only the top-level store, and storage attached later with `mastra.setStorage()` uses the same logger. Before, those domains kept printing to the console with their own default logger. Domain logs from every storage adapter now follow the Mastra logger and its level, so you may see storage warnings that were hidden before. Fixes [#29885](https://github.com/mastra-ai/mastra/issues/29885). ([#30314](https://github.com/mastra-ai/mastra/pull/30314))
+
+- Fixed tool validation errors being passed to `toModelOutput`. When a tool that defines `toModelOutput` fails input, request context or output validation, the agent now skips `toModelOutput` and sends the model the validation error, marked as an error result, so the model can see what went wrong and retry. Before, a mapper written for successful output turned the error into an empty result such as `{}`. This matches the `toModelOutput` type, which only receives the tool's output. Fixes #30211. ([#30311](https://github.com/mastra-ai/mastra/pull/30311))
+
+  Because `toModelOutput` is where a tool keeps fields out of the prompt, the error sent in its place names only the fields that failed and the kind of each problem, for example `- query: too_small` or `- count: invalid_type (expected number)`. It never includes the schema's issue messages, which can quote rejected values or values an input transform resolved, nor the arguments, output, request context or suspend data. Field names the schema doesn't declare, such as record keys, appear as `*`. Issue kinds and expected types come from a fixed list of schema library codes and type names; anything else appears as `invalid`. This also applies to approval-required tools whose arguments fail validation before the approval prompt. Only validation errors that Mastra itself produced skip `toModelOutput`; a tool result or client tool result that merely has `error: true` and `validationErrors` fields is mapped as before. The tool result your code receives still holds the full error, and tools without `toModelOutput` are unchanged.
+
+- - Preserved durable and evented agent behavior while reorganizing execution lifecycle internals. Existing durable replay records remain readable after upgrading. ([#30472](https://github.com/mastra-ai/mastra/pull/30472))
+  - Fixed stream cleanup so older readers preserve resumed runs and current readers can release completed runs.
+  - Prevented duplicate completion callbacks when terminal events arrive concurrently.
+  - Kept idle timeouts active after ignoring terminal events from an earlier execution.
+
+- Fixed agents losing token usage and reporting an extra step when a stream error is retried. When the model stream failed mid-reply and an error processor retried it, the default agent loop reported the failed attempt as its own step, and the run's `usage` lost its input, output and total token counts. The retry now happens inside the same step, the same as on durable and evented agents: the run reports one step, `onStepFinish` and `step-finish` fire once, and usage holds the successful attempt's token counts. Tool calls, sources and files from the failed attempt no longer show up on the recovered step. ([#30696](https://github.com/mastra-ai/mastra/pull/30696))
+
+- `Agent.generate()` and `Agent.stream()` now raise an error when a model step stops at its output-token limit before writing any text or tool calls, for example when a reasoning model spends its whole budget thinking. Previously the run finished with empty text and no error. The error says the model reached its maximum output length, the same message AgentController shows. Truncated text that ends at the limit is still returned as before. ([#30595](https://github.com/mastra-ai/mastra/pull/30595))
+
+- Blocked messages no longer print an error with a stack trace. When an input or output processor calls `abort()`, the workflow step that ran it used to log `Error executing step …: TripWire: …` at ERROR level with the full stack, even though a guardrail blocking a message is expected behavior. Tripwires are now logged at debug level with the step id, processor id and reason. The run still returns `result.tripwire` and the trace still records the step as blocked by a guardrail. Genuine step errors still log at ERROR with their stack. ([#30807](https://github.com/mastra-ai/mastra/pull/30807))
+
+- Fixed resumed workflow runs sampling again. A resume now keeps the suspended run's sampling decision and trace settings and nests under its span on the default, evented and Inngest engines. A resume of a run the sampler did not record stays unrecorded, so scorers do not run for it. This also applies to a durable agent run that another process resumes. On Inngest, a custom sampler now receives the request context and run metadata for the workflow run span. ([#30697](https://github.com/mastra-ai/mastra/pull/30697))
+
+- Fixed evented workflows started with `run.startAsync()` skipping their `onFinish` and `onError` callbacks. `onFinish` now runs when the background run succeeds, fails, suspends, or is canceled, and `onError` runs when it fails or a tripwire stops it, the same way they do for `run.start()`. `mastra.shutdown()` now also waits, up to its drain timeout, for evented `startAsync()` runs that were already dispatched so their callbacks can finish. Fixes [#29391](https://github.com/mastra-ai/mastra/issues/29391). ([#29541](https://github.com/mastra-ai/mastra/pull/29541))
+
+- Fixed `resume()` streaming nothing and never finishing after a durable agent run suspended. With observational memory on, the resumed run also failed its memory step with "lost its execution lease". Fixes [#30206](https://github.com/mastra-ai/mastra/issues/30206). ([#30548](https://github.com/mastra-ai/mastra/pull/30548))
+
+  This happened with storage that tracks which execution owns a run, most often when storage is slow to open new connections. A lease renewal sent just before the run suspended reached storage after the run had let go of it, and the run was reported as lost. Evented agent runs were affected too, including when the worker runs in a different process from the API. A late renewal is now ignored when storage shows the run's own suspension or finish caused it to fail. A renewal rejected because another execution took over the run still stops the run.
+
+  **Behaviour changes**
+
+  - With storage that does not track run ownership, a late renewal after a run suspends still reports the run as lost, as before.
+  - With storage that tracks run ownership, when an evented worker finished or suspended a run but the result never reached the caller, the caller now gets the loss error: the first failed lease renewal after the release is excused and the next one reports the loss, so it arrives within about two lease-renewal intervals (10s by default). Before, it never got one when the worker and caller shared a process, and got it up to one interval (5s by default) earlier when the worker ran in another process. A run abandoned by a worker in another process is also reported up to one interval later. A run abandoned in this process is reported as before.
+  - With storage that tracks run ownership, an execution that outlives its claim's release (for example a worker still running after the run suspended) keeps publishing for up to one lease-renewal interval longer before its events are dropped.
+
+- Fixed background tasks on durable agents with memory failing with "could not verify that this execution still owns the run" or "lost its execution lease" when they suspend after the agent's run has finished. The task is now marked suspended and can be resumed with `backgroundTaskManager.resume()`. This covers tools that call `suspend()` and sub-agents that reach a tool needing approval, including when another evented worker finished the run. A background task's result that arrives while the finished run is still cleaning up is now saved to memory instead of the "Background task started" placeholder. ([#30553](https://github.com/mastra-ai/mastra/pull/30553))
+
+  The fix applies when your storage adapter tracks run ownership, as the in-memory, LibSQL and Postgres stores do. When run ownership lives only in the pubsub lease, a background task that suspends after its run finished still fails as before, because the lease can't show whether another execution took over and finished the run in the meantime. On the evented engine, a background task that suspends after its run was resumed from an approval in the same turn still fails, because the resume's claim counts as another execution. Fixes [#30182](https://github.com/mastra-ai/mastra/issues/30182).
+
+- Fixed evented workflows handing a resumed `foreach` item another item's suspend data. When several items of a `foreach` were suspended, a resumed item received the first suspended item's payload as `suspendData`, and an item started after a resume could receive it too. Each resumed item now gets its own payload, and an item that never suspended gets none. This also fixes evented agents with several suspended sub-agent tool calls, where approving one call could resume another call's sub-agent run. ([#30403](https://github.com/mastra-ai/mastra/pull/30403))
+
+- Tool results from an agent's `workflows` are now marked so `@mastra/observability` can show them in the next model step span instead of `[tool-result: workflow-<name>]`. The tool output sent to the model is unchanged. Tool-result chunks and saved messages for workflow tools now include `providerMetadata.mastra.workflowTool: true`. Fixes #30219. ([#30323](https://github.com/mastra-ai/mastra/pull/30323))
+
+## 1.85.0-alpha.3
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f))
+
+- Fixed tool calls running without their required approval after a resume. When the model called several tools in one response and one of them suspended or waited for approval, a later tool call from that response could run after the resume without asking. This affected `requireToolApproval` functions passed at call time on `Agent`, and every approval policy on agents created with `createEventedAgent`. Such calls now ask for approval. Agents created with `createEventedAgent` also no longer ask for approval of a call that a `requireToolApproval` function does not match. ([#30605](https://github.com/mastra-ai/mastra/pull/30605))
+
+  On `Agent`, a `requireToolApproval` function is not stored with the run. When a run is resumed without passing it again, every tool call that starts after the resume now asks for approval, including calls the function would not have matched. Pass the same `requireToolApproval` to `resumeStream()` or `approveToolCall()` to keep per-call decisions.
+
+  A tool that called `suspend()` on a version older than 1.50.0 and is resumed after the upgrade no longer receives the payload it suspended with. If that tool also requires approval, it asks for approval again and then runs without the data it was resumed with, so it can suspend once more.
+
+- Blocked messages no longer print an error with a stack trace. When an input or output processor calls `abort()`, the workflow step that ran it used to log `Error executing step …: TripWire: …` at ERROR level with the full stack, even though a guardrail blocking a message is expected behavior. Tripwires are now logged at debug level with the step id, processor id and reason. The run still returns `result.tripwire` and the trace still records the step as blocked by a guardrail. Genuine step errors still log at ERROR with their stack. ([#30807](https://github.com/mastra-ai/mastra/pull/30807))
+
+- Fixed resumed workflow runs sampling again. A resume now keeps the suspended run's sampling decision and trace settings and nests under its span on the default, evented and Inngest engines. A resume of a run the sampler did not record stays unrecorded, so scorers do not run for it. This also applies to a durable agent run that another process resumes. On Inngest, a custom sampler now receives the request context and run metadata for the workflow run span. ([#30697](https://github.com/mastra-ai/mastra/pull/30697))
+
+- Fixed evented workflows started with `run.startAsync()` skipping their `onFinish` and `onError` callbacks. `onFinish` now runs when the background run succeeds, fails, suspends, or is canceled, and `onError` runs when it fails or a tripwire stops it, the same way they do for `run.start()`. `mastra.shutdown()` now also waits, up to its drain timeout, for evented `startAsync()` runs that were already dispatched so their callbacks can finish. Fixes [#29391](https://github.com/mastra-ai/mastra/issues/29391). ([#29541](https://github.com/mastra-ai/mastra/pull/29541))
+
+- Fixed evented workflows handing a resumed `foreach` item another item's suspend data. When several items of a `foreach` were suspended, a resumed item received the first suspended item's payload as `suspendData`, and an item started after a resume could receive it too. Each resumed item now gets its own payload, and an item that never suspended gets none. This also fixes evented agents with several suspended sub-agent tool calls, where approving one call could resume another call's sub-agent run. ([#30403](https://github.com/mastra-ai/mastra/pull/30403))
+
+## 1.85.0-alpha.2
+
+### Patch Changes
+
+- Fixed background tasks on durable agents with memory failing with "could not verify that this execution still owns the run" or "lost its execution lease" when they suspend after the agent's run has finished. The task is now marked suspended and can be resumed with `backgroundTaskManager.resume()`. This covers tools that call `suspend()` and sub-agents that reach a tool needing approval, including when another evented worker finished the run. A background task's result that arrives while the finished run is still cleaning up is now saved to memory instead of the "Background task started" placeholder. ([#30553](https://github.com/mastra-ai/mastra/pull/30553))
+
+  The fix applies when your storage adapter tracks run ownership, as the in-memory, LibSQL and Postgres stores do. When run ownership lives only in the pubsub lease, a background task that suspends after its run finished still fails as before, because the lease can't show whether another execution took over and finished the run in the meantime. On the evented engine, a background task that suspends after its run was resumed from an approval in the same turn still fails, because the resume's claim counts as another execution. Fixes [#30182](https://github.com/mastra-ai/mastra/issues/30182).
+
+## 1.85.0-alpha.1
+
+### Patch Changes
+
+- - Preserved durable and evented agent behavior while reorganizing execution lifecycle internals. Existing durable replay records remain readable after upgrading. ([#30472](https://github.com/mastra-ai/mastra/pull/30472))
+  - Fixed stream cleanup so older readers preserve resumed runs and current readers can release completed runs.
+  - Prevented duplicate completion callbacks when terminal events arrive concurrently.
+  - Kept idle timeouts active after ignoring terminal events from an earlier execution.
+
+- Fixed agents losing token usage and reporting an extra step when a stream error is retried. When the model stream failed mid-reply and an error processor retried it, the default agent loop reported the failed attempt as its own step, and the run's `usage` lost its input, output and total token counts. The retry now happens inside the same step, the same as on durable and evented agents: the run reports one step, `onStepFinish` and `step-finish` fire once, and usage holds the successful attempt's token counts. Tool calls, sources and files from the failed attempt no longer show up on the recovered step. ([#30696](https://github.com/mastra-ai/mastra/pull/30696))
+
+- Fixed `resume()` streaming nothing and never finishing after a durable agent run suspended. With observational memory on, the resumed run also failed its memory step with "lost its execution lease". Fixes [#30206](https://github.com/mastra-ai/mastra/issues/30206). ([#30548](https://github.com/mastra-ai/mastra/pull/30548))
+
+  This happened with storage that tracks which execution owns a run, most often when storage is slow to open new connections. A lease renewal sent just before the run suspended reached storage after the run had let go of it, and the run was reported as lost. Evented agent runs were affected too, including when the worker runs in a different process from the API. A late renewal is now ignored when storage shows the run's own suspension or finish caused it to fail. A renewal rejected because another execution took over the run still stops the run.
+
+  **Behaviour changes**
+
+  - With storage that does not track run ownership, a late renewal after a run suspends still reports the run as lost, as before.
+  - With storage that tracks run ownership, when an evented worker finished or suspended a run but the result never reached the caller, the caller now gets the loss error: the first failed lease renewal after the release is excused and the next one reports the loss, so it arrives within about two lease-renewal intervals (10s by default). Before, it never got one when the worker and caller shared a process, and got it up to one interval (5s by default) earlier when the worker ran in another process. A run abandoned by a worker in another process is also reported up to one interval later. A run abandoned in this process is reported as before.
+  - With storage that tracks run ownership, an execution that outlives its claim's release (for example a worker still running after the run suspended) keeps publishing for up to one lease-renewal interval longer before its events are dropped.
+
 ## 1.85.0-alpha.0
 
 ### Minor Changes

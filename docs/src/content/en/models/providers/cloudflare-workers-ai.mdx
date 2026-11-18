@@ -7,7 +7,7 @@ description: "Browse Cloudflare Workers AI model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/cloudflare-workers-ai.svg" alt="Cloudflare Workers AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cloudflare Workers AI
 
-Access 28 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_KEY` environment variable. Configure `CLOUDFLARE_ACCOUNT_ID` as well.
+Access 29 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_KEY` environment variable. Configure `CLOUDFLARE_ACCOUNT_ID` as well.
 
 Learn more in the [Cloudflare Workers AI documentation](https://developers.cloudflare.com/workers-ai/models/).
 
@@ -201,6 +201,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.45,
     "outputCost": 3.2
+  },
+  {
+    "model": "cloudflare-workers-ai/@cf/thinkingmachines/inkling-2-small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "cloudflare-workers-ai/@cf/zai-org/glm-4.7-flash",

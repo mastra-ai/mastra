@@ -170,7 +170,7 @@ const memory = new Memory({
 
 Use a model with a large context window (128,000 tokens or more) that's fast enough to run in the background. Mastra has tested `google/gemini-2.5-flash`, `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__` and `deepseek/deepseek-flash`.
 
-To use a different model per role, set `observation.model` and `reflection.model` instead, and leave the top-level `model` out. Setting both throws. Some models keep so much detail that their reflections can stay above the threshold; in testing, `google/gemini-2.5-flash` did this. A common split uses a detail-preserving model as the Observer and one that condenses more readily, such as `deepseek/deepseek-flash`, as the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+To use a different model per role, set `observation.model` and `reflection.model` instead, and leave the top-level `model` out. Setting both throws. Some models keep so much detail that their reflections can stay above the threshold; in testing, `google/gemini-2.5-flash` did this. A common split uses a detail-preserving model as the Observer and one that condenses more aggressively, such as `deepseek/deepseek-flash`, as the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
 
 ### Tune automatic selection
 
@@ -231,7 +231,7 @@ const memory = new Memory({
 
 Each tier needs a concrete model ID, not `'auto'`. Each `upTo` key is an inclusive upper bound. A call larger than the biggest key throws, so make the last tier cover the largest input you expect.
 
-### Attachments and text-only Observers
+### Attachments and text-only observers
 
 By default the Observer receives images and PDFs (`observation.observeAttachments: ['image/*', 'application/pdf']`). Other attachments are left out, and their placeholders stay in the transcript. Change it when your Observer model handles more or less:
 
@@ -257,7 +257,7 @@ The same filter applies to images and files inside tool results. Attachments the
 
 ## Cost and latency
 
-Each observation and reflection is a model call. With the defaults, a thread costs one Observer call for roughly every 6,000 tokens of new messages, and one Reflector call each time the log reaches 40,000 tokens. In return, every main-agent call reads a context of at most a few tens of thousands of tokens instead of the whole thread. The observation prefix changes rarely, so prompt caching keeps working: users generally see 97 to 99% prompt cache hit rates with OM.
+Each observation and reflection is a model call. With the defaults, a thread costs one Observer call for about every 6,000 tokens of new messages, and one Reflector call each time the log reaches 40,000 tokens. In return, every main-agent call reads a context of at most a few tens of thousands of tokens instead of the whole thread. The observation prefix stays stable, so prompt caching keeps working: users see 97 to 99% prompt cache hit rates with OM.
 
 The Observer runs ahead in the background (async buffering), so the agent doesn't stop to wait for it. These settings control the timing:
 

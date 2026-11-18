@@ -45,6 +45,12 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+// Bindings read at once by a reconcile pass, which yields between them.
+const RECONCILE_CONCURRENCY = 4;
+// The full walk of every active binding behind the routine reconcile pass.
+const FULL_RECONCILE_INTERVAL_MS = 10 * 60_000;
+
+const yieldToEventLoop = () => new Promise<void>(resolve => setImmediate(resolve));
 function ruleStage(boards: BoardRegistry, item: Card | null | undefined): string | undefined {
   return item && workItemPhaseSemantics(boards, item) ? item.stages[0] : undefined;
 }
@@ -199,10 +205,13 @@ function completedStepToolCallIds(steps: unknown[]): Set<string> {
   return ids;
 }
 
-function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
-  if (message.role !== 'assistant') return [];
-  const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt);
-  const completed: CompletedToolResult[] = [];
+function* completedInvocations(message: MastraDBMessage): Generator<{
+  invocation: Record<string, unknown>;
+  state: 'result' | 'error';
+  toolCallId: string;
+  toolName: string;
+}> {
+  if (message.role !== 'assistant') return;
   for (const rawPart of messageParts(message)) {
     if (!rawPart || typeof rawPart !== 'object') continue;
     const part = rawPart as Record<string, unknown>;
@@ -215,6 +224,25 @@ function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
     const toolCallId = invocation.toolCallId;
     const toolName = invocation.toolName ?? invocation.name;
     if (typeof toolCallId !== 'string' || typeof toolName !== 'string') continue;
+    yield { invocation, state, toolCallId, toolName };
+  }
+}
+
+/** Which tool calls a message holds a result for, without serializing the results. */
+function completedToolCallsKey(message: MastraDBMessage): string {
+  const keys: string[] = [];
+  for (const { state, toolCallId } of completedInvocations(message)) keys.push(`${toolCallId}:${state}`);
+  return keys.join('\n');
+}
+
+function messageTime(message: MastraDBMessage): number {
+  return (message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt)).getTime();
+}
+
+function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
+  const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt);
+  const completed: CompletedToolResult[] = [];
+  for (const { invocation, state, toolCallId, toolName } of completedInvocations(message)) {
     completed.push({
       assistantMessageId: message.id,
       messageCreatedAt: createdAt,
@@ -327,6 +355,16 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   /** Request contexts whose caller row is already resolved for this request. */
   private readonly loadedMemorySettings = new WeakSet<object>();
   private readonly bindingReconciles = new Map<string, Promise<void>>();
+  /**
+   * Bindings a step ran on since they were last reconciled, or whose run was still
+   * going then. Only these can have tool results the step hook did not see, so a
+   * routine pass reads only them. `settled` marks one already read after its run
+   * stopped: it gets one trailing read, for results persisted after the run ended.
+   */
+  private readonly pendingReconciles = new Map<string, { binding: FactoryRunBindingRecord; settled: boolean }>();
+  /** Messages at each binding's cursor time already ingested, by id, with the tool calls they held results for. */
+  private readonly cursorBoundaries = new Map<string, { at: number; seen: Map<string, string> }>();
+  private lastFullReconcileAt: number | undefined;
   private readonly boards: ProjectBoardSource;
 
   constructor(
@@ -342,6 +380,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       defaultThinkingLevel?: (requestContext: ComputeStateSignalArgs['requestContext']) => Promise<ThinkingLevel>;
       /** Called on every step of a run on an active bound thread, so an idle dispatcher reconciles its tool results. */
       onBoundThreadRun?: () => void;
+      /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
+      isThreadRunning?: (threadId: string) => boolean;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -391,6 +431,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // recovered session reaches its project row from this hook too.
     await this.loadCallerMemorySettings(args.requestContext, binding);
     if (!binding || binding.status !== 'active') return;
+    this.pendingReconciles.set(binding.id, { binding, settled: false });
     this.options.onBoundThreadRun?.();
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
@@ -592,10 +633,91 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     };
   }
 
-  async reconcileAllBoundThreads(): Promise<void> {
+  /**
+   * The dispatcher's recurring pass. Tool results reach the card from the step hook;
+   * this catches the ones it cannot see (results persisted after a run's last step,
+   * or while no process was watching). Only bindings a step ran on since the last
+   * pass can have new ones, so a routine pass reads just those. The first pass, and
+   * one every {@link FULL_RECONCILE_INTERVAL_MS}, walks every active binding instead.
+   */
+  async reconcileBoundThreads(now = Date.now()): Promise<void> {
+    if (!this.options.messageReader) return;
+    if (this.lastFullReconcileAt === undefined || now - this.lastFullReconcileAt >= FULL_RECONCILE_INTERVAL_MS) {
+      await this.reconcileAllBoundThreads(now);
+      return;
+    }
+    const pending = [...this.pendingReconciles.values()];
+    this.pendingReconciles.clear();
+    await this.reconcileEntries(pending, true);
+  }
+
+  /** Walks every active binding: the boot catch-up and the safety net behind {@link reconcileBoundThreads}. */
+  async reconcileAllBoundThreads(now = Date.now()): Promise<void> {
     if (!this.options.messageReader) return;
     const bindings = await this.options.storage.listActiveRunBindings();
-    for (const binding of bindings) await this.reconcileBinding(binding);
+    this.lastFullReconcileAt = now;
+    const pending = new Map(this.pendingReconciles);
+    this.pendingReconciles.clear();
+    const active = new Set(bindings.map(binding => binding.id));
+    for (const id of this.cursorBoundaries.keys()) if (!active.has(id)) this.cursorBoundaries.delete(id);
+    await this.reconcileEntries(
+      bindings.map(binding => ({ binding, settled: pending.get(binding.id)?.settled ?? true })),
+      false,
+    );
+  }
+
+  /**
+   * A few bindings at a time, yielding between them: a pass is background work and
+   * must not hold the event loop or the database for the runs it follows. A binding
+   * that fails stays due for the next pass; the first failure is rethrown at the end.
+   */
+  private async reconcileEntries(
+    entries: Array<{ binding: FactoryRunBindingRecord; settled: boolean }>,
+    refresh: boolean,
+  ): Promise<void> {
+    let next = 0;
+    let failure: { error: unknown } | undefined;
+    const worker = async () => {
+      while (next < entries.length) {
+        const entry = entries[next++]!;
+        try {
+          await this.reconcileEntry(entry, refresh);
+        } catch (error) {
+          failure ??= { error };
+          if (!this.pendingReconciles.has(entry.binding.id)) this.pendingReconciles.set(entry.binding.id, entry);
+        }
+        await yieldToEventLoop();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(RECONCILE_CONCURRENCY, entries.length) }, worker));
+    if (failure) throw failure.error;
+  }
+
+  private async reconcileEntry(
+    entry: { binding: FactoryRunBindingRecord; settled: boolean },
+    refresh: boolean,
+  ): Promise<void> {
+    let binding = entry.binding;
+    if (refresh) {
+      // Noted at its last step; the card may have moved on and revoked it since.
+      const current = await this.options.storage.findRunBindingById({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        id: binding.id,
+      });
+      if (current?.status !== 'active') {
+        this.cursorBoundaries.delete(binding.id);
+        return;
+      }
+      binding = current;
+    }
+    // Read before the transcript: a run that stops after this check gets its trailing read next pass.
+    const running = this.options.isThreadRunning?.(binding.threadId) ?? false;
+    await this.reconcileBinding(binding);
+    // A step that ran meanwhile already queued it again.
+    if (this.pendingReconciles.has(binding.id)) return;
+    if (running) this.pendingReconciles.set(binding.id, { binding, settled: false });
+    else if (!entry.settled) this.pendingReconciles.set(binding.id, { binding, settled: true });
   }
 
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
@@ -619,8 +741,21 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // single rule stage would ingest nothing, so skip the cursor and message
     // reads entirely instead of paying them on every walk.
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!itemInRuleStage(await this.boards.load(binding), item)) return;
+    if (!itemInRuleStage(await this.boards.load(binding), item)) {
+      this.cursorBoundaries.delete(binding.id);
+      return;
+    }
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
+    // The cursor start is inclusive: a message at the cursor time can be rewritten in
+    // place (a suspended tool call that later resumes with its result), and several
+    // messages can share a timestamp. Messages there that were already ingested and
+    // still hold the same results are skipped instead of ingested again every pass.
+    const startAt = cursor ? new Date(cursor.lastMessageCreatedAt).getTime() : undefined;
+    const previous = this.cursorBoundaries.get(binding.id);
+    const ingested = previous && previous.at === startAt ? previous.seen : new Map<string, string>();
+    let cursorAt = startAt;
+    let boundary = new Map<string, string>();
+    let read = false;
     let page = 0;
     while (true) {
       const result = await reader.listMessages({
@@ -631,20 +766,34 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(cursor ? { filter: { dateRange: { start: cursor.lastMessageCreatedAt } } } : {}),
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
-      await this.ingestMessages(binding, result.messages, undefined, item);
+      const fresh = result.messages.filter(
+        message => messageTime(message) !== startAt || ingested.get(message.id) !== completedToolCallsKey(message),
+      );
+      if (fresh.length > 0) await this.ingestMessages(binding, fresh, undefined, item);
       const last = result.messages.at(-1);
       if (last) {
-        await this.options.storage.advanceToolResultCursor({
-          bindingId: binding.id,
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          lastMessageCreatedAt: last.createdAt instanceof Date ? last.createdAt : new Date(last.createdAt),
-          updatedAt: new Date(),
-        });
+        read = true;
+        const lastAt = messageTime(last);
+        if (lastAt !== cursorAt) {
+          await this.options.storage.advanceToolResultCursor({
+            bindingId: binding.id,
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            lastMessageCreatedAt: new Date(lastAt),
+            updatedAt: new Date(),
+          });
+          cursorAt = lastAt;
+          boundary = new Map();
+        }
+        for (const message of result.messages) {
+          if (messageTime(message) === lastAt) boundary.set(message.id, completedToolCallsKey(message));
+        }
       }
       if (!result.hasMore) break;
       page += 1;
+      await yieldToEventLoop();
     }
+    if (read && cursorAt !== undefined) this.cursorBoundaries.set(binding.id, { at: cursorAt, seen: boundary });
   }
 
   private async ingestMessages(

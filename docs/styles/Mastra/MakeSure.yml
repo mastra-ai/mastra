@@ -1,6 +1,6 @@
 extends: substitution
-message: "Use 'Ensure' instead of '%s'."
-level: warning
+message: "Use '%s' instead of '%s'."
+level: error
 ignorecase: true
 swap:
   make sure: Ensure

@@ -2,7 +2,8 @@ import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { normalizeModelOutput } from '../normalize-model-output';
+import { getModelFacingValidationError } from '../../../tools/validation';
+import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
 /** Completion payload delivered by the background-task manager's onResult hook. */
 export interface BackgroundToolResultParams {
@@ -120,9 +121,15 @@ export async function applyBackgroundToolResult(deps: {
     : { transcriptArgs: deps.args, transcriptResult: result, providerMetadata: deps.baseProviderMetadata };
 
   // Recompute the model-facing output from the *real* result. Mirrors the
-  // synchronous path's toModelOutput mapping.
+  // synchronous path's toModelOutput mapping, including skipping the mapper for
+  // a validation error Mastra produced, so the model reads the error, not a
+  // mapping of missing fields. The marker only survives when the task ran in
+  // this process; a result from another process is mapped like any result.
+  const validationError = failed ? undefined : getModelFacingValidationError(result);
   let modelOutput: unknown = null;
-  if (!failed && deps.toModelOutput && result != null) {
+  if (deps.toModelOutput && validationError) {
+    modelOutput = validationErrorModelOutput(validationError);
+  } else if (!failed && deps.toModelOutput && result != null) {
     try {
       modelOutput = normalizeModelOutput(await deps.toModelOutput(result)) ?? null;
     } catch (mappingError) {

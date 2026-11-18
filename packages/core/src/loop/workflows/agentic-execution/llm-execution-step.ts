@@ -131,6 +131,7 @@ import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-to
 import { getToolResultInvocationState } from './provider-tool-result-state';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
+import { resolveRunToolApprovalPolicy } from './tool-approval-verdict';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -2438,7 +2439,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         activeTools: readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') as
                           | string[]
                           | undefined,
-                        requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+                        requireToolApproval: resolveRunToolApprovalPolicy(requireToolApproval, requestContext),
                         autoResumeSuspendedTools,
                         // Output processors reach the loop wrapped in a workflow, so the
                         // plain `processOutputStep` / `processLLMResponse` methods are not

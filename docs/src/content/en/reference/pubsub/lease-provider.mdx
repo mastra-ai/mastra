@@ -126,7 +126,7 @@ Returns: `Promise<boolean>`
 
 #### `transferLease(key, fromOwner, toOwner, ttlMs)`
 
-Atomically transfers a held lease from `fromOwner` to `toOwner` and refreshes its TTL without releasing the key in between. This gap-free primitive lets a follow-up owner take over the same key immediately after the current owner finishes. For example, a queued follow-up run can take over when a thread run completes. A naive release-then-acquire briefly leaves the key empty. A racing process could then win the freed lease and start a competing run.
+Atomically transfers a held lease from `fromOwner` to `toOwner` and refreshes its TTL without releasing the key in between. This gap-free primitive lets a follow-up owner take over the same key immediately after the current owner finishes. For example, a queued follow-up run can take over when a thread run completes. A naive release-then-acquire leaves the key empty for a moment. A racing process could then win the freed lease and start a competing run.
 
 Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwner`, or `false` if the lease was already lost, in which case the caller should fall back to a fresh `acquireLease`.
 

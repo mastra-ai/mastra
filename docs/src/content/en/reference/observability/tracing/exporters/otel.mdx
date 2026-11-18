@@ -378,7 +378,7 @@ Flushes pending traces and shuts down the exporter.
 
 ## Usage examples
 
-### Zero-Config (using environment variables)
+### Zero-config (using environment variables)
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter'
@@ -393,7 +393,7 @@ const exporter = new OtelExporter({ provider: { signoz: {} } })
 // Set LMNR_PROJECT_API_KEY for Laminar
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 ```typescript
 import { OtelExporter } from '@mastra/otel-exporter'
@@ -408,7 +408,7 @@ const exporter = new OtelExporter({
 })
 ```
 
-### With Custom Endpoint
+### With custom endpoint
 
 ```typescript
 const exporter = new OtelExporter({
@@ -451,7 +451,7 @@ const result = await agent.generate('Hello', {
 })
 ```
 
-### How Tags Are Stored
+### How tags are stored
 
 Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute for maximum backend compatibility:
 
