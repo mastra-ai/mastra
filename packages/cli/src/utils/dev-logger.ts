@@ -73,11 +73,6 @@ export class DevLogger {
     this.clearLine();
   }
 
-  serverOutput(output: string, stream: NodeJS.WriteStream): void {
-    this.stopStarting();
-    stream.write(output);
-  }
-
   ready(
     host: string,
     port: number,

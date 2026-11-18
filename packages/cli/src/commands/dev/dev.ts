@@ -204,7 +204,8 @@ const startServer = async (
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
-          devLogger.serverOutput(output, process.stdout);
+          devLogger.stopStarting();
+          process.stdout.write(output);
         }
       });
     }
@@ -213,7 +214,8 @@ const startServer = async (
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
-          devLogger.serverOutput(output, process.stderr);
+          devLogger.stopStarting();
+          process.stderr.write(output);
         }
       });
     }
