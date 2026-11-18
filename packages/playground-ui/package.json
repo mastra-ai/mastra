@@ -168,6 +168,8 @@
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
     "icons:central": "node scripts/central-icons.mjs",
+    "art:build": "node scripts/empty-state-art/build.mts --react src/ds/components/EmptyStateArt && prettier --write src/ds/components/EmptyStateArt",
+    "art:preview": "node scripts/empty-state-art/build.mts ${TMPDIR:-/tmp}/empty-state-art",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
     "build:publish": "pnpm build && yalc push",

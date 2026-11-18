@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create states, Factory objects</title>
+    <style>
+      *{box-sizing:border-box;margin:0}
+      html,body{background:#080808}
+      body{font-family:"Mona Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-synthesis:none;min-height:100dvh;padding:40px 40px 120px}
+      .stage{--background:#0D0D0D;--card:#141414;--fg:#FAFAFA;--muted:#8F8F8F;--subtle:#6B6B6B;--hairline:rgb(255 255 255/8%);--btn:#FAFAFA;--btn-ink:#0D0D0D;color:var(--fg)}
+      .card{--accent-ink:var(--accent)}
+      .stage[data-theme=light] .card{--accent-ink:color-mix(in oklab,var(--accent) 72%,black)}
+      .stage[data-theme=light]{--background:#FAFAFA;--card:#FFFFFF;--fg:#171717;--muted:#5E5E5E;--subtle:#8A8A8A;--hairline:rgb(0 0 0/9%);--btn:#171717;--btn-ink:#FFFFFF}
+      body:has(.stage[data-theme=light]){background:#EDEDED}
+      .top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:32px;max-width:1568px}
+      .top h1{font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.015em}
+      .top p{font-size:14px;line-height:21px;color:var(--muted);max-width:620px;margin-top:6px}
+      .controls{display:flex;gap:12px}
+      .seg{display:flex;padding:3px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--hairline)}
+      .seg button{border:0;background:transparent;color:var(--muted);font:500 12px/16px "Mona Sans",system-ui;padding:6px 12px;border-radius:999px;cursor:pointer;transition:color 150ms ease-out,background-color 150ms ease-out}
+      .seg button[aria-pressed=true]{background:var(--hairline);color:var(--fg)}
+      .seg button:focus-visible{outline:2px solid var(--muted);outline-offset:2px}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(620px,1fr));gap:40px 32px;max-width:1568px}
+      .label{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:0 4px 10px;white-space:nowrap}
+      .label b{font-size:15px;line-height:20px;font-weight:500}
+      .label span{font-size:13px;color:var(--muted);margin-left:10px}
+      .label code{min-width:0;overflow:hidden;text-overflow:ellipsis;font:12px/16px CommitMono,ui-monospace,monospace;color:var(--subtle)}
+      .frame{background:var(--background);border-radius:12px;box-shadow:inset 0 0 0 1px var(--hairline);height:520px;display:flex;flex-direction:column;overflow:hidden}
+      .crumbs{display:flex;gap:8px;align-items:center;height:44px;padding:0 20px;box-shadow:inset 0 -1px 0 var(--hairline);font-size:13px;font-weight:500;color:var(--muted);flex-shrink:0}
+      .crumbs i{font-style:normal;color:var(--subtle);opacity:.6}
+      .crumbs :last-child{color:var(--fg)}
+      .body{flex:1;display:flex;align-items:center;justify-content:center;gap:40px;padding:24px 40px}
+      .stage[data-layout=stacked] .body{flex-direction:column;gap:20px;text-align:center}
+      .visual{width:300px;height:240px;display:grid;place-items:center;flex-shrink:0}
+      .stage[data-layout=stacked] .visual{height:180px}
+      .stage[data-layout=stacked] .art{max-height:180px;width:auto}
+      .copy{display:flex;flex-direction:column;align-items:flex-start;gap:0;flex:none;width:280px}
+      .copy p{margin-top:8px}
+      .copy .chip{margin-bottom:12px}
+      .stage[data-layout=stacked] .copy{align-items:center;width:400px}
+      .copy h3{font-size:20px;line-height:26px;font-weight:500;letter-spacing:-.01em;text-wrap:balance}
+      .copy[data-tier="2"] h3{font-size:16px;line-height:22px}
+      .copy p{font-size:14px;line-height:21px;color:var(--muted);text-wrap:pretty}
+      .copy small{font-size:12px;line-height:16px;color:var(--subtle)}
+      .actions{display:flex;align-items:center;gap:12px;margin-top:24px}
+      .copy small{margin-top:6px}
+      .copy small.status{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--muted)}
+      .count{font-variant-numeric:tabular-nums}
+      .sdot{position:relative;width:8px;height:8px;border-radius:50%;background:var(--accent-ink);flex-shrink:0}
+      .sdot::after{content:'';position:absolute;inset:-3px;border-radius:50%;box-shadow:0 0 0 1px var(--accent-ink);opacity:0;animation:sdot 1.6s ease-out infinite}
+      @keyframes sdot{0%{opacity:.7;scale:.6}100%{opacity:0;scale:1.4}}
+      @media (prefers-reduced-motion:reduce){.sdot::after{animation:none}}
+      .btn{white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 14px;border:0;border-radius:999px;background:var(--btn);color:var(--btn-ink);font:500 13px/18px "Mona Sans",system-ui;cursor:pointer;transition:transform 150ms ease-out}
+      .btn:active{transform:scale(.97)}
+      .btn:focus-visible,.link:focus-visible{outline:2px solid var(--muted);outline-offset:2px}
+      .btn[aria-busy=true]{cursor:progress}
+      .spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:spin 700ms linear infinite}
+      @keyframes spin{to{rotate:360deg}}
+      .link{white-space:nowrap;display:inline-flex;gap:6px;align-items:center;color:var(--fg);font:500 13px/18px "Mona Sans",system-ui;text-decoration:none;opacity:.85}
+      .chip{font-size:12px;line-height:16px;font-weight:500;padding:2px 8px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--hairline)}
+
+      .art{display:block;overflow:visible;pointer-events:none;user-select:none;
+        --line:color-mix(in oklab,var(--muted) 45%,var(--background));
+        --face:var(--card);
+        --detail:color-mix(in oklab,var(--muted) 24%,var(--background));
+        --hole:var(--background);
+        --packet:var(--muted);
+        --logo:var(--line);
+        --smoke:color-mix(in oklab,var(--muted) 55%,var(--background))}
+      .fx{transform-box:view-box}
+      .stage[data-mode=accent] .acc,
+      .stage[data-mode=hover] .card:is([data-live],[data-pending]) .acc,
+      .card[data-tone=error] .acc{
+        --line:color-mix(in oklab,var(--accent-ink) 85%,var(--card));
+        --face:color-mix(in oklab,var(--accent) 8%,var(--card));
+        --detail:color-mix(in oklab,var(--accent-ink) 45%,var(--card));
+        --hole:color-mix(in oklab,var(--accent) 5%,var(--background))}
+      .stage:not([data-mode=gray]) .art{--packet:var(--accent-ink)}
+      .art path{transition:stroke 240ms ease-out,fill 240ms ease-out}
+      .card:is([data-live],[data-pending]) .drawer{animation:drawer 3.6s infinite}
+      .card:is([data-live],[data-pending]) .hold{animation:hold .7s cubic-bezier(.22,1,.36,1) forwards}
+      @keyframes hold{from{translate:0 0}to{translate:var(--shift)}}
+      .swing{transform-box:fill-box;transform-origin:50% 0}
+      .card:is([data-live],[data-pending]) .swing{animation:swing 2.6s ease-in-out infinite}
+      @keyframes swing{0%,100%{rotate:0deg}25%{rotate:8deg}75%{rotate:-8deg}}
+      .stream{animation:stream var(--dur) var(--ease,linear) infinite;animation-delay:var(--delay,0s)}
+      @keyframes job{
+        0%{translate:0 0}
+        52%{translate:var(--up)}
+        62%{translate:var(--up);animation-timing-function:cubic-bezier(.65,0,.35,1)}
+        76%{translate:var(--over);animation-timing-function:cubic-bezier(.55,0,1,.45)}
+        90%{translate:var(--in)}
+        100%{translate:var(--in)}}
+      .job{animation:job 4.4s linear infinite;animation-delay:-1.9s}
+      .tick{animation:tick var(--dur) infinite}
+      @keyframes tick{0%{translate:0 0;animation-timing-function:cubic-bezier(.65,0,.35,1)}40%{translate:var(--step)}100%{translate:var(--step)}}
+      .card:is([data-live],[data-pending]) .bob{animation:bob var(--dur) ease-in-out infinite;animation-delay:var(--delay)}
+      @keyframes bob{0%,100%{translate:0 0}50%{translate:var(--shift)}}
+      .card:is([data-live],[data-pending]) .flip{animation:flip 4s infinite;animation-delay:var(--delay)}
+      @keyframes flip{0%{translate:0 0;animation-timing-function:cubic-bezier(.22,1,.36,1)}6%{translate:var(--shift)}55%{translate:var(--shift);animation-timing-function:cubic-bezier(.22,1,.36,1)}61%{translate:0 0}100%{translate:0 0}}
+      .lamp,.lamp4{opacity:.25}
+      .card:is([data-live],[data-pending]) .lamp{animation:lamp 4s infinite;animation-delay:var(--delay)}
+      @keyframes lamp{0%{opacity:.25}6%{opacity:1}55%{opacity:1}61%{opacity:.25}100%{opacity:.25}}
+      .lamp4{animation:lamp4 6.4s infinite;animation-delay:var(--delay)}
+      @keyframes lamp4{0%{opacity:.25}3%{opacity:1}22%{opacity:1}25%{opacity:.25}100%{opacity:.25}}
+      .raise{transform-box:fill-box;transform-origin:0% 100%}
+      .card:is([data-live],[data-pending]) .raise{animation:raise 3.2s infinite}
+      @keyframes raise{0%{rotate:0deg;animation-timing-function:cubic-bezier(.22,1,.36,1)}18%{rotate:var(--rot)}62%{rotate:var(--rot);animation-timing-function:cubic-bezier(.65,0,.35,1)}80%{rotate:0deg}100%{rotate:0deg}}
+      .sparks{display:none;pointer-events:none}
+      .card[data-tone=error] .sparks{display:inline}
+      .spark path{fill:none;stroke:var(--accent-ink);stroke-width:1;stroke-linecap:round;vector-effect:non-scaling-stroke}
+      .spark circle{fill:color-mix(in oklab,var(--accent-ink) 55%,white)}
+      .spark.b{opacity:0}
+      .card[data-tone=error][data-live] .spark.a{animation:sparkA .9s steps(1) infinite}
+      .card[data-tone=error][data-live] .spark.b{animation:sparkB .9s steps(1) infinite}
+      @keyframes sparkA{0%{opacity:1}22%{opacity:0}48%{opacity:1}60%{opacity:0}100%{opacity:0}}
+      @keyframes sparkB{0%{opacity:0}22%{opacity:1}40%{opacity:0}66%{opacity:1}84%{opacity:0}100%{opacity:0}}
+      .fail{display:none}
+      .card[data-tone=error] .fail{display:inline}
+      .card[data-tone=error] .okonly{display:none}
+      .rattle,.sway2{transform-box:fill-box;transform-origin:50% 50%}
+      .sway2{transform-origin:50% 0}
+      .card[data-tone=error][data-live] .rattle{animation:rattle .42s linear infinite}
+      @keyframes rattle{0%,100%{transform:translate(0,0)}25%{transform:translate(-1.2px,.6px)}50%{transform:translate(1px,-.5px)}75%{transform:translate(-.6px,-.6px)}}
+      .card[data-tone=error][data-live] .blinkr{animation:blinkr 1s steps(1) infinite}
+      @keyframes blinkr{50%{opacity:.12}}
+      .card[data-tone=error][data-live] .flicker{animation:flicker 1.4s steps(1) infinite}
+      @keyframes flicker{0%{opacity:1}9%{opacity:.2}13%{opacity:1}38%{opacity:.3}42%{opacity:1}68%{opacity:.15}71%{opacity:1}}
+      .card[data-tone=error][data-live] .sway2{animation:sway2 1.8s ease-in-out infinite}
+      @keyframes sway2{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+      .cart{offset-rotate:0deg;offset-distance:var(--at);animation:cart var(--cycle) infinite;animation-delay:var(--delay)}
+      @keyframes cart{0%{offset-distance:0%;animation-timing-function:cubic-bezier(.45,0,.2,1)}5%{offset-distance:100%}15%{offset-distance:100%;animation-timing-function:cubic-bezier(.45,0,.2,1)}20%{offset-distance:0%}100%{offset-distance:0%}}
+      .card[data-tone=error] .cart{--accent:#FF4758!important;--accent-ink:#FF4758!important}
+      .card[data-tone=error] .cartjam{transform-box:fill-box;transform-origin:50% 100%;translate:var(--fpose);rotate:var(--frot)}
+      .card[data-tone=error] [style*="--frot"]{transform-box:fill-box;transform-origin:50% 100%}
+      .card:is([data-live],[data-pending]) .file{animation:file 3.6s infinite}
+      @keyframes file{0%,30%{translate:0 0;opacity:1;animation-timing-function:cubic-bezier(.33,0,.67,1)}38%{translate:var(--up)}48%{translate:var(--over);animation-timing-function:cubic-bezier(.55,0,1,.45)}55%{translate:var(--in);opacity:1}55.1%{translate:var(--in);opacity:0}99.9%{translate:var(--in);opacity:0}100%{translate:0 0;opacity:1}}
+      .filein{opacity:0}
+      .card:is([data-live],[data-pending]) .filein{animation:filein 3.6s forwards}
+      @keyframes filein{0%,54.9%{opacity:0}55%,100%{opacity:1}}
+      @property --a{syntax:'<angle>';inherits:false;initial-value:0deg}
+      .mbflag{transform-box:view-box;transform:matrix(calc(cos(var(--a)) - sin(var(--a))*0.3536),calc(sin(var(--a))*1.591),calc(sin(var(--a))*-0.7072),calc(cos(var(--a)) + sin(var(--a))*0.3536),0,0)}
+      .card:is([data-live],[data-pending]) .mbfly{animation:mbfly 3.2s infinite}
+      @keyframes mbfly{0%,15%{translate:0 0;opacity:1;animation-timing-function:cubic-bezier(.33,0,.67,1)}27%{translate:var(--up)}38%{translate:var(--over);animation-timing-function:cubic-bezier(.55,0,1,.45)}45%{translate:var(--mouth);opacity:1}45.1%,99.9%{translate:var(--mouth);opacity:0}100%{translate:0 0;opacity:1}}
+      .mbin{opacity:0}
+      .card:is([data-live],[data-pending]) .mbin{animation:mbin 3.2s infinite}
+      @keyframes mbin{0%,44.9%{opacity:0;translate:0 0}45%{opacity:1;translate:0 0;animation-timing-function:cubic-bezier(.45,0,.55,1)}62%{opacity:1;translate:var(--push)}64%,100%{opacity:0;translate:var(--push)}}
+      .card:is([data-live],[data-pending]) .mbflag{animation:mbflag 3.2s infinite}
+      @keyframes mbflag{0%,60%{--a:0deg;animation-timing-function:cubic-bezier(.22,1,.36,1)}72%{--a:90deg}88%{--a:90deg;animation-timing-function:cubic-bezier(.65,0,.35,1)}100%{--a:0deg}}
+      @keyframes stream{from{translate:0 0}to{translate:var(--travel)}}
+      .art :is(.stream,.belt,.job,.tick,.lamp4,.cart,.mdlamp path,.packet,.packet>*){animation-play-state:paused}
+      .card:is([data-flow],[data-pending]) .art :is(.stream,.belt,.job,.tick,.lamp4,.cart,.mdlamp path,.packet,.packet>*){animation-play-state:running}
+      @keyframes drawer{
+        0%{translate:0 0;animation-timing-function:cubic-bezier(.22,1,.36,1)}
+        30%{translate:var(--shift)}
+        62%{translate:var(--shift);animation-timing-function:cubic-bezier(.65,0,.35,1)}
+        88%{translate:0 0}
+        100%{translate:0 0}}
+      .packet{offset-rotate:0deg;offset-distance:var(--at);animation:travel 2.4s linear infinite;animation-delay:var(--delay)}
+      .packet>g,.packet>circle{animation:edge 2.4s linear infinite;animation-delay:var(--delay)}
+      @keyframes travel{from{offset-distance:0%}to{offset-distance:100%}}
+      @keyframes edge{0%{opacity:0}12%{opacity:1}85%{opacity:1}100%{opacity:0}}
+      .card:is([data-live],[data-pending]) .cursor{animation:blink 1s steps(1) infinite}
+      @keyframes blink{50%{opacity:0}}
+      @media (prefers-reduced-motion:reduce){
+        .art path{transition:none}
+        .card .fx,.card .reelspin{animation:none!important}
+        .card .hold,.card .mbfly,.card .mbin,.card .mbflag,.card .file,.card .spark,.card .drawer,.card .swing,.card .rays,.card .bob,.card .flip,.card .lamp,.card .raise,.card .cursor,.spin{animation:none!important}
+        .card :is(.stream,.belt,.job,.tick,.lamp4,.cart,.mdlamp path,.packet,.packet>*){animation-play-state:paused!important}
+        .card .rattle,.card .blinkr,.card .flicker,.card .sway2{animation:none!important}
+      }
+
+      .swap{appearance:none;border:0;background:transparent;color:var(--muted);font:500 12px/16px "Mona Sans",system-ui;padding:4px 22px 4px 8px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--hairline);cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 11px) 50%,calc(100% - 7px) 50%;background-size:4px 4px;background-repeat:no-repeat}
+      .swap:focus-visible{outline:2px solid var(--muted);outline-offset:2px}
+      .label-end{display:flex;gap:12px;align-items:center;min-width:0}
+      .label>div:first-child{flex-shrink:0}
+      .rays{opacity:0}
+      .card:is([data-live],[data-pending]) .rays{animation:pulse 1.6s ease-in-out infinite}
+      @keyframes belt{from{translate:0 0}to{translate:var(--step)}}
+      .belt{animation:belt .35s linear infinite}
+      .card[data-tone=error] :is(.stream,.belt,.job,.tick,.lamp4,.cart,.mdlamp path,.packet,.packet>*){animation-play-state:paused!important}
+      @keyframes pulse{0%,100%{opacity:0}45%{opacity:1}}
+      .card[data-tone=error] :is(.hold,.drawer,.swing,.bob,.flip,.raise){animation:none!important;translate:var(--fpose,0px 0px);rotate:var(--frot,0deg)}
+      .card[data-tone=error] .packet,.card[data-tone=error] .rays{opacity:0!important}
+      .copy p.error{color:var(--muted)}
+      .btn[disabled]{opacity:.9;cursor:progress}
+      .btn.secondary{background:transparent;color:var(--fg);box-shadow:inset 0 0 0 1px var(--hairline)}
+      .lib{max-width:1568px;margin-top:64px}
+      .lib h2{font-size:20px;line-height:26px;font-weight:500;letter-spacing:-.01em}
+      .lib>p{font-size:14px;line-height:21px;color:var(--muted);margin:6px 0 24px;max-width:620px}
+      .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+      .tile{background:var(--background);border-radius:12px;box-shadow:inset 0 0 0 1px var(--hairline);padding:20px 20px 18px;display:flex;flex-direction:column;gap:14px}
+      .tile .visual{width:100%;height:240px}
+      .tile b{font-size:14px;line-height:20px;font-weight:500;display:block}
+      .tile span{font-size:13px;line-height:19px;color:var(--muted)}
+
+      @media (prefers-reduced-motion:reduce){
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage-root" data-theme="dark" data-layout="split" data-mode="gray" data-state="empty">
+      <div class="top">
+        <div>
+          <h1>Create states, Factory objects</h1>
+          <p>
+            Hover or tab into a card to see its move. Switch the state at the top right, and swap drawings from each
+            card’s menu.
+          </p>
+        </div>
+        <div class="controls">
+          <div class="seg" role="group" aria-label="State">
+            <button data-state="empty" aria-pressed="true">Empty</button
+            ><button data-state="pending" aria-pressed="false">Setting up</button
+            ><button data-state="importing" aria-pressed="false">Importing</button
+            ><button data-state="failed" aria-pressed="false">Couldn’t set up</button>
+          </div>
+          <div class="seg" role="group" aria-label="Layout">
+            <button data-layout="split" aria-pressed="true">Split</button
+            ><button data-layout="stacked" aria-pressed="false">Stacked</button>
+          </div>
+          <div class="seg" role="group" aria-label="Theme">
+            <button data-theme="dark" aria-pressed="true">Dark</button
+            ><button data-theme="light" aria-pressed="false">Light</button>
+          </div>
+        </div>
+      </div>
+      <div class="grid" id="stage"></div>
+      <section class="lib" aria-label="Drawing library">
+        <h2>Drawing library</h2>
+        <p>
+          Every drawing, with the surfaces it covers. Hover one to see its move. The state switch at the top applies
+          here too: “Couldn’t set up” shows how each object breaks. Swap any of them into the cards above with the menu
+          next to each card name.
+        </p>
+        <div class="lib-grid" id="lib"></div>
+      </section>
+    </div>
+
+    <script>
+      /*ART*/
+      const BRAND = { green: '#7AFF78', orange: '#FDAC53', purple: '#B588FE', blue: '#6CCDFB', pink: '#FF69CC' };
+      const arrow =
+        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 7h8M7.5 3.5L11 7l-3.5 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      const out =
+        '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 8l4-4M4.5 4H8v3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      const CARDS = [
+        {
+          key: 'knowledge',
+          name: 'Knowledge',
+          tier: 'Tier 1, turn on a capability',
+          file: 'KnowledgeEmptyState.tsx',
+          crumbs: ['Acme', 'support-agent', 'Knowledge'],
+          feature: 'purple',
+          title: 'Give your agents shared knowledge',
+          desc: 'A store of pages your agents search, read and write. Importers keep it in sync with Linear, Notion, Confluence, Zendesk and Fireflies.',
+          button: 'Set up Knowledge',
+          pending: 'Setting up',
+          note: 'Creates a dedicated Postgres database.',
+        },
+        {
+          key: 'workspaces',
+          name: 'Workspaces',
+          tier: 'Tier 1, turn on a capability',
+          file: 'WorkspacesEmptyState.tsx',
+          crumbs: ['Acme', 'support-agent', 'Workspaces'],
+          feature: 'blue',
+          title: 'Give every environment files and a sandbox',
+          desc: 'Workspaces add persistent file storage to each environment, plus sandboxes for running tools.',
+          button: 'Set up workspaces',
+          pending: 'Setting up',
+          note: 'Creates one workspace per environment.',
+        },
+        {
+          key: 'environments',
+          name: 'Environments',
+          tier: 'Tier 2, create the first object',
+          file: 'ProjectEnvironments.tsx',
+          crumbs: ['Acme', 'support-agent', 'Environments'],
+          feature: 'green',
+          tierN: 2,
+          title: 'No environments yet',
+          desc: 'Create a production environment to deploy this project.',
+          button: 'New environment',
+          pending: 'Creating',
+        },
+        {
+          key: 'upgrade',
+          name: 'Trace Intelligence',
+          tier: 'Upgrade state, not a create state',
+          file: 'TraceIntelligenceUpgradeState.tsx',
+          crumbs: ['Acme', 'Intelligence'],
+          upgrade: true,
+          feature: 'pink',
+          title: 'Upgrade to Team for Trace Intelligence',
+          desc: 'Trace Intelligence groups your agents’ traces into recurring themes, sorted by goals, outcomes, behaviors and sentiment.',
+          button: 'Upgrade to Team',
+        },
+      ];
+      Object.assign(CARDS[0], {
+        iTitle: 'Importing your first pages',
+        iDesc: 'Pages show up here as they land.',
+        iSource: 'Notion',
+        iCount: 1284,
+        iButton: 'View importer',
+        pTitle: 'Setting up Knowledge',
+        pDesc: 'Creating a dedicated Postgres database for this project. This page updates when it’s ready.',
+        fTitle: 'Couldn’t set up Knowledge',
+        fDesc: 'The database for this project couldn’t be created. Contact support and we’ll retry it.',
+        fButton: 'Contact support',
+      });
+      Object.assign(CARDS[1], {
+        pTitle: 'Setting up workspaces',
+        pDesc: 'Creating a workspace for each environment. This page updates when they’re ready.',
+        fTitle: 'Couldn’t set up workspaces',
+        fDesc: 'The workspaces couldn’t be created. Try again, or contact support if it keeps failing.',
+        fButton: 'Try again',
+      });
+      Object.assign(CARDS[2], {
+        pTitle: 'Creating production',
+        pDesc: 'Your environment is starting. This page updates when it’s ready.',
+        fTitle: 'Couldn’t create production',
+        fDesc: 'The environment couldn’t be created. Try again, or contact support if it keeps failing.',
+        fButton: 'Try again',
+      });
+      const LIB = [
+        ['knowledge', 'Filing cabinet', 'Knowledge', 'purple'],
+        ['workspaces', 'Workbench', 'Workspaces', 'blue'],
+        ['environments', 'Server rack', 'Environments', 'green'],
+        ['upgrade', 'Sorter', 'Trace Intelligence and its upgrade state', 'pink'],
+        ['memory', 'Message rack', 'Memory instances, threads', 'orange'],
+        ['api-keys', 'Key cabinet', 'Org and Gateway API keys', 'yellow'],
+        ['connect', 'Plug and socket', 'Connect, shared connections', 'blue'],
+        ['databases', 'Database stack', 'Databases', 'green'],
+        ['alerts', 'Pressure gauge', 'Alerts and its upgrade state', 'orange'],
+        ['deploys', 'Loading dock', 'Deploys', 'purple'],
+        ['traces', 'Printer', 'Traces and spans setup', 'pink'],
+        ['gateway', 'Router', 'Gateway requests and logs', 'blue'],
+        ['byok', 'Key-card reader', 'Gateway provider keys (BYOK) and its upgrade state', 'yellow'],
+        ['projects', 'Building site', 'Projects, first project', 'orange'],
+        ['workers', 'Scheduler', 'Workers', 'yellow'],
+        ['importers', 'Intake chute', 'Knowledge importers', 'purple'],
+        ['env-vars', 'Switch panel', 'Environment variables', 'green'],
+        ['widgets', 'Monitor wall', 'Dashboard widgets', 'blue'],
+        ['destinations', 'Mailbox', 'Alert destinations', 'orange'],
+        ['license', 'Stamp press', 'Enterprise license keys', 'yellow'],
+        ['logs', 'Tape reels', 'Logs', 'pink'],
+        ['gateway-threads', 'Router, threaded', 'Gateway threads', 'blue'],
+        ['models', 'Model cartridges', 'Custom models, model providers', 'purple'],
+      ];
+      BRAND.yellow = '#E7E67B';
+      const SWAP = {};
+      const MODES = [{ mode: 'hover', accent: c => BRAND[c.feature] }];
+      const root = document.getElementById('stage-root');
+      function card(c, m) {
+        const want = root.dataset.state,
+          st = c.upgrade || (want === 'importing' && !c.iTitle) ? 'empty' : want;
+        if (st === 'importing') {
+          const accent = m.accent ? `--accent:${m.accent(c)}` : '';
+          const key = SWAP[c.key] || c.key;
+          const opts = LIB.map(([k, n]) => `<option value="${k}"${k === key ? ' selected' : ''}>${n}</option>`).join(
+            '',
+          );
+          return `<section class="card" style="${accent}" aria-label="${c.name}" data-pending>
+    <div class="label"><div><b>${c.name}</b><span>Importing, first pages not landed</span></div><div class="label-end"><select class="swap" data-card="${c.key}" aria-label="Drawing for ${c.name}">${opts}</select><code title="KnowledgeBrowser.tsx">KnowledgeBrowser.tsx</code></div></div>
+    <div class="frame"><div class="crumbs">${c.crumbs.map(x => `<span>${x}</span>`).join('<i>/</i>')}</div>
+      <div class="body"><div class="visual">${ART[key]}</div>
+        <div class="copy" data-tier="1"><h3>${c.iTitle}</h3><p>${c.iDesc}</p>
+          <div class="actions"><button class="btn secondary" type="button">${c.iButton}</button><a class="link" href="#" onclick="return false">How it works${out}</a></div>
+          <small class="status" role="status"><span class="sdot" aria-hidden="true"></span><span>Importing from ${c.iSource}, <span class="count" data-count="${c.iCount}">${c.iCount.toLocaleString('en-US')}</span> pages so far</span></small></div></div></div></section>`;
+        }
+        const err = st === 'failed';
+        const accent = err ? '--accent:#FF4758' : !m.accent ? '' : `--accent:${m.accent(c)}`;
+        const title = st === 'pending' ? c.pTitle : err ? c.fTitle : c.title;
+        const desc = st === 'pending' ? c.pDesc : err ? c.fDesc : c.desc;
+        const actions = c.upgrade
+          ? `<button class="btn" type="button">${c.button}${arrow}</button><a class="link" href="#" onclick="return false">Learn more${out}</a>`
+          : st === 'pending'
+            ? `<button class="btn" type="button" disabled aria-busy="true"><span class="spin" aria-hidden="true"></span>${c.pending}</button>`
+            : err
+              ? `<button class="btn" type="button">${c.fButton}</button>`
+              : `<button class="btn" type="button" data-pending-label="${c.pending}">${c.button}</button>`;
+        const key = SWAP[c.key] || c.key;
+        const opts = LIB.map(([k, n]) => `<option value="${k}"${k === key ? ' selected' : ''}>${n}</option>`).join('');
+        return `<section class="card" style="${accent}" aria-label="${c.name}"${st === 'pending' ? ' data-pending' : ''}${err ? ' data-tone="error"' : ''}${c.upgrade ? ' data-upgrade' : ''}>
+    <div class="label"><div><b>${c.name}</b><span>${c.upgrade && want !== 'empty' ? 'No setup states' : want === 'importing' ? 'No importing state' : c.tier}</span></div><div class="label-end"><select class="swap" data-card="${c.key}" aria-label="Drawing for ${c.name}">${opts}</select><code title="${c.file}">${c.file}</code></div></div>
+    <div class="frame"><div class="crumbs">${c.crumbs.map(x => `<span>${x}</span>`).join('<i>/</i>')}</div>
+      <div class="body"><div class="visual">${ART[key]}</div>
+        <div class="copy" data-tier="${c.tierN || 1}"><h3>${title}</h3><p>${desc}</p>
+          <div class="actions">${actions}</div>${c.note && st === 'empty' ? `<small>${c.note}</small>` : ''}</div></div></div></section>`;
+      }
+      function tile([k, n, used, color], m) {
+        const st = root.dataset.state === 'importing' ? 'pending' : root.dataset.state,
+          err = st === 'failed';
+        const accent = err ? '--accent:#FF4758' : m.accent ? `--accent:${BRAND[color]}` : '';
+        return `<div class="card tile" tabindex="0" style="${accent}"${err ? ' data-tone="error"' : ''}${st === 'pending' ? ' data-pending' : ''}><div class="visual">${ART[k]}</div><div><b>${n}</b><span>${used}</span></div></div>`;
+      }
+      const NS = 'http://www.w3.org/2000/svg';
+      const SPARK_A = 'M0,-3L0,-10M3,-2L8,-7M-3,-2L-8,-7M4,1L10,2';
+      const SPARK_B = 'M1,-4L3,-11M-2,-3L-6,-10M5,-1L11,-4M-4,1L-10,0';
+      function addSparks(scope) {
+        for (const svg of scope.querySelectorAll('svg.art')) {
+          if (svg.querySelector(':scope>.sparks')) continue;
+          const part = svg.querySelector('.acc:not(.packet)');
+          if (!part) continue;
+          const b = part.getBBox();
+          if (!b.width && !b.height) continue;
+          const g = document.createElementNS(NS, 'g');
+          g.setAttribute('class', 'sparks');
+          g.setAttribute(
+            'transform',
+            `translate(${(b.x + b.width / 2).toFixed(1)} ${(b.y + Math.min(b.height * 0.35, 10)).toFixed(1)})`,
+          );
+          g.innerHTML = `<g class="spark a"><path d="${SPARK_A}"/><circle cx="7" cy="-11" r="1"/><circle cx="-9" cy="-4" r="0.8"/></g><g class="spark b"><path d="${SPARK_B}"/><circle cx="-7" cy="-12" r="1"/><circle cx="11" cy="1" r="0.8"/></g>`;
+          svg.appendChild(g);
+        }
+      }
+      const lib = document.getElementById('lib');
+      const variants = MODES.map(m => () => {
+        root.dataset.mode = m.mode;
+        lib.innerHTML = LIB.map(t => tile(t, m)).join('');
+        return CARDS.map(c => card(c, m)).join('');
+      });
+      document.addEventListener('click', e => {
+        const b = e.target.closest('.btn[data-pending-label]');
+        if (!b || b.getAttribute('aria-busy') === 'true') return;
+        const label = b.textContent,
+          c = b.closest('.card');
+        b.setAttribute('aria-busy', 'true');
+        b.innerHTML = `<span class="spin" aria-hidden="true"></span>${b.dataset.pendingLabel}`;
+        c.setAttribute('data-pending', '');
+        live(c);
+        setTimeout(() => {
+          b.removeAttribute('aria-busy');
+          b.textContent = label;
+          c.removeAttribute('data-pending');
+          if (!c.matches(':hover')) settle(c);
+        }, 1600);
+      });
+      for (const seg of document.querySelectorAll('.seg'))
+        seg.addEventListener('click', e => {
+          const b = e.target.closest('button');
+          if (!b) return;
+          for (const x of seg.querySelectorAll('button')) x.setAttribute('aria-pressed', String(x === b));
+          if (b.dataset.layout) root.dataset.layout = b.dataset.layout;
+          if (b.dataset.theme) root.dataset.theme = b.dataset.theme;
+          if (b.dataset.state) {
+            root.dataset.state = b.dataset.state;
+            mount(current);
+          }
+        });
+      document.addEventListener('change', e => {
+        const s = e.target.closest('.swap');
+        if (!s) return;
+        SWAP[s.dataset.card] = s.value;
+        const c = s.closest('.card');
+        c.querySelector('.visual').innerHTML = ART[s.value];
+      });
+
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+      const MOVERS = '.hold,.drawer,.swing,.rays,.bob,.flip,.lamp,.raise,.file,.filein,.mbfly,.mbin',
+        FLOWS = '.reelspin,.stream,.belt,.job,.tick,.lamp4,.cart,.mdlamp path,.packet,.packet>*';
+      const PROPS = ['translate', 'rotate', 'scale', 'opacity', 'strokeDashoffset', 'offsetDistance', 'transform'];
+      function snapStyles(els) {
+        return els.map(el => {
+          const s = getComputedStyle(el),
+            o = {};
+          for (const k of PROPS) o[k] = s[k];
+          return [el, o];
+        });
+      }
+      function easeBack(c) {
+        const flags = [...c.querySelectorAll('.mbflag')].map(el => [el, getComputedStyle(el).getPropertyValue('--a')]);
+        const els = [...c.querySelectorAll(MOVERS + ',.fx')];
+        const before = snapStyles(els);
+        els.forEach(el =>
+          el.getAnimations().forEach(a => {
+            if (!(a instanceof CSSAnimation)) a.cancel();
+          }),
+        );
+        c.removeAttribute('data-live');
+        if (reduce.matches) return;
+        const after = new Map(snapStyles(els));
+        for (const [el, b] of before) {
+          const a = after.get(el),
+            from = {},
+            to = {};
+          let n = 0;
+          for (const k of PROPS) {
+            if (b[k] !== a[k]) {
+              from[k] = b[k];
+              to[k] = a[k];
+              n++;
+            }
+          }
+          if (n) el.animate([from, to], { duration: 650, easing: 'cubic-bezier(.33,1,.68,1)' });
+        }
+        for (const [el, a] of flags)
+          if (a && a !== '0deg')
+            el.animate([{ '--a': a }, { '--a': '0deg' }], { duration: 700, easing: 'cubic-bezier(.33,1,.68,1)' });
+      }
+      function windDown(c) {
+        const anims = [...c.querySelectorAll(FLOWS)].flatMap(el => el.getAnimations());
+        const token = (c._flow = (c._flow || 0) + 1),
+          t0 = performance.now();
+        const done = () => {
+          c.removeAttribute('data-flow');
+          anims.forEach(a => (a.playbackRate = 1));
+        };
+        if (reduce.matches) return done();
+        const tick = now => {
+          if (c._flow !== token) return;
+          const k = Math.min(1, (now - t0) / 900);
+          const rate = (1 - k) * (1 - k);
+          anims.forEach(a => (a.playbackRate = Math.max(rate, 0.0001)));
+          k < 1 ? requestAnimationFrame(tick) : done();
+        };
+        requestAnimationFrame(tick);
+      }
+      function settle(c) {
+        easeBack(c);
+        windDown(c);
+      }
+      function live(c) {
+        c._flow = (c._flow || 0) + 1;
+        for (const el of c.querySelectorAll(FLOWS)) el.getAnimations().forEach(a => (a.playbackRate = 1));
+        for (const el of c.querySelectorAll(MOVERS + ',.fx'))
+          el.getAnimations().forEach(a => {
+            if (!(a instanceof CSSAnimation)) a.cancel();
+          });
+        c.setAttribute('data-live', '');
+        c.setAttribute('data-flow', '');
+      }
+      document.addEventListener(
+        'pointerenter',
+        e => {
+          if (e.target.matches?.('.card')) live(e.target);
+        },
+        true,
+      );
+      document.addEventListener(
+        'pointerleave',
+        e => {
+          if (e.target.matches?.('.card') && !e.target.contains(document.activeElement)) settle(e.target);
+        },
+        true,
+      );
+      const settleAll = () =>
+        document.querySelectorAll('.card[data-live]').forEach(c => {
+          if (!c.matches(':hover') && !c.contains(document.activeElement)) settle(c);
+        });
+      document.addEventListener('pointerout', e => {
+        if (!e.relatedTarget) settleAll();
+      });
+      window.addEventListener('blur', settleAll);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) settleAll();
+      });
+      document.addEventListener('focusin', e => {
+        const c = e.target.closest('.card');
+        if (c && !c.hasAttribute('data-live')) live(c);
+      });
+      document.addEventListener('focusout', e => {
+        const c = e.target.closest('.card');
+        if (c && !c.contains(e.relatedTarget) && !c.matches(':hover')) settle(c);
+      });
+      const stage = document.getElementById('stage');
+      function mount(i) {
+        stage.innerHTML = '';
+        requestAnimationFrame(() => {
+          stage.innerHTML = variants[i]();
+        });
+      }
+      const current = 0;
+      setInterval(() => {
+        for (const el of document.querySelectorAll('.count[data-count]')) {
+          const n = +el.dataset.count + 1 + Math.floor(Math.random() * 4);
+          el.dataset.count = n;
+          el.textContent = n.toLocaleString('en-US');
+        }
+      }, 900);
+      mount(0);
+    </script>
+  </body>
+</html>
