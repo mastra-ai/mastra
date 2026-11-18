@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
-import { Kbd } from '@/ds/components/Kbd';
+import { Kbd } from './kbd';
 
-export type SidebarButtonHintProps = {
+export type ShortcutHintProps = {
   label: ReactNode;
   shortcut?: ReactNode;
 };
 
-/** Tooltip content for the sidebar's header buttons: the label, then its shortcut. */
-export function SidebarButtonHint({ label, shortcut }: SidebarButtonHintProps) {
+export function ShortcutHint({ label, shortcut }: ShortcutHintProps) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {label}
