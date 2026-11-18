@@ -1,5 +1,6 @@
 import { PlatformClient } from './client.js';
 import type { PlatformClientOptions } from './client.js';
+import { experimentalComputerEnabled } from './experimental.js';
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -162,6 +163,9 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
   }
 
   desktop(): SandboxTemplateBuilder {
+    if (!experimentalComputerEnabled()) {
+      throw new Error('Template().desktop() is experimental: set MASTRA_EXPERIMENTAL_COMPUTER=true to use it');
+    }
     return this.#append('desktop', [true]);
   }
 
