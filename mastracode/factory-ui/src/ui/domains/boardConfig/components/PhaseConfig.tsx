@@ -16,12 +16,12 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
-import { useState } from 'react';
+import { Link } from 'react-router';
 import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
-import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
+import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import {
@@ -35,6 +35,7 @@ import {
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
+import { SkillBadges } from './skills/SkillBadges';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
@@ -52,19 +53,6 @@ const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${le
 
 /** Runner context a phase gets when it names none. */
 const DEFAULT_SESSION = 'work';
-
-/** A skill's status, with the same badges as the Skills page. */
-function SkillBadges({ skill, missing }: { skill?: FactorySkillInfo; missing: boolean }) {
-  return (
-    <>
-      {missing && <Badge variant="destructive">Not found</Badge>}
-      {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
-      {skill?.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && <Badge>Overridden by app</Badge>}
-      {skill?.origin === 'project' && <Badge>Custom</Badge>}
-      {skill?.edited && <Badge>Edited</Badge>}
-    </>
-  );
-}
 
 /**
  * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
@@ -179,7 +167,6 @@ export function PhaseConfig({
   const skillName = phase.runner?.skill;
   const skill = skillName ? skills?.find(candidate => candidate.name === skillName) : undefined;
   const skillMissing = skillName !== undefined && skills !== undefined && skill === undefined;
-  const [openSkill, setOpenSkill] = useState<FactorySkillInfo>();
 
   const setRunner = (runner: Partial<NonNullable<StoredPhaseInfo['runner']>>) => {
     const merged = { ...phase.runner, ...runner };
@@ -360,7 +347,9 @@ export function PhaseConfig({
                       ))}
                     </SelectContent>
                   </Select>
-                  <SkillBadges skill={skill} missing={skillMissing} />
+                  {skillMissing && <Badge variant="destructive">Not found</Badge>}
+                  {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
+                  {skill && <SkillBadges skill={skill} />}
                   {skill && (
                     <Button
                       size="sm"
@@ -368,7 +357,7 @@ export function PhaseConfig({
                       icon={skillsEditable ? <IconPencil /> : <IconFileText />}
                       aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
                       className="ml-auto"
-                      onClick={() => setOpenSkill(skill)}
+                      render={<Link to={boardSkillPath(factoryId, boardId, skill.name)} />}
                     >
                       {skillsEditable ? 'Edit' : 'View'}
                     </Button>
@@ -491,15 +480,6 @@ export function PhaseConfig({
       </PhaseSteps>
 
       {remove}
-
-      {openSkill && (
-        <FactorySkillEditorDialog
-          skill={openSkill}
-          factoryId={factoryId}
-          canEdit={skillsEditable}
-          onClose={() => setOpenSkill(undefined)}
-        />
-      )}
     </div>
   );
 }

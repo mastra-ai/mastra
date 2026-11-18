@@ -89,6 +89,10 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
+const FactorySkillPage = lazyPage(
+  () => import('./pages/FactorySkillPage').then(module => module.FactorySkillPage),
+  <AppPageLoader />,
+);
 const BoardIntakePage = lazyPage(
   () => import('./pages/BoardIntakePage').then(module => module.BoardIntakePage),
   <AppPageLoader />,
@@ -325,6 +329,10 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'work/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'work/new-skill', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/new-skill', ...lazyRoute(FactorySkillPage) },
                         { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
