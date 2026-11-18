@@ -10,6 +10,14 @@ import { ThreadTraceRoot } from './thread-trace-root';
 import { ThreadTraceDivider, ThreadTraceRow, ThreadTraceRowBody } from './thread-trace-row';
 import { ThreadTraceSpanDetail, ThreadTraceSpanPanel } from './thread-trace-span-panel';
 import { ThreadTraceSpans } from './thread-trace-spans';
+import { ThreadTraceEmpty, ThreadTraceError, ThreadTraceLoading } from './thread-trace-states';
+import {
+  ThreadTraceFeedbackTab,
+  ThreadTraceMessagesTab,
+  ThreadTraceScoresTab,
+  ThreadTraceTraceLink,
+  ThreadTraceTurnMessages,
+} from './thread-trace-turn';
 
 /**
  * A memory thread rendered as its traces: one row per agent turn (oldest first), with the
@@ -18,7 +26,8 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  * of its props, so the layout can be restyled from the call site.
  *
  * It never fetches: the host hands each part the records it draws (each row's spans, the selected
- * span's record), typed like the Mastra client's responses, so any transport can feed it.
+ * span's record), typed like the Mastra client's responses, so any transport can feed it. Before the
+ * turns are known, render `ThreadTrace.Loading`, `ThreadTrace.Empty` or `ThreadTrace.Error` instead.
  *
  * @example
  * <ThreadTrace traceIds={ids} onLoadOlder={fetchOlderPage} selectedSpan={selected} onSelectedSpanChange={setSelected}>
@@ -26,13 +35,20 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  *     {ids.map((traceId, i) => (
  *       <ThreadTrace.Row key={traceId} traceId={traceId}>
  *         <ThreadTrace.Divider label={`Turn ${i + 1}`}>
+ *           <ThreadTrace.TraceLink />
  *           <ThreadTrace.TabList>
- *             <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+ *             <ThreadTrace.MessagesTab />
+ *             <ThreadTrace.FeedbackTab />
  *           </ThreadTrace.TabList>
  *         </ThreadTrace.Divider>
  *         <ThreadTrace.RowBody>
  *           <ThreadTrace.Messages>
- *             <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
+ *             <ThreadTrace.TabContent value="messages" flush>
+ *               <ThreadTrace.TurnMessages spans={spansByTraceId[traceId]} />
+ *             </ThreadTrace.TabContent>
+ *             <ThreadTrace.TabContent value="feedback">
+ *               <FeedbackThread feedbackData={feedbackByTraceId[traceId]} onSubmit={…} />
+ *             </ThreadTrace.TabContent>
  *           </ThreadTrace.Messages>
  *           <ThreadTrace.Details>
  *             <ThreadTrace.DetailsHeader>
@@ -64,6 +80,14 @@ export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   Spans: ThreadTraceSpans,
   SpanPanel: ThreadTraceSpanPanel,
   SpanDetail: ThreadTraceSpanDetail,
+  TurnMessages: ThreadTraceTurnMessages,
+  TraceLink: ThreadTraceTraceLink,
+  MessagesTab: ThreadTraceMessagesTab,
+  FeedbackTab: ThreadTraceFeedbackTab,
+  ScoresTab: ThreadTraceScoresTab,
+  Loading: ThreadTraceLoading,
+  Empty: ThreadTraceEmpty,
+  Error: ThreadTraceError,
 });
 
 export { useThreadTrace } from './thread-trace-context';
@@ -87,3 +111,9 @@ export type {
 } from './thread-trace-details';
 export type { ThreadTraceSpansProps } from './thread-trace-spans';
 export type { ThreadTraceSpanDetailProps, ThreadTraceSpanPanelProps } from './thread-trace-span-panel';
+export type { ThreadTraceErrorProps } from './thread-trace-states';
+export type {
+  ThreadTracePresetTabProps,
+  ThreadTraceTraceLinkProps,
+  ThreadTraceTurnMessagesProps,
+} from './thread-trace-turn';

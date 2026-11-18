@@ -1,8 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import type { ComponentProps } from 'react';
-import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
-
-type TraceSpan = NonNullable<ComponentProps<typeof TraceDataPanelView>['spans']>[number];
+import type { TracePanelSpan as TraceSpan } from '@/domains/traces/components/trace-panel/trace-panel-context';
 
 /**
  * The thread a trace belongs to, when it can be shown as a reconstructed agent turn:

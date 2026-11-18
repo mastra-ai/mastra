@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
+import { TestLinkProvider } from '@/test/link-provider';
+import { server } from '@/test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const TRACE_IDS = ['trace-a', 'trace-b'];
 
@@ -367,6 +371,102 @@ describe('ThreadTrace', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
       expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
+    });
+  });
+
+  describe('when the host composes a turn from the turn parts', () => {
+    // The chat message renderer resolves MCP app tools; it belongs to the chat domain, not to this compound.
+    const serveMcpAppToolsLookup = () =>
+      server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })));
+
+    const renderTurn = () =>
+      renderWithProviders(
+        <TestLinkProvider>
+          <ThreadTrace traceIds={['trace-a']}>
+            <ThreadTrace.List>
+              <ThreadTrace.Row traceId="trace-a">
+                <ThreadTrace.Divider label="Turn 1">
+                  <ThreadTrace.TraceLink />
+                  <ThreadTrace.TabList>
+                    <ThreadTrace.MessagesTab />
+                    <ThreadTrace.FeedbackTab />
+                    <ThreadTrace.ScoresTab />
+                  </ThreadTrace.TabList>
+                </ThreadTrace.Divider>
+                <ThreadTrace.RowBody>
+                  <ThreadTrace.Messages>
+                    <ThreadTrace.TabContent value="messages" flush>
+                      <ThreadTrace.TurnMessages spans={spansOf('trace-a')} />
+                    </ThreadTrace.TabContent>
+                    <ThreadTrace.TabContent value="feedback">Host feedback</ThreadTrace.TabContent>
+                    <ThreadTrace.TabContent value="scores">Host scores</ThreadTrace.TabContent>
+                  </ThreadTrace.Messages>
+                  <ThreadTrace.Details>
+                    <ThreadTrace.Spans spans={spansOf('trace-a')} />
+                  </ThreadTrace.Details>
+                </ThreadTrace.RowBody>
+              </ThreadTrace.Row>
+            </ThreadTrace.List>
+            <RootStateProbe />
+          </ThreadTrace>
+        </TestLinkProvider>,
+      );
+
+    it('reconstructs the turn from the spans given to TurnMessages', async () => {
+      serveMcpAppToolsLookup();
+      renderTurn();
+
+      expect(await within(getRow('trace-a')).findByText('cook pasta')).toBeTruthy();
+    });
+
+    it('highlights the spans behind a message in the same row', async () => {
+      serveMcpAppToolsLookup();
+      renderTurn();
+      await within(getRow('trace-a')).findByText('cook pasta');
+
+      const [userMessageAction] = within(getRow('trace-a')).getAllByRole('button', { name: 'Highlight spans' });
+      if (!userMessageAction) throw new Error('no highlight action');
+      fireEvent.click(userMessageAction);
+
+      expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
+    });
+
+    it('links the turn to its trace page', async () => {
+      serveMcpAppToolsLookup();
+      renderTurn();
+
+      const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });
+
+      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
+    });
+
+    it('swaps in what the host renders under the Feedback and Scores tabs', async () => {
+      serveMcpAppToolsLookup();
+      renderTurn();
+
+      fireEvent.click(await within(getRow('trace-a')).findByRole('tab', { name: 'Scores' }));
+
+      expect(within(getRow('trace-a')).getByText('Host scores')).toBeTruthy();
+    });
+  });
+
+  describe('when the thread is not ready to draw', () => {
+    it('shows the loading skeleton', () => {
+      renderUI(<ThreadTrace.Loading />);
+
+      expect(screen.getByRole('status', { name: 'Loading thread' })).toBeTruthy();
+    });
+
+    it('says the thread has no traces', () => {
+      renderUI(<ThreadTrace.Empty />);
+
+      expect(screen.getByText('No traces found for this thread.')).toBeTruthy();
+    });
+
+    it('shows why the thread failed to load', () => {
+      renderUI(<ThreadTrace.Error error={new Error('store unavailable')} />);
+
+      expect(screen.getByText('Failed to load traces')).toBeTruthy();
     });
   });
 });

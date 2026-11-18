@@ -23,7 +23,7 @@ export {
   type TraceQueryArgs,
 } from '@mastra/react/hooks/traces';
 export { useTracesListSource, type UseTracesListSourceArgs } from './use-traces-list-source';
-export { useThreadTraceSpans } from './use-thread-trace-spans';
+export { useThreadTraceSpans, type ThreadTurnSpans } from './use-thread-trace-spans';
 export { useTags } from '@mastra/react/hooks/traces';
 export {
   useTraceMetadataFilterFields,

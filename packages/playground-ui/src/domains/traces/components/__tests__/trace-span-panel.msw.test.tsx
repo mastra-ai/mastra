@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { panelScorers } from '../trace-panel/__tests__/fixtures/trace-panel';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
@@ -16,7 +17,6 @@ import {
   skillSignalRootDetail,
   spanDetailById,
 } from './fixtures/trace-span-panel';
-import { panelScorers } from './fixtures/trace-span-panel-view';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';

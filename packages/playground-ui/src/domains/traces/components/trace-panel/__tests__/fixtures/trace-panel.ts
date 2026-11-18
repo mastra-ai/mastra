@@ -1,6 +1,6 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 
-import { panelTraceSpans, skillSignalRootDetail } from './trace-span-panel';
+import { panelTraceSpans, skillSignalRootDetail } from '../../../__tests__/fixtures/trace-span-panel';
 
 /** The scorers a host lists (`listScorers`): one registered for any span, one only for top-level agent runs. */
 export const panelScorers: Record<string, GetScorerResponse> = {
