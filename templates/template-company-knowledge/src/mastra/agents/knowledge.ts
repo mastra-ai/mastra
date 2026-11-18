@@ -78,6 +78,8 @@ Follow this order strictly — it saves API calls and gives faster answers:
     new PIIDetector({
       model: 'mastra/openai/gpt-6-luna',
       strategy: 'redact',
+      // Fail closed: a detection-model error must reject the content, not pass it through unredacted.
+      errorStrategy: 'strict',
       redactionMethod: 'mask',
       detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key'],
     }),
