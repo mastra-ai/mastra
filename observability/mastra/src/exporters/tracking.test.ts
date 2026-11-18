@@ -62,6 +62,7 @@ class TestTrackingExporter extends TrackingExporter<
   public builtSpans: Map<string, TestSpanData> = new Map();
   public builtEvents: Map<string, TestEventData> = new Map();
   public abortedSpans: Map<string, SpanErrorInfo> = new Map();
+  public closedSpans: Map<string, Date> = new Map();
 
   // Track root span ID for parent checking
   private rootSpanId?: string;
@@ -211,6 +212,10 @@ class TestTrackingExporter extends TrackingExporter<
     });
 
     this.abortedSpans.set(args.span.spanId, args.reason);
+  }
+
+  protected override async _closeFilteredSpan(args: { span: TestSpanData; endTime: Date }): Promise<void> {
+    this.closedSpans.set(args.span.spanId, args.endTime);
   }
 
   // Helper methods for test assertions
@@ -1288,6 +1293,31 @@ describe('TrackingExporter', () => {
 
       // No flush: the end must not go through the waiting queue
       expect(finishCalls('tool')).toHaveLength(1);
+    });
+
+    it('should close a span whose end spanFilter dropped, so shutdown does not report it as aborted', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root')));
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId, spanId: 'tool', endTime: t });
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+
+      expect(exporter.closedSpans.get('tool')).toEqual(t);
+      expect(exporter.abortedSpans.size).toBe(0);
+    });
+
+    it('should close a span whose dropped end is dispatched in the same tick as its start', async () => {
+      await Promise.all([
+        exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root'))),
+        exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId, spanId: 'tool', endTime: t }),
+      ]);
+      await flushAsync();
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+
+      expect(exporter.closedSpans.get('tool')).toEqual(t);
+      expect(exporter.abortedSpans.size).toBe(0);
     });
   });
 });

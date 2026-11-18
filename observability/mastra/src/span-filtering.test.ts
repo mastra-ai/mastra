@@ -1,6 +1,12 @@
 import { RequestContext } from '@mastra/core/di';
 import { EntityType, SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  MetricEvent,
+  ObservabilityExporter,
+  AnyExportedSpan,
+  SpanFilteredEvent,
+} from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 import { PricingRegistry } from './metrics/pricing-registry';
@@ -425,6 +431,40 @@ describe('Span Filtering', () => {
 
       const toolExported = testExporter.events.map(e => e.exportedSpan).find(s => s.type === SpanType.TOOL_CALL);
       expect(toolExported?.parentSpanId).toBe(runSpan.id);
+    });
+
+    it('should tell exporters to close a span when the filter drops only its end', () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => {
+          // Dropped from the start: exporters never see this span.
+          if (span.type === SpanType.MODEL_STEP) return false;
+          // Kept at the start, because success is not set until the tool call ends.
+          return !(span.type === SpanType.TOOL_CALL && span.attributes?.success);
+        },
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const stepSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_STEP, name: 'test-step' });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      toolSpan.end({ attributes: { success: true } });
+      stepSpan.end();
+      agentSpan.end();
+
+      expect(closed).toEqual([
+        { type: 'span_filtered', traceId: toolSpan.traceId, spanId: toolSpan.id, endTime: toolSpan.endTime },
+      ]);
     });
 
     it('should still drop every span of an entity when the filter drops that entity', () => {
