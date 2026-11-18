@@ -664,7 +664,7 @@ export const createModelInstance = async (
 // Helper function to resolve model from request context with AI SDK version detection
 export const resolveModel = async ({
   requestContext,
-  defaultModel = 'openai/gpt-6.1-sol',
+  defaultModel = 'openai/gpt-6-luna',
   projectPath,
 }: {
   requestContext: RequestContext;

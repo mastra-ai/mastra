@@ -177,7 +177,7 @@ const discoverUnitsStep = createStep({
 
     console.info('targetPath', targetPath);
 
-    const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-6.1-sol') });
+    const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-6-luna') });
 
     try {
       const agent = new Agent({
@@ -977,11 +977,7 @@ const intelligentMergeStep = createStep({
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
     const targetPath = resolveTargetPath(inputData, requestContext);
     try {
-      const model = await resolveModel({
-        requestContext,
-        projectPath: targetPath,
-        defaultModel: openai('gpt-6.1-sol'),
-      });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-6-luna') });
 
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -1319,11 +1315,7 @@ const validationAndFixStep = createStep({
     let currentIteration = 1; // Declare at function scope for error handling
 
     try {
-      const model = await resolveModel({
-        requestContext,
-        projectPath: targetPath,
-        defaultModel: openai('gpt-6.1-sol'),
-      });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-6-luna') });
 
       const allTools = await AgentBuilderDefaults.listToolsForMode(targetPath, 'template');
 
