@@ -9,7 +9,7 @@ import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 import { OnboardingNextRow } from './onboarding/OnboardingStepRow';
 import { OnboardingWorkRow } from './onboarding/OnboardingWorkRow';
 
-export function FactoryOnboardingSkeletonContent({ label }: { label: string }) {
+function OnboardingStepsSkeleton({ label }: { label: string }) {
   const draft = readOnboardingDraft();
   const openStep = restoredOnboardingStep(readOnboardingStep(), draft);
 
@@ -65,7 +65,7 @@ export function FactoryOnboardingSkeletonContent({ label }: { label: string }) {
 export function FactoryOnboardingSkeleton({ label }: { label: string }) {
   return (
     <OnboardingFrame>
-      <FactoryOnboardingSkeletonContent label={label} />
+      <OnboardingStepsSkeleton label={label} />
     </OnboardingFrame>
   );
 }
