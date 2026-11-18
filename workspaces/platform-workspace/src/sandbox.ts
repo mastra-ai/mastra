@@ -372,21 +372,30 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
  * input as `command` allows arbitrary shell syntax execution on the remote
  * sandbox.
  */
+const GITHUB_TOKEN_ENV = /^(GH_TOKEN(_\d+)?|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
+const GIT_CONFIG_ENV = /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/;
+
 /**
- * Drops GitHub credentials from a per-call env: `GH_TOKEN`/`GH_TOKEN_<n>` and
- * a `GIT_CONFIG_*` block that scopes a header to github.com. Other hosts'
- * credentials (GitLab) are left alone.
+ * Drops GitHub credentials from a per-call env: the token variables `gh` reads, and the
+ * `GIT_CONFIG_*` pairs scoped to github.com. Other pairs (GitLab auth) are kept and
+ * renumbered without gaps, because git reads indices 0..GIT_CONFIG_COUNT-1.
  */
 function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
-  const githubConfig = Object.entries(env).some(
-    ([name, value]) => /^GIT_CONFIG_KEY_\d+$/.test(name) && !!value?.startsWith('http.https://github.com/'),
+  const result: Record<string, string | undefined> = Object.fromEntries(
+    Object.entries(env).filter(([name]) => !GITHUB_TOKEN_ENV.test(name) && !GIT_CONFIG_ENV.test(name)),
   );
-  return Object.fromEntries(
-    Object.entries(env).filter(
-      ([name]) =>
-        !/^GH_TOKEN(_\d+)?$/.test(name) && !(githubConfig && /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name)),
-    ),
-  ) as T;
+  const count = Number(env.GIT_CONFIG_COUNT);
+  if (env.GIT_CONFIG_COUNT === undefined || !Number.isInteger(count) || count < 0) return result as T;
+  let kept = 0;
+  for (let index = 0; index < count; index++) {
+    const key = env[`GIT_CONFIG_KEY_${index}`];
+    if (key === undefined || key.toLowerCase().startsWith('http.https://github.com/')) continue;
+    result[`GIT_CONFIG_KEY_${kept}`] = key;
+    result[`GIT_CONFIG_VALUE_${kept}`] = env[`GIT_CONFIG_VALUE_${index}`];
+    kept++;
+  }
+  if (kept > 0) result.GIT_CONFIG_COUNT = String(kept);
+  return result as T;
 }
 
 function buildCommand(command: string, args?: string[]): string {

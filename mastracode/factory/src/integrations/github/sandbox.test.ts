@@ -24,6 +24,7 @@ import {
   resolveGitIdentity,
   runSetupCommand,
   runTeardownCommand,
+  sh,
   shellQuote,
   SetupCommandError,
   githubCredentialHelper,
@@ -535,6 +536,29 @@ describe('credential-vault sandboxes', () => {
     expect(attempts).toHaveLength(2);
     expect(attempts[0]!.options?.env?.GIT_CONFIG_COUNT).toBe('2');
     expect(attempts[1]!.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it('drops GITHUB_TOKEN and only the github.com config pairs for a vault sandbox', async () => {
+    const sandbox = vaultSandbox(true);
+    await sh(sandbox, 'true', {
+      env: {
+        GITHUB_TOKEN: 'ghs_real',
+        GH_ENTERPRISE_TOKEN: 'ghs_ent',
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_CONFIG_KEY_1: 'http.https://gitlab.com/group/proj.extraHeader',
+        GIT_CONFIG_VALUE_1: 'Authorization: Basic gitlab',
+        GIT_CONFIG_KEY_2: 'HTTP.https://github.com/octocat/hello.git.extraHeader',
+        GIT_CONFIG_VALUE_2: 'Authorization: Basic secret',
+      },
+    });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.com/group/proj.extraHeader',
+      GIT_CONFIG_VALUE_0: 'Authorization: Basic gitlab',
+    });
   });
 
   it('keeps process-scoped credentials when the platform reports a non-vault sandbox', async () => {
