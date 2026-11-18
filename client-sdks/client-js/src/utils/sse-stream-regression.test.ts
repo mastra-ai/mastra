@@ -137,11 +137,13 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
     });
 
     it('keeps the onChunk error when cancelling the source also fails (#30788)', async () => {
+      let cancelAttempted = false;
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
         },
         cancel() {
+          cancelAttempted = true;
           throw new Error('cancel failed');
         },
       });
@@ -154,6 +156,8 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
           },
         }),
       ).rejects.toBe(failure);
+      // Prove the cancel was attempted, or this case passes when nothing cancels.
+      expect(cancelAttempted).toBe(true);
       expect(stream.locked).toBe(false);
     });
   });
