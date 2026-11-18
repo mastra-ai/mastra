@@ -1,5 +1,14 @@
 # @mastra/platform
 
+## 0.1.1-alpha.1
+
+### Patch Changes
+
+- `PlatformKnowledge` now registers under the stable id `platform-knowledge-<instanceId>` (was random per boot), so two instances with different instance IDs still register side by side, and a missing instance ID now fails at construction with its own error naming `MASTRA_KNOWLEDGE_INSTANCE_ID`. ([#30757](https://github.com/mastra-ai/mastra/pull/30757))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes
