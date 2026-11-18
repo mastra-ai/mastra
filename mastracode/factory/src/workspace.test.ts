@@ -2696,6 +2696,24 @@ describe('GitHub session workspace preparation', () => {
       expect(lastGhToken()).toBe('ghp_org_pat');
     });
 
+    it('installs the org PAT when a sandbox that withheld tokens reconnects as non-vault', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBeUndefined();
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      mocks.setEnv.mockClear();
+      await sandbox.start();
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+      expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
+    });
+
     it('installs tokens as before when the platform reports a non-vault sandbox', async () => {
       mocks.vault = false;
       mocks.githubPat = 'ghp_org_pat';
