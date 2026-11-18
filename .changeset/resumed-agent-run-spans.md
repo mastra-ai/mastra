@@ -4,4 +4,4 @@
 '@mastra/server': patch
 ---
 
-Fixed traces of durable agent runs that suspend and resume, or recover after a crash. Each part of the run now has its own agent run and model generation spans in the run's trace, and every span ends once with its real outcome, on whichever process or Inngest worker finishes the run. A recovered run whose final step was already saved ends with that saved outcome instead of `unknown`.
+Fixed traces of durable agent runs that suspend and resume, or recover after a crash. Each part of the run now has its own agent run and model generation spans in the run's trace, ended with that part's real outcome by whichever process or Inngest worker finishes it. A recovered run whose final step was already saved ends with that saved outcome instead of `unknown`.
