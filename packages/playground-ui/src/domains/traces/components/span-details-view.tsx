@@ -1,4 +1,4 @@
-import type { SpanRecord } from '../types';
+import type { SpanRecord, TraceSpanRecord } from '../types';
 import { getSpanChanges } from './span-outcome.utils';
 import {
   SpanErrorRenderer,
@@ -13,6 +13,7 @@ import {
   SpanProcessorMutations,
 } from './span-payload';
 import { SpanToolsSection } from './span-payload/span-tools-section';
+import type { RegisteredTools } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -29,6 +30,10 @@ export interface SpanDetailsViewProps {
   span: SpanRecord | undefined;
   isLoading?: boolean;
   onClose: () => void;
+  /** Every span of the trace (`getTrace`), so tool calls show the result their tool span recorded. */
+  traceSpans?: TraceSpanRecord[];
+  /** The tool registry (`listTools`), so offered tools link to their pages. */
+  registeredTools?: RegisteredTools;
 }
 
 /**
@@ -36,7 +41,14 @@ export interface SpanDetailsViewProps {
  * input/output/metadata/attributes code sections. Use this for inline span inspection; for the
  * full-width span view with scoring tab + prev/next nav, use `SpanDataPanelView`.
  */
-export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
+export function SpanDetailsView({
+  spanId,
+  span,
+  isLoading,
+  onClose,
+  traceSpans,
+  registeredTools,
+}: SpanDetailsViewProps) {
   return (
     <DataDetailsPanel>
       <DataDetailsPanel.Header>
@@ -104,7 +116,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
-          <SpanToolsSection span={span} layout="details" />
+          <SpanToolsSection span={span} layout="details" traceSpans={traceSpans} registeredTools={registeredTools} />
           <SpanPayloadJsonSection title="Metadata" icon={<IconCodeBrackets />} raw={span.metadata} layout="details" />
           <SpanPayloadJsonSection
             title="Attributes"

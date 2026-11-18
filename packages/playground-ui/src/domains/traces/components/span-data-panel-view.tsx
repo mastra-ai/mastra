@@ -2,9 +2,10 @@ import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/obser
 import type { UsageStats } from '@mastra/core/observability';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { SpanRecord, SpanTab } from '../types';
+import type { SpanRecord, SpanTab, TraceSpanRecord } from '../types';
 import { getSpanSignal } from '../utils/span-signal';
 import { getSpanDurationMs, getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { formatSpanToolCallMessages } from './format-trace-thread-messages';
 import { getSpanTypeUi } from './shared';
 import { SpanOutcomeSummary } from './span-outcome';
 import { getSpanOutcome } from './span-outcome.utils';
@@ -20,7 +21,7 @@ import {
 } from './span-payload';
 import { asCoreSpan, getSpanTools } from './span-payload/span-payload-registry';
 import { SpanToolCallList, SpanToolList } from './span-payload/span-tools-section';
-import { useSpanToolCalls } from './span-payload/use-span-tool-calls';
+import type { RegisteredTools } from './span-payload/span-tools-section';
 import { SpanPromptChanges } from './span-prompt-changes';
 import { getPromptChanges, runsAfterModel } from './span-prompt-impact';
 import { SpanTokenUsage } from './span-token-usage';
@@ -58,9 +59,16 @@ type PayloadView = 'rich' | 'raw';
 export interface SpanDataPanelViewProps {
   traceId: string;
   spanId: string;
-  /** Full span record. Caller fetches via useSpanDetail. */
+  /** Full span record (`getSpan`). The panel never fetches: the host hands it down (Studio: `useSpanDetail`). */
   span: SpanRecord | undefined;
   isLoading?: boolean;
+  /**
+   * Every span of the trace with its payload (`getTrace`). The Output tab pairs each tool call the span
+   * requested with the result its tool span recorded; without it, the calls show no result.
+   */
+  traceSpans?: TraceSpanRecord[];
+  /** The tool registry (`listTools`), so the tools a span offered link to their pages. */
+  registeredTools?: RegisteredTools;
   /** Previous/next buttons show only when one is provided; omit both where a span tree already navigates. */
   onPrevious?: () => void;
   onNext?: () => void;
@@ -95,6 +103,8 @@ export function SpanDataPanelView({
   spanId,
   span,
   isLoading,
+  traceSpans,
+  registeredTools,
   onPrevious,
   onNext,
   onClose,
@@ -194,8 +204,10 @@ export function SpanDataPanelView({
 
           <div role="tabpanel" aria-label={tabs.find(item => item.value === tab)?.name} className={BODY_CLASS}>
             {tab === 'details' && <DetailsTab traceId={traceId} span={span} />}
-            {tab === 'input' && <InputTab span={span} view={view} onViewChange={setView} />}
-            {tab === 'output' && <OutputTab span={span} view={view} onViewChange={setView} />}
+            {tab === 'input' && (
+              <InputTab span={span} view={view} onViewChange={setView} registeredTools={registeredTools} />
+            )}
+            {tab === 'output' && <OutputTab span={span} view={view} onViewChange={setView} traceSpans={traceSpans} />}
             {tab === 'feedback' && feedbackTabSlot?.({ span, traceId, spanId })}
           </div>
         </>
@@ -281,7 +293,12 @@ type PayloadTabProps = { span: SpanRecord; view: PayloadView; onViewChange: (vie
  */
 const PROCESSOR_INPUT_HIDDEN = ['tools', 'toolChoice', 'retryCount', 'stepNumber'];
 
-function InputTab({ span, view, onViewChange }: PayloadTabProps) {
+function InputTab({
+  span,
+  view,
+  onViewChange,
+  registeredTools,
+}: PayloadTabProps & { registeredTools?: RegisteredTools }) {
   const tools = getSpanTools(span);
   const processorInput = getProcessorInput(span);
   return (
@@ -302,14 +319,14 @@ function InputTab({ span, view, onViewChange }: PayloadTabProps) {
       </Payload>
       {tools && (
         <Section title="Available tools" count={tools.tools.length}>
-          <SpanToolList tools={tools.tools} />
+          <SpanToolList tools={tools.tools} registeredTools={registeredTools} />
         </Section>
       )}
     </Stack>
   );
 }
 
-function OutputTab({ span, view, onViewChange }: PayloadTabProps) {
+function OutputTab({ span, view, onViewChange, traceSpans }: PayloadTabProps & { traceSpans?: TraceSpanRecord[] }) {
   const output = getSpanOutputPayload(span);
   return (
     <Stack>
@@ -331,7 +348,7 @@ function OutputTab({ span, view, onViewChange }: PayloadTabProps) {
           <SpanOutputRenderer span={span} />
         </Payload>
       )}
-      <ToolCalls span={span} />
+      <ToolCalls span={span} traceSpans={traceSpans} />
     </Stack>
   );
 }
@@ -471,8 +488,8 @@ function SpanProblem({ span }: { span: SpanRecord }) {
   );
 }
 
-function ToolCalls({ span }: { span: SpanRecord }) {
-  const toolCalls = useSpanToolCalls(span);
+function ToolCalls({ span, traceSpans = [] }: { span: SpanRecord; traceSpans?: TraceSpanRecord[] }) {
+  const toolCalls = formatSpanToolCallMessages(span, traceSpans);
   if (toolCalls.length === 0) return null;
   return (
     <Section title="Tool calls" count={toolCalls.length}>

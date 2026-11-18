@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { Group, Panel, useGroupRef } from 'react-resizable-panels';
 import type { Layout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
-import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
-import { useTraceSearch } from '../hooks/use-trace-search';
+import { useTraceSearchResult } from '../hooks/use-trace-search';
+import type { TraceSearchResult } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
@@ -43,12 +43,29 @@ export type TraceSpanView = 'tree' | 'timeline';
 
 export type TraceSideView = 'messages' | 'feedback' | 'scores';
 
+/** A span of the panel: the light record, plus the signal that started it when one did. */
+export type TraceDataPanelSpan = LightSpanRecord & { signalLabel?: string };
+
+const NO_SPANS: TraceDataPanelSpan[] = [];
+
 export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   traceId?: string;
-  /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: (LightSpanRecord & { signalLabel?: string })[] | undefined;
+  /** Lightweight spans for the trace. The panel never fetches: the host hands them down (Studio: `useTraceLightSpans`). */
+  spans: TraceDataPanelSpan[] | undefined;
   isLoading?: boolean;
+  /** When set, a "Download trace JSON" button calls it with the trace id; the host loads and saves the trace. */
+  onDownloadTrace?: (traceId: string) => void;
+  /** A download started through `onDownloadTrace` is in flight. */
+  isDownloadingTrace?: boolean;
+  /** Controlled value of the span search field; the panel keeps its own when omitted. */
+  searchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
+  /**
+   * What the host's own search found for `searchQuery` (e.g. on its server): the spans to draw with
+   * their ancestors. Omitted, the panel searches `spans` itself.
+   */
+  searchResult?: TraceSearchResult<TraceDataPanelSpan>;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
@@ -146,6 +163,11 @@ export function TraceDataPanelView({
   traceId,
   spans,
   isLoading,
+  onDownloadTrace,
+  isDownloadingTrace = false,
+  searchQuery,
+  onSearchQueryChange,
+  searchResult,
   onClose,
   onSpanSelect,
   onEvaluateTrace,
@@ -257,8 +279,6 @@ export function TraceDataPanelView({
     onSpanViewChange?.(view);
   };
 
-  const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
-
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
   // Sync selected span when initialSpanId or trace data changes
@@ -285,7 +305,15 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
+  const [ownSearchQuery, setOwnSearchQuery] = useState('');
+  const query = searchQuery ?? ownSearchQuery;
+  const setQuery = (next: string) => {
+    setOwnSearchQuery(next);
+    onSearchQueryChange?.(next);
+  };
+  // A host that searches itself hands the results down, so the panel builds no haystack of its own.
+  const localSearch = useTraceSearchResult(searchResult ? NO_SPANS : (spans ?? NO_SPANS), query);
+  const { results, payloadOnlyMatchIds } = searchResult ?? localSearch;
 
   const hierarchicalSpans = useMemo(
     () =>
@@ -328,15 +356,17 @@ export function TraceDataPanelView({
           <IconChainLink3 />
         </Button>
       )}
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        tooltip="Download trace JSON"
-        disabled={isDownloadingTrace}
-        onClick={() => downloadTraceJson(traceId)}
-      >
-        {isDownloadingTrace ? <IconLoadingCircle className="animate-spin" /> : <IconArrowInbox />}
-      </Button>
+      {onDownloadTrace && (
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          tooltip="Download trace JSON"
+          disabled={isDownloadingTrace}
+          onClick={() => onDownloadTrace(traceId)}
+        >
+          {isDownloadingTrace ? <IconLoadingCircle className="animate-spin" /> : <IconArrowInbox />}
+        </Button>
+      )}
     </>
   );
 

@@ -4,19 +4,17 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { TraceMessagesPanel } from '../trace-messages-panel';
-import { TRACE_ID, panelTraceSpans } from './fixtures/trace-span-panel';
+import { panelTraceSpans } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 describe('TraceMessagesPanel', () => {
   it('when rendered, then the reconstructed turn shows inside the messages panel', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(panelTraceSpans)),
-    );
+    server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })));
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
-        <TraceMessagesPanel traceId={TRACE_ID} />
+        <TraceMessagesPanel spans={panelTraceSpans.spans} />
       </TestLinkProvider>,
     );
 

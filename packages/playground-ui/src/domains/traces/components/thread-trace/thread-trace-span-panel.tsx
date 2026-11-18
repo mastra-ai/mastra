@@ -1,21 +1,20 @@
-import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import type { ComponentProps } from 'react';
 import { Panel } from 'react-resizable-panels';
 
+import type { SpanRecord, TraceSpanRecord } from '../../types';
 import { SpanDataPanelView } from '../span-data-panel-view';
+import type { RegisteredTools } from '../span-payload/span-tools-section';
 import { useThreadTrace } from './thread-trace-context';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { cn } from '@/lib/utils';
 
-export interface ThreadTraceSpanPanelProps extends Omit<ComponentProps<'div'>, 'children'> {
-  panelClassName?: string;
-}
+export type ThreadTraceSpanPanelProps = ComponentProps<'div'>;
 
 /**
- * The resizable side column with the selected span's detail; rendered only while a
- * span is selected.
+ * The resizable side column of the selected span; rendered only while a span is selected. Its children
+ * are typically a `ThreadTrace.SpanDetail` fed with the selected span's record.
  */
-export function ThreadTraceSpanPanel({ className, panelClassName, ...props }: ThreadTraceSpanPanelProps) {
+export function ThreadTraceSpanPanel({ className, children, ...props }: ThreadTraceSpanPanelProps) {
   const { selected } = useThreadTrace();
   if (!selected) return null;
   return (
@@ -31,43 +30,46 @@ export function ThreadTraceSpanPanel({ className, panelClassName, ...props }: Th
           )}
           {...props}
         >
-          {/* Keyed by trace only: the panel's queries already follow `spanId`, so prev/next keep the DOM. */}
-          <SelectedSpanPanel
-            key={selected.traceId}
-            traceId={selected.traceId}
-            spanId={selected.spanId}
-            panelClassName={panelClassName}
-          />
+          {children}
         </div>
       </Panel>
     </>
   );
 }
 
-interface SelectedSpanPanelProps {
-  traceId: string;
-  spanId: string;
-  panelClassName?: string;
+export interface ThreadTraceSpanDetailProps {
+  /** Full record of the selected span (`getSpan`); the host loads it for `useThreadTrace().selected`. */
+  span?: SpanRecord;
+  isLoading?: boolean;
+  /** Every span of the selected span's trace (`getTrace`), so its tool calls show their results. */
+  traceSpans?: TraceSpanRecord[];
+  /** The tool registry (`listTools`), so offered tools link to their pages. */
+  registeredTools?: RegisteredTools;
+  className?: string;
 }
 
-function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPanelProps) {
-  const { selectSpan } = useThreadTrace();
-  const { data: spanDetailData, isLoading } = useSpanDetail({
-    traceId: traceId,
-    spanId: spanId,
-    queryOptions: { enabled: !!traceId && !!spanId },
-  });
-  // The thread rows read spans passively; this active observer keeps the selected trace fresh on focus/reconnect.
-  useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
-
+/** The selected span's detail, closed back through the root's selection. Draws the record it is given. */
+export function ThreadTraceSpanDetail({
+  span,
+  isLoading,
+  traceSpans,
+  registeredTools,
+  className,
+}: ThreadTraceSpanDetailProps) {
+  const { selected, selectSpan } = useThreadTrace();
+  if (!selected) return null;
   return (
     <SpanDataPanelView
-      className={panelClassName}
-      traceId={traceId}
-      spanId={spanId}
-      span={spanDetailData?.span}
+      // Keyed by trace only: stepping between spans of a trace keeps the panel's tab and view.
+      key={selected.traceId}
+      className={className}
+      traceId={selected.traceId}
+      spanId={selected.spanId}
+      span={span}
       isLoading={isLoading}
-      onClose={() => selectSpan(traceId, undefined)}
+      traceSpans={traceSpans}
+      registeredTools={registeredTools}
+      onClose={() => selectSpan(selected.traceId, undefined)}
     />
   );
 }

@@ -4,12 +4,19 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
-import { TRACE_ID, panelTraceSpans, skillSignalRootDetail, spanDetailById } from './fixtures/trace-span-panel';
+import {
+  TRACE_ID,
+  panelTraceSpans,
+  scoreStarted,
+  skillSignalRootDetail,
+  spanDetailById,
+} from './fixtures/trace-span-panel';
+import { panelScorers } from './fixtures/trace-span-panel-view';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -461,6 +468,38 @@ describe('TraceSpanPanel', () => {
     expect(within(details).getByText('Session')).not.toBeNull();
     expect(within(details).getByText('session-42')).not.toBeNull();
     expect(within(details).getByRole('button', { name: 'Copy Session id' })).not.toBeNull();
+  });
+
+  describe('when the reader scores the trace', () => {
+    beforeEach(() => vi.stubGlobal('PointerEvent', MouseEvent));
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('starts the picked scorer on the root span through the Mastra server', async () => {
+      installHandlers();
+      const onScore = vi.fn<(body: unknown) => void>();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(panelScorers)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/score`, async ({ request }) => {
+          onScore(await request.json());
+          return HttpResponse.json(scoreStarted);
+        }),
+      );
+      const { queryClient } = renderPanel();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Score trace' });
+      fireEvent.click(within(dialog).getByRole('combobox', { name: 'Select scorer' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Helpfulness' }));
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Start scoring' }));
+
+      await waitFor(() =>
+        expect(onScore).toHaveBeenCalledWith({
+          scorerName: 'helpfulness',
+          targets: [{ traceId: TRACE_ID, spanId: 'root01' }],
+        }),
+      );
+      await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    });
   });
 
   describe('resizable columns', () => {

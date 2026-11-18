@@ -1,4 +1,4 @@
-import { useTraceSpans } from '@mastra/react/hooks/traces';
+import type { TraceSpanRecord } from '../types';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from './read-only-tool-call-provider';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
@@ -10,19 +10,28 @@ import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { cn } from '@/utils/cn';
 
 export interface TraceThreadItemViewProps {
-  traceId: string;
+  /**
+   * Every span of the trace with its payload (`getTrace`); the turn is reconstructed from them.
+   * The view never fetches: the host hands them down (Studio: `useTraceSpans`).
+   */
+  spans: TraceSpanRecord[] | undefined;
+  /** The spans are still loading: shows the messages skeleton. */
+  isLoading?: boolean;
+  /** The spans failed to load. */
+  error?: unknown;
   /** Called with the ids of the spans behind a message (text or tool call) when its "Highlight spans" action is clicked. */
   onHighlightSpans?: (spanIds: string[]) => void;
   className?: string;
 }
 
-export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans({
-    traceId: traceId,
-    passive: true,
-    queryOptions: { enabled: !!traceId },
-  });
-
+/** One trace rendered as the agent turn it recorded, through the chat UI. */
+export function TraceThreadItemView({
+  spans,
+  isLoading,
+  error,
+  onHighlightSpans,
+  className,
+}: TraceThreadItemViewProps) {
   if (isLoading) return <TraceMessagesSkeleton className={className} />;
 
   if (error) {
@@ -33,7 +42,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
     );
   }
 
-  const messages = data ? formatTraceThreadMessages(data.spans) : [];
+  const messages = spans ? formatTraceThreadMessages(spans) : [];
 
   if (messages.length === 0) {
     return (

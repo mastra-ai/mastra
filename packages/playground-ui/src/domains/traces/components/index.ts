@@ -16,8 +16,18 @@ export {
   TraceDataPanelView,
   type TraceDataPanelViewProps,
   type TraceDataPanelPlacement,
+  type TraceDataPanelSpan,
 } from './trace-data-panel-view';
 export { SpanDataPanelView, type SpanDataPanelViewProps } from './span-data-panel-view';
+export { TraceSpanPanelView, type TraceSpanPanelViewProps } from './trace-span-panel-view';
+export {
+  ThreadViewByTraceView,
+  type ThreadViewByTraceViewProps,
+  type ThreadViewTrace,
+} from './thread-view-by-trace-view';
+export { TraceThreadPanelView, type TraceThreadPanelViewProps } from './trace-thread-panel-view';
+export { TraceThreadItemView, type TraceThreadItemViewProps } from './trace-thread-item-view';
+export { FeedbackThread, type FeedbackThreadProps } from './feedback-thread';
 export { SpanDetailsView, type SpanDetailsViewProps } from './span-details-view';
 export { TraceDetailsView, type TraceDetailsViewProps } from './trace-details-view';
 export { TracesListView, type TracesListViewProps, type TracesListViewTrace } from './traces-list-view';

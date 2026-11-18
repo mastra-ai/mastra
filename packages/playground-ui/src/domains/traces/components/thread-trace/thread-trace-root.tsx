@@ -13,19 +13,26 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   traceIds: string[];
   /** Fires when the reader scrolls up to the oldest loaded row; load the previous page here. */
   onLoadOlder?: () => void;
+  /**
+   * Controlled selection (`null`: no span open), so the host knows which span to load the record of.
+   * The root keeps its own when omitted.
+   */
+  selectedSpan?: ThreadTraceSelectedSpan | null;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
 
 /**
- * Owns the interaction state of a thread rendered as its traces: the selected span, the
- * highlighted spans, which rows are expanded, and which rows are on screen. Layout parts read it
+ * Owns the interaction state of a thread rendered as its traces: the selected span (unless the host
+ * controls it), the highlighted spans, which rows are expanded, and which rows are on screen. It never
+ * fetches: each part gets the records it draws from the host. Layout parts read it
  * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the resizable panel group that
  * gains a span column while a span is selected.
  */
 export function ThreadTraceRoot({
   traceIds,
   onLoadOlder,
+  selectedSpan,
   onSelectedSpanChange,
   className,
   children,
@@ -34,7 +41,8 @@ export function ThreadTraceRoot({
   const listRef = useRef<HTMLDivElement>(null);
   const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
 
-  const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
+  const [ownSelected, setOwnSelected] = useState<ThreadTraceSelectedSpan | null>(null);
+  const selected = selectedSpan !== undefined ? selectedSpan : ownSelected;
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
   // Selecting a span expands its row and it stays expanded until the reader collapses it with "Collapse".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -52,7 +60,7 @@ export function ThreadTraceRoot({
   const selectSpan = useCallback(
     (traceId: string, spanId: string | undefined) => {
       const next = spanId ? { traceId, spanId } : null;
-      setSelected(next);
+      setOwnSelected(next);
       onSelectedSpanChange?.(next);
       if (spanId) setTraceExpanded(traceId, true);
       // Closing the panel also ends the highlight, like clearing the URL param on the traces page.

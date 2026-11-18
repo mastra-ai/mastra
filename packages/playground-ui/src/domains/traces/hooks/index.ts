@@ -8,7 +8,12 @@ export {
   type UseTraceOrBranchSpansArgs,
   type UseTraceOrBranchSpansResult,
 } from '@mastra/react/hooks/traces';
-export { useTraceSearch, type UseTraceSearchResult } from './use-trace-search';
+export {
+  useTraceSearch,
+  useTraceSearchResult,
+  type TraceSearchResult,
+  type UseTraceSearchResult,
+} from './use-trace-search';
 export { useTraceSpans } from '@mastra/react/hooks/traces';
 export { useTraces } from '@mastra/react/hooks/traces';
 export {
@@ -18,6 +23,7 @@ export {
   type TraceQueryArgs,
 } from '@mastra/react/hooks/traces';
 export { useTracesListSource, type UseTracesListSourceArgs } from './use-traces-list-source';
+export { useThreadTraceSpans } from './use-thread-trace-spans';
 export { useTags } from '@mastra/react/hooks/traces';
 export {
   useTraceMetadataFilterFields,

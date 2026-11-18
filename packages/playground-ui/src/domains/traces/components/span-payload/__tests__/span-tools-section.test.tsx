@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
@@ -9,16 +8,11 @@ import { SpanDetailsView } from '../../span-details-view';
 import { makeSpan, modelToolsSpan, processorToolsSpan } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
-
-beforeEach(() => {
-  server.use(http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)));
-});
 
 const section = (selector: string, name: string) => () => {
   const found = screen.getByText(name).closest(selector);
@@ -30,7 +24,9 @@ const LAYOUTS = [
   {
     layout: 'data panel',
     // Tools sit in the Input tab, under the input they were offered with.
-    renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} activeTab="input" />,
+    renderSpan: (span: SpanRecord) => (
+      <SpanDataPanelView traceId="t" spanId="s" span={span} activeTab="input" registeredTools={registeredTools} />
+    ),
     toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
     toolsHeading: (tools: HTMLElement, count: number) => {
       const heading = within(tools).getByText('Available tools');
@@ -40,7 +36,9 @@ const LAYOUTS = [
   },
   {
     layout: 'details',
-    renderSpan: (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />,
+    renderSpan: (span: SpanRecord) => (
+      <SpanDetailsView traceId="t" spanId="s" span={span} registeredTools={registeredTools} />
+    ),
     toolsSection: () => {
       const found = screen.getByText(/^Available tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
       if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');

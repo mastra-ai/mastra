@@ -8,7 +8,7 @@ import {
 } from './thread-trace-messages';
 import { ThreadTraceRoot } from './thread-trace-root';
 import { ThreadTraceDivider, ThreadTraceRow, ThreadTraceRowBody } from './thread-trace-row';
-import { ThreadTraceSpanPanel } from './thread-trace-span-panel';
+import { ThreadTraceSpanDetail, ThreadTraceSpanPanel } from './thread-trace-span-panel';
 import { ThreadTraceSpans } from './thread-trace-spans';
 
 /**
@@ -17,8 +17,11 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  * the side so the conversation stays readable. Every part takes `className` and spreads the rest
  * of its props, so the layout can be restyled from the call site.
  *
+ * It never fetches: the host hands each part the records it draws (each row's spans, the selected
+ * span's record), typed like the Mastra client's responses, so any transport can feed it.
+ *
  * @example
- * <ThreadTrace traceIds={ids} onLoadOlder={fetchOlderPage}>
+ * <ThreadTrace traceIds={ids} onLoadOlder={fetchOlderPage} selectedSpan={selected} onSelectedSpanChange={setSelected}>
  *   <ThreadTrace.List>
  *     {ids.map((traceId, i) => (
  *       <ThreadTrace.Row key={traceId} traceId={traceId}>
@@ -35,13 +38,15 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  *             <ThreadTrace.DetailsHeader>
  *               <ThreadTrace.DetailsActions>…</ThreadTrace.DetailsActions>
  *             </ThreadTrace.DetailsHeader>
- *             <ThreadTrace.Spans />
+ *             <ThreadTrace.Spans spans={spansByTraceId[traceId]} />
  *           </ThreadTrace.Details>
  *         </ThreadTrace.RowBody>
  *       </ThreadTrace.Row>
  *     ))}
  *   </ThreadTrace.List>
- *   <ThreadTrace.SpanPanel />
+ *   <ThreadTrace.SpanPanel>
+ *     <ThreadTrace.SpanDetail span={selectedSpanRecord} />
+ *   </ThreadTrace.SpanPanel>
  * </ThreadTrace>
  */
 export const ThreadTrace = Object.assign(ThreadTraceRoot, {
@@ -58,6 +63,7 @@ export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   DetailsActions: ThreadTraceDetailsActions,
   Spans: ThreadTraceSpans,
   SpanPanel: ThreadTraceSpanPanel,
+  SpanDetail: ThreadTraceSpanDetail,
 });
 
 export { useThreadTrace } from './thread-trace-context';
@@ -80,4 +86,4 @@ export type {
   ThreadTraceDetailsActionsProps,
 } from './thread-trace-details';
 export type { ThreadTraceSpansProps } from './thread-trace-spans';
-export type { ThreadTraceSpanPanelProps } from './thread-trace-span-panel';
+export type { ThreadTraceSpanDetailProps, ThreadTraceSpanPanelProps } from './thread-trace-span-panel';

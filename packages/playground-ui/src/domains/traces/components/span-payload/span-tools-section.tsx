@@ -1,24 +1,25 @@
-import { useTools } from '@mastra/react/hooks/tools';
-import type { SpanRecord } from '../../types';
-import { getRequestedToolCalls } from '../format-trace-thread-messages';
+import type { GetToolResponse } from '@mastra/client-js';
+import type { SpanRecord, TraceSpanRecord } from '../../types';
+import { formatSpanToolCallMessages, getRequestedToolCalls } from '../format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from '../read-only-tool-call-provider';
 import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
 import { getDelegatedToolHref, getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import type { SpanPayloadSectionProps } from './span-payload-section';
-import { useSpanToolCalls } from './use-span-tool-calls';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import { Txt } from '@/ds/components/Txt';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
 
+/** The tool registry as `listTools` returns it: tools by the key they are registered under. */
+export type RegisteredTools = Record<string, GetToolResponse>;
+
 /**
  * Registered tool ids by the names a span may record them under: the tool id,
  * or the key it is registered with (what model spans pass to the provider).
  */
-function useRegisteredToolIds(): Map<string, string> {
-  const { data: tools = {} } = useTools();
+function getRegisteredToolIds(tools: RegisteredTools): Map<string, string> {
   const ids = new Map<string, string>();
   for (const [key, tool] of Object.entries(tools)) {
     ids.set(key, tool.id);
@@ -27,10 +28,18 @@ function useRegisteredToolIds(): Map<string, string> {
   return ids;
 }
 
+const NO_TOOLS: RegisteredTools = {};
+
+export interface SpanToolListProps {
+  tools: SpanTool[];
+  /** The tool registry (`listTools`); a tool it holds links to its page. Without it, tools are plain text. */
+  registeredTools?: RegisteredTools;
+}
+
 /** The tools a span offered the model, linking to their pages when registered. */
-export function SpanToolList({ tools }: { tools: SpanTool[] }) {
+export function SpanToolList({ tools, registeredTools = NO_TOOLS }: SpanToolListProps) {
   const { Link, paths } = useLinkComponent();
-  const registered = useRegisteredToolIds();
+  const registered = getRegisteredToolIds(registeredTools);
 
   return (
     <SpanPayloadList
@@ -58,26 +67,35 @@ export function SpanToolList({ tools }: { tools: SpanTool[] }) {
   );
 }
 
+/** The tool calls a span requested, paired with the results their tool spans recorded. */
+export type SpanToolCallMessages = ReturnType<typeof formatSpanToolCallMessages>;
+
 export interface SpanToolsSectionProps {
   span: SpanRecord;
   layout?: SpanPayloadSectionProps['layout'];
+  /** Every span of the trace (`getTrace`): a call's result lives on its tool span. Without it, calls show no result. */
+  traceSpans?: TraceSpanRecord[];
+  /** The tool registry (`listTools`), so offered tools link to their pages. */
+  registeredTools?: RegisteredTools;
 }
 
 /**
  * The tools the model called, each opening on its input and result like in the chat,
  * then the tools the span offered the model.
  */
-export function SpanToolsSection({ span, layout }: SpanToolsSectionProps) {
+export function SpanToolsSection({ span, layout, traceSpans, registeredTools }: SpanToolsSectionProps) {
   return (
     <>
-      {getRequestedToolCalls(span).length > 0 && <SpanToolCallsSection span={span} layout={layout} />}
-      <SpanAvailableToolsSection span={span} layout={layout} />
+      {getRequestedToolCalls(span).length > 0 && (
+        <SpanToolCallsSection span={span} layout={layout} traceSpans={traceSpans} />
+      )}
+      <SpanAvailableToolsSection span={span} layout={layout} registeredTools={registeredTools} />
     </>
   );
 }
 
 /** Each call opens on its input and result, like in the chat. */
-export function SpanToolCallList({ toolCalls }: { toolCalls: ReturnType<typeof useSpanToolCalls> }) {
+export function SpanToolCallList({ toolCalls }: { toolCalls: SpanToolCallMessages }) {
   return (
     // Tool rows carry their own vertical margins; strip them at the edges so the container is the only outer spacing.
     <div
@@ -94,8 +112,8 @@ export function SpanToolCallList({ toolCalls }: { toolCalls: ReturnType<typeof u
 }
 
 /** The tools the model called, each opening on its input and the result its tool span recorded. */
-export function SpanToolCallsSection({ span, layout }: SpanToolsSectionProps) {
-  const toolCalls = useSpanToolCalls(span);
+export function SpanToolCallsSection({ span, layout, traceSpans }: Omit<SpanToolsSectionProps, 'registeredTools'>) {
+  const toolCalls = formatSpanToolCallMessages(span, traceSpans ?? []);
   // Only tools the chat never draws (task tools, working memory) were called; the Output JSON keeps them.
   if (toolCalls.length === 0) return null;
 
@@ -115,7 +133,11 @@ export function SpanToolCallsSection({ span, layout }: SpanToolsSectionProps) {
 }
 
 /** The tools the span offered the model, linking to their pages when registered. */
-export function SpanAvailableToolsSection({ span, layout }: SpanToolsSectionProps) {
+export function SpanAvailableToolsSection({
+  span,
+  layout,
+  registeredTools,
+}: Omit<SpanToolsSectionProps, 'traceSpans'>) {
   const spanTools = getSpanTools(span);
   if (!spanTools) return null;
 
@@ -126,7 +148,7 @@ export function SpanAvailableToolsSection({ span, layout }: SpanToolsSectionProp
       raw={spanTools.raw}
       layout={layout}
     >
-      <SpanToolList tools={spanTools.tools} />
+      <SpanToolList tools={spanTools.tools} registeredTools={registeredTools} />
     </SpanPayloadSection>
   );
 }

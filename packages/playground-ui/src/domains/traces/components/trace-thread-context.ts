@@ -12,3 +12,13 @@ export function getTraceThreadId(rootSpan: TraceSpan | undefined, anchorSpanId?:
   if (anchorSpanId || rootSpan?.spanType !== SpanType.AGENT_RUN) return undefined;
   return 'threadId' in rootSpan && typeof rootSpan.threadId === 'string' ? rootSpan.threadId : undefined;
 }
+
+/** The span the panel treats as the trace's root: the branch anchor when one is given, else the parentless span. */
+export function getTraceRootSpan<Span extends TraceSpan>(
+  spans: Span[] | undefined,
+  anchorSpanId?: string,
+): Span | undefined {
+  return anchorSpanId
+    ? spans?.find(span => span.spanId === anchorSpanId)
+    : spans?.find(span => span.parentSpanId == null);
+}

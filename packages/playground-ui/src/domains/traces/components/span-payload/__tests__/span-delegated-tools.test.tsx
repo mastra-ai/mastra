@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
@@ -10,19 +9,11 @@ import { SpanDetailsView } from '../../span-details-view';
 import { makeSpan, traceWithoutToolCalls } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
-
-beforeEach(() => {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)),
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
-  );
-});
 
 // Agents expose each workflow they own as a tool named `workflow-<key>` and each
 // sub-agent as `agent-<key>`; the workflow and agent pages resolve that key.
@@ -34,14 +25,30 @@ const KINDS = [
 const LAYOUTS = [
   {
     layout: 'data panel',
-    renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />,
+    renderSpan: (span: SpanRecord) => (
+      <SpanDataPanelView
+        traceId="t"
+        spanId="s"
+        span={span}
+        traceSpans={traceWithoutToolCalls.spans}
+        registeredTools={registeredTools}
+      />
+    ),
     // What the span got sits in the Input tab, what it produced in the Output tab.
     open: (tab: 'input' | 'output') => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${tab}`, 'i') })),
     toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
   },
   {
     layout: 'details',
-    renderSpan: (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />,
+    renderSpan: (span: SpanRecord) => (
+      <SpanDetailsView
+        traceId="t"
+        spanId="s"
+        span={span}
+        traceSpans={traceWithoutToolCalls.spans}
+        registeredTools={registeredTools}
+      />
+    ),
     open: () => {},
     toolsSection: () => {
       const found = screen.getByText('Available tools (2)').closest('[data-slot="span-payload-section"]');

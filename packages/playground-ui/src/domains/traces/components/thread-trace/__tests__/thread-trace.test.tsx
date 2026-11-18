@@ -1,27 +1,14 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
+import { act, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
-import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:4111';
 const TRACE_IDS = ['trace-a', 'trace-b'];
 
-let queryClient: QueryClient;
-
-function Wrapper({ children }: { children: ReactNode }) {
-  return (
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </MastraReactProvider>
-  );
-}
+/** Every span of each turn, as the host's `getTrace` returned them. */
+const spansOf = (traceId: string) => (traceId === 'trace-b' ? traceBSpans : traceASpans).spans;
 
 // jsdom does not implement scrollIntoView, which the anchor row relies on, nor ResizeObserver,
 // which the resizable panel group relies on.
@@ -36,19 +23,10 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   scrollIntoView.mockClear();
-  server.use(
-    http.get(`${BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
-    http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
-      HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
-    ),
-  );
 });
 
 afterEach(() => {
-  cleanup();
-  queryClient.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -128,16 +106,17 @@ const renderView = ({ traceIds = TRACE_IDS, className }: { traceIds?: string[]; 
                     <button type="button">Action {traceId}</button>
                   </ThreadTrace.DetailsActions>
                 </ThreadTrace.DetailsHeader>
-                <ThreadTrace.Spans />
+                <ThreadTrace.Spans spans={spansOf(traceId)} />
               </ThreadTrace.Details>
             </ThreadTrace.RowBody>
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
-      <ThreadTrace.SpanPanel data-testid="span-panel" />
+      <ThreadTrace.SpanPanel data-testid="span-panel">
+        <ThreadTrace.SpanDetail span={spanADetail.span} />
+      </ThreadTrace.SpanPanel>
       <RootStateProbe />
     </ThreadTrace>,
-    { wrapper: Wrapper },
   );
 
 const getRow = (traceId: string) => {
@@ -159,20 +138,89 @@ describe('ThreadTrace', () => {
     });
   });
 
-  describe('when a thread with several traces loads', () => {
-    it('hands every row plain spans, without building a search haystack', async () => {
+  describe('when the spans come from the props', () => {
+    // Rendered without any Mastra client or React Query provider: a part that fetched would throw.
+    it('draws every turn from them alone', async () => {
       renderView();
-      await waitFor(() => expect(within(getRow('trace-b')).getAllByRole('button').length).toBeGreaterThan(0));
 
-      // What each mounted observer actually receives (after any `select`): the thread view
-      // has no search, so flattening span payloads here is pure memory cost on long threads.
-      const observedSpans = TRACE_IDS.flatMap(traceId => {
-        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
-        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
-      });
+      expect(await within(getRow('trace-a')).findByText('Recipe lookup')).toBeTruthy();
+      expect(within(getRow('trace-b')).getByText('Chef agent follow-up')).toBeTruthy();
+    });
+  });
 
-      expect(observedSpans.length).toBeGreaterThan(0);
-      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+  describe('when the host controls the selected span', () => {
+    it('opens the side panel on the span it selects', async () => {
+      renderUI(
+        <ThreadTrace traceIds={['trace-a']} selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}>
+          <ThreadTrace.List>
+            <ThreadTrace.Row traceId="trace-a">
+              <ThreadTrace.RowBody>
+                <ThreadTrace.Details>
+                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
+                </ThreadTrace.Details>
+              </ThreadTrace.RowBody>
+            </ThreadTrace.Row>
+          </ThreadTrace.List>
+          <ThreadTrace.SpanPanel>
+            <ThreadTrace.SpanDetail span={spanADetail.span} />
+          </ThreadTrace.SpanPanel>
+        </ThreadTrace>,
+      );
+
+      expect(await screen.findByRole('region', { name: 'Chef agent run' })).toBeTruthy();
+      expect(getRow('trace-a').dataset.active).toBe('true');
+    });
+
+    it('asks the host to close the span instead of closing it itself', async () => {
+      const onSelectedSpanChange = vi.fn();
+      renderUI(
+        <ThreadTrace
+          traceIds={['trace-a']}
+          selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}
+          onSelectedSpanChange={onSelectedSpanChange}
+        >
+          <ThreadTrace.List>
+            <ThreadTrace.Row traceId="trace-a">
+              <ThreadTrace.RowBody>
+                <ThreadTrace.Details>
+                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
+                </ThreadTrace.Details>
+              </ThreadTrace.RowBody>
+            </ThreadTrace.Row>
+          </ThreadTrace.List>
+          <ThreadTrace.SpanPanel>
+            <ThreadTrace.SpanDetail span={spanADetail.span} />
+          </ThreadTrace.SpanPanel>
+        </ThreadTrace>,
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close span' }));
+
+      expect(onSelectedSpanChange).toHaveBeenCalledWith(null);
+      expect(screen.getByRole('region', { name: 'Chef agent run' })).toBeTruthy();
+    });
+  });
+
+  describe('when the selected span record is still loading', () => {
+    it('says so in the side panel', async () => {
+      renderUI(
+        <ThreadTrace traceIds={['trace-a']} selectedSpan={{ traceId: 'trace-a', spanId: 'span-a' }}>
+          <ThreadTrace.List>
+            <ThreadTrace.Row traceId="trace-a">
+              <ThreadTrace.RowBody>
+                <ThreadTrace.Details>
+                  <ThreadTrace.Spans spans={spansOf('trace-a')} />
+                </ThreadTrace.Details>
+              </ThreadTrace.RowBody>
+            </ThreadTrace.Row>
+          </ThreadTrace.List>
+          <ThreadTrace.SpanPanel>
+            <ThreadTrace.SpanDetail isLoading />
+          </ThreadTrace.SpanPanel>
+        </ThreadTrace>,
+      );
+
+      expect(await screen.findByText('Loading span details...')).toBeTruthy();
     });
   });
 
@@ -195,7 +243,7 @@ describe('ThreadTrace', () => {
       expect(screen.queryByTestId('span-panel')).toBeNull();
       expect(screen.queryByRole('separator')).toBeNull();
 
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
 
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       // The span column opens behind a resize handle.
@@ -205,11 +253,11 @@ describe('ThreadTrace', () => {
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
       // Re-clicking the selected span toggles it off...
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
       await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
 
       // ...and so does the panel's close button.
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
       await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
@@ -220,7 +268,7 @@ describe('ThreadTrace', () => {
     it('has no prev/next buttons, since the span tree already navigates', async () => {
       renderView();
       await screen.findByText('Recipe lookup');
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
       await screen.findByRole('button', { name: 'Close span' });
 
       expect(screen.queryByRole('button', { name: 'Go to next span' })).toBeNull();
@@ -311,10 +359,10 @@ describe('ThreadTrace', () => {
       expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy();
 
       // Collapsing would hide the selected span, so Collapse waits until the panel closes.
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(within(getRow('trace-a')).getByText('Chef agent run'));
       await screen.findByRole('button', { name: 'Collapse' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));

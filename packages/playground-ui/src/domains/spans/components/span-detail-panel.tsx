@@ -1,4 +1,5 @@
-import { useSpanDetail } from '@mastra/react/hooks/traces';
+import { useTools } from '@mastra/react/hooks/tools';
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '../../traces/components/span-data-panel-view';
 
 export type SpanSelection = { traceId: string; spanId: string };
@@ -16,6 +17,9 @@ export interface SpanDetailPanelProps {
 /** The selected span's details, with previous/next over `spans`. Hosts wrap it in their own drawer or side panel. */
 export function SpanDetailPanel({ selection, spans, onSelect, onClose, onShowTrace }: SpanDetailPanelProps) {
   const { data, isLoading } = useSpanDetail({ traceId: selection.traceId, spanId: selection.spanId });
+  // The span's tool calls read their results from the trace's tool spans; tools link to their pages.
+  const { data: trace } = useTraceSpans({ traceId: selection.traceId, passive: true });
+  const { data: registeredTools } = useTools();
 
   const index = spans.findIndex(span => span.traceId === selection.traceId && span.spanId === selection.spanId);
   const previous = index > 0 ? spans[index - 1] : undefined;
@@ -27,6 +31,8 @@ export function SpanDetailPanel({ selection, spans, onSelect, onClose, onShowTra
       spanId={selection.spanId}
       span={data?.span}
       isLoading={isLoading}
+      traceSpans={trace?.spans}
+      registeredTools={registeredTools}
       onPrevious={previous ? () => onSelect(previous) : undefined}
       onNext={next ? () => onSelect(next) : undefined}
       onClose={onClose}

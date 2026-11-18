@@ -1,8 +1,8 @@
-import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
+import type { LightSpanRecord } from '../../types';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';
@@ -24,7 +24,13 @@ function useSpansClamp() {
   return { budget, overflows, isExpanded, setExpanded };
 }
 
+const NO_SPANS: LightSpanRecord[] = [];
+
 export interface ThreadTraceSpansProps extends Omit<ComponentProps<'div'>, 'children'> {
+  /** The row's spans, as its trace returned them (`getTrace`, or the light `getTraceLight`). */
+  spans: LightSpanRecord[] | undefined;
+  /** The row's spans are still loading. */
+  isLoading?: boolean;
   /** Class name of the measured wrapper around the timeline. */
   timelineClassName?: string;
 }
@@ -34,14 +40,18 @@ export interface ThreadTraceSpansProps extends Omit<ComponentProps<'div'>, 'chil
  * Clicking the fade or its Expand button expands it; a Collapse button sits under the expanded tree
  * (hidden while a span of the row is open). Clamping needs the measured height of `ThreadTrace.Messages`.
  */
-export function ThreadTraceSpans({ className, timelineClassName, ...props }: ThreadTraceSpansProps) {
+export function ThreadTraceSpans({
+  spans = NO_SPANS,
+  isLoading,
+  className,
+  timelineClassName,
+  ...props
+}: ThreadTraceSpansProps) {
   const { selectSpan } = useThreadTrace();
   const { traceId, selectedSpanId, featuredSpanIds, revealSpanId, timelineRef, isActive } = useThreadTraceRow();
   const { budget, overflows, isExpanded, setExpanded } = useSpansClamp();
 
-  // Passive: deduped with the (non-passive) fetch inside the consumer's messages slot and the side panel.
-  const { data, isLoading } = useTraceSpans({ traceId: traceId, passive: true, queryOptions: { enabled: !!traceId } });
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans), [spans]);
   const { expandedSpanIds, setExpandedSpanIds } = useExpandedSpanIds(hierarchicalSpans);
 
   // The clamp applies whenever the row is collapsed, not only once `overflows` is known: the

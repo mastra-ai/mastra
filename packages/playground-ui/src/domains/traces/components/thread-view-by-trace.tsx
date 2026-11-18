@@ -1,26 +1,15 @@
-import { useMastraClient } from '@mastra/react';
-import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/traces';
-import { useQueries } from '@tanstack/react-query';
+import { useTools } from '@mastra/react/hooks/tools';
+import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useMemo, useState } from 'react';
+import { useThreadTraceSpans } from '../hooks/use-thread-trace-spans';
 import type { FeedbackOptions } from './feedback-options';
-import { TraceScoresTab } from '@/domains/scores';
-import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
+import { TraceScoresTab } from '@/domains/scores/components/trace-scores-tab';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
-
-import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
+import { ThreadViewByTraceView } from '@/domains/traces/components/thread-view-by-trace-view';
+import type { ThreadViewByTraceViewProps } from '@/domains/traces/components/thread-view-by-trace-view';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
-import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
-import { IconChatBubble7Plus } from '@/ds/icons/central/IconChatBubble7Plus';
-import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
-import { Icon } from '@/ds/icons/Icon';
-import { ScorersIcon } from '@/ds/icons/ScorersIcon';
-import { useLinkComponent } from '@/lib/framework';
 
 // `queryTraces` requires a time range; start at the epoch so it covers the whole thread, like the legacy endpoint.
 const THREAD_WINDOW_FROM = new Date(0).toISOString();
@@ -41,10 +30,9 @@ export interface ThreadViewByTraceProps {
 }
 
 /**
- * A memory thread rendered as its traces, like a chat: one row per agent turn (oldest at the top),
- * opened on the latest turns, with older turns loaded as the reader scrolls up. Each row shows the
- * reconstructed messages on the left and the span tree on the right. Clicking a span opens its
- * detail panel on the side so the conversation stays readable.
+ * Studio's thread view: {@link ThreadViewByTraceView} fed through the Mastra client. Loads the thread's
+ * traces page by page (latest first), each turn's spans, and the record of the span the reader opens;
+ * the view itself never fetches.
  */
 export function ThreadViewByTrace({
   threadId,
@@ -71,151 +59,87 @@ export function ThreadViewByTrace({
         orderBy: [{ field: 'startedAt', direction: 'desc' }],
       }),
     });
-  // Pages come newest first; the conversation reads oldest first.
-  const traceIds = rows.map(trace => trace.traceId).reverse();
-  const listSettled = !isLoading && !isPlaceholderData;
 
-  // The first page is shown only once its turns' spans have settled too, so the rows mount complete
-  // instead of each one loading on its own. Older pages keep their per-row loading.
-  const client = useMastraClient();
-  const [readyThreadId, setReadyThreadId] = useState<string | null>(null);
-  const isReady = readyThreadId === threadId;
-  const firstPageSpansSettled = useQueries({
-    queries: (isReady || !listSettled ? [] : traceIds).map(traceId => ({
-      ...traceSpansQueryOptions(client, traceId),
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    })),
-    combine: results => results.every(result => !result.isPending),
-  });
-  if (!isReady && listSettled && firstPageSpansSettled) setReadyThreadId(threadId);
+  const feedbackSlot: ThreadViewByTraceViewProps['feedbackSlot'] = withFeedback
+    ? ({ traceId }) => (
+        <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" feedbackOptions={feedbackOptions} />
+      )
+    : undefined;
+  const scoresSlot: ThreadViewByTraceViewProps['scoresSlot'] = ({ traceId, rootSpanId }) => (
+    <TraceScoresTab
+      key={traceId}
+      traceId={traceId}
+      spanId={rootSpanId}
+      onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
+    />
+  );
 
-  if (error) {
+  // Placeholder rows belong to the previous thread: they never reach the view.
+  if (error || isLoading || isPlaceholderData) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
-        <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
-      </div>
-    );
-  }
-
-  if (!isReady) return <ThreadViewSkeleton withFeedback={withFeedback} />;
-
-  if (traceIds.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="body" tone="muted">
-          No traces found for this thread.
-        </Txt>
-      </div>
+      <ThreadViewByTraceView traces={[]} isLoading={!error} error={error ?? undefined} feedbackSlot={feedbackSlot} />
     );
   }
 
   return (
-    <ThreadTrace
+    <LoadedThread
+      // A span opened in one thread means nothing in the next one.
       key={threadId}
-      traceIds={traceIds}
-      onSelectedSpanChange={onSelectedSpanChange}
+      // Pages come newest first; the conversation reads oldest first.
+      traceIds={rows.map(trace => trace.traceId).reverse()}
       onLoadOlder={() => {
         if (hasNextPage && !isFetchingNextPage) fetchNextPage();
       }}
-    >
-      <ThreadTrace.List data-testid="thread-view-by-trace">
-        {traceIds.map((traceId, index) => (
-          <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent
-              turn={index + 1}
-              withFeedback={withFeedback}
-              feedbackOptions={feedbackOptions}
-              onOpenScore={onOpenScore}
-            />
-          </ThreadTrace.Row>
-        ))}
-      </ThreadTrace.List>
-      <ThreadTrace.SpanPanel />
-    </ThreadTrace>
+      onSelectedSpanChange={onSelectedSpanChange}
+      feedbackSlot={feedbackSlot}
+      scoresSlot={scoresSlot}
+    />
   );
 }
 
-function ThreadTraceRowContent({
-  turn,
-  withFeedback,
-  feedbackOptions,
-  onOpenScore,
-}: {
-  /** 1-based position among the loaded turns. */
-  turn: number;
-  withFeedback: boolean;
-  feedbackOptions?: FeedbackOptions;
-  onOpenScore: (traceId: string, scoreId: string) => void;
-}) {
-  const { traceId, highlightSpans } = useThreadTraceRow();
-  const { Link, paths } = useLinkComponent();
-  const traceHref = paths.traceLink(traceId);
-  // Same query the span tree observes (passive: the tree drives refetches).
-  const { data: traceData } = useTraceSpans({ traceId: traceId, passive: true, queryOptions: { enabled: !!traceId } });
-  const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
+interface LoadedThreadProps extends Pick<
+  ThreadViewByTraceViewProps,
+  'onLoadOlder' | 'onSelectedSpanChange' | 'feedbackSlot' | 'scoresSlot'
+> {
+  /** The thread's turns loaded so far, oldest first. */
+  traceIds: string[];
+}
+
+/** A thread whose list has loaded: loads each turn's spans and the record of the span the reader opens. */
+function LoadedThread({ traceIds, onLoadOlder, onSelectedSpanChange, feedbackSlot, scoresSlot }: LoadedThreadProps) {
+  const traces = useThreadTraceSpans(traceIds);
+  // The first page is shown only once its turns' spans have settled too, so the rows mount complete
+  // instead of each one loading on its own. Older pages are prepended later and keep their per-row loading.
+  const [firstPage] = useState(() => new Set(traceIds));
+  const isReady = traces.every(trace => !firstPage.has(trace.traceId) || !trace.isLoading);
+
+  const [selectedSpan, setSelectedSpan] = useState<ThreadTraceSelectedSpan | null>(null);
+  const spanDetail = useSpanDetail({
+    traceId: selectedSpan?.traceId,
+    spanId: selectedSpan?.spanId,
+    queryOptions: { enabled: !!selectedSpan },
+  });
+  // The rows read their spans passively; this active observer keeps the selected trace fresh on focus/reconnect.
+  useTraceSpans({ traceId: selectedSpan?.traceId, queryOptions: { enabled: !!selectedSpan } });
+  // Tools only matter to an open span: its Input tab links the tools it offered to their pages.
+  const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpan } });
 
   return (
-    <>
-      <ThreadTrace.Divider label={`Turn ${turn}`}>
-        {traceHref && (
-          <>
-            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<IconSquareArrowTopRight />}>
-              Go to trace
-            </Button>
-            <span aria-hidden className="h-4 w-px bg-border" />
-          </>
-        )}
-        <ThreadTrace.TabList>
-          <ThreadTrace.Tab value="messages">
-            <Icon size="xs">
-              <IconChatBubble7 />
-            </Icon>
-            Messages
-          </ThreadTrace.Tab>
-          {withFeedback && (
-            <ThreadTrace.Tab value="feedback">
-              <Icon size="xs">
-                <IconChatBubble7Plus />
-              </Icon>
-              Feedback
-            </ThreadTrace.Tab>
-          )}
-          <ThreadTrace.Tab value="scores">
-            <Icon size="xs">
-              <ScorersIcon />
-            </Icon>
-            Scores
-          </ThreadTrace.Tab>
-        </ThreadTrace.TabList>
-      </ThreadTrace.Divider>
-      <ThreadTrace.RowBody>
-        <ThreadTrace.Messages>
-          <ThreadTrace.TabContent value="messages" flush>
-            <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
-          </ThreadTrace.TabContent>
-          {withFeedback && (
-            <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
-              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" feedbackOptions={feedbackOptions} />
-            </ThreadTrace.TabContent>
-          )}
-          <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
-            {rootSpanId ? (
-              <TraceScoresTab
-                key={traceId}
-                traceId={traceId}
-                spanId={rootSpanId}
-                onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
-              />
-            ) : null}
-          </ThreadTrace.TabContent>
-        </ThreadTrace.Messages>
-        <ThreadTrace.Details>
-          <ThreadTrace.Spans />
-        </ThreadTrace.Details>
-      </ThreadTrace.RowBody>
-    </>
+    <ThreadViewByTraceView
+      traces={traces}
+      isLoading={!isReady}
+      onLoadOlder={onLoadOlder}
+      selectedSpan={selectedSpan}
+      onSelectedSpanChange={selected => {
+        setSelectedSpan(selected);
+        onSelectedSpanChange?.(selected);
+      }}
+      selectedSpanDetail={spanDetail.data?.span}
+      isLoadingSelectedSpanDetail={spanDetail.isLoading}
+      registeredTools={registeredTools}
+      feedbackSlot={feedbackSlot}
+      scoresSlot={scoresSlot}
+    />
   );
 }
 

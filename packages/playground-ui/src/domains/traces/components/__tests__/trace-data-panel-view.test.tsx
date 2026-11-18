@@ -1,13 +1,8 @@
 // @vitest-environment jsdom
 import '@/test/inert-resize-observer';
-import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http } from 'msw';
-import { setupServer } from 'msw/node';
-import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
@@ -15,19 +10,12 @@ import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures
 import { installHighlightApi } from '@/test/highlight-api';
 import type { HighlightApiHarness } from '@/test/highlight-api';
 
-let queryClient: QueryClient;
-beforeEach(() => {
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-});
-const render = (ui: ReactNode) =>
-  renderUI(ui, {
-    wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
-  });
-
+// Rendered without a Mastra client or a React Query provider: the view draws what it is given and fetches nothing.
 const baseProps: TraceDataPanelViewProps = {
   traceId: 'trace-1',
   spans: rootSpanFixture,
   onClose: vi.fn(),
+  onDownloadTrace: vi.fn(),
   placement: 'traces-list',
 };
 
@@ -37,7 +25,6 @@ Element.prototype.scrollIntoView = scrollIntoView;
 
 afterEach(() => {
   cleanup();
-  queryClient.clear();
   scrollIntoView.mockClear();
 });
 
@@ -654,27 +641,23 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
 });
 
 describe('TraceDataPanelView — downloading the trace', () => {
-  const BASE_URL = 'http://localhost:4111';
-  const server = setupServer();
+  describe('when the reader asks for the JSON', () => {
+    it('hands the trace id to the host, which loads and saves it', () => {
+      const onDownloadTrace = vi.fn<(traceId: string) => void>();
+      render(<TraceDataPanelView {...baseProps} onDownloadTrace={onDownloadTrace} />);
 
-  beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
-  afterEach(() => server.resetHandlers());
-  afterAll(() => server.close());
+      fireEvent.click(screen.getByRole('button', { name: 'Download trace JSON' }));
 
-  const withClient = (children: ReactNode) => <MastraReactProvider baseUrl={BASE_URL}>{children}</MastraReactProvider>;
+      expect(onDownloadTrace).toHaveBeenCalledWith('trace-1');
+    });
+  });
 
-  it('refuses a second download while the first is still running', async () => {
-    // The request never settles, so the button stays in its in-flight state.
-    server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => new Promise(() => {})));
+  describe('when the host is still downloading', () => {
+    it('refuses a second download', () => {
+      render(<TraceDataPanelView {...baseProps} isDownloadingTrace />);
 
-    render(withClient(<TraceDataPanelView {...baseProps} />));
-
-    const download = screen.getByRole('button', { name: 'Download trace JSON' });
-    expect(download.hasAttribute('data-disabled')).toBe(false);
-
-    fireEvent.click(download);
-
-    await waitFor(() => expect(download.hasAttribute('data-disabled')).toBe(true));
+      expect(screen.getByRole('button', { name: 'Download trace JSON' }).hasAttribute('data-disabled')).toBe(true);
+    });
   });
 });
 

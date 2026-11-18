@@ -32,7 +32,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { formatDate } from '@/utils/date-format';
 
-type FeedbackThreadProps = {
+export type FeedbackThreadProps = {
   /** Rows flagged `isPending` are not stored yet: they show "Sending…" and get no actions. */
   feedbackData?: FeedbackListResponse | null;
   isLoadingFeedbackData?: boolean;

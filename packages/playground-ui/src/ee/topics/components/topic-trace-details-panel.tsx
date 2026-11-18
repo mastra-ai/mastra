@@ -1,3 +1,4 @@
+import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
@@ -22,6 +23,7 @@ export function TopicTraceDetailsPanel({
     spanId: selectedSpanId,
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });
+  const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpanId } });
 
   if (!traceId) return null;
 
@@ -46,6 +48,8 @@ export function TopicTraceDetailsPanel({
           spanId={selectedSpanId}
           span={spanDetail.data?.span}
           isLoading={spanDetail.isLoading}
+          traceSpans={traceSpans.data?.spans}
+          registeredTools={registeredTools}
           onClose={onSpanSelect ? () => onSpanSelect(undefined) : undefined}
         />
       ) : null}

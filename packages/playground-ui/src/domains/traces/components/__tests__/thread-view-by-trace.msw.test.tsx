@@ -304,6 +304,25 @@ describe('ThreadViewByTrace', () => {
       expect(requested).not.toHaveBeenCalled();
     });
   });
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = ['trace-a', 'trace-b'].flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+    });
+  });
+
   it('renders one row per trace, oldest first', async () => {
     installHandlers();
     const { queryClient } = renderView();
