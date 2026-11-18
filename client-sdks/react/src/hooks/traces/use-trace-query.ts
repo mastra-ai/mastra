@@ -21,7 +21,7 @@ type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight'
 type LightSpanRecord = ListTracesLightResponse['spans'][number];
 
 /**
- * Set `progressive: true` with a word search when the server reports `observabilityProgressiveSearch`: each page
+ * Set `progressive: true` with a word search when the server reports `progressiveTokenSearch`: each page
  * then searches one chunk of the range, in sort order, and the list pages by `continuation`.
  */
 export type TraceQueryArgs = Omit<QueryTracesKeysetInput, 'page' | 'pagination' | 'continuation'>;

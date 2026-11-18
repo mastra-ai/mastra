@@ -45,7 +45,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   spanQueryTokenSearch: z.boolean().default(false).describe('Token matching within individual spans'),
   traceAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in trace aggregates'),
   spanAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in span aggregates'),
-  observabilityProgressiveSearch: z
+  progressiveTokenSearch: z
     .boolean()
     .default(false)
     .describe(

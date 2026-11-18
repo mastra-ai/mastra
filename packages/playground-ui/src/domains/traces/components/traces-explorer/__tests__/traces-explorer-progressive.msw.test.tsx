@@ -28,7 +28,7 @@ const CHUNK = 7 * DAY;
 
 const progressiveCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceTokenSearchCapabilities,
-  capabilities: { ...traceTokenSearchCapabilities.capabilities, observabilityProgressiveSearch: true },
+  capabilities: { ...traceTokenSearchCapabilities.capabilities, progressiveTokenSearch: true },
 };
 
 const WORD_SEARCH_30D: TracesFilters = {

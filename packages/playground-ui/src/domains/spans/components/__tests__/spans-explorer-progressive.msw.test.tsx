@@ -30,7 +30,7 @@ const searchable: GetObservabilityCapabilitiesResponse = {
 };
 const progressiveCapabilities: GetObservabilityCapabilitiesResponse = {
   ...searchable,
-  capabilities: { ...searchable.capabilities, observabilityProgressiveSearch: true },
+  capabilities: { ...searchable.capabilities, progressiveTokenSearch: true },
 };
 
 type Body = {

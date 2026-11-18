@@ -3918,7 +3918,7 @@ type Shared_Type_69 = {
   /** Token predicates in span aggregates */
   spanAggregateTokenSearch: boolean;
   /** Word searches over long ranges in chunks: `progressive: true` and `continuation` on span and trace queries and aggregates */
-  observabilityProgressiveSearch: boolean;
+  progressiveTokenSearch: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */

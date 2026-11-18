@@ -140,6 +140,6 @@ export const progressiveSearchCapabilities: GetObservabilityCapabilitiesResponse
   observabilityStorageType: 'ObservabilityStorageDuckDB',
   capabilities: {
     ...traceQueryCapabilities.capabilities,
-    observabilityProgressiveSearch: true,
+    progressiveTokenSearch: true,
   },
 };

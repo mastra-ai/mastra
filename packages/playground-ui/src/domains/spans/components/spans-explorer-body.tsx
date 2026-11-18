@@ -59,7 +59,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
   const withModelFields = capabilities?.capabilities.spanQueryModelFields ?? false;
-  const withProgressiveSearch = capabilities?.capabilities.observabilityProgressiveSearch ?? false;
+  const withProgressiveSearch = capabilities?.capabilities.progressiveTokenSearch ?? false;
 
   // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
   const displayedColumns = useMemo(

@@ -53,7 +53,7 @@ export type TracesConfigContextValue = {
   withTimeToFirstTokenSort: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
-  /** The server searches a word search over more than 7 days one chunk at a time (`observabilityProgressiveSearch`). */
+  /** The server searches a word search over more than 7 days one chunk at a time (`progressiveTokenSearch`). */
   withProgressiveSearch: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
   withDiscovery: boolean;

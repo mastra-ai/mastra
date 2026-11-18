@@ -9,7 +9,7 @@ import type { ProgressiveListState } from '../shared/use-progressive-list';
 export const SPAN_QUERY_PER_PAGE = 25;
 
 /**
- * Set `progressive: true` with a word search when the server reports `observabilityProgressiveSearch`: each page
+ * Set `progressive: true` with a word search when the server reports `progressiveTokenSearch`: each page
  * then searches one chunk of the range, newest first, and the list pages by `continuation`.
  */
 export type SpanQueryArgs = Omit<QuerySpansInput, 'page' | 'continuation'>;

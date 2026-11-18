@@ -24,7 +24,7 @@ export type UseSpansHistogramArgs = {
 
 /**
  * Span and error counts over the span list's time range and filters. When the server searches in chunks
- * (`observabilityProgressiveSearch`), a word search over more than 7 days loads one chunk at a time, newest first,
+ * (`progressiveTokenSearch`), a word search over more than 7 days loads one chunk at a time, newest first,
  * and `progress` reports how far it got.
  */
 export function useSpansHistogram({ timeRange, where, enabled = true }: UseSpansHistogramArgs): HistogramView {
