@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
+import { LRUCache } from 'lru-cache';
 import { estimateTokenCount } from 'tokenx';
 
 import { measureImageBuffer } from './measure-image-buffer';
@@ -169,6 +170,22 @@ function buildEstimateKey(kind: string, text: string): string {
   const payloadHash = createHash('sha256').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
 }
+
+/**
+ * Payloads at least this long have their estimate remembered by payload hash across messages and counters.
+ * Shorter payloads cost less to estimate than to look up.
+ */
+const SHARED_ESTIMATE_MIN_PAYLOAD_LENGTH = 1024;
+
+/**
+ * Text estimates by estimate key (kind plus payload hash), shared by every counter in the process.
+ *
+ * The per-part cache only helps while the same message object is counted again. Messages loaded from
+ * storage are new objects, and most are stored without an estimate (the turn's final message and older
+ * history are never re-saved after counting), so every turn would otherwise re-estimate the whole
+ * unobserved window. Hashing a payload costs a small fraction of estimating it.
+ */
+const sharedTextEstimates = new LRUCache<string, number>({ max: 20_000 });
 
 function resolveEstimatorId(): string {
   return 'tokenx';
@@ -1273,6 +1290,22 @@ export class TokenCounter {
     return estimateTokenCount(text);
   }
 
+  private countPayload(key: string, payload: string): number {
+    if (payload.length < SHARED_ESTIMATE_MIN_PAYLOAD_LENGTH) {
+      return this.countString(payload);
+    }
+
+    const sharedKey = `${this.cacheSource}:${key}`;
+    const cached = sharedTextEstimates.get(sharedKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const tokens = this.countString(payload);
+    sharedTextEstimates.set(sharedKey, tokens);
+    return tokens;
+  }
+
   private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {
     const key = buildEstimateKey(kind, payload);
     const cached = getPartCacheEntry(part, key);
@@ -1280,7 +1313,7 @@ export class TokenCounter {
       return cached.tokens;
     }
 
-    const tokens = this.countString(payload);
+    const tokens = this.countPayload(key, payload);
     setPartCacheEntry(part, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
       source: this.cacheSource,
@@ -1315,7 +1348,7 @@ export class TokenCounter {
       return cached.tokens;
     }
 
-    const tokens = this.countString(payload);
+    const tokens = this.countPayload(key, payload);
     setMessageCacheEntry(message, key, {
       v: TOKEN_ESTIMATE_CACHE_VERSION,
       source: this.cacheSource,

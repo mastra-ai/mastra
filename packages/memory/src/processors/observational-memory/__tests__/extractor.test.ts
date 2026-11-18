@@ -240,6 +240,33 @@ describe('Extractor', () => {
     expect(onExtracted).toHaveBeenCalledWith(expect.objectContaining({ memory }));
   });
 
+  it('formats recent messages for hooks only when a user hook will read them', async () => {
+    const formatRecentMessages = vi.fn(() => 'formatted messages');
+    const onExtracted = vi.fn((_context: { recentMessages?: string }) => undefined);
+    const internalHook = new Extractor({ name: 'Internal', instructions: 'Extract.', onExtracted }, true);
+    const withoutHook = new Extractor({ name: 'Plain', instructions: 'Extract plain.' });
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [internalHook, withoutHook],
+      values: { internal: 'value', plain: 'value' },
+      recentMessages: formatRecentMessages,
+      threadId: 'thread-1',
+    });
+    expect(formatRecentMessages).not.toHaveBeenCalled();
+
+    const userHook = new Extractor({ name: 'Hook', instructions: 'Extract hook.', onExtracted });
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [userHook, withoutHook],
+      values: { hook: 'value' },
+      recentMessages: formatRecentMessages,
+      threadId: 'thread-1',
+    });
+    expect(formatRecentMessages).toHaveBeenCalledTimes(1);
+    expect(onExtracted).toHaveBeenCalledWith(expect.objectContaining({ recentMessages: 'formatted messages' }));
+  });
+
   it('updates markdown working memory from the working memory extractor without persisting OM metadata', async () => {
     const memory = {
       getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),

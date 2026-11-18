@@ -304,6 +304,55 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  // History loaded from storage arrives as new objects, usually without a stored estimate, so the
+  // per-part cache misses on every turn. Estimates are also remembered by payload hash in-process.
+  it('does not re-estimate unchanged history reloaded from storage, and recounts edited history', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: 't', resourceId: 'r', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: 'test-model', messageTokens: 1_000_000_000, bufferTokens: false, bufferOnIdle: false },
+      reflection: { model: 'test-model', observationTokens: 1_000_000_000 },
+    });
+    const history = (payload: string) => ({
+      ...assistant([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'history-call',
+            toolName: 'git_diff',
+            args: {},
+            result: { diff: payload },
+          },
+        },
+      ]),
+      id: 'history',
+    });
+    const original = `unique diff line ${Date.now()} `.repeat(4_000);
+    await storage.saveMessages({ messages: [history(original)] });
+
+    const estimates = vi.spyOn(TokenCounter.prototype, 'countString');
+    const largeEstimates = () => estimates.mock.calls.filter(([text]) => text.length > 10_000).length;
+
+    const first = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    expect(largeEstimates()).toBe(1);
+
+    const reloaded = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    expect(reloaded.pendingTokens).toBe(first.pendingTokens);
+    expect(largeEstimates()).toBe(1);
+
+    await storage.updateMessages({
+      messages: [{ id: 'history', content: history(`${original} and an edited tail`).content }],
+    });
+    const edited = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    expect(largeEstimates()).toBe(2);
+    expect(edited.pendingTokens).toBeGreaterThan(first.pendingTokens);
+  });
+
   it('serializes each prior tool result at most twice per step as a long tool run grows', async () => {
     const f = await setup();
     const observe = vi.spyOn(f.om, 'observe');

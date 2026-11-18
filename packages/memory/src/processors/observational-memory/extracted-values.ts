@@ -238,7 +238,8 @@ export async function applyExtractorHooks(opts: {
   failures?: ExtractionFailure[];
   previousValues?: Record<string, unknown>;
   rawObservations?: string;
-  recentMessages?: string;
+  /** Pass a function to skip formatting the messages when no extractor hook will read them. */
+  recentMessages?: string | (() => string);
   threadId: string;
   resourceId?: string;
   mainAgent?: ProcessorContext['agent'];
@@ -252,6 +253,12 @@ export async function applyExtractorHooks(opts: {
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
   const failures: ExtractionFailure[] = [...(opts.failures ?? [])];
+  const recentMessages =
+    typeof opts.recentMessages === 'function'
+      ? opts.extractors.some(extractor => extractor.onExtracted && !extractor.internal)
+        ? opts.recentMessages()
+        : undefined
+      : opts.recentMessages;
 
   for (const extractor of opts.extractors) {
     const isHook = extractor.mode === 'hook';
@@ -279,7 +286,7 @@ export async function applyExtractorHooks(opts: {
         previous: isHook ? undefined : opts.previousValues?.[extractor.slug],
         current,
         rawObservations: opts.rawObservations,
-        recentMessages: opts.recentMessages,
+        recentMessages,
         mainAgent: opts.mainAgent,
         memory: opts.memory,
         sendSignal: opts.sendSignal,

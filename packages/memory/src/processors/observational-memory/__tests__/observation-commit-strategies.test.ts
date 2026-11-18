@@ -79,16 +79,19 @@ function createMessages(count: number): MastraDBMessage[] {
 function createCommitProbe() {
   const outcomes: boolean[] = [];
   const settled: Promise<void>[] = [];
+  const recentMessages: (string | undefined)[] = [];
   const extractor = new Extractor({
     name: 'Commit probe',
     mode: 'hook',
-    onExtracted: ({ observationCommitted }: ExtractorOnExtractedContext<unknown>) => {
+    onExtracted: ({ observationCommitted, recentMessages: recent }: ExtractorOnExtractedContext<unknown>) => {
+      recentMessages.push(recent);
       if (!observationCommitted) throw new Error('observation strategy did not pass observationCommitted');
       settled.push(observationCommitted.then(committed => void outcomes.push(committed)));
     },
   });
   return {
     extractor,
+    recentMessages,
     async outcomes() {
       await Promise.all(settled);
       return outcomes;
@@ -166,6 +169,8 @@ describe('observation commit settlement through the real strategies', () => {
       });
 
       expect(await probe.outcomes()).toEqual([true]);
+      // Hooks still receive the observed messages, formatted and truncated for the hook.
+      expect(probe.recentMessages).toEqual([expect.stringContaining('Message 0:')]);
       expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('January 15');
     });
 
@@ -194,6 +199,8 @@ describe('observation commit settlement through the real strategies', () => {
       await om.waitForBuffering(threadId, resourceId, 5000);
 
       expect(await probe.outcomes()).toEqual([true]);
+      // Hooks still receive the observed messages, formatted and truncated for the hook.
+      expect(probe.recentMessages).toEqual([expect.stringContaining('Message 0:')]);
       expect((await om.getStatus({ threadId, resourceId })).bufferedChunkCount).toBe(1);
     });
 
@@ -241,6 +248,8 @@ describe('observation commit settlement through the real strategies', () => {
       });
 
       expect(await probe.outcomes()).toEqual([true]);
+      // Hooks still receive the observed messages, formatted and truncated for the hook.
+      expect(probe.recentMessages).toEqual([expect.stringContaining('Message 0:')]);
       expect((await storage.getObservationalMemory(null, resourceId))?.activeObservations).toContain('January 15');
     });
   });
