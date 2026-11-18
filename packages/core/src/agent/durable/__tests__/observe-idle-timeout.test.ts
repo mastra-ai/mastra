@@ -429,6 +429,8 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await emitSuspendedEvent(pubsub, runId, { type: 'suspension' });
 
     expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
+    // `done` settles on a rejection too, so assert clean EOF separately.
+    expect(reader.getThrown()).toBeUndefined();
     expect(reader.isClosed()).toBe(true);
     // Teardown waits for the frames already published before unsubscribing, so it
     // lands a beat after the stream closes rather than inside the callback.
