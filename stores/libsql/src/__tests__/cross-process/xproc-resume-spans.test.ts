@@ -1,9 +1,9 @@
 /**
- * A durable run that suspends on one worker and is resumed or recovered from another process must
- * report each execution as its own AGENT_RUN + MODEL_GENERATION pair in one trace: the suspended
- * pair stays ended `suspend`, the next pair nests under it with that execution's own outcome, and
- * every span ends exactly once. Real OS processes: the API replica that streams, a worker, and a
- * fresh replica that resumes, all over one LibSQL file and one socket.
+ * A durable run that suspends or crashes on one worker and is resumed or recovered from another
+ * process must report each execution as its own AGENT_RUN + MODEL_GENERATION pair in one trace: the
+ * earlier pair stays ended as it was, the next pair nests under it with that execution's own
+ * outcome, and every span ends exactly once. Real OS processes: the API replica that streams, a
+ * worker, and a fresh replica that resumes or recovers, all over one LibSQL file and one socket.
  */
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -30,6 +30,7 @@ describe('durable run spans across processes', () => {
   let mastra: Mastra | undefined;
   let agentId: string;
   let eventsPath: string;
+  let storageVersion: 1 | 2 | undefined;
   const peers: PeerHandle[] = [];
 
   afterEach(async () => {
@@ -46,13 +47,14 @@ describe('durable run spans across processes', () => {
     }
   });
 
-  async function setup(options: { workers: boolean }) {
-    env = await createXprocEnv(options);
+  async function setup(options: { workers: boolean; storageVersion?: 1 | 2 }) {
+    env = await createXprocEnv({ workers: options.workers });
     agentId = `resume-spans-${randomUUID()}`;
     eventsPath = path.join(env.dir, 'span-events.jsonl');
+    storageVersion = options.storageVersion;
     storage = new LibSQLStore({ id: 'resume-spans-api', url: env.dbUrl });
     const { agent } = createStepAgent({ id: agentId, steps: 1 });
-    const runner = createEventedAgent({ agent });
+    const runner = createEventedAgent({ agent, storageVersion });
     mastra = new Mastra({
       agents: { [agentId]: runner },
       storage,
@@ -64,11 +66,11 @@ describe('durable run spans across processes', () => {
     return runner;
   }
 
-  async function spawn(role: string, args: Omit<ResumeSpansPeerArgs, 'agentId' | 'eventsPath'>) {
+  async function spawn(role: string, args: Omit<ResumeSpansPeerArgs, 'agentId' | 'eventsPath' | 'storageVersion'>) {
     const peer = await env.spawnPeer<ResumeSpansPeerArgs>(
       PEER,
-      { agentId, eventsPath, ...args },
-      { role, workers: args.mode === 'worker' },
+      { agentId, eventsPath, storageVersion, ...args },
+      { role, workers: args.mode !== 'resumer' },
     );
     peers.push(peer);
     return peer;
@@ -145,6 +147,55 @@ describe('durable run spans across processes', () => {
 
       workerPeer.send('finish');
       await workerPeer.result();
+    },
+    CELL_TIMEOUT_MS,
+  );
+
+  it(
+    'a recovery of a run whose worker died right after saving the final step ends the recovered pair with the saved outcome',
+    async () => {
+      // Storage v2 stores every step as it completes, so a worker can die between the final step
+      // and the run's status.
+      const runner = await setup({ workers: false, storageVersion: 2 });
+      const dying = await spawn('worker-1', { mode: 'worker', exitAfterFinalStep: true });
+      await dying.waitFor('worker-ready');
+
+      // The worker publishes FINISH and saves the final step, then dies before the run's status.
+      const stream = await runner.stream('Perform the steps', { maxSteps: 3 });
+      expect(await dying.exit({ timeoutMs: DEFAULT_HANG_GUARD_MS }), env.describe()).toEqual({ code: 0, signal: null });
+      stream.cleanup?.();
+      const saved = await snapshot(stream.runId);
+      expect(saved?.status, 'the run is still active in storage').toBe('running');
+      expect((saved?.context as Record<string, { status?: string }>)?.['map-final-output']?.status).toBe('success');
+
+      const recoverer = await spawn('recoverer', { mode: 'recoverer', runId: stream.runId });
+      const recovered = await recoverer.result<ResumeSpansPeerResult>();
+      expect(recovered.error, env.describe()).toBeNull();
+      expect(recovered.chunkTypes).toContain('finish');
+
+      const spans = await settledSpans(stream.runId);
+      const [first, second, ...more] = spans.filter(span => span.type === 'agent_run');
+      expect(
+        more,
+        `two agent runs, one per execution
+${describeSpans(spans)}`,
+      ).toEqual([]);
+      expect(first?.endedBy, describeSpans(spans)).toEqual([{ role: 'worker-1', outcome: 'success' }]);
+      expect(
+        second,
+        `the recovery ends its own AGENT_RUN as the saved run did
+${describeSpans(spans)}`,
+      ).toMatchObject({
+        startedBy: ['recoverer'],
+        recovered: true,
+        parentSpanId: first!.spanId,
+        endedBy: [{ role: 'recoverer', outcome: 'success' }],
+      });
+      expect(spans.filter(span => span.type === 'model_generation').map(span => span.endedBy)).toEqual([
+        [{ role: 'worker-1', outcome: 'success' }],
+        [{ role: 'recoverer', outcome: 'success' }],
+      ]);
+      expectEndedOnce(spans);
     },
     CELL_TIMEOUT_MS,
   );
