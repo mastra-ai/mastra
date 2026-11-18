@@ -1083,6 +1083,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
             ready && integration.intakeLookup ? [integration.intakeLookup] : [],
           ),
+          intakeRefreshers: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
+            ready && integration.refreshIntake
+              ? [{ id: integration.id, refreshIntake: integration.refreshIntake.bind(integration) }]
+              : [],
+          ),
         }).routes()
       : []),
     ...(deps.factoryReady

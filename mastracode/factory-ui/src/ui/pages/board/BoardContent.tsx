@@ -23,6 +23,7 @@ import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
 import { RunQueueIndicator } from '../../domains/factory/components/RunQueueIndicator';
+import { RefreshIntakeButton } from '../../domains/factory/components/RefreshIntakeButton';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -356,6 +357,7 @@ export function BoardContent({
             aside={
               <div className="flex items-center gap-2">
                 <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />
+                <RefreshIntakeButton factoryId={factoryProjectId} />
                 <ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />
               </div>
             }

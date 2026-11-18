@@ -6,7 +6,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -27,7 +27,8 @@ import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { asProjectFromBeforeIntakeEvaluator } from '../storage/test-utils.js';
 import { BoardRoutes } from './boards.js';
-import { IntakeRouteRoutes } from './intake-routes.js';
+import { INTAKE_REFRESH_MIN_GAP_MS, IntakeRouteRoutes } from './intake-routes.js';
+import type { IntakeRefresher } from './intake-routes.js';
 import type { RouteAuth } from './route.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -91,6 +92,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     options: {
       auth?: RouteAuth;
       evaluator?: 'route-list' | 'intake-order';
+      refreshers?: IntakeRefresher[];
     } = {},
   ) {
     const cache = new ProjectBoardCache({
@@ -118,6 +120,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         storage: domains.boards,
         boards: cache,
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
+        ...(options.refreshers ? { intakeRefreshers: options.refreshers } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -337,6 +340,97 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect((await outsider.send('POST', base, { name: 'Mine', target: WORK })).status).toBe(404);
     expect((await replicaA.send('GET', base, undefined, SIGNED_OUT)).status).toBe(401);
     expect(await list(replicaA.send, base)).toHaveLength(1);
+  });
+
+  it("refreshes the project's intake through every integration that can, one sweep at a time per project", async () => {
+    const { a, orgId, scope, projectPath } = await setup();
+    const counts = { checked: 3, updated: 1, closed: 1, observed: 2, failed: 1 };
+    const summary = { ...counts, errors: ['acme/app#7: Bad credentials for installation 7'] };
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    const jira = vi.fn(async () => {
+      await held;
+      return summary;
+    });
+    const linear = vi.fn(async () => {
+      throw new Error('Linear is down');
+    });
+    // No Factory runtime yet: nothing to report.
+    const github = vi.fn(async () => null);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => {
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
+    });
+    const { send } = replica(a, orgId, {
+      refreshers: [
+        { id: 'jira', refreshIntake: jira },
+        { id: 'linear', refreshIntake: linear },
+        { id: 'github', refreshIntake: github },
+      ],
+    });
+
+    // Members can ask; a second ask while the first runs waits for it.
+    const first = send('POST', `${projectPath}/intake/refresh`, undefined, MEMBER);
+    const second = send('POST', `${projectPath}/intake/refresh`);
+    await vi.waitFor(() => expect(jira).toHaveBeenCalledOnce());
+    release();
+    const expected = {
+      status: 200,
+      body: {
+        integrations: [
+          { integrationId: 'jira', status: 'refreshed', summary: counts },
+          { integrationId: 'linear', status: 'failed' },
+        ],
+      },
+    };
+    expect(await first).toEqual(expected);
+    expect(await second).toEqual(expected);
+    expect(jira).toHaveBeenCalledOnce();
+    expect(jira).toHaveBeenCalledWith(scope);
+    // Provider and storage messages are logged, never sent to the member.
+    expect(JSON.stringify((await second).body)).not.toMatch(/Linear is down|Bad credentials/);
+    expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('jira'), summary.errors);
+
+    // Asked again right after it settles, the refresh is refused until a minute has passed.
+    const tooSoon = await send('POST', `${projectPath}/intake/refresh`);
+    expect(tooSoon).toMatchObject({ status: 429, body: { error: 'intake_refresh_too_soon' } });
+    expect((tooSoon.body as { retryAfterSeconds: number }).retryAfterSeconds).toBeGreaterThan(0);
+    expect(jira).toHaveBeenCalledOnce();
+
+    const later = Date.now() + INTAKE_REFRESH_MIN_GAP_MS;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+    onTestFinished(() => clock.mockRestore());
+    expect((await send('POST', `${projectPath}/intake/refresh`)).status).toBe(200);
+    expect(jira).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets a refresh that every integration failed be retried at once', async () => {
+    const { a, orgId, projectPath } = await setup();
+    const jira = vi.fn(async () => {
+      throw new Error('Connect is down');
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => consoleError.mockRestore());
+    const { send } = replica(a, orgId, { refreshers: [{ id: 'jira', refreshIntake: jira }] });
+
+    expect(await send('POST', `${projectPath}/intake/refresh`)).toMatchObject({
+      status: 200,
+      body: { integrations: [{ integrationId: 'jira', status: 'failed' }] },
+    });
+    expect((await send('POST', `${projectPath}/intake/refresh`)).status).toBe(200);
+    expect(jira).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to refresh another organization's project, or for a signed-out request", async () => {
+    const { a, projectPath } = await setup();
+    const refreshIntake = vi.fn(async () => null);
+    const elsewhere = replica(a, `org-${randomUUID()}`, { refreshers: [{ id: 'jira', refreshIntake }] });
+
+    expect((await elsewhere.send('POST', `${projectPath}/intake/refresh`)).status).toBe(404);
+    expect((await elsewhere.send('POST', `${projectPath}/intake/refresh`, undefined, SIGNED_OUT)).status).toBe(401);
+    expect(refreshIntake).not.toHaveBeenCalled();
   });
 
   it('needs no admin in local mode', async () => {

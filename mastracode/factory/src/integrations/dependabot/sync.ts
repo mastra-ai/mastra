@@ -118,10 +118,12 @@ export function createDependabotSync(options: {
     const summary: DependabotSyncSummary = { repositories: 0, alerts: 0, failed: 0, errors: [] };
     for (const target of targets) {
       try {
-        const linked = await options.listProjects({
-          installationExternalId: String(target.installationId),
-          repositoryExternalId: String(target.id),
-        });
+        const linked =
+          target.projects ??
+          (await options.listProjects({
+            installationExternalId: String(target.installationId),
+            repositoryExternalId: String(target.id),
+          }));
         const projects = [];
         for (const project of linked) {
           if (await options.repositoryEnabled({ orgId: project.orgId, repository: target.fullName })) {
