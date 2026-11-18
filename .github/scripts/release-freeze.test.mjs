@@ -28,12 +28,25 @@ const freezeSummary = {
   source: 'mastra-ai/mastra',
   enforcement: 'disabled',
 };
+// DANE_APP_ID stands in for the Dane app's real id, which the admin fills in.
+const DANE_APP_ID = 424242;
+function statusRule(checks = [{ context: 'Release freeze', integration_id: DANE_APP_ID }], strict = false) {
+  return {
+    type: 'required_status_checks',
+    parameters: {
+      strict_required_status_checks_policy: strict,
+      do_not_enforce_on_create: false,
+      required_status_checks: checks,
+    },
+  };
+}
+const VERSIONING_HEAD = 'a'.repeat(40);
 function freezeDetail(enforcement = 'disabled', overrides = {}) {
   return {
     ...freezeSummary,
     enforcement,
     conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
-    rules: [{ type: 'update', parameters: { update_allows_fetch_and_merge: false } }],
+    rules: [statusRule()],
     ...overrides,
   };
 }
@@ -85,6 +98,11 @@ function standardRoutes({ role = 'admin', enforcement = 'disabled' } = {}) {
         state.enforcement = body.enforcement;
         return freezeDetail(state.enforcement);
       },
+      'GET /repos/mastra-ai/mastra/branches/changeset-release%2Fmain': () => ({
+        name: 'changeset-release/main',
+        commit: { sha: VERSIONING_HEAD },
+      }),
+      [`POST /repos/mastra-ai/mastra/statuses/${VERSIONING_HEAD}`]: ({ body }) => ({ status: 201, body }),
     },
   };
 }
@@ -93,13 +111,16 @@ function run(t, api, args, env = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'release-freeze-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const summary = path.join(dir, 'summary.md');
+  const output = path.join(dir, 'output.txt');
   writeFileSync(summary, '');
+  writeFileSync(output, '');
   const childEnv = {
     ...process.env,
     GITHUB_API_URL: api.url,
     GITHUB_REPOSITORY: 'mastra-ai/mastra',
     GITHUB_TOKEN: 'test-token',
     GITHUB_STEP_SUMMARY: summary,
+    GITHUB_OUTPUT: output,
     ...env,
   };
   return new Promise((resolve, reject) => {
@@ -109,11 +130,20 @@ function run(t, api, args, env = {}) {
     child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
     child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
     child.on('error', reject);
-    child.on('close', status => resolve({ status, stdout, stderr, summary: readFileSync(summary, 'utf8') }));
+    child.on('close', status =>
+      resolve({
+        status,
+        stdout,
+        stderr,
+        summary: readFileSync(summary, 'utf8'),
+        output: readFileSync(output, 'utf8'),
+      }),
+    );
   });
 }
 
 const puts = api => api.requests.filter(r => r.key.startsWith('PUT '));
+const statusPosts = api => api.requests.filter(r => r.key.startsWith('POST ') && r.key.includes('/statuses/'));
 
 test('freeze sets only enforcement=active on the ruleset found by name', async t => {
   const { routes } = standardRoutes();
@@ -236,8 +266,22 @@ test('ignores an organization ruleset with the same name', async t => {
 });
 
 for (const [label, overrides] of [
-  ['has no "update" rule', { rules: [{ type: 'deletion' }] }],
-  ['has another rule besides "update"', { rules: [{ type: 'update' }, { type: 'required_signatures' }] }],
+  ['has no required-check rule', { rules: [{ type: 'update' }] }],
+  ['has another rule besides the required check', { rules: [statusRule(), { type: 'update' }] }],
+  ['requires a different check', { rules: [statusRule([{ context: 'Lint', integration_id: DANE_APP_ID }])] }],
+  ['lets any app post the check', { rules: [statusRule([{ context: 'Release freeze' }])] }],
+  [
+    'requires a second check',
+    {
+      rules: [
+        statusRule([
+          { context: 'Release freeze', integration_id: DANE_APP_ID },
+          { context: 'Lint', integration_id: DANE_APP_ID },
+        ]),
+      ],
+    },
+  ],
+  ['makes PRs be up to date', { rules: [statusRule(undefined, true)] }],
   ['does not target the default branch', { conditions: { ref_name: { include: ['refs/heads/0.x'], exclude: [] } } }],
   ['targets tags', { target: 'tag' }],
   ['excludes main', { conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: ['refs/heads/main'] } } }],
@@ -249,7 +293,7 @@ for (const [label, overrides] of [
     const api = await startApi(t, routes);
     const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /is not a main-only "Restrict updates" ruleset/);
+    assert.match(result.stderr, /is not a main-only "Release freeze" required-check ruleset/);
     assert.equal(puts(api).length, 0);
   });
 }
@@ -320,4 +364,139 @@ test('refuses to run without a token', async t => {
   const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler'], { GITHUB_TOKEN: '' });
   assert.equal(result.status, 2);
   assert.equal(api.requests.length, 0);
+});
+
+test('freeze passes the versioning PR head before it turns the ruleset on, and says it changed', async t => {
+  const { routes } = standardRoutes();
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 0, result.stderr);
+  const keys = api.requests.map(r => r.key);
+  const post = keys.indexOf(`POST /repos/mastra-ai/mastra/statuses/${VERSIONING_HEAD}`);
+  assert.ok(post !== -1, keys.join('\n'));
+  assert.ok(post < keys.indexOf('PUT /repos/mastra-ai/mastra/rulesets/9100001'), keys.join('\n'));
+  assert.equal(statusPosts(api)[0].body.state, 'success');
+  assert.equal(statusPosts(api)[0].body.context, 'Release freeze');
+  assert.match(result.output, /^changed=true$/m);
+  assert.match(result.output, /^frozen=true$/m);
+});
+
+test('freeze still freezes when there is no versioning PR branch', async t => {
+  const { routes } = standardRoutes();
+  routes['GET /repos/mastra-ai/mastra/branches/changeset-release%2Fmain'] = () => ({
+    status: 404,
+    body: { message: 'Branch not found' },
+  });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 0);
+  assert.deepEqual(
+    puts(api).map(r => r.body),
+    [{ enforcement: 'active' }],
+  );
+  assert.match(result.stdout, /No changeset-release\/main branch/);
+});
+
+test('freeze stops before the PUT when the versioning PR status cannot be posted', async t => {
+  const { routes } = standardRoutes();
+  routes[`POST /repos/mastra-ai/mastra/statuses/${VERSIONING_HEAD}`] = () => ({ status: 403, body: {} });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /403/);
+  assert.equal(puts(api).length, 0);
+});
+
+test('freeze when already frozen reposts the status and reports no change', async t => {
+  const { routes } = standardRoutes({ enforcement: 'active' });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 1);
+  assert.match(result.output, /^changed=false$/m);
+});
+
+test('a dry-run freeze posts no status', async t => {
+  const { routes } = standardRoutes();
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler', '--dry-run']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 0);
+  assert.match(result.output, /^changed=false$/m);
+});
+
+test('unfreeze reports it changed and posts no status', async t => {
+  const { routes } = standardRoutes({ enforcement: 'active' });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'unfreeze', '--actor', 'tyler']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 0);
+  assert.match(result.output, /^changed=true$/m);
+  assert.match(result.output, /^frozen=false$/m);
+});
+
+test('mark passes the current changeset-release/main head without needing an actor', async t => {
+  const { routes } = standardRoutes();
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'mark']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 1);
+  assert.deepEqual(
+    { state: statusPosts(api)[0].body.state, context: statusPosts(api)[0].body.context },
+    { state: 'success', context: 'Release freeze' },
+  );
+  assert.equal(puts(api).length, 0);
+  assert.ok(!api.requests.some(r => r.key.includes('/rulesets') || r.key.includes('/collaborators')));
+});
+
+test('mark with no versioning branch does nothing and succeeds', async t => {
+  const { routes } = standardRoutes();
+  routes['GET /repos/mastra-ai/mastra/branches/changeset-release%2Fmain'] = () => ({ status: 404, body: {} });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'mark']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(statusPosts(api).length, 0);
+});
+
+test('mark fails when the status post fails', async t => {
+  const { routes } = standardRoutes();
+  routes[`POST /repos/mastra-ai/mastra/statuses/${VERSIONING_HEAD}`] = () => ({ status: 500, body: {} });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'mark']);
+  assert.equal(result.status, 1);
+});
+
+for (const [enforcement, frozen] of [
+  ['active', 'true'],
+  ['disabled', 'false'],
+  ['evaluate', 'false'],
+]) {
+  test(`check reports frozen=${frozen} for a ${enforcement} ruleset, read-only and without an actor`, async t => {
+    const { routes } = standardRoutes({ enforcement });
+    const api = await startApi(t, routes);
+    const result = await run(t, api, ['--action', 'check']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.output, new RegExp(`^frozen=${frozen}$`, 'm'));
+    assert.ok(api.requests.every(r => r.key.startsWith('GET ')));
+    assert.ok(!api.requests.some(r => r.key.includes('/collaborators')));
+  });
+}
+
+test('check reports not frozen when no freeze ruleset exists', async t => {
+  const { routes } = standardRoutes();
+  routes['GET /repos/mastra-ai/mastra/rulesets'] = () => [mergeProtection];
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'check']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.output, /^frozen=false$/m);
+});
+
+test('check fails, rather than guessing, when the ruleset list errors', async t => {
+  const { routes } = standardRoutes();
+  routes['GET /repos/mastra-ai/mastra/rulesets'] = () => ({ status: 502, body: {} });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'check']);
+  assert.equal(result.status, 1);
+  assert.doesNotMatch(result.output, /frozen=/);
 });

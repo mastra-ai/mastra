@@ -175,6 +175,8 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.cli-version.outputs.version }}
     permissions:
       contents: read
       id-token: write
@@ -418,6 +420,95 @@ jobs:
           git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+  # ===========================================
+  # AFTER STABLE: announce it and unfreeze main
+  # ===========================================
+  # Runs after enter_prerelease, the last job that pushes to main, so nothing can merge
+  # before main is back in alpha mode. If that job failed, main stays frozen.
+  after_stable:
+    name: Announce stable and unfreeze main
+    needs: [stable, enter_prerelease]
+    if: |
+      always() &&
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish_type == 'stable' &&
+      !inputs.dry_run &&
+      needs.stable.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - name: Is main frozen?
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/release-freeze.mjs --action check
+
+      - name: Dane App Auth
+        id: app-auth
+        if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: write
+
+      - name: Unfreeze main
+        id: unfreeze
+        if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: node .github/scripts/release-freeze.mjs --action unfreeze --actor "$ACTOR"
+
+      - name: Write the Slack message
+        id: message
+        if: ${{ !cancelled() }}
+        env:
+          VERSION: ${{ needs.stable.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FROZEN: ${{ steps.check.outputs.frozen }}
+          PRERELEASE: ${{ needs.enter_prerelease.result }}
+          UNFREEZE: ${{ steps.unfreeze.outcome }}
+          UNFROZE: ${{ steps.unfreeze.outputs.changed }}
+        run: |
+          text=":package: Stable release published: mastra@${VERSION}. <${RUN_URL}|Run>"
+          if [ "$UNFROZE" = "true" ]; then
+            text+=$'\n:sunny: main is unfrozen; merges are open again.'
+          elif [ "$FROZEN" = "true" ] && [ "$PRERELEASE" != "success" ]; then
+            text+=$'\n:warning: Entering prerelease mode failed, so main stays frozen. Fix it, then unfreeze with the Release merge freeze workflow.'
+          elif [ "$UNFREEZE" = "failure" ]; then
+            text+=$'\n:warning: Unfreezing main failed, so it stays frozen. Unfreeze with the Release merge freeze workflow.'
+          fi
+          {
+            echo 'text<<EOF_SLACK_TEXT'
+            echo "$text"
+            echo 'EOF_SLACK_TEXT'
+          } >> "$GITHUB_OUTPUT"
+
+      # #eng-maintainers-club. The bot must be a member; a failed post only warns.
+      - name: Post to Slack
+        if: ${{ !cancelled() && steps.message.outputs.text != '' && vars.RELEASE_FREEZE_SLACK_CHANNEL != '' }}
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel: ${{ vars.RELEASE_FREEZE_SLACK_CHANNEL }}
+          text: ${{ steps.message.outputs.text }}
+
+      - name: Slack channel not set
+        if: ${{ !cancelled() && vars.RELEASE_FREEZE_SLACK_CHANNEL == '' }}
+        run: echo "::warning::RELEASE_FREEZE_SLACK_CHANNEL is not set; skipped the Slack post."
 
   # ===========================================
   # PLAYGROUND SNAPSHOT: UI library, observability, and their workspace dependencies only

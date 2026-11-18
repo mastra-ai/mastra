@@ -2,19 +2,24 @@ name: Release merge freeze
 
 # Freezes main while a release is in progress, so merges stop rerunning
 # version-packages.yml and restarting the versioning PR's CI. "freeze" turns on
-# the "Release merge freeze" ruleset (Restrict updates on main); its bypass
-# actors (release owners) can still merge the versioning PR. "unfreeze" turns it
-# off. A repo admin creates the ruleset once, disabled; see
-# .github/scripts/release-freeze.mjs.
+# the "Release merge freeze" ruleset, which requires a "Release freeze" check
+# only Dane can post; Dane posts it on the versioning PR alone, so that PR still
+# merges and every other one waits. "unfreeze" turns the ruleset off; a stable
+# release (npm-publish.yml) also unfreezes once it finishes. A repo admin
+# creates the ruleset once, disabled; see .github/scripts/release-freeze.mjs.
 
 permissions:
   contents: read
 
 on:
+  # Every new versioning PR head gets the passing check, frozen or not.
+  push:
+    branches:
+      - changeset-release/main
   workflow_dispatch:
     inputs:
       action:
-        description: 'freeze: only release owners can merge to main. unfreeze: everyone can again.'
+        description: 'freeze: only the versioning PR can merge to main. unfreeze: everyone can again.'
         required: true
         type: choice
         options:
@@ -26,14 +31,44 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: release-merge-freeze
-  cancel-in-progress: false
-
 jobs:
+  mark-versioning-pr:
+    name: Pass the versioning PR
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'push' }}
+    # Reads the branch's current head, so a run replaced while queued loses nothing.
+    concurrency:
+      group: release-freeze-mark
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The ruleset only accepts the check from the Dane app.
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-statuses: write
+
+      - name: Pass "Release freeze" on the versioning PR head
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+        run: node .github/scripts/release-freeze.mjs --action mark
+
   freeze:
     name: ${{ inputs.action }} main
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'workflow_dispatch' }}
+    concurrency:
+      group: release-merge-freeze
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -44,7 +79,8 @@ jobs:
           persist-credentials: false
 
       # GITHUB_TOKEN can't edit rulesets; the Dane app token with
-      # administration: write can.
+      # administration: write can. statuses: write posts the versioning PR's
+      # check, which the ruleset only accepts from Dane.
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth
@@ -53,8 +89,10 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-administration: write
+          permission-statuses: write
 
       - name: ${{ inputs.action }} main
+        id: freeze
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           ACTION: ${{ inputs.action }}
@@ -66,3 +104,17 @@ jobs:
           ARGS=(--action "$ACTION" --actor "$ACTOR")
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           node .github/scripts/release-freeze.mjs "${ARGS[@]}"
+
+      # #eng-maintainers-club. The bot must be a member; a failed post only warns.
+      - name: Post to Slack
+        if: steps.freeze.outputs.changed == 'true' && vars.RELEASE_FREEZE_SLACK_CHANNEL != ''
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel: ${{ vars.RELEASE_FREEZE_SLACK_CHANNEL }}
+          text: >-
+            ${{ inputs.action == 'freeze' && format(':ice_cube: main is frozen for a release by @{0}. Only the versioning PR can merge until it is unfrozen. <{1}/{2}/actions/runs/{3}|Run>', github.triggering_actor, github.server_url, github.repository, github.run_id) || format(':sunny: main is unfrozen by @{0}; merges are open again. <{1}/{2}/actions/runs/{3}|Run>', github.triggering_actor, github.server_url, github.repository, github.run_id) }}
+
+      - name: Slack channel not set
+        if: steps.freeze.outputs.changed == 'true' && vars.RELEASE_FREEZE_SLACK_CHANNEL == ''
+        run: echo "::warning::RELEASE_FREEZE_SLACK_CHANNEL is not set; skipped the Slack post."
