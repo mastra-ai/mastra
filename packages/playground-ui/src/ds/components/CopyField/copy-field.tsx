@@ -1,3 +1,5 @@
+'use client';
+
 import type { ClipboardEvent } from 'react';
 import { InputGroup, InputGroupAddon, InputGroupButton, inputGroupControlClassName } from '../InputGroup/input-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
@@ -33,6 +35,10 @@ export function CopyField({ value, label, size, disabled, className }: CopyField
   // What's selected is the shortened text; put the real value on the clipboard instead.
   const copyWholeValue = (event: ClipboardEvent<HTMLElement>) => {
     if (!truncated) return;
+    // Only a selection inside this value: one that runs into the next row keeps its own text.
+    const selection = window.getSelection();
+    const field = event.currentTarget;
+    if (!selection || !field.contains(selection.anchorNode) || !field.contains(selection.focusNode)) return;
     event.preventDefault();
     event.clipboardData.setData('text/plain', value);
   };

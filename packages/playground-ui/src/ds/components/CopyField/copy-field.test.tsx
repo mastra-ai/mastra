@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '../Toaster';
 import { TooltipProvider } from '../Tooltip';
 import { CopyField } from './copy-field';
 
@@ -20,8 +21,17 @@ function renderField() {
   return render(
     <TooltipProvider>
       <CopyField value={ORG_ID} label="organization ID" />
+      <p>Next row</p>
+      <Toaster />
     </TooltipProvider>,
   );
+}
+
+function selectContents(element: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
 }
 
 beforeEach(() => {
@@ -73,10 +83,36 @@ describe('CopyField', () => {
       layoutWith(20 * CHAR_WIDTH);
       renderField();
       const setData = vi.fn();
+      selectContents(screen.getByText('org_01KJGEY54…Y27PGS'));
 
       fireEvent.copy(screen.getByText('org_01KJGEY54…Y27PGS'), { clipboardData: { setData } });
 
       expect(setData).toHaveBeenCalledWith('text/plain', ORG_ID);
+    });
+    it('leaves a selection that runs past the field alone', () => {
+      layoutWith(20 * CHAR_WIDTH);
+      renderField();
+      const setData = vi.fn();
+      const range = document.createRange();
+      range.setStart(screen.getByText('org_01KJGEY54…Y27PGS'), 0);
+      range.setEndAfter(screen.getByText('Next row'));
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+
+      fireEvent.copy(screen.getByText('org_01KJGEY54…Y27PGS'), { clipboardData: { setData } });
+
+      expect(setData).not.toHaveBeenCalled();
+    });
+
+    it('never splits an emoji at the end of the value', () => {
+      layoutWith(12 * CHAR_WIDTH);
+      render(
+        <TooltipProvider>
+          <CopyField value="https://mastra.dev/a/😀abcde" label="link" />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByText('http…😀abcde')).toBeTruthy();
     });
   });
 

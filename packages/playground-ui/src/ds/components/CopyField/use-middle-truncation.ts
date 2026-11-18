@@ -1,3 +1,5 @@
+'use client';
+
 import { useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
@@ -45,19 +47,23 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
           setText(value);
           return;
         }
+        // Cut on whole characters (code points), so an emoji or other astral character is never split in half.
+        const chars = Array.from(value);
+        const startOf = (count: number) => chars.slice(0, count).join('');
+        const endOf = (count: number) => (count > 0 ? chars.slice(-count).join('') : '');
         // In a box too narrow for `…` and the whole tail, keep less of the tail (down to just `…`).
-        let tailLength = Math.min(tail, value.length - 1);
-        while (tailLength > 0 && widthOf(`…${value.slice(-tailLength)}`) > room) tailLength--;
-        const end = tailLength > 0 ? value.slice(-tailLength) : '';
+        let tailLength = Math.min(tail, chars.length - 1);
+        while (tailLength > 0 && widthOf(`…${endOf(tailLength)}`) > room) tailLength--;
+        const end = endOf(tailLength);
         let keep = 0;
-        let over = value.length - tailLength - 1;
+        let over = chars.length - tailLength - 1;
         // Binary search for the longest start that still fits beside `…` and the tail.
         while (keep < over) {
           const mid = Math.ceil((keep + over) / 2);
-          if (widthOf(`${value.slice(0, mid)}…${end}`) <= room) keep = mid;
+          if (widthOf(`${startOf(mid)}…${end}`) <= room) keep = mid;
           else over = mid - 1;
         }
-        setText(`${value.slice(0, keep)}…${end}`);
+        setText(`${startOf(keep)}…${end}`);
       } finally {
         probe.remove();
       }
@@ -70,12 +76,15 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
       observer = new ResizeObserver(measure);
       observer.observe(element);
     }
-    // The real font can arrive after the first measurement and change every width.
+    // The real font can arrive after the first measurement, or load later, and change every width without
+    // resizing the box.
     document.fonts?.ready.then(measure).catch(() => {});
+    document.fonts?.addEventListener('loadingdone', measure);
 
     return () => {
       stopped = true;
       observer?.disconnect();
+      document.fonts?.removeEventListener('loadingdone', measure);
     };
   }, [value, tail]);
 
