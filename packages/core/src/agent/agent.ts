@@ -39,7 +39,6 @@ import type {
   StreamObjectResult,
   StreamTextResult,
 } from '../llm/model/base.types';
-import { isMastraGatewayModel } from '../llm/model/gateways/gateway-helpers';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
@@ -9279,7 +9278,11 @@ export class Agent<
     })) as MastraLLMVNext;
 
     const resolvedModel = llm.getModel();
-    const isGatewayModel = isMastraGatewayModel(resolvedModel);
+    const isGatewayModel =
+      typeof resolvedModel === 'object' &&
+      resolvedModel !== null &&
+      'gatewayId' in resolvedModel &&
+      resolvedModel.gatewayId === 'mastra';
     // Only warn for ids the caller passed in `memory` args. Reserved request-context ids are set
     // per request (auth middleware, AgentController) and inherited by every agent in that request,
     // including internal memory-less agents such as the OM Observer and Reflector.

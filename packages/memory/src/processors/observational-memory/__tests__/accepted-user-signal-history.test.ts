@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, ToolsInput } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -8,10 +9,6 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
-
-// A single agent with observational memory, as Factory and MastraCode run it. A chat sends each
-// message as a `user` signal; a reloaded chat rebuilds its transcript from stored history, so a
-// message must be stored while the agent still works on it.
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -66,7 +63,7 @@ function scriptedModel(steps: Step[], hold?: number) {
   return { model, prompts, reached: reached.promise, release: released.resolve };
 }
 
-function setup(model: MockLanguageModelV2, tools: Record<string, ReturnType<typeof createTool>> = {}) {
+function setup(model: MockLanguageModelV2 | ModelRouterLanguageModel, tools: ToolsInput = {}) {
   const storage = new InMemoryStore();
   const memory = new Memory({
     storage,
@@ -84,6 +81,19 @@ function setup(model: MockLanguageModelV2, tools: Record<string, ReturnType<type
   const thread = { resourceId: 'om-user', threadId: `om-thread-${Math.random().toString(36).slice(2)}` };
   const stored = async () => (await memory.recall({ threadId: thread.threadId })).messages;
   return { agent, memory, thread, stored };
+}
+
+function mastraGatewayModel(apiKey: string, model: MockLanguageModelV2) {
+  return new ModelRouterLanguageModel('mastra/openai/gpt-4o', [
+    {
+      id: 'mastra',
+      name: 'Gateway',
+      fetchProviders: async () => ({}),
+      buildUrl: () => undefined,
+      getApiKey: async () => apiKey,
+      resolveLanguageModel: () => model,
+    },
+  ]);
 }
 
 const sentTexts = (messages: MastraDBMessage[]) =>
@@ -207,13 +217,27 @@ describe('observational memory and messages a person sends', () => {
     expect(sentTexts(await stored())).toEqual(['build the login page', 'now add tests']);
   });
 
-  it('leaves storage to the Mastra gateway when it runs observational memory', async () => {
+  it('leaves storage to the Mastra gateway when it serves memory, as for a project key', async () => {
     const { model } = scriptedModel([{ text: 'on it' }]);
-    const { agent, memory, thread, stored } = setup(Object.assign(model, { gatewayId: 'mastra' }));
+    const { agent, memory, thread, stored } = setup(mastraGatewayModel('msk_live_project_key', model));
     await memory.createThread(thread);
 
     await finish(agent.sendMessage({ contents: 'build the login page' }, thread).accepted);
 
     expect(await stored()).toEqual([]);
+  });
+
+  it('stores the message early when the Mastra gateway leaves memory local, as for an organization key', async () => {
+    const { model, reached, release } = scriptedModel([{ text: 'on it' }], 0);
+    const { agent, memory, thread, stored } = setup(mastraGatewayModel('mskv2_organization_key', model));
+    await memory.createThread(thread);
+
+    const { accepted } = agent.sendMessage({ contents: 'build the login page' }, thread);
+    await reached;
+
+    expect(sentTexts(await stored())).toEqual(['build the login page']);
+
+    release();
+    await finish(accepted);
   });
 });

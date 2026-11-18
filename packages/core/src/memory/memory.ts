@@ -41,6 +41,7 @@ import {
 } from './message-history-config';
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
+import { memoryTurnSaver } from './turn-saver';
 
 import type {
   SharedMemoryConfig,
@@ -1172,16 +1173,7 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
 
-      // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
-
-      // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
-      const hasObservationalMemory =
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
-
-      // Skip MessageHistory output processor if ObservationalMemory handles message saving
-      if (!hasMessageHistory && !hasObservationalMemory) {
+      if (memoryTurnSaver(effectiveConfig, configuredProcessors) === 'message-history') {
         processors.push(
           new MessageHistory({
             storage: memoryStore,

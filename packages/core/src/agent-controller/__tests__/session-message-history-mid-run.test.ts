@@ -53,9 +53,6 @@ function createHeldAgent() {
   };
 }
 
-// A chat session (Factory, MastraCode) sends each message as a `user` signal. Reloading the chat
-// while the agent works on the first message rebuilds the transcript from stored history.
-// Engine and timing variants live in sent-message-history.scenario.test.ts.
 describe('a sent message in thread history', () => {
   it('is stored while its first model call is still running', async () => {
     const { agent, storage, roles, modelCalled, releaseModel } = createHeldAgent();
