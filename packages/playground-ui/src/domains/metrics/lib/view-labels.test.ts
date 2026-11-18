@@ -27,6 +27,10 @@ describe('shortViewLabels', () => {
     expect(shortViewLabels(['Breakdown by agent'])).toEqual(['Breakdown by agent']);
   });
 
+  it('keeps the labels when two would shorten to the same name', () => {
+    expect(shortViewLabels(['Spend by team', 'Spend by teams'])).toEqual(['Spend by team', 'Spend by teams']);
+  });
+
   it('leaves every label a word of its own', () => {
     expect(shortViewLabels(['Breakdown', 'Breakdown by tool'])).toEqual(['Breakdown', 'Breakdown by tool']);
   });

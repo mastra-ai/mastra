@@ -17,17 +17,20 @@ function sharedWords(words: readonly string[][]): number {
 /**
  * Short tab names for a card's views: their labels without the words they all start with,
  * capitalised ("Breakdown by agent", "Breakdown by tool" → "Agents", "Tools"; after "by", the
- * rest names what each row is, so it reads as a plural). Labels that share nothing stay as they are.
+ * rest names what each row is, so it reads as a plural). Labels that share nothing, or that would
+ * shorten to the same name, stay as they are.
  */
 export function shortViewLabels(labels: readonly string[]): string[] {
   const words = labels.map(label => label.split(/\s+/));
   const shared = sharedWords(words);
   if (shared === 0) return [...labels];
   const byRows = words[0]?.[shared - 1]?.toLowerCase() === 'by';
-  return words.map(w => {
+  const names = words.map(w => {
     const rest = w.slice(shared);
     const last = rest.pop() ?? '';
     const name = [...rest, byRows ? plural(last) : last].join(' ');
     return name.charAt(0).toUpperCase() + name.slice(1);
   });
+  // Two views that shorten to the same name ("by team", "by teams") keep their labels, to tell apart.
+  return new Set(names).size === names.length ? names : [...labels];
 }
