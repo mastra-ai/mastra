@@ -18,13 +18,7 @@ async function gatewayManagesMemory(model: MastraLanguageModel): Promise<boolean
   return 'gatewayId' in model && model.gatewayId === 'mastra';
 }
 
-/**
- * Saves messages a person sent (`user` signals) to the thread before the model request that reads
- * them, so a chat reloaded mid-run shows them; the turn's own save later overwrites the rows by id.
- * Undefined unless memory adds the processor that saves the turn to its own store.
- *
- * Best effort: a failed save is logged and retried before the next model request.
- */
+/** The turn's own save later overwrites these rows by id. */
 export function createAcceptedUserSignalSaver({
   memory,
   memoryConfig,
@@ -56,8 +50,7 @@ export function createAcceptedUserSignalSaver({
       if (unsaved.length === 0) return;
       if (saver === 'observational-memory' && (await gatewayManagesMemory(model))) return;
       await authorizeWrite();
-      // Not memory.saveMessages, which embeds the message the turn's save embeds again, nor
-      // MessageHistory.persistMessages, which marks the live thread stream as saved up to now.
+      // Not memory.saveMessages (embeds ahead of the model call) or MessageHistory.persistMessages (marks the stream saved).
       const store = await memory.storage.getStore('memory');
       await store?.saveMessages({ messages: messageList.transformMessagesForTranscript(unsaved) });
       for (const message of unsaved) savedIds.add(message.id);
