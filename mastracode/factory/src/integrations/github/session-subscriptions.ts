@@ -118,7 +118,10 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
   }
   const sourceControl = github.sourceControlStorage;
   const session = await sourceControl.sessions.getBySessionId(context.sessionId);
-  if (session && (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))) {
+  if (
+    session &&
+    (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))
+  ) {
     throw new Error('The active session does not belong to this Factory.');
   }
   const repositories = await resolveSessionRepositories({

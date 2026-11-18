@@ -643,7 +643,13 @@ export async function syncEnvironmentRepository(
   }
   assertRepositoryLocator(repoFullName, cloneUrl, 'pull-failed');
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(sandbox, cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(
+    sandbox,
+    cleanCloneUrl,
+    token,
+    authUsername ?? 'x-access-token',
+    'pull-failed',
+  );
 
   // Raw git in this checkout (push, fetch) authenticates through gh with the
   // token that covers this repository, like the session repository does. A
@@ -839,7 +845,13 @@ async function checkoutSessionBranchImpl(
   // helper when reopening an older checkout so a stale sandbox cannot retain
   // credentials injected by an earlier implementation.
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(sandbox, cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(
+    sandbox,
+    cleanCloneUrl,
+    token,
+    authUsername ?? 'x-access-token',
+    'pull-failed',
+  );
   const credentialKey = authUsername ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper' : 'credential.helper';
   // A vault sandbox holds no token for gh to hand out; the vault authenticates.
   if (authUsername || !sandboxAcceptsGithubToken(sandbox)) {

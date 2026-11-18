@@ -279,7 +279,11 @@ describe('GitHub subscription entry points', () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
     const inject = vi.fn();
     const requestContext = authenticatedRequestContext();
-    registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1', sandboxAuth: () => auth });
+    registerGithubRefreshTarget(requestContext, {
+      orgId: 'org-1',
+      repositoryId: 'repository-1',
+      sandboxAuth: () => auth,
+    });
     registerGithubTokenInjector(requestContext, inject);
     const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
 
@@ -404,7 +408,9 @@ describe('GitHub subscription entry points', () => {
         'explicit-tool',
         githubStub,
       ),
-    ).rejects.toThrow('Pull request https://github.com/other/repo/pull/123 is not in a repository linked to this Factory.');
+    ).rejects.toThrow(
+      'Pull request https://github.com/other/repo/pull/123 is not in a repository linked to this Factory.',
+    );
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(
