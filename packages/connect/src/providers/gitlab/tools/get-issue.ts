@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getIssueInputSchema = z.object({
   project_id: z
     .union([z.string(), z.number()])
@@ -101,7 +111,7 @@ export function getIssueTool(proxy: PlatformProxy) {
       const projectId = String(input.project_id);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/issues/#get-a-single-project-issue
-        endpoint: `/api/v4/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(String(input.issue_iid))}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/issues/${gitlabPathSegment(input.issue_iid)}`,
         retries: 3,
       });
 

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { withoutSecretFields } from '../../../runtime/redact.js';
 
 export const createProjectInputSchema = z.object({
   name: z.string().describe('Name of the new project. Example: "my-new-project"'),
@@ -52,32 +53,38 @@ export const createProjectOutputSchema = z
   })
   .passthrough();
 
+/** Provider secrets removed before the result leaves the tool. */
+export const createProjectOutputSchemaRedacted = createProjectOutputSchema;
+
 export function createProjectTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_create_project',
     description: 'Create a project in GitLab.',
     inputSchema: createProjectInputSchema,
-    outputSchema: createProjectOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof createProjectOutputSchema>> => {
+    outputSchema: createProjectOutputSchemaRedacted,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof createProjectOutputSchemaRedacted>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const response = await platformProxy.post({
-        // https://docs.gitlab.com/api/projects/#create-project
-        endpoint: '/api/v4/projects',
-        data: {
-          name: input.name,
-          ...(input.path !== undefined && { path: input.path }),
-          ...(input.namespace_id !== undefined && { namespace_id: input.namespace_id }),
-          ...(input.description !== undefined && { description: input.description }),
-          ...(input.visibility !== undefined && { visibility: input.visibility }),
-          ...(input.initialize_with_readme !== undefined && { initialize_with_readme: input.initialize_with_readme }),
-          ...(input.default_branch !== undefined && { default_branch: input.default_branch }),
-        },
-        retries: 1,
-      });
+      const result = await (async (): Promise<z.infer<typeof createProjectOutputSchema>> => {
+        const response = await platformProxy.post({
+          // https://docs.gitlab.com/api/projects/#create-project
+          endpoint: '/api/v4/projects',
+          data: {
+            name: input.name,
+            ...(input.path !== undefined && { path: input.path }),
+            ...(input.namespace_id !== undefined && { namespace_id: input.namespace_id }),
+            ...(input.description !== undefined && { description: input.description }),
+            ...(input.visibility !== undefined && { visibility: input.visibility }),
+            ...(input.initialize_with_readme !== undefined && { initialize_with_readme: input.initialize_with_readme }),
+            ...(input.default_branch !== undefined && { default_branch: input.default_branch }),
+          },
+          retries: 1,
+        });
 
-      const providerProject = createProjectOutputSchema.parse(response.data);
+        const providerProject = createProjectOutputSchema.parse(response.data);
 
-      return providerProject;
+        return providerProject;
+      })();
+      return withoutSecretFields(result, ['runners_token']);
     },
   });
 }

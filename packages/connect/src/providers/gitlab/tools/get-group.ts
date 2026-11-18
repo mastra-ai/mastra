@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getGroupInputSchema = z.object({
   id: z.union([z.string(), z.number()]).describe('The ID or URL-encoded path of the group. Example: "133159324"'),
 });
@@ -56,7 +66,7 @@ export function getGroupTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/groups/#get-a-single-group
-        endpoint: `/api/v4/groups/${String(input.id)}`,
+        endpoint: `/api/v4/groups/${gitlabPathSegment(input.id)}`,
         retries: 3,
       });
 

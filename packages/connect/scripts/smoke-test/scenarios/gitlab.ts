@@ -8,26 +8,78 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  *
  *   project → issue → branch/file/commit → merge request → release → pipeline
  *
- * CI never consumes compute: every commit carries `[skip ci]`, shared runners
- * are switched off on the project, and the one pipeline the scenario creates
- * pins its job to a runner tag nothing serves, so the job sits `pending` until
- * the pipeline is cancelled and deleted.
+ * CI never consumes compute: the project starts empty, shared runners are
+ * switched off before its first commit, every commit carries `[skip ci]`, and
+ * the one pipeline the scenario creates pins its job to a runner tag nothing
+ * serves, so the job sits `pending` until the pipeline is cancelled and deleted.
+ * GitLab.com keeps the deleted project for its retention period.
  *
  * Groups: GitLab.com does not let most users create top-level groups through
  * the API. Set `MASTRA_SMOKE_GITLAB_PARENT_GROUP_ID` to a group the connection
- * can create subgroups in to run the real group lifecycle; otherwise the
- * scenario tries a top-level group and, when GitLab refuses, probes the group
- * write tools against a synthetic id.
+ * can create subgroups in to run the real group lifecycle, including permanent
+ * removal; otherwise the scenario tries a top-level group and, when GitLab
+ * refuses, skips the create and probes the group write tools against a
+ * synthetic id.
  */
 
 const SYNTHETIC_GROUP_ID = 999_999_999;
+const CI_JOB_NAME = 'mastra-smoke';
+/** Job states GitLab's retry endpoint accepts. */
+const RETRYABLE_JOB_STATES = new Set(['failed', 'canceled', 'success']);
+
+const GITLAB_TOOLS = [
+  'gitlab_cancel_pipeline',
+  'gitlab_create_branch',
+  'gitlab_create_commit',
+  'gitlab_create_file',
+  'gitlab_create_group',
+  'gitlab_create_issue',
+  'gitlab_create_merge_request',
+  'gitlab_create_pipeline',
+  'gitlab_create_project',
+  'gitlab_create_release',
+  'gitlab_delete_branch',
+  'gitlab_delete_file',
+  'gitlab_delete_group',
+  'gitlab_delete_issue',
+  'gitlab_delete_merge_request',
+  'gitlab_delete_pipeline',
+  'gitlab_delete_project',
+  'gitlab_delete_release',
+  'gitlab_get_branch',
+  'gitlab_get_commit',
+  'gitlab_get_file',
+  'gitlab_get_group',
+  'gitlab_get_issue',
+  'gitlab_get_job',
+  'gitlab_get_merge_request',
+  'gitlab_get_pipeline',
+  'gitlab_get_project',
+  'gitlab_get_release',
+  'gitlab_list_branches',
+  'gitlab_list_commits',
+  'gitlab_list_groups',
+  'gitlab_list_issues',
+  'gitlab_list_jobs',
+  'gitlab_list_merge_requests',
+  'gitlab_list_pipelines',
+  'gitlab_list_projects',
+  'gitlab_list_releases',
+  'gitlab_retry_job',
+  'gitlab_update_file',
+  'gitlab_update_group',
+  'gitlab_update_issue',
+  'gitlab_update_merge_request',
+  'gitlab_update_project',
+  'gitlab_update_release',
+] as const;
 
 export const gitlabScenario: Scenario = {
   integrationId: 'gitlab',
   summary: 'disposable project: issue, branch/file/commit, MR, release, pipeline/job, group CRUD',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
-    const missing = requireTools(tools, ['gitlab_create_project', 'gitlab_delete_project', 'gitlab_get_project']);
+    const missing = requireTools(tools, GITLAB_TOOLS);
     if (missing) {
       steps.push({ name: 'preflight', status: 'skip', detail: missing });
       return steps;
@@ -59,6 +111,7 @@ export const gitlabScenario: Scenario = {
 
     await runGroupLifecycle(groups?.items[0]?.id);
 
+    // An empty project, so no commit exists until shared runners are off.
     const project = await step<{ id: number; default_branch?: string | null }>(
       'create project',
       'gitlab_create_project',
@@ -67,26 +120,49 @@ export const gitlabScenario: Scenario = {
         path: runId,
         description: 'Automated @mastra/connect smoke test. Safe to delete.',
         visibility: 'private',
-        initialize_with_readme: true,
       },
       out => `#${out.id}`,
     );
-    if (!project) return steps;
-    const projectId = project.id;
+    const projectId = project?.id ?? (await findLeakedProject());
+    if (projectId === undefined) return steps;
     const pid = String(projectId);
 
     try {
-      await runProjectLifecycle(projectId, pid, project.default_branch ?? undefined);
+      if (project) await runProjectLifecycle(projectId, pid);
     } finally {
       try {
         await call('gitlab_delete_project', { project_id: pid });
-        steps.push(makeStep('delete project', 'gitlab_delete_project', 'pass'));
+        steps.push(
+          makeStep(
+            'delete project',
+            'gitlab_delete_project',
+            'pass',
+            'deletion requested; GitLab.com keeps the project for its retention period before removing it',
+          ),
+        );
       } catch (error) {
         log.error(`gitlab: leaked project ${projectId} (${runId}); delete it manually`, errorMessage(error));
         steps.push(makeStep('delete project', 'gitlab_delete_project', 'fail', errorMessage(error)));
       }
     }
     return steps;
+
+    /** When create_project failed after GitLab may have created the project, finds it so it can still be deleted. */
+    async function findLeakedProject(): Promise<number | undefined> {
+      try {
+        const found = await call<{ items: Array<{ id: number; path: string }> }>('gitlab_list_projects', {
+          search: runId,
+          owned: true,
+          per_page: 20,
+        });
+        const leaked = found.items.find(item => item.path === runId);
+        if (leaked) log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
+        return leaked?.id;
+      } catch (error) {
+        log.error(`gitlab: could not check for a leaked ${runId} project; check manually`, errorMessage(error));
+        return undefined;
+      }
+    }
 
     async function runGroupLifecycle(existingGroupId: number | undefined) {
       const parentSpec = process.env.MASTRA_SMOKE_GITLAB_PARENT_GROUP_ID?.trim();
@@ -116,16 +192,17 @@ export const gitlabScenario: Scenario = {
           steps.push(makeStep('create group', 'gitlab_create_group', 'pass', group.full_path));
         } catch (error) {
           const msg = errorMessage(error);
-          // GitLab.com refuses API-created top-level groups (403/400). That is
-          // a platform restriction, not a tool bug — the request still proved
-          // routing and auth. With an explicit parent, any failure is real.
+          // GitLab.com refuses API-created top-level groups (400/403). That
+          // can't be told apart from a missing scope by status alone, so it is
+          // a skip, never a pass; set a parent group for the real lifecycle.
+          // With an explicit parent, any failure is real.
           if (parentId === undefined && /status=(400|403)/.test(msg)) {
             steps.push(
               makeStep(
                 'create group',
                 'gitlab_create_group',
-                'pass',
-                `top-level group creation refused (set MASTRA_SMOKE_GITLAB_PARENT_GROUP_ID for the full lifecycle): ${msg.slice(0, 120)}`,
+                'skip',
+                `GitLab refused a top-level group; set MASTRA_SMOKE_GITLAB_PARENT_GROUP_ID for the full lifecycle: ${msg.slice(0, 160)}`,
               ),
             );
           } else {
@@ -158,36 +235,69 @@ export const gitlabScenario: Scenario = {
       await step('update group', 'gitlab_update_group', { id: group.id, description: `${runId} (updated)` });
       try {
         await call('gitlab_delete_group', { group_id: group.id });
-        // GitLab.com marks groups for deletion first; a second call with
-        // permanently_remove removes a marked subgroup immediately.
-        try {
-          await call('gitlab_delete_group', {
-            group_id: group.id,
-            permanently_remove: true,
-            full_path: group.full_path,
-          });
-        } catch (error) {
-          log.warn(`gitlab: group ${group.full_path} is marked for deletion but not yet removed`, errorMessage(error));
-        }
-        steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass'));
       } catch (error) {
         log.error(`gitlab: leaked group ${group.full_path}; delete it manually`, errorMessage(error));
+        steps.push(makeStep('delete group', 'gitlab_delete_group', 'fail', errorMessage(error)));
+        return;
+      }
+
+      // Instances with delayed deletion only mark the group and rename it, so
+      // read its current path back. Gone already means it was deleted outright.
+      let markedPath: string | undefined;
+      try {
+        const marked = await call<{ full_path?: string }>('gitlab_get_group', { id: group.id });
+        markedPath = marked.full_path ?? group.full_path;
+      } catch (error) {
+        if (/status=404/.test(errorMessage(error))) {
+          steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'deleted'));
+          return;
+        }
+        markedPath = group.full_path;
+      }
+      if (parentId === undefined) {
+        // Only subgroups can be removed permanently; a top-level group stays
+        // scheduled for the instance's retention period.
+        steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', `${markedPath} scheduled for deletion`));
+        return;
+      }
+      try {
+        await call('gitlab_delete_group', { group_id: group.id, permanently_remove: true, full_path: markedPath });
+        steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'scheduled, then permanently removed'));
+      } catch (error) {
+        log.error(
+          `gitlab: subgroup ${markedPath} is scheduled for deletion but was not removed; remove it manually`,
+          errorMessage(error),
+        );
         steps.push(makeStep('delete group', 'gitlab_delete_group', 'fail', errorMessage(error)));
       }
     }
 
-    async function runProjectLifecycle(projectId: number, pid: string, createdDefaultBranch: string | undefined) {
-      const got = await step<{ default_branch?: string | null }>('get project', 'gitlab_get_project', {
-        project_id: projectId,
-      });
-      const defaultBranch = got?.default_branch ?? createdDefaultBranch ?? 'main';
-
-      // Shared runners off first, so nothing the scenario does can consume CI compute.
+    async function runProjectLifecycle(projectId: number, pid: string) {
+      // Shared runners off before the first commit, so nothing the scenario
+      // does can consume CI compute.
       await step('update project', 'gitlab_update_project', {
         id: projectId,
         description: `${runId} (updated)`,
         shared_runners_enabled: false,
       });
+
+      const empty = await step<{ default_branch?: string | null }>('get project', 'gitlab_get_project', {
+        project_id: projectId,
+      });
+      const defaultBranch = empty?.default_branch ?? 'main';
+      const seeded = await step('create README', 'gitlab_create_file', {
+        project_id: projectId,
+        file_path: 'README.md',
+        branch: defaultBranch,
+        content: `# ${runId}\n\nAutomated @mastra/connect smoke test. Safe to delete.\n`,
+        commit_message: `${runId} initial commit [skip ci]`,
+      });
+      if (!seeded) {
+        steps.push(
+          makeStep('seed repository', 'gitlab_create_file', 'fail', 'repository has no commits to branch from'),
+        );
+        return;
+      }
 
       steps.push(
         ...(await runReadBatch(
@@ -348,7 +458,7 @@ export const gitlabScenario: Scenario = {
         project_id: projectId,
         file_path: '.gitlab-ci.yml',
         branch: defaultBranch,
-        content: ['mastra-smoke:', `  tags: ["${runId}-no-such-runner"]`, '  script: ["true"]', ''].join('\n'),
+        content: [`${CI_JOB_NAME}:`, `  tags: ["${runId}-no-such-runner"]`, '  script: ["true"]', ''].join('\n'),
         commit_message: `${runId} ci config [skip ci]`,
       });
       const pipeline = ciCommitted
@@ -376,26 +486,38 @@ export const gitlabScenario: Scenario = {
 
       await step('get pipeline', 'gitlab_get_pipeline', { project_id: projectId, pipeline_id: pipeline.id });
       await step('list pipelines', 'gitlab_list_pipelines', { project_id: projectId, per_page: 5 });
-      const jobs = await step<{ items: Array<{ id: number }> }>(
+      const jobs = await step<{ items: Array<{ id: number; name: string; pipeline?: { id: number } }> }>(
         'list jobs',
         'gitlab_list_jobs',
-        { project_id: projectId, per_page: 5 },
+        { project_id: projectId, per_page: 20 },
         out => `${out.items.length} jobs`,
       );
-      const jobId = jobs?.items[0]?.id;
-      if (jobId !== undefined) {
-        await step('get job', 'gitlab_get_job', { project_id: projectId, job_id: jobId });
-      } else {
-        steps.push(makeStep('get job', 'gitlab_get_job', 'fail', 'smoke pipeline has no jobs'));
-      }
+      const jobId = jobs?.items.find(job => job.pipeline?.id === pipeline.id && job.name === CI_JOB_NAME)?.id;
 
       await step('cancel pipeline', 'gitlab_cancel_pipeline', { project_id: projectId, pipeline_id: pipeline.id });
-      if (jobId !== undefined) {
-        // Retrying the cancelled job queues a fresh copy that is equally
-        // unrunnable; deleting the pipeline removes both.
-        await step('retry job', 'gitlab_retry_job', { project_id: projectId, job_id: jobId });
-      } else {
+      if (jobId === undefined) {
+        steps.push(makeStep('get job', 'gitlab_get_job', 'fail', `pipeline #${pipeline.id} has no ${CI_JOB_NAME} job`));
         steps.push(makeStep('retry job', 'gitlab_retry_job', 'skip', 'no job to retry'));
+      } else {
+        const job = await step<{ status: string }>(
+          'get job',
+          'gitlab_get_job',
+          { project_id: projectId, job_id: jobId },
+          out => out.status,
+        );
+        if (job && RETRYABLE_JOB_STATES.has(job.status)) {
+          // The retried copy is equally unrunnable; deleting the pipeline removes both.
+          await step('retry job', 'gitlab_retry_job', { project_id: projectId, job_id: jobId });
+        } else {
+          steps.push(
+            makeStep(
+              'retry job',
+              'gitlab_retry_job',
+              'fail',
+              job ? `job is ${job.status} after cancelling its pipeline; GitLab can't retry it` : 'job not read',
+            ),
+          );
+        }
       }
       await step('delete pipeline', 'gitlab_delete_pipeline', { project_id: pid, pipeline_id: pipeline.id });
     }

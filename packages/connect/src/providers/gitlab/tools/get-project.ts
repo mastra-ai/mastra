@@ -3,6 +3,17 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
+import { withoutSecretFields } from '../../../runtime/redact.js';
+
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
 
 export const getProjectInputSchema = z.object({
   project_id: z
@@ -268,33 +279,39 @@ export const getProjectOutputSchema = z
   })
   .passthrough();
 
+/** Provider secrets removed before the result leaves the tool. */
+export const getProjectOutputSchemaRedacted = getProjectOutputSchema.omit({ runners_token: true });
+
 export function getProjectTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_get_project',
     description: 'Retrieve a single project from GitLab.',
     inputSchema: getProjectInputSchema,
-    outputSchema: getProjectOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof getProjectOutputSchema>> => {
+    outputSchema: getProjectOutputSchemaRedacted,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof getProjectOutputSchemaRedacted>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const config: PlatformProxyRequest = {
-        // https://docs.gitlab.com/api/projects/#get-a-single-project
-        endpoint: `/api/v4/projects/${String(input.project_id)}`,
-        retries: 3,
-      };
+      const result = await (async (): Promise<z.infer<typeof getProjectOutputSchema>> => {
+        const config: PlatformProxyRequest = {
+          // https://docs.gitlab.com/api/projects/#get-a-single-project
+          endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}`,
+          retries: 3,
+        };
 
-      const response = await platformProxy.get(config);
+        const response = await platformProxy.get(config);
 
-      if (!response.data) {
-        throw new platformProxy.ActionError({
-          type: 'not_found',
-          message: 'Project not found',
-          project_id: input.project_id,
-        });
-      }
+        if (!response.data) {
+          throw new platformProxy.ActionError({
+            type: 'not_found',
+            message: 'Project not found',
+            project_id: input.project_id,
+          });
+        }
 
-      const project = getProjectOutputSchema.parse(response.data);
+        const project = getProjectOutputSchema.parse(response.data);
 
-      return project;
+        return project;
+      })();
+      return withoutSecretFields(result, ['runners_token']);
     },
   });
 }

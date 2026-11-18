@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const deleteIssueInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
@@ -20,14 +30,14 @@ export const deleteIssueOutputSchema = z.object({
 export function deleteIssueTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_delete_issue',
-    description: 'Delete or archive a issue in GitLab.',
+    description: 'Delete an issue in GitLab.',
     inputSchema: deleteIssueInputSchema,
     outputSchema: deleteIssueOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteIssueOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/issues/#delete-an-issue
       await platformProxy.delete({
-        endpoint: `/api/v4/projects/${String(input.project_id)}/issues/${input.issue_iid}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${gitlabPathSegment(input.issue_iid)}`,
         retries: 1,
       });
 

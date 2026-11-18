@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 const CommitActionSchema = z.object({
   action: z.enum(['create', 'delete', 'move', 'update', 'chmod']),
   file_path: z.string(),
@@ -125,7 +135,7 @@ export function createCommitTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/commits/#create-a-commit
       const response = await platformProxy.post({
-        endpoint: `/api/v4/projects/${input.project_id}/repository/commits`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/commits`,
         data: requestBody,
         retries: 1,
       });

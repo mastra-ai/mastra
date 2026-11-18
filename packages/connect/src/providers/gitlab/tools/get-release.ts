@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getReleaseInputSchema = z.object({
   project_id: z
     .union([z.string(), z.number()])
@@ -40,12 +50,12 @@ const ProviderMilestoneSchema = z.object({
   iid: z.number().optional(),
   project_id: z.number().optional(),
   title: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   state: z.string().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
-  due_date: z.string().optional(),
-  start_date: z.string().optional(),
+  due_date: z.string().nullish(),
+  start_date: z.string().nullish(),
   web_url: z.string().optional(),
   issue_stats: z
     .object({
@@ -94,7 +104,7 @@ const ProviderLinksSchema = z.object({
 
 const ProviderReleaseSchema = z.object({
   tag_name: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   name: z.string().optional(),
   created_at: z.string().optional(),
   released_at: z.string().optional(),
@@ -124,7 +134,7 @@ export function getReleaseTool(proxy: PlatformProxy) {
       const projectId = typeof input.project_id === 'number' ? String(input.project_id) : input.project_id;
       // https://docs.gitlab.com/api/releases/#get-a-release-by-a-tag-name
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${encodeURIComponent(projectId)}/releases/${encodeURIComponent(input.tag_name)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/releases/${gitlabPathSegment(input.tag_name)}`,
         retries: 3,
       });
 

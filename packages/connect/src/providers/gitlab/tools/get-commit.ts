@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getCommitInputSchema = z.object({
   project_id: z
     .union([z.string(), z.number()])
@@ -41,9 +51,9 @@ const ProviderCommitSchema = z.object({
   committed_date: z.string(),
   authored_date: z.string(),
   parent_ids: z.array(z.string()),
-  last_pipeline: LastPipelineSchema,
+  last_pipeline: LastPipelineSchema.nullable(),
   stats: StatsSchema,
-  status: z.string().optional(),
+  status: z.string().nullish(),
   web_url: z.string(),
 });
 
@@ -60,9 +70,9 @@ export const getCommitOutputSchema = z.object({
   committed_date: z.string(),
   authored_date: z.string(),
   parent_ids: z.array(z.string()),
-  last_pipeline: LastPipelineSchema,
+  last_pipeline: LastPipelineSchema.nullable(),
   stats: StatsSchema,
-  status: z.string().optional(),
+  status: z.string().nullish(),
   web_url: z.string(),
 });
 
@@ -78,7 +88,7 @@ export function getCommitTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/commits/#get-a-single-commit
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${projectId}/repository/commits/${encodeURIComponent(input.sha)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/repository/commits/${gitlabPathSegment(input.sha)}`,
         retries: 3,
       });
 

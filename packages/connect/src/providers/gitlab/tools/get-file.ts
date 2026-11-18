@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getFileInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
   file_path: z.string().describe('URL-encoded full path to the file. Example: hello.txt'),
@@ -48,7 +58,7 @@ export function getFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/repository_files/#retrieve-a-file-from-a-repository
-        endpoint: `/api/v4/projects/${String(input.project_id)}/repository/files/${input.file_path}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
         params: {
           ref: input.ref ?? 'HEAD',
         },

@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const listPipelinesInputSchema = z.object({
   project_id: z.number().describe('GitLab project ID. Example: 82599306'),
   cursor: z
@@ -139,7 +149,7 @@ export function listPipelinesTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/pipelines/
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/pipelines`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/pipelines`,
         params,
         retries: 3,
       });

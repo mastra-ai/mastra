@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const retryJobInputSchema = z.object({
   project_id: z.number().describe('Project ID. Example: 82599306'),
   job_id: z.number().describe('Job ID. Example: 12345'),
@@ -53,7 +63,7 @@ const ProviderJobSchema = z
     finished_at: z.string().nullable().optional(),
     duration: z.number().nullable().optional(),
     queued_duration: z.number().nullable().optional(),
-    user: ProviderUserSchema.optional(),
+    user: ProviderUserSchema.nullish(),
     commit: ProviderCommitSchema.optional(),
     pipeline: ProviderPipelineSchema.optional(),
     web_url: z.string(),
@@ -72,7 +82,7 @@ export function retryJobTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/jobs/#retry-a-job
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/jobs/${encodeURIComponent(String(input.job_id))}/retry`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${gitlabPathSegment(input.job_id)}/retry`,
         retries: 3,
       });
 

@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const deletePipelineInputSchema = z.object({
   project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306" or "group/project".'),
   pipeline_id: z.number().describe('The ID of the pipeline to delete. Example: 123'),
@@ -28,7 +38,7 @@ export function deletePipelineTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/pipelines/#delete-a-pipeline
       await platformProxy.delete({
-        endpoint: `/api/v4/projects/${encodedProjectId}/pipelines/${input.pipeline_id}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/pipelines/${gitlabPathSegment(input.pipeline_id)}`,
         retries: 3,
       });
 

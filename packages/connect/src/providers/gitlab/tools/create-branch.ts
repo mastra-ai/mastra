@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const createBranchInputSchema = z.object({
   project_id: z.number().describe('Project ID. Example: 82599306'),
   branch: z.string().describe('Name of the new branch. Example: "feature/my-branch"'),
@@ -78,7 +88,7 @@ export function createBranchTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/branches/#create-repository-branch
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/repository/branches`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/branches`,
         data: {
           branch: input.branch,
           ref: input.ref,
