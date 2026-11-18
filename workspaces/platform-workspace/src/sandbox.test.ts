@@ -699,20 +699,122 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(true);
     });
 
-    it('fails the start when the sandbox record cannot be read after a recovery-id reattach', async () => {
-      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(json({ id: 'sbx_1', reattached: true, instanceUrl: null }))
-        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'internal_error' } }, { status: 500 }));
-      const sandbox = new PlatformSandbox({
-        accessToken: 'sk_test',
-        projectId: 'proj_123',
-        environmentId: 'env_123',
-        fetch: fetchMock,
+    describe('reading the mode after a recovery-id reattach', () => {
+      const boom = (status: number) =>
+        json({ error: { message: 'boom', type: status === 400 ? 'bad_request' : 'internal_error' } }, { status });
+      const reattached = () => json({ id: 'sbx_1', reattached: true, instanceUrl: null });
+      let sockets: ReturnType<typeof fakeExecSocket>['sockets'];
+      const sandboxWith = (fetchMock: ReturnType<typeof vi.fn>) => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const socket = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+        sockets = socket.sockets;
+        return new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          webSocketFactory: socket.factory,
+        });
+      };
+      const vaultReads = (fetchMock: ReturnType<typeof vi.fn>) =>
+        fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/sandbox/sbx_1') && !init?.method).length;
+      // Runs a command carrying a GitHub token and returns the env the VM received.
+      const execEnv = async (sandbox: PlatformSandbox) => {
+        await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+        const init = JSON.parse(sockets.at(-1)!.sent[0]!) as { data: { env: Record<string, string> } };
+        return init.data.env;
+      };
+
+      beforeEach(() => {
+        vi.useFakeTimers();
       });
-      await expect(sandbox._start()).rejects.toThrow();
-      expect(sandbox.vault).not.toBe(false);
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('retries a 503 and learns vault from the next answer', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockResolvedValueOnce(boom(503))
+          .mockResolvedValueOnce(json({ id: 'sbx_1', vault: true }))
+          .mockResolvedValueOnce(leaseResponse());
+        const sandbox = sandboxWith(fetchMock);
+        const started = sandbox.start();
+        await vi.runAllTimersAsync();
+        await started;
+        expect(vaultReads(fetchMock)).toBe(2);
+        expect(sandbox.vault).toBe(true);
+        vi.useRealTimers();
+        expect(await execEnv(sandbox)).toEqual({ A: '1' });
+      });
+
+      it('retries a network error and treats an answer without the flag as not vault', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockRejectedValueOnce(new TypeError('fetch failed'))
+          .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+          .mockResolvedValueOnce(leaseResponse());
+        const sandbox = sandboxWith(fetchMock);
+        const started = sandbox.start();
+        await vi.runAllTimersAsync();
+        await started;
+        expect(vaultReads(fetchMock)).toBe(2);
+        expect(sandbox.vault).toBe(false);
+        vi.useRealTimers();
+        expect(await execEnv(sandbox)).toEqual({ GH_TOKEN: 'ghs_real', A: '1' });
+      });
+
+      it('fails the start after the retries run out, and the next command asks again', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(502));
+        const sandbox = sandboxWith(fetchMock);
+        const started = sandbox.start();
+        const failed = expect(started).rejects.toThrow();
+        await vi.runAllTimersAsync();
+        await failed;
+        expect(vaultReads(fetchMock)).toBe(4);
+        expect(sandbox.vault).toBeUndefined();
+        expect(sockets).toHaveLength(0);
+
+        // No cached failure: the next command starts again, reads the record, and only then decides.
+        vi.useRealTimers();
+        fetchMock
+          .mockReset()
+          .mockResolvedValueOnce(json({ id: 'sbx_1', destroyedAt: null, vault: true }))
+          .mockResolvedValueOnce(leaseResponse());
+        expect(await execEnv(sandbox)).toEqual({ A: '1' });
+        expect(vaultReads(fetchMock)).toBe(1);
+        expect(sandbox.vault).toBe(true);
+      });
+
+      it('lets a later start succeed after an earlier one ran out of retries', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(503));
+        const sandbox = sandboxWith(fetchMock);
+        const failed = expect(sandbox.start()).rejects.toThrow();
+        await vi.runAllTimersAsync();
+        await failed;
+        fetchMock.mockReset().mockResolvedValueOnce(json({ id: 'sbx_1', destroyedAt: null }));
+        await sandbox.start();
+        expect(sandbox.vault).toBe(false);
+      });
+
+      it('does not retry a 400', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValue(boom(400));
+        const sandbox = sandboxWith(fetchMock);
+        await expect(sandbox.start()).rejects.toThrow();
+        expect(vaultReads(fetchMock)).toBe(1);
+        expect(sandbox.vault).toBeUndefined();
+      });
+
+      it('treats a 404 as a gone sandbox, so the next start provisions', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValueOnce(boom(404));
+        const sandbox = sandboxWith(fetchMock);
+        await expect(sandbox.start()).rejects.toThrow();
+        expect(vaultReads(fetchMock)).toBe(1);
+        expect(sandbox.vault).toBeUndefined();
+        expect((sandbox as unknown as { _sandboxId?: string })._sandboxId).toBeUndefined();
+      });
     });
 
     it('treats a reattach that does not report vault as not vault', async () => {
@@ -738,12 +840,12 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(true);
     });
 
-    it('propagates a refreshVault failure and keeps the mode', async () => {
+    it('propagates a non-retryable refreshVault failure and keeps the mode', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_existing', destroyedAt: null, vault: true }))
-        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'internal_error' } }, { status: 500 }));
+        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'bad_request' } }, { status: 400 }));
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
