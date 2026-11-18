@@ -45,29 +45,25 @@ if (!encryptionKey) {
 
 const factoryConfigVersion = 'mastracode-web-v1';
 
-// A bot token alone can post but cannot receive Slack events or link a sender
-// to a Factory account. Webhooks need a signing secret; Socket Mode needs an
-// app-level token. Both modes need OAuth credentials for account linking.
-const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
-const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
-const slackBotToken = process.env.SLACK_APP_BOT_TOKEN?.trim() || process.env.SLACK_BOT_TOKEN?.trim();
-const slackClientId = process.env.SLACK_APP_CLIENT_ID?.trim();
-const slackClientSecret = process.env.SLACK_APP_CLIENT_SECRET?.trim();
-const slackConfigured = Boolean(
-  slackSigningSecret || slackAppToken || slackBotToken || slackClientId || slackClientSecret,
-);
-if (slackConfigured) {
-  const required = [
-    ...(!slackAppToken && !slackSigningSecret ? ['SLACK_APP_SIGNING_SECRET'] : []),
-    ...(!slackBotToken ? ['SLACK_APP_BOT_TOKEN (or SLACK_BOT_TOKEN)'] : []),
-    ...(!slackClientId ? ['SLACK_APP_CLIENT_ID'] : []),
-    ...(!slackClientSecret ? ['SLACK_APP_CLIENT_SECRET'] : []),
-  ];
-  if (required.length) {
-    throw new Error(
-      `Incomplete Slack configuration: set ${required.join(', ')}. Unset all Slack credentials to disable it.`,
-    );
-  }
+// Slack needs a bot token, an event transport, and OAuth credentials to link users.
+const slackCredentials = {
+  signingSecret: process.env.SLACK_APP_SIGNING_SECRET?.trim(),
+  appToken: process.env.SLACK_APP_TOKEN?.trim(),
+  botToken: process.env.SLACK_APP_BOT_TOKEN?.trim(),
+  clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+  clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+};
+const slackConfigured = Object.values(slackCredentials).some(Boolean);
+if (
+  slackConfigured &&
+  (!(slackCredentials.signingSecret || slackCredentials.appToken) ||
+    !slackCredentials.botToken ||
+    !slackCredentials.clientId ||
+    !slackCredentials.clientSecret)
+) {
+  throw new Error(
+    'Slack requires SLACK_APP_BOT_TOKEN, SLACK_APP_CLIENT_ID, SLACK_APP_CLIENT_SECRET, and either SLACK_APP_SIGNING_SECRET or SLACK_APP_TOKEN.',
+  );
 }
 
 const publicUrl = process.env.MASTRACODE_PUBLIC_URL?.trim() || undefined;
@@ -77,13 +73,8 @@ if (slackConfigured && !slackRedirectUrl?.startsWith('https://')) {
 }
 const slack = slackConfigured
   ? new SlackIntegration({
-      mode: slackAppToken ? 'socket' : 'webhook',
-      appToken: slackAppToken,
-      signingSecret: slackSigningSecret,
-      botToken: slackBotToken,
-      clientId: slackClientId,
-      clientSecret: slackClientSecret,
-      // Slack requires an HTTPS OIDC redirect. Use a tunnel URL for local dev.
+      ...slackCredentials,
+      mode: slackCredentials.appToken ? 'socket' : 'webhook',
       oidcRedirectBaseUrl: slackRedirectUrl,
       uiOrigin: publicUrl,
     })
@@ -100,7 +91,7 @@ export const factory = new MastraFactory({
   // Sign-in callbacks and links use this origin; defaults to http://localhost:4111.
   publicUrl,
   // Stable across restarts/replicas so Slack account-link callbacks can verify OAuth state.
-  stateSecret: slackSigningSecret || slackAppToken,
+  stateSecret: slackCredentials.signingSecret || slackCredentials.appToken,
   integrations: slack ? [slack] : [],
   // No `sandbox`: with Platform credentials the factory uses a local sandbox
   // under `mastra dev` and a Platform sandbox in deployments.
