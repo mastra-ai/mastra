@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Platform Linear now runs on Mastra Connect. `PlatformLinearIntegration` reads every workspace through its project-linked `linear` connection, receives Linear's webhooks as Platform events instead of polling for them, and reconciles hourly.
+Platform Linear now runs on Mastra Connect. `PlatformLinearIntegration` reads every workspace through its project-linked `linear` connection, reads Linear's webhooks from each connection's platform event log through the shared Connect event poller, and reconciles hourly.
 
 - Workspaces connected before this change hold their tokens on the platform. Factory moves them onto Mastra Connect on its own, at boot and whenever the hourly check finds one left. Their sources, routing and cards carry over unchanged. Until a workspace has moved, its status reads `migration_required`; there is no fallback to the old platform routes.
 - The move covers the whole organization and can't be undone. Factory deployments in the organization that haven't been upgraded lose Linear access until they are.
