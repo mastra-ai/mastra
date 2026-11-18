@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -125,6 +125,34 @@ describe('Renaming a session by hand', () => {
     expect(screen.getByRole('textbox', { name: 'Session title' })).toHaveValue('Launch checklist');
     // The open dialog hides the page behind it from assistive tech.
     expect(screen.getByRole('link', { name: session.title!, hidden: true })).toBeInTheDocument();
+
+    // The reason was for the refused title; it goes once the title is edited.
+    await user.type(screen.getByRole('textbox', { name: 'Session title' }), ' v2');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('does not save when Enter only confirms an input-method candidate', async () => {
+    const sent: unknown[] = [];
+    useFactoryFixtures(() => [session]);
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/user-sessions/${sessionId}/title`, async ({ request }) => {
+        sent.push(await request.json());
+        return HttpResponse.json({ title: 'x' });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    const input = await openRename(user, 'dropdown');
+    await user.clear(input);
+    await user.type(input, 'にほん');
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    await waitForMutationsIdle(client);
+
+    expect(sent).toEqual([]);
+    expect(screen.getByRole('textbox', { name: 'Session title' })).toHaveValue('にほん');
   });
 
   it('does not save an empty title', async () => {

@@ -53,7 +53,7 @@ export function RenameSessionDialog({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(name);
-  const { mutateAsync, isPending, error } = useRenameSession(factoryId, sessionId);
+  const { mutateAsync, isPending, error, reset } = useRenameSession(factoryId, sessionId);
   const title = draft.trim();
 
   const save = async () => {
@@ -82,8 +82,14 @@ export function RenameSessionDialog({
             value={draft}
             disabled={isPending}
             onFocus={event => event.target.select()}
-            onChange={event => setDraft(withinTitleLimit(event.target.value))}
+            onChange={event => {
+              setDraft(withinTitleLimit(event.target.value));
+              // The reason shown was for the title just refused, not the one being typed now.
+              if (error) reset();
+            }}
             onKeyDown={event => {
+              // Enter that confirms an input-method candidate is not a save.
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
               if (event.key === 'Enter') void save();
             }}
           />
