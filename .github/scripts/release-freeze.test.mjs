@@ -230,6 +230,8 @@ for (const [label, overrides] of [
   ['has another rule besides "update"', { rules: [{ type: 'update' }, { type: 'required_signatures' }] }],
   ['does not target the default branch', { conditions: { ref_name: { include: ['refs/heads/0.x'], exclude: [] } } }],
   ['targets tags', { target: 'tag' }],
+  ['excludes main', { conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: ['refs/heads/main'] } } }],
+  ['excludes every branch', { conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: ['~ALL'] } } }],
 ]) {
   test(`refuses a ruleset that ${label}`, async t => {
     const { routes } = standardRoutes();

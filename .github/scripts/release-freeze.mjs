@@ -90,15 +90,20 @@ function makeApi({ baseUrl, token }) {
   };
 }
 
-// A ruleset this script may flip: branch target, default branch only, and
-// nothing but the "update" rule, so enforcing it can't switch on anything else.
+// A ruleset this script may flip: branch target, default branch only with no
+// exclusions (an exclude could drop main, and we'd report a freeze that isn't
+// one), and nothing but the "update" rule, so enforcing it can't switch on
+// anything else.
 function isFreezeRuleset(ruleset) {
   const include = ruleset.conditions?.ref_name?.include ?? [];
+  const exclude = ruleset.conditions?.ref_name?.exclude;
   const rules = ruleset.rules ?? [];
   return (
     ruleset.target === 'branch' &&
     include.length === 1 &&
     include[0] === '~DEFAULT_BRANCH' &&
+    Array.isArray(exclude) &&
+    exclude.length === 0 &&
     rules.length === 1 &&
     rules[0].type === 'update'
   );
@@ -144,6 +149,7 @@ async function main() {
     throw new Error(
       `Ruleset ${id} "${RULESET_NAME}" is not a main-only "Restrict updates" ruleset ` +
         `(target ${current.target}, include ${JSON.stringify(current.conditions?.ref_name?.include)}, ` +
+        `exclude ${JSON.stringify(current.conditions?.ref_name?.exclude)}, ` +
         `rules ${JSON.stringify((current.rules ?? []).map(r => r.type))}); refusing to change it.`,
     );
   }
