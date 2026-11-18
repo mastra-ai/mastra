@@ -76,7 +76,7 @@ Follow this order strictly — it saves API calls and gives faster answers:
   inputProcessors: [new UnicodeNormalizer({ stripControlChars: true, collapseWhitespace: true })],
   outputProcessors: [
     new PIIDetector({
-      model: 'mastra/openai/gpt-5-nano',
+      model: 'mastra/openai/gpt-6-luna',
       strategy: 'redact',
       redactionMethod: 'mask',
       detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key'],

@@ -103,7 +103,7 @@ export const webSearchTool = createTool({
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-5-mini',
+        model: 'openai/gpt-6-luna',
         messages: [
           {
             role: 'system',

@@ -22,12 +22,12 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6-luna',
   memory: new Memory({
     embedder: fastembed,
     options: {
       observationalMemory: {
-        model: 'openai/gpt-5-mini',
+        model: 'openai/gpt-6-luna',
       },
     },
   }),
