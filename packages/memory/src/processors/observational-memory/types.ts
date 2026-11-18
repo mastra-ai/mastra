@@ -1164,7 +1164,7 @@ export interface ObservationalMemoryConfig {
   hookExecution?: 'non-blocking' | 'await';
 
   /**
-   * Maximum number of Observer and Reflector runs active at once in the process, across all
+   * Maximum number of Observer and Reflector model calls in flight at once in the process, across all
    * threads, resources, and Memory instances. Calls beyond the limit wait for a free slot,
    * and a run waiting to retry a failed call holds none.
    *
