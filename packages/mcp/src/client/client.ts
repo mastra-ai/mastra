@@ -1089,20 +1089,30 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
+        // Deliver the connect failure first: releasing the process hooks below can throw,
+        // and it must not leave the caller's connect() pending forever with the connect
+        // error lost to an unhandled rejection (#30820).
+        reject(e);
         // A newer attempt that abandoned this one already owns the connection state
         // and the process hooks, so leave both to it.
         if (this.isConnected === attempt) {
           // A connect that never reached a transport leaves nothing for disconnect() to
           // tear down, so the process hooks must not outlive the failed attempt. A live
-          // transport means an earlier connection still owns them.
+          // transport means an earlier connection still owns them. A host that refuses
+          // the release must not undo the rejection above.
           if (!this.transport) {
-            this.unregisterProcessHooks();
+            try {
+              this.unregisterProcessHooks();
+            } catch (cleanupError) {
+              this.log('error', 'Failed to release MCP process hooks after a failed connect', {
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              });
+            }
           }
           this.isConnected = null;
         }
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
-        reject(e);
       }
     });
     this.isConnected = attempt;
