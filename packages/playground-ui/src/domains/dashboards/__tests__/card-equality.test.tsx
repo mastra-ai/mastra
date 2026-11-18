@@ -231,9 +231,12 @@ function expectSame(card: Rendered, widget: Rendered) {
 async function expectSameView(card: Rendered, widget: Rendered, view: string) {
   for (const side of [card, widget]) {
     const recorder = recordRequests();
-    pickIn(side.root, view);
-    await settle(recorder);
-    recorder.stop();
+    try {
+      pickIn(side.root, view);
+      await settle(recorder);
+    } finally {
+      recorder.stop();
+    }
     side.sent = recorder.sent;
   }
   expectSame(card, widget);

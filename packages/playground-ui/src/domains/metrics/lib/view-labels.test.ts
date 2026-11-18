@@ -10,6 +10,14 @@ describe('shortViewLabels', () => {
     ]);
   });
 
+  it('keeps a word that already reads as a plural', () => {
+    expect(shortViewLabels(['Spend by teams', 'Spend by projects', 'Spend by box'])).toEqual([
+      'Teams',
+      'Projects',
+      'Boxes',
+    ]);
+  });
+
   it('drops the words the views share, keeping the rest as written when it is not a "by" breakdown', () => {
     expect(shortViewLabels(['Agent latency', 'Agent cost'])).toEqual(['Latency', 'Cost']);
   });

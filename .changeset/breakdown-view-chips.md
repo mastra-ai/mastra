@@ -13,4 +13,4 @@ Added a `chips` variant to `TabList`: separate outlined pills with the open one 
 </Tabs>
 ```
 
-The metrics Breakdown card and dashboard tables with several views now list their views as chips under the title ("Agents", "Tools", …) instead of a dropdown in the title, so every view is one click away. `CardViewTabs` is exported from `domains/metrics/components` for other cards with several views.
+The metrics Breakdown card and dashboard tables with several views now list their views as chips under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, and the rest are in the "+N" menu. `CardViewTabs` is exported from `domains/metrics/components` for other cards with several views.

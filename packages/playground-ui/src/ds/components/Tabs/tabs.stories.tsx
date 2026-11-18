@@ -299,6 +299,11 @@ export const ChipsVariant: Story = {
                 </Tab>
               ))}
             </TabList>
+            {BREAKDOWN_VIEWS.map(view => (
+              <TabContent key={view} value={view}>
+                <div className="p-4 text-foreground">Breakdown by {view.toLowerCase()}</div>
+              </TabContent>
+            ))}
           </Tabs>
         </div>
       ))}

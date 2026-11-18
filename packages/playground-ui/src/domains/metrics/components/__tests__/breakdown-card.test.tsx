@@ -476,7 +476,8 @@ describe('BreakdownCard', () => {
       serveSpanAggregate(() => HttpResponse.json({ error: 'boom' }, { status: 500 }));
       renderInMetrics(<BreakdownCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-      expect(chipNames()).toContain('Tools');
+      pickChip('Tools');
+      expect(selectedChip()).toBe('Tools');
     });
   });
 });

@@ -1,7 +1,8 @@
-/** "agent" → "agents", "entity" → "entities", "address" → "addresses". */
+/** "agent" → "agents", "entity" → "entities", "box" → "boxes"; a word already ending in "s" ("teams") stays. */
 const plural = (word: string) => {
+  if (/s$/i.test(word)) return word;
   if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/i.test(word)) return `${word}es`;
+  if (/(x|z|ch|sh)$/i.test(word)) return `${word}es`;
   return `${word}s`;
 };
 

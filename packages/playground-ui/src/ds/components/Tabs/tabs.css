@@ -241,7 +241,8 @@
       }
     }
 
-    [data-slot='tabs-list'][data-overflow] {
+    /* Room for the pinned "+N" menu; chips keep theirs in the row instead. */
+    [data-slot='tabs-list'][data-overflow]:not([data-variant='chips']) {
       padding-right: 56px;
     }
 
