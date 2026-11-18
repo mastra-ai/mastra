@@ -10,11 +10,7 @@ async function setup() {
   const orgId = 'org-1';
   const project = await seed.projects.create({ orgId, userId: 'owner', input: { name: 'Mastra' } });
   const other = await seed.projects.create({ orgId, userId: 'owner', input: { name: 'Other' } });
-  const installation = await sourceControl.installations.upsert({
-    orgId,
-    connectedByUserId: 'owner',
-    externalId: '41',
-  });
+  const installation = await sourceControl.installations.upsert({ orgId, connectedByUserId: 'owner', externalId: '41' });
   const link = async (projectId: string, externalId: string, slug: string) => {
     const repository = await sourceControl.repositories.upsert({
       orgId,
@@ -98,21 +94,11 @@ describe('githubIntakeLookup', () => {
     'source.kind': 'issue',
     'source.repository': 'mastra-ai/mastra',
   };
-  const prFacts = {
-    'source.kind': 'pull_request',
-    'item.trusted': true,
-    'pullRequest.trusted': true,
-    'item.labels': ['docs'],
-  };
+  const prFacts = { 'source.kind': 'pull_request', 'item.trusted': true, 'pullRequest.trusted': true, 'item.labels': ['docs'] };
   it.each([
     {
       url: 'https://github.com/Mastra-AI/Mastra/issues/12',
-      result: {
-        status: 'found',
-        title: 'Crash on start',
-        url: 'https://github.com/mastra-ai/mastra/issues/12',
-        facts: issueFacts,
-      },
+      result: { status: 'found', title: 'Crash on start', url: 'https://github.com/mastra-ai/mastra/issues/12', facts: issueFacts },
       reads: ['issue 41 mastra-ai/mastra#12', 'permission 41 mastra-ai/mastra outsider'],
     },
     { url: 'https://github.com/mastra-ai/mastra/pull/34/files', result: { status: 'found', facts: prFacts } },
