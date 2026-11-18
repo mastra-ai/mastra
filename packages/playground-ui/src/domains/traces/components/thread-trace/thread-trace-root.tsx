@@ -3,6 +3,8 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Panel } from 'react-resizable-panels';
 
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
+import type { TraceNavigation } from '../trace-navigation';
+import { TraceNavigationScope } from '../trace-navigation-scope';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
 import {
@@ -32,6 +34,8 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
    * `ThreadTrace.SpanDetail` fed with the open span's record.
    */
   spanDetail?: ReactNode;
+  /** Where the thread opens things (each turn's trace, tools, agents…): the host's callbacks; text without them. */
+  navigation?: TraceNavigation;
   /** The turns, oldest first: one `ThreadTrace.Row` per trace of `traceIds`. */
   children?: ReactNode;
 }
@@ -49,6 +53,7 @@ export function ThreadTraceRoot({
   selectedSpan,
   onSelectedSpanChange,
   spanDetail,
+  navigation,
   className,
   children,
   ...props
@@ -139,39 +144,41 @@ export function ThreadTraceRoot({
 
   return (
     <ThreadTraceContext.Provider value={contextValue}>
-      {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
+      <TraceNavigationScope navigation={navigation}>
+        {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
           No auto-follow: turns are settled before mount, so the only growth at the end comes from
           the reader expanding a row, which must not move the view. */}
-      <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
-        <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
-          <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
-              {/* Visible-row tracking observes `[data-trace-id]` inside this viewport. */}
-              <MessageScroller data-slot="thread-trace-list" className="min-h-0 flex-1">
-                <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
-                  <MessageScrollerContent data-slot="thread-trace-list-inner" className="relative min-h-full gap-0">
-                    {children}
-                  </MessageScrollerContent>
-                </MessageScrollerViewport>
-              </MessageScroller>
-            </Panel>
-            {selected && spanDetail && (
-              <>
-                <PanelSeparator variant="pill" />
-                <Panel id="thread-trace-span" minSize={384} defaultSize="35%" maxSize="50%">
-                  <div
-                    data-slot="thread-trace-span-panel"
-                    // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
-                    className="flex h-full min-h-0 min-w-0 animate-in flex-col overflow-hidden border-l border-border duration-300 fade-in-0"
-                  >
-                    {spanDetail}
-                  </div>
-                </Panel>
-              </>
-            )}
-          </PanelGroup>
-        </div>
-      </MessageScrollerProvider>
+        <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
+          <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
+            <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+              <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+                {/* Visible-row tracking observes `[data-trace-id]` inside this viewport. */}
+                <MessageScroller data-slot="thread-trace-list" className="min-h-0 flex-1">
+                  <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
+                    <MessageScrollerContent data-slot="thread-trace-list-inner" className="relative min-h-full gap-0">
+                      {children}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                </MessageScroller>
+              </Panel>
+              {selected && spanDetail && (
+                <>
+                  <PanelSeparator variant="pill" />
+                  <Panel id="thread-trace-span" minSize={384} defaultSize="35%" maxSize="50%">
+                    <div
+                      data-slot="thread-trace-span-panel"
+                      // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
+                      className="flex h-full min-h-0 min-w-0 animate-in flex-col overflow-hidden border-l border-border duration-300 fade-in-0"
+                    >
+                      {spanDetail}
+                    </div>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          </div>
+        </MessageScrollerProvider>
+      </TraceNavigationScope>
     </ThreadTraceContext.Provider>
   );
 }

@@ -3,10 +3,10 @@ import { act, fireEvent, render as renderUI, screen, waitFor, within } from '@te
 import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { TraceNavigation } from '../../trace-navigation';
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import type { ThreadTraceRootProps, ThreadTraceRowProps, ThreadTraceSelectedSpan } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
-import { TestLinkProvider } from '@/test/link-provider';
 
 const TRACE_IDS = ['trace-a', 'trace-b'];
 
@@ -392,24 +392,21 @@ describe('ThreadTrace', () => {
   });
 
   describe('when the host composes a turn from the turn parts', () => {
-    // No Mastra client and no React Query: the turn draws the spans it is given. Only the Studio link
-    // provider is around, for the trace route `TraceLink` falls back to.
-    const renderTurn = (row: Partial<ThreadTraceRowProps> = {}) =>
+    // No provider at all: the turn draws the spans it is given and navigates through the host's callbacks.
+    const renderTurn = (row: Partial<ThreadTraceRowProps> = {}, navigation?: TraceNavigation) =>
       renderUI(
-        <TestLinkProvider>
-          <ThreadTrace traceIds={['trace-a']}>
-            <ThreadTrace.Row
-              traceId="trace-a"
-              label="Turn 1"
-              link={<ThreadTrace.TraceLink />}
-              messages={<ThreadTrace.TurnMessages spans={spansOf('trace-a')} />}
-              scores={<p>Host scores</p>}
-              spans={<ThreadTrace.Spans spans={spansOf('trace-a')} />}
-              {...row}
-            />
-            <RootStateProbe />
-          </ThreadTrace>
-        </TestLinkProvider>,
+        <ThreadTrace traceIds={['trace-a']} navigation={navigation}>
+          <ThreadTrace.Row
+            traceId="trace-a"
+            label="Turn 1"
+            link={<ThreadTrace.TraceLink />}
+            messages={<ThreadTrace.TurnMessages spans={spansOf('trace-a')} />}
+            scores={<p>Host scores</p>}
+            spans={<ThreadTrace.Spans spans={spansOf('trace-a')} />}
+            {...row}
+          />
+          <RootStateProbe />
+        </ThreadTrace>,
       );
 
     it('reconstructs the turn from the spans given to TurnMessages', async () => {
@@ -429,20 +426,21 @@ describe('ThreadTrace', () => {
       expect(screen.getByTestId('root-state').textContent).toBe('none;trace-a');
     });
 
-    it('links the turn to its trace page', async () => {
-      renderTurn();
+    it('opens the turn’s trace through onOpenTrace', async () => {
+      const onOpenTrace = vi.fn();
+      renderTurn({}, { onOpenTrace });
 
-      const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });
+      fireEvent.click(await within(getRow('trace-a')).findByRole('button', { name: 'Go to trace' }));
 
-      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
+      expect(onOpenTrace).toHaveBeenCalledWith('trace-a');
     });
 
-    it('links the turn wherever the host says', async () => {
-      renderTurn({ link: <ThreadTrace.TraceLink href="/elsewhere/trace-a" /> });
+    it('offers no Go to trace when the host does not navigate', async () => {
+      renderTurn();
 
-      const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });
+      await within(getRow('trace-a')).findByText('cook pasta');
 
-      expect(link.getAttribute('href')).toBe('/elsewhere/trace-a');
+      expect(within(getRow('trace-a')).queryByRole('button', { name: 'Go to trace' })).toBeNull();
     });
   });
 

@@ -207,18 +207,22 @@ describe('TracePanel, fully composed — header actions', () => {
 
 describe('TracePanel, fully composed — trace summary description', () => {
   it('shows the start date, duration and entity right under the heading', () => {
-    render(<FullTracePanel {...baseProps} spans={deepTraceFixture} entityHref="/agents/weather-agent/chat/new" />);
+    const onOpenAgent = vi.fn();
+    // An agent run: the panel opens its agent through the host.
+    const agentTrace = deepTraceFixture.map(span => (span.parentSpanId ? span : { ...span, entityType: 'agent' }));
+    render(<FullTracePanel {...baseProps} spans={agentTrace} navigation={{ onOpenAgent }} />);
 
     expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
     // 1s between the fixture's startedAt and endedAt.
     expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: /weather-agent/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /weather-agent/ }));
+    expect(onOpenAgent).toHaveBeenCalledWith('weather-agent');
   });
 
-  it('renders the entity as plain text when no href is provided', () => {
+  it('renders the entity as plain text when the host does not navigate', () => {
     render(<FullTracePanel {...baseProps} spans={deepTraceFixture} />);
 
-    expect(screen.queryByRole('link', { name: /weather-agent/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /weather-agent/ })).toBeNull();
     expect(screen.getAllByText(/weather-agent/).length).toBeGreaterThan(0);
   });
 
@@ -423,43 +427,25 @@ describe('TracePanel, fully composed — the header', () => {
     expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
   });
 
-  it('links out to the trace page only with both a link component and an href', () => {
-    const Anchor = ({ href, children, ...rest }: { href?: string; children?: React.ReactNode }) => (
-      <a href={href} {...rest}>
-        {children}
-      </a>
-    );
-
-    const noHref = render(<FullTracePanel {...baseProps} LinkComponent={Anchor} />);
-    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
-    expect(noHref.container).toBeTruthy();
-
-    cleanup();
-
-    render(<FullTracePanel {...baseProps} traceHref="/traces/trace-1" />);
-    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
-
-    cleanup();
-
+  it('offers the trace page only when the host opens traces', () => {
     render(<FullTracePanel {...baseProps} />);
-    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
 
-    cleanup();
-
-    render(<FullTracePanel {...baseProps} LinkComponent={Anchor} traceHref="/traces/trace-1" />);
-    expect(screen.getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe('/traces/trace-1');
+    expect(screen.queryByRole('button', { name: 'Open trace page' })).toBeNull();
   });
 
-  it('never links out from the trace page itself', () => {
-    const Anchor = ({ href, children, ...rest }: { href?: string; children?: React.ReactNode }) => (
-      <a href={href} {...rest}>
-        {children}
-      </a>
-    );
+  it('opens the trace page through the host’s onOpenTrace', () => {
+    const onOpenTrace = vi.fn();
+    render(<FullTracePanel {...baseProps} navigation={{ onOpenTrace }} />);
 
-    render(<FullTracePanel {...baseProps} placement="trace-page" LinkComponent={Anchor} traceHref="/traces/trace-1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open trace page' }));
 
-    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
+    expect(onOpenTrace).toHaveBeenCalledWith('trace-1');
+  });
+
+  it('never opens the trace page from the trace page itself', () => {
+    render(<FullTracePanel {...baseProps} placement="trace-page" navigation={{ onOpenTrace: vi.fn() }} />);
+
+    expect(screen.queryByRole('button', { name: 'Open trace page' })).toBeNull();
   });
 });
 

@@ -103,7 +103,7 @@ describe('TracePanel', () => {
           }
           summary={
             <TracePanel.Summary
-              entity={<TracePanel.Entity entityHref="/agents/weather-agent" />}
+              entity={<TracePanel.Entity />}
               status={<TracePanel.Status />}
               stats={<TracePanel.Stats />}
             />
@@ -175,7 +175,7 @@ describe('TracePanel', () => {
       composeEverything();
 
       expect(await screen.findByLabelText('Trace status')).toBeTruthy();
-      expect(screen.getByRole('link', { name: /Weather Agent/ }).getAttribute('href')).toBe('/agents/weather-agent');
+      expect(screen.getByText('Weather Agent')).toBeTruthy();
     });
 
     it('asks the network for nothing', async () => {
@@ -254,6 +254,61 @@ describe('TracePanel', () => {
 
       expect(await screen.findByLabelText('Trace status')).toBeTruthy();
       expect(screen.queryByText('Weather Agent')).toBeNull();
+    });
+  });
+
+  describe('when the host navigates', () => {
+    const navigation = () => ({ onOpenAgent: vi.fn(), onOpenWorkflow: vi.fn(), onOpenTrace: vi.fn() });
+    const renderNavigable = (props: Partial<PanelProps> = {}) =>
+      render(
+        <Panel
+          header={<TracePanel.Header title={<TracePanel.TraceId />} actions={<TracePanel.OpenPageButton />} />}
+          summary={<TracePanel.Summary entity={<TracePanel.Entity />} />}
+          {...props}
+        />,
+      );
+
+    it('opens the agent the trace ran through onOpenAgent', async () => {
+      const host = navigation();
+      renderNavigable({ navigation: host });
+
+      fireEvent.click(await screen.findByRole('button', { name: /Weather Agent/ }));
+
+      expect(host.onOpenAgent).toHaveBeenCalledWith('weather-agent');
+    });
+
+    it('opens the trace on its own page through onOpenTrace', async () => {
+      const host = navigation();
+      renderNavigable({ navigation: host });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Open trace page' }));
+
+      expect(host.onOpenTrace).toHaveBeenCalledWith(TRACE_ID);
+    });
+
+    it('draws no link: every navigation goes through the host', async () => {
+      const { container } = renderNavigable({ navigation: navigation() });
+
+      await screen.findByRole('button', { name: /Weather Agent/ });
+
+      expect(container.ownerDocument.querySelectorAll('a')).toHaveLength(0);
+    });
+
+    describe('when the host does not navigate', () => {
+      it('shows the entity as text', async () => {
+        renderNavigable();
+
+        expect(await screen.findByText('Weather Agent')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Weather Agent/ })).toBeNull();
+      });
+
+      it('offers no trace page', async () => {
+        renderNavigable();
+
+        await screen.findByText('Weather Agent');
+
+        expect(screen.queryByRole('button', { name: 'Open trace page' })).toBeNull();
+      });
     });
   });
 

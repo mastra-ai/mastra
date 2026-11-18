@@ -2,6 +2,7 @@ import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '../../traces/components/span-data-panel-view';
 import { useLiveToolCalls } from '@/domains/traces/hooks/use-live-tool-calls';
+import { useStudioTraceNavigation } from '@/domains/traces/hooks/use-studio-trace-navigation';
 
 export type SpanSelection = { traceId: string; spanId: string };
 
@@ -23,6 +24,7 @@ export function SpanDetailPanel({ selection, spans, onSelect, onClose, onShowTra
   const { data: registeredTools } = useTools();
   // Studio draws the span's tool calls with the chat's live cards (workflow graph, MCP app UI).
   const toolCalls = useLiveToolCalls();
+  const navigation = useStudioTraceNavigation();
 
   const index = spans.findIndex(span => span.traceId === selection.traceId && span.spanId === selection.spanId);
   const previous = index > 0 ? spans[index - 1] : undefined;
@@ -37,6 +39,7 @@ export function SpanDetailPanel({ selection, spans, onSelect, onClose, onShowTra
       traceSpans={trace?.spans}
       registeredTools={registeredTools}
       {...toolCalls}
+      navigation={navigation}
       onPrevious={previous ? () => onSelect(previous) : undefined}
       onNext={next ? () => onSelect(next) : undefined}
       onClose={onClose}

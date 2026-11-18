@@ -2,6 +2,7 @@ import type { GetScorerResponse } from '@mastra/client-js';
 import type { ComponentProps, ReactNode } from 'react';
 
 import type { TraceUsageSummary } from '../../trace-list-columns';
+import { getEntityOpener, useTraceNavigation } from '../trace-navigation';
 import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from '../trace-summary-description';
 import { useTracePanel } from './trace-panel-context';
 import { SpanScoring } from '@/domains/scores/components/span-scoring';
@@ -16,7 +17,6 @@ import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
 import { IconGauge } from '@/ds/icons/central/IconGauge';
 import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface TracePanelHeaderProps {
   /** Before the title, e.g. `TracePanel.Navigation`. */
@@ -69,37 +69,20 @@ export function TracePanelTraceId() {
   );
 }
 
-export interface TracePanelSummaryContentProps {
+export interface TracePanelPageHeadingProps {
   /** Token and estimated-cost totals of the trace. */
   usage?: TraceUsageSummary;
-  /** When set with `LinkComponent`, the entity name links to the entity's page. */
-  entityHref?: string;
-  LinkComponent?: LinkComponent;
-}
-
-export interface TracePanelPageHeadingProps extends TracePanelSummaryContentProps {
   children?: ReactNode;
 }
 
-/** The heading of a full trace page: a title with the trace summary under it. */
-export function TracePanelPageHeading({
-  children = 'Trace Timeline',
-  usage,
-  entityHref,
-  LinkComponent,
-}: TracePanelPageHeadingProps) {
+/** The heading of a full trace page: a title with the trace summary under it. The entity opens through the root's navigation. */
+export function TracePanelPageHeading({ children = 'Trace Timeline', usage }: TracePanelPageHeadingProps) {
   const { rootSpan } = useTracePanel();
+  const onOpenEntity = getEntityOpener(useTraceNavigation(), rootSpan);
   return (
     <DataPanel.HeaderContent>
       <DataPanel.Heading>{children}</DataPanel.Heading>
-      {rootSpan && (
-        <TraceSummaryDescription
-          rootSpan={rootSpan}
-          usage={usage}
-          entityHref={entityHref}
-          LinkComponent={LinkComponent}
-        />
-      )}
+      {rootSpan && <TraceSummaryDescription rootSpan={rootSpan} usage={usage} onOpenEntity={onOpenEntity} />}
     </DataPanel.HeaderContent>
   );
 }
@@ -115,15 +98,13 @@ export function TracePanelCloseButton() {
   );
 }
 
-export interface TracePanelOpenPageButtonProps {
-  href: string;
-  LinkComponent: LinkComponent;
-}
-
-/** Opens the trace on its own page. */
-export function TracePanelOpenPageButton({ href, LinkComponent }: TracePanelOpenPageButtonProps) {
+/** Opens the trace on its own page, through the root's `navigation.onOpenTrace`; renders nothing without it. */
+export function TracePanelOpenPageButton() {
+  const { traceId } = useTracePanel();
+  const { onOpenTrace } = useTraceNavigation();
+  if (!onOpenTrace || !traceId) return null;
   return (
-    <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={href} />}>
+    <Button size="icon-sm" variant="ghost" tooltip="Open trace page" onClick={() => onOpenTrace(traceId)}>
       <IconChainLink3 />
     </Button>
   );
@@ -264,17 +245,15 @@ export function TracePanelSummary({ entity, status, stats }: TracePanelSummaryPr
   );
 }
 
-export interface TracePanelEntityProps {
-  /** When set with `LinkComponent`, the entity name links to the entity's page. */
-  entityHref?: string;
-  LinkComponent?: LinkComponent;
-}
-
-/** The entity the trace ran (agent, workflow…), from the root span. */
-export function TracePanelEntity({ entityHref, LinkComponent }: TracePanelEntityProps) {
+/**
+ * The entity the trace ran (agent, workflow…), from the root span. It opens through the root's
+ * `navigation.onOpenAgent` / `onOpenWorkflow`, and shows as text without them.
+ */
+export function TracePanelEntity() {
   const { rootSpan } = useTracePanel();
+  const onOpenEntity = getEntityOpener(useTraceNavigation(), rootSpan);
   if (!rootSpan) return null;
-  return <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />;
+  return <TraceEntityMeta rootSpan={rootSpan} onOpenEntity={onOpenEntity} />;
 }
 
 /** How the trace ended, from the root span. */

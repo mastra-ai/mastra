@@ -2,6 +2,7 @@ import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useMemo, useState } from 'react';
 import { useLiveToolCalls } from '../hooks/use-live-tool-calls';
+import { useStudioTraceNavigation } from '../hooks/use-studio-trace-navigation';
 import { useThreadTraceSpans } from '../hooks/use-thread-trace-spans';
 import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores/components/trace-scores-tab';
@@ -122,6 +123,8 @@ function LoadedThread({
   const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpan } });
   // Studio draws the turns' tool calls with the chat's live cards (workflow graph, MCP app UI).
   const toolCalls = useLiveToolCalls();
+  // Studio opens each turn's trace, tools and delegated agents through its router.
+  const navigation = useStudioTraceNavigation();
 
   if (!isReady) return <ThreadTrace.Loading withFeedback={withFeedback} />;
   if (turns.length === 0) return <ThreadTrace.Empty />;
@@ -129,6 +132,7 @@ function LoadedThread({
   return (
     <ThreadTrace
       data-testid="thread-view-by-trace"
+      navigation={navigation}
       traceIds={traceIds}
       selectedSpan={selectedSpan}
       onSelectedSpanChange={selected => {

@@ -25,6 +25,7 @@ export {
 export { useTracesListSource, type UseTracesListSourceArgs } from './use-traces-list-source';
 export { useThreadTraceSpans, type ThreadTurnSpans } from './use-thread-trace-spans';
 export { useLiveToolCalls } from './use-live-tool-calls';
+export { useStudioTraceNavigation } from './use-studio-trace-navigation';
 export { useTags } from '@mastra/react/hooks/traces';
 export {
   useTraceMetadataFilterFields,

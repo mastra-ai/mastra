@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import '@/test/inert-resize-observer';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { RecordedToolCard } from '../recorded-tool-card';
 import type { RecordedToolCardProps } from '../recorded-tool-card';
+import { RecordNavigationContext } from '@/domains/chat/context/record-navigation';
 import { recordRequests } from '@/test/record-requests';
 
 /*
@@ -122,6 +123,42 @@ describe('RecordedToolCard', () => {
       );
 
       expect(screen.getByText('Weekend in Paris')).toBeTruthy();
+    });
+  });
+
+  describe('when the call listed files of a workspace', () => {
+    const listedFiles = recordedCall({
+      toolName: 'mastra_workspace_list_files',
+      input: { path: 'src' },
+      output: 'src/\n  index.ts',
+      dataParts: [
+        {
+          type: 'data',
+          name: 'workspace-metadata',
+          data: { toolCallId: 'call-1', id: 'ws-1', name: 'Main workspace', filesystem: { name: 'local' } },
+        },
+      ],
+    });
+
+    it('opens the workspace at that path through the host’s onOpenWorkspace', () => {
+      const onOpenWorkspace = vi.fn();
+      render(
+        <RecordNavigationContext.Provider value={{ onOpenWorkspace }}>
+          <RecordedToolCard {...listedFiles} />
+        </RecordNavigationContext.Provider>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Main workspace' }));
+
+      expect(onOpenWorkspace).toHaveBeenCalledWith({ workspaceId: 'ws-1', path: 'src' });
+    });
+
+    it('names the workspace as text, with no Studio link, when the host does not navigate', () => {
+      const { container } = render(<RecordedToolCard {...listedFiles} />);
+
+      expect(screen.getByText('Main workspace')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Main workspace' })).toBeNull();
+      expect(container.querySelector('a')).toBeNull();
     });
   });
 

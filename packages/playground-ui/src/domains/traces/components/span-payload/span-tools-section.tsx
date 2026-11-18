@@ -2,17 +2,18 @@ import type { GetToolResponse } from '@mastra/client-js';
 import type { SpanRecord, TraceSpanRecord } from '../../types';
 import { formatSpanToolCallMessages, getRequestedToolCalls } from '../format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from '../read-only-tool-call-provider';
+import { getDelegatedToolOpener, useRecordNavigationOf, useTraceNavigation } from '../trace-navigation';
 import { useTraceToolCardRenderer } from '../trace-tool-calls';
 import type { TraceToolCallsProps } from '../trace-tool-calls';
 import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
-import { getDelegatedToolHref, getSpanTools } from './span-payload-registry';
+import { getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import type { SpanPayloadSectionProps } from './span-payload-section';
+import { RecordNavigationContext } from '@/domains/chat/context/record-navigation';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import { Txt } from '@/ds/components/Txt';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { useLinkComponent } from '@/lib/framework';
 
 /** The tool registry as `listTools` returns it: tools by the key they are registered under. */
 export type RegisteredTools = Record<string, GetToolResponse>;
@@ -34,13 +35,14 @@ const NO_TOOLS: RegisteredTools = {};
 
 export interface SpanToolListProps {
   tools: SpanTool[];
-  /** The tool registry (`listTools`); a tool it holds links to its page. Without it, tools are plain text. */
+  /** The tool registry (`listTools`); a tool it holds opens through `onOpenTool`. Without it, tools are plain text. */
   registeredTools?: RegisteredTools;
 }
 
-/** The tools a span offered the model, linking to their pages when registered. */
+/** The tools a span offered the model, opening the ones the host can open (registered, or delegated). */
 export function SpanToolList({ tools, registeredTools = NO_TOOLS }: SpanToolListProps) {
-  const { Link, paths } = useLinkComponent();
+  const navigation = useTraceNavigation();
+  const { onOpenTool } = navigation;
   const registered = getRegisteredToolIds(registeredTools);
 
   return (
@@ -50,16 +52,22 @@ export function SpanToolList({ tools, registeredTools = NO_TOOLS }: SpanToolList
       items={tools.map(tool => {
         const registeredId = registered.get(tool.id);
         // Workspace, skill and agent-only tools are not in the registry, so they have no page to open.
-        const href = getDelegatedToolHref(paths, tool.id) || (registeredId ? paths.toolLink(registeredId) : '');
+        const open =
+          getDelegatedToolOpener(navigation, tool.id) ??
+          (registeredId && onOpenTool ? () => onOpenTool(registeredId) : undefined);
         return {
           key: tool.id,
           description: tool.description,
-          name: href ? (
-            <Link href={href} className="w-fit max-w-full truncate text-foreground hover:underline">
+          name: open ? (
+            <button
+              type="button"
+              onClick={open}
+              className="w-fit max-w-full truncate text-left text-foreground hover:underline"
+            >
               <Txt as="span" variant="label">
                 {tool.id}
               </Txt>
-            </Link>
+            </button>
           ) : (
             <SpanPayloadListName>{tool.id}</SpanPayloadListName>
           ),
@@ -103,23 +111,26 @@ export interface SpanToolCallListProps extends TraceToolCallsProps {
 /** Each call opens on its input and result, like in the chat. */
 export function SpanToolCallList({ toolCalls, mcpAppTools, renderToolCall }: SpanToolCallListProps) {
   const renderToolCard = useTraceToolCardRenderer({ mcpAppTools, renderToolCall });
+  const recordNavigation = useRecordNavigationOf(useTraceNavigation());
   return (
     // Tool rows carry their own vertical margins; strip them at the edges so the container is the only outer spacing.
     <div
       data-slot="span-tool-calls"
       className="flex flex-col [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0"
     >
-      <ReadOnlyToolCallProvider>
-        {toolCalls.map(message => (
-          <MessageRow
-            key={message.id}
-            message={message}
-            readOnly
-            mcpAppTools={mcpAppTools}
-            renderToolCard={renderToolCard}
-          />
-        ))}
-      </ReadOnlyToolCallProvider>
+      <RecordNavigationContext.Provider value={recordNavigation}>
+        <ReadOnlyToolCallProvider>
+          {toolCalls.map(message => (
+            <MessageRow
+              key={message.id}
+              message={message}
+              readOnly
+              mcpAppTools={mcpAppTools}
+              renderToolCard={renderToolCard}
+            />
+          ))}
+        </ReadOnlyToolCallProvider>
+      </RecordNavigationContext.Provider>
     </div>
   );
 }

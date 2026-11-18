@@ -70,7 +70,14 @@ interface StoryPanelProps {
 function FullComposition({ spans, variant, spanView, streamed }: StoryPanelProps) {
   const [traceId, setTraceId] = useState<string | undefined>(rootSpan.traceId);
   return (
-    <TracePanel traceId={traceId} spans={spans} spanView={spanView} onClose={() => setTraceId(undefined)}>
+    <TracePanel
+      traceId={traceId}
+      spans={spans}
+      spanView={spanView}
+      onClose={() => setTraceId(undefined)}
+      // The story's own navigation: any host opens things through callbacks, here a no-op.
+      navigation={{ onOpenAgent: () => {}, onOpenWorkflow: () => {}, onOpenTrace: () => {}, onOpenTool: () => {} }}
+    >
       <TracePanel.Frame
         variant={variant}
         header={
@@ -81,6 +88,7 @@ function FullComposition({ spans, variant, spanView, streamed }: StoryPanelProps
               <>
                 <TracePanel.ScoreButton />
                 <TracePanel.DatasetButton onSaveAsDatasetItem={() => {}} />
+                <TracePanel.OpenPageButton />
                 <TracePanel.DownloadButton onDownload={() => {}} />
                 {variant !== 'inline' && <TracePanel.CloseButton />}
               </>
@@ -89,7 +97,7 @@ function FullComposition({ spans, variant, spanView, streamed }: StoryPanelProps
         }
         summary={
           <TracePanel.Summary
-            entity={<TracePanel.Entity entityHref="#" />}
+            entity={<TracePanel.Entity />}
             status={<TracePanel.Status />}
             stats={<TracePanel.Stats usage={usage} />}
           />

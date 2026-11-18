@@ -1,4 +1,6 @@
 import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
+import { RecordNavigationContext, useRecordNavigation } from '../context/record-navigation';
+import type { RecordNavigation } from '../context/record-navigation';
 import { AgentBadge } from './badges/agent-badge';
 import { CodeModeBadge } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -17,6 +19,8 @@ export interface RecordedToolCardProps extends ToolCardProps {
   mcpAppTools?: Record<string, McpAppToolInfo>;
 }
 
+const NO_RECORD_NAVIGATION: RecordNavigation = {};
+
 const stripPrefix = (toolName: string, prefix: string): string =>
   toolName.startsWith(prefix) ? toolName.slice(prefix.length) : toolName;
 
@@ -24,9 +28,19 @@ const stripPrefix = (toolName: string, prefix: string): string =>
  * A tool call read back from a record (a trace, a stored thread), drawn from what the call recorded and
  * nothing else: no request, no provider, nothing to approve or resume. The sub-agent's answer comes from
  * the call's output, a workflow's from its input and result. `ToolCard` is the live card of a chat; this
- * one renders the same cards wherever the record comes from.
+ * one renders the same cards wherever the record comes from. Its links (a workspace, a Knowledge page) open
+ * through the host's record navigation and show as text without it: never through a Studio route.
  */
-export function RecordedToolCard({
+export function RecordedToolCard(props: RecordedToolCardProps) {
+  const record = useRecordNavigation();
+  return (
+    <RecordNavigationContext.Provider value={record ?? NO_RECORD_NAVIGATION}>
+      <RecordedCall {...props} />
+    </RecordNavigationContext.Provider>
+  );
+}
+
+function RecordedCall({
   toolName,
   input,
   output,

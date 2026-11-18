@@ -67,6 +67,24 @@ import { ThreadTrace } from '@mastra/playground-ui/domains/traces/components/thr
 <TracePanel.Messages spans={trace.spans} {...useLiveToolCalls()} />
 ```
 
+- `navigation` on `TracePanel`, `ThreadTrace` and `SpanDataPanel` (and on `SpanDataPanelView`, `SpanDetailsView` and `TraceThreadItemView`): where the panels open things, as your callbacks. Every link of the panels (the entity, the trace page, each turn's trace, the tools a span offered, the agents and workflows it delegated to, workspaces and Knowledge pages in the turn) becomes a button that calls one of them, and text when you give none. No href, no link component, no `LinkComponentProvider`. `useStudioTraceNavigation()` builds it from Studio's router.
+
+```tsx
+<TracePanel
+  traceId={trace.traceId}
+  spans={trace.spans}
+  onClose={close}
+  navigation={{
+    onOpenTrace: traceId => host.openLink(`${studioUrl}/traces/${traceId}`),
+    onOpenAgent: agentId => host.openLink(`${studioUrl}/agents/${agentId}`),
+  }}
+>
+  …
+</TracePanel>
+```
+
+- `DataKeysAndValues.ValueButton`: a value drawn like `ValueLink` that acts through `onClick`.
+
 `TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList` and `TraceScoresTab` keep their props.
 
 **Changed**
@@ -93,11 +111,24 @@ const { data: mcpAppTools } = useMcpAppTools();
 <MessageRow message={message} mcpAppTools={mcpAppTools} />;
 ```
 
-Without a `LinkComponentProvider`, links now render as plain anchors instead of nothing, and Studio routes stay empty, so a part shows text where it would have linked to a Studio page.
+Navigation in the panels goes through `navigation` instead of hrefs: `TracePanel.Entity`, `TracePanel.PageHeading` and `TracePanel.OpenPageButton` drop `entityHref`, `href` and `LinkComponent`, `ThreadTrace.TraceLink` drops `href`, and `TraceEntityMeta` / `TraceSummaryDescription` take `onOpenEntity` instead of `entityHref` and `LinkComponent`. Read back from a record, `WorkspaceLink` and `KnowledgePageLink` open through the record's navigation; `WorkspaceLink` takes `workspaceId` and `path` instead of an `href`.
+
+```tsx
+// Before
+<TracePanel.OpenPageButton href={`/traces/${traceId}`} LinkComponent={Link} />
+<ThreadTrace.TraceLink href={`/traces/${traceId}`} />
+
+// After
+<TracePanel navigation={{ onOpenTrace: traceId => navigate(`/traces/${traceId}`) }} …>
+  <TracePanel.OpenPageButton />
+</TracePanel>
+```
+
+Without a `LinkComponentProvider`, links now render as plain anchors instead of nothing.
 
 These components used to load part of their data themselves; pass it in now:
 
-- `SpanDataPanelView` and `SpanDetailsView`: pass `traceSpans` so tool calls show their results, and `registeredTools` so the tools a span offered link to their pages.
+- `SpanDataPanelView` and `SpanDetailsView`: pass `traceSpans` so tool calls show their results, and `registeredTools` so the tools a span offered open through `navigation.onOpenTool`.
 - `SpanScoring`: takes `onTriggerScorer`, which starts the scorer and resolves once it started.
 - `TraceThreadItemView`: takes the trace's `spans` instead of a `traceId`.
 

@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 
 import type { TraceSearchResult } from '../../../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../../../trace-list-columns';
+import type { TraceNavigation } from '../../trace-navigation';
 import { TracePanel, useTracePanelSide } from '../../trace-panel';
 import type { TracePanelSpan, TraceSideView, TraceSpanView } from '../../trace-panel';
 import type { TraceStreamingTimings } from '../../trace-span-timeline';
 import { getTraceRootSpan } from '../../trace-thread-context';
 import type { DataPanelDrawerProps } from '@/ds/components/DataPanel';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 /** Where a host shows the trace: as a list's side drawer, or as a trace page. */
 export type FullTracePanelPlacement = 'traces-list' | 'trace-page';
@@ -35,9 +35,8 @@ export interface FullTracePanelProps {
   headerActionsSlot?: ReactNode;
   title?: string;
   placement: FullTracePanelPlacement;
-  LinkComponent?: LinkComponent;
-  traceHref?: string;
-  entityHref?: string;
+  /** Where the host opens the entity and the trace page. */
+  navigation?: TraceNavigation;
   usage?: TraceUsageSummary;
   rootStreamingTimings?: Omit<TraceStreamingTimings, 'startedAt'>;
   anchorSpanId?: string;
@@ -83,9 +82,7 @@ export function FullTracePanel({
   headerActionsSlot,
   title,
   placement,
-  LinkComponent,
-  traceHref,
-  entityHref,
+  navigation,
   usage,
   rootStreamingTimings,
   anchorSpanId,
@@ -134,6 +131,7 @@ export function FullTracePanel({
         if (view === 'messages' || view === 'feedback' || view === 'scores') onSideViewChange?.(view);
       }}
       onClose={onClose}
+      navigation={navigation}
     >
       <TracePanel.Frame
         title={title ?? (isOnTracePage ? 'Trace Timeline' : undefined)}
@@ -143,7 +141,7 @@ export function FullTracePanel({
         header={
           isOnTracePage ? (
             <TracePanel.Header
-              title={<TracePanel.PageHeading usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />}
+              title={<TracePanel.PageHeading usage={usage} />}
               actions={
                 <>
                   {headerActionsSlot}
@@ -161,9 +159,7 @@ export function FullTracePanel({
                   {headerActionsSlot}
                   {score}
                   {onSaveAsDatasetItem && <TracePanel.DatasetButton onSaveAsDatasetItem={onSaveAsDatasetItem} />}
-                  {LinkComponent && traceHref && (
-                    <TracePanel.OpenPageButton href={traceHref} LinkComponent={LinkComponent} />
-                  )}
+                  <TracePanel.OpenPageButton />
                   {download}
                   <TracePanel.CloseButton />
                 </>
@@ -174,7 +170,7 @@ export function FullTracePanel({
         summary={
           !isOnTracePage && (
             <TracePanel.Summary
-              entity={<TracePanel.Entity entityHref={entityHref} LinkComponent={LinkComponent} />}
+              entity={<TracePanel.Entity />}
               status={<TracePanel.Status />}
               stats={<TracePanel.Stats usage={usage} />}
             />

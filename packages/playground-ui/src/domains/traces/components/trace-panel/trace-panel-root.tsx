@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import type { TraceNavigation } from '../trace-navigation';
+import { TraceNavigationScope } from '../trace-navigation-scope';
 import { getTraceRootSpan } from '../trace-thread-context';
 import { TracePanelContext } from './trace-panel-context';
 import type { TracePanelContextValue, TracePanelSpan, TraceSpanView } from './trace-panel-context';
@@ -38,6 +40,11 @@ export interface TracePanelRootProps {
   onSideViewChange?: (view: string) => void;
   /** Closes the panel (`TracePanel.CloseButton`, Escape or the backdrop of `TracePanel.Frame`). */
   onClose: () => void;
+  /**
+   * Where the panel opens things (the entity, the trace page, tools, delegated agents and workflows,
+   * workspaces, Knowledge pages): the host's callbacks. A part with no callback shows as text.
+   */
+  navigation?: TraceNavigation;
   /** Typically a `TracePanel.Frame`. */
   children?: ReactNode;
 }
@@ -63,6 +70,7 @@ export function TracePanelRoot({
   sideView: controlledSideView,
   onSideViewChange,
   onClose,
+  navigation,
   children,
 }: TracePanelRootProps) {
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(requestedSpanId ?? undefined);
@@ -124,5 +132,9 @@ export function TracePanelRoot({
     onClose,
   };
 
-  return <TracePanelContext.Provider value={value}>{children}</TracePanelContext.Provider>;
+  return (
+    <TracePanelContext.Provider value={value}>
+      <TraceNavigationScope navigation={navigation}>{children}</TraceNavigationScope>
+    </TracePanelContext.Provider>
+  );
 }

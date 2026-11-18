@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { SpanRecord, SpanTab, TraceSpanRecord } from '../types';
 import { SpanDataPanel } from './span-data-panel';
 import type { RegisteredTools } from './span-payload/span-tools-section';
+import type { TraceNavigation } from './trace-navigation';
 import type { TraceToolCallsProps } from './trace-tool-calls';
 
 export interface SpanDataPanelViewProps extends TraceToolCallsProps {
@@ -37,6 +38,8 @@ export interface SpanDataPanelViewProps extends TraceToolCallsProps {
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
+  /** Where the span opens its tools, delegated agents and workflows; defaults to the navigation of the root around it. */
+  navigation?: TraceNavigation;
   /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
   className?: string;
 }
@@ -62,6 +65,7 @@ export function SpanDataPanelView({
   feedbackTabBadge,
   mcpAppTools,
   renderToolCall,
+  navigation,
   className,
 }: SpanDataPanelViewProps) {
   return (
@@ -73,6 +77,7 @@ export function SpanDataPanelView({
       activeTab={activeTab}
       onTabChange={onTabChange}
       className={className}
+      navigation={navigation}
       header={
         <SpanDataPanel.Header
           identity={<SpanDataPanel.Identity />}

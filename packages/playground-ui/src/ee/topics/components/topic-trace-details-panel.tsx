@@ -3,6 +3,7 @@ import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
 import { useLiveToolCalls } from '@/domains/traces/hooks/use-live-tool-calls';
+import { useStudioTraceNavigation } from '@/domains/traces/hooks/use-studio-trace-navigation';
 import { cn } from '@/lib/utils';
 
 export interface TopicTraceDetailsPanelProps {
@@ -27,6 +28,7 @@ export function TopicTraceDetailsPanel({
   const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpanId } });
   // Studio draws the span's tool calls with the chat's live cards (workflow graph, MCP app UI).
   const toolCalls = useLiveToolCalls();
+  const navigation = useStudioTraceNavigation();
 
   if (!traceId) return null;
 
@@ -54,6 +56,7 @@ export function TopicTraceDetailsPanel({
           traceSpans={traceSpans.data?.spans}
           registeredTools={registeredTools}
           {...toolCalls}
+          navigation={navigation}
           onClose={onSpanSelect ? () => onSpanSelect(undefined) : undefined}
         />
       ) : null}

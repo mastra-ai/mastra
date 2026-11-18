@@ -111,9 +111,10 @@ function Harness({
 const renderPanel = (
   props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {},
   paths?: ComponentProps<typeof TestLinkProvider>['paths'],
+  navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
 ) =>
   renderWithProviders(
-    <TestLinkProvider paths={paths}>
+    <TestLinkProvider paths={paths} navigate={navigate}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -352,16 +353,17 @@ describe('TraceSpanPanel', () => {
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
-  it('given an agent root span, then the trace summary shows the entity linked to its agent page, start time, duration, and a Spans tab', async () => {
+  it('given an agent root span, then the trace summary shows the entity opening its agent page, start time, duration, and a Spans tab', async () => {
     installHandlers();
-    const { queryClient } = renderPanel();
+    const navigate = vi.fn();
+    const { queryClient } = renderPanel({}, undefined, navigate);
 
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID.slice(0, 6)}` })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // Entity block: name linking to the agent page.
-    const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
-    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
+    // Entity block: Studio opens the agent page through its router.
+    fireEvent.click(screen.getByRole('button', { name: /Weather Agent/ }));
+    expect(navigate).toHaveBeenCalledWith('/agents/weather-agent');
 
     // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
@@ -373,18 +375,23 @@ describe('TraceSpanPanel', () => {
     // that rendering is covered by the playground-ui unit tests.
   });
 
-  it('given a workflow root span, then the entity links to its workflow graph', async () => {
+  it('given a workflow root span, then the entity opens its workflow graph', async () => {
     installHandlers();
-    renderPanel({
-      spans: panelTraceSpans.spans.map(span =>
-        span.parentSpanId == null
-          ? { ...span, entityType: 'workflow_run', entityId: 'daily-report', entityName: 'Daily report' }
-          : span,
-      ),
-    });
+    const navigate = vi.fn();
+    renderPanel(
+      {
+        spans: panelTraceSpans.spans.map(span =>
+          span.parentSpanId == null
+            ? { ...span, entityType: 'workflow_run', entityId: 'daily-report', entityName: 'Daily report' }
+            : span,
+        ),
+      },
+      undefined,
+      navigate,
+    );
 
-    const entityLink = await screen.findByRole('link', { name: /Daily report/ });
-    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report');
+    fireEvent.click(await screen.findByRole('button', { name: /Daily report/ }));
+    expect(navigate).toHaveBeenCalledWith('/workflows/daily-report');
   });
 
   const withRootEntity = (entityType: string, entityId: string, entityName: string) =>
@@ -392,20 +399,20 @@ describe('TraceSpanPanel', () => {
       span.parentSpanId == null ? { ...span, entityType, entityId, entityName } : span,
     );
 
-  it('given the app has no agent route, then the agent entity is shown without a link', async () => {
+  it('given the app has no agent route, then the agent entity is shown as text', async () => {
     installHandlers();
     renderPanel({ spans: withRootEntity('agent_run', 'chef', 'Chef agent') }, { agentLink: () => '' });
 
     expect(await screen.findByText(/Chef agent/)).not.toBeNull();
-    expect(screen.queryByRole('link', { name: /Chef agent/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Chef agent/ })).toBeNull();
   });
 
-  it('given the app has no workflow route, then the workflow entity is shown without a link', async () => {
+  it('given the app has no workflow route, then the workflow entity is shown as text', async () => {
     installHandlers();
     renderPanel({ spans: withRootEntity('workflow_run', 'daily-report', 'Daily report') }, { workflowLink: () => '' });
 
     expect(await screen.findByText(/Daily report/)).not.toBeNull();
-    expect(screen.queryByRole('link', { name: /Daily report/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Daily report/ })).toBeNull();
   });
 
   it('given a span with a parent, then its Details tab still lists the trace-level ids it carries', async () => {

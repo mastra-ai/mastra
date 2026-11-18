@@ -114,10 +114,8 @@ export type { TracePanelBodyProps } from './trace-panel-body';
 export type {
   TracePanelDatasetButtonProps,
   TracePanelDownloadButtonProps,
-  TracePanelEntityProps,
   TracePanelHeaderProps,
   TracePanelNavigationProps,
-  TracePanelOpenPageButtonProps,
   TracePanelPageHeadingProps,
   TracePanelScoreButtonProps,
   TracePanelScoreDialogProps,

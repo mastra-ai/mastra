@@ -188,6 +188,7 @@ const renderView = ({
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
+  navigate,
   pageSize,
 }: {
   withFeedback?: boolean;
@@ -195,10 +196,11 @@ const renderView = ({
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+  navigate?: ComponentProps<typeof TestLinkProvider>['navigate'];
   pageSize?: number;
 } = {}) =>
   renderWithProviders(
-    <TestLinkProvider paths={paths}>
+    <TestLinkProvider paths={paths} navigate={navigate}>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
@@ -680,14 +682,16 @@ describe('ThreadViewByTrace', () => {
   });
 
   describe('the trace panel tabs', () => {
-    it('links each row to its trace on the traces page', async () => {
+    it('opens each row’s trace on the traces page', async () => {
       installHandlers();
       installFeedbackHandlers();
-      renderView();
+      const navigate = vi.fn();
+      renderView({ navigate });
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      fireEvent.click(firstRow.getByRole('button', { name: 'Go to trace' }));
 
-      expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
+      expect(navigate).toHaveBeenCalledWith('/traces?traceId=trace-a');
     });
 
     it('hides "Go to trace" when the app has no trace route', async () => {
@@ -697,7 +701,7 @@ describe('ThreadViewByTrace', () => {
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-      expect(firstRow.queryByRole('link', { name: 'Go to trace' })).toBeNull();
+      expect(firstRow.queryByRole('button', { name: 'Go to trace' })).toBeNull();
     });
 
     describe('given a scored trace', () => {

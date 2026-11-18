@@ -3,7 +3,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentProps } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACE_DATE_PRESET_PARAM,
@@ -252,9 +252,9 @@ function Harness({
   );
 }
 
-const renderExplorer = (props: HarnessProps = {}) =>
+const renderExplorer = (props: HarnessProps = {}, navigate?: ComponentProps<typeof TestLinkProvider>['navigate']) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider navigate={navigate}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -418,30 +418,37 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (
+      traceHref?: TracesExplorerPanelProps['traceHref'],
+      navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
+    ) => {
       setExplorerHandlers();
-      const { queryClient } = renderExplorer({
-        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
-        traceHref,
-      });
+      const { queryClient } = renderExplorer(
+        {
+          initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+          traceHref,
+        },
+        navigate,
+      );
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await within(dialog).findByRole('button', { name: 'Download trace JSON' });
       return dialog;
     };
 
-    it('links to the host trace page of the selected trace', async () => {
-      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
+    it('opens the host trace page of the selected trace', async () => {
+      const navigate = vi.fn();
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`, navigate);
 
-      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
-        '/observe/traces/trace-weather',
-      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace page' }));
+
+      expect(navigate).toHaveBeenCalledWith('/observe/traces/trace-weather');
     });
 
-    it('offers no trace page link without traceHref', async () => {
+    it('offers no trace page without traceHref', async () => {
       const dialog = await openTrace();
 
-      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'Open trace page' })).toBeNull();
     });
   });
 

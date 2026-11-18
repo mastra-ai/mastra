@@ -1,9 +1,11 @@
 import { useScorers, useTriggerScorer } from '@mastra/react/hooks/scores';
 import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useThreadHasOtherTraces, useTraceSpans } from '@mastra/react/hooks/traces';
+import { useMemo } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useLiveToolCalls } from '../hooks/use-live-tool-calls';
+import { useStudioTraceNavigation } from '../hooks/use-studio-trace-navigation';
 import type { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TracePanel } from '@/domains/traces/components/trace-panel';
 import type {
@@ -16,21 +18,8 @@ import type {
 import { getTraceRootSpan, getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import type { TraceUsageSummary } from '@/domains/traces/trace-list-columns';
 import { useLinkComponent } from '@/lib/framework';
-import type { LinkComponentPaths } from '@/lib/framework';
 
 type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
-
-function getEntityHref(
-  paths: LinkComponentPaths,
-  entityType: string | null | undefined,
-  entityId: string | null | undefined,
-) {
-  if (!entityId || !entityType) return undefined;
-  const normalizedEntityType = entityType.toLowerCase();
-  if (normalizedEntityType.includes('workflow')) return paths.workflowLink(entityId) || undefined;
-  if (normalizedEntityType.includes('agent')) return paths.agentLink(entityId) || undefined;
-  return undefined;
-}
 
 export interface TraceSpanPanelProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -135,7 +124,13 @@ export function TraceSpanPanel({
   spanFeedbackTabBadge,
   spanFeedbackTabSlot,
 }: TraceSpanPanelProps) {
-  const { Link, paths } = useLinkComponent();
+  const { navigate } = useLinkComponent();
+  // Studio opens the entity, tools and delegated agents through its router; the trace page is the caller's.
+  const studioNavigation = useStudioTraceNavigation();
+  const navigation = useMemo(
+    () => ({ ...studioNavigation, onOpenTrace: traceHref ? () => navigate(traceHref) : undefined }),
+    [studioNavigation, traceHref, navigate],
+  );
 
   const selectedSpanDetail = useSpanDetail({
     traceId,
@@ -175,6 +170,7 @@ export function TraceSpanPanel({
       spanView={spanView}
       onSpanViewChange={onSpanViewChange}
       onClose={onClose}
+      navigation={navigation}
     >
       <TracePanel.Frame
         title={title}
@@ -190,7 +186,7 @@ export function TraceSpanPanel({
                 {headerActionsSlot}
                 <TracePanel.ScoreButton />
                 {onSaveAsDatasetItem && <TracePanel.DatasetButton onSaveAsDatasetItem={onSaveAsDatasetItem} />}
-                {traceHref && <TracePanel.OpenPageButton href={traceHref} LinkComponent={Link} />}
+                <TracePanel.OpenPageButton />
                 <TracePanel.DownloadButton onDownload={download.download} isPending={download.isPending} />
                 <TracePanel.CloseButton />
               </>
@@ -199,12 +195,7 @@ export function TraceSpanPanel({
         }
         summary={
           <TracePanel.Summary
-            entity={
-              <TracePanel.Entity
-                entityHref={getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId)}
-                LinkComponent={Link}
-              />
-            }
+            entity={<TracePanel.Entity />}
             status={<TracePanel.Status />}
             stats={<TracePanel.Stats usage={usage} />}
           />
