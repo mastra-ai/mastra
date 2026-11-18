@@ -16,8 +16,11 @@ process.off = ((event: string | symbol, listener: (...args: unknown[]) => void) 
   return originalOff(event, listener);
 }) as typeof process.off;
 
-// Answers every request with a 404, like a mistyped endpoint.
+// Answers every request with a 404, like a mistyped endpoint. Counting requests lets the
+// test tell a fresh connect from a replayed one: a cached rejected attempt sends none.
+let requests = 0;
 const server = createServer((_request, response) => {
+  requests += 1;
   response.writeHead(404, { 'content-type': 'text/plain' });
   response.end('not found');
 });
@@ -32,6 +35,17 @@ const mcp = new MCPClient({
 
 // No per-server timeout: discovery must settle because the connect settles, not because
 // a wrapper gave up on it. A wrapper timeout would hide the hang this host triggers.
-const { errors } = await mcp.listToolsWithErrors();
-console.log(`host: settled ${JSON.stringify(errors)}`);
+const first = await mcp.listToolsWithErrors();
+const requestsAfterFirst = requests;
+console.log(`host: settled ${JSON.stringify(first.errors)}`);
+
+// A failed connect must not leave its rejected attempt cached: a second call has to open a
+// fresh connection, so it reaches the server again instead of replaying the first rejection.
+const second = await mcp.listToolsWithErrors();
+console.log(
+  `host: retried ${JSON.stringify({
+    errors: second.errors,
+    requests: { first: requestsAfterFirst, second: requests },
+  })}`,
+);
 process.exit(0);
