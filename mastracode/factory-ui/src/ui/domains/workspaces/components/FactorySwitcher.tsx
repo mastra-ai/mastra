@@ -49,7 +49,7 @@ export function FactorySwitcher() {
             {activeFactory?.name ?? 'Select a factory…'}
           </Txt>
         )}
-        <IconChevronDownMedium size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronDownMedium className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (

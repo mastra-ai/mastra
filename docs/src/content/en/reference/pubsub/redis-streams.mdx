@@ -293,7 +293,7 @@ redis-cli --scan --pattern 'mastra:topic:*' | while read -r key; do
 done
 ```
 
-The loop only touches streams without a TTL, so it's safe to run repeatedly. After step 2, a stream that's still in use keeps its data, because every write refreshes the TTL.
+The loop only touches streams without a TTL, so it's safe to run more than once. After step 2, a stream that's still in use keeps its data, because every write refreshes the TTL.
 
 ## Redelivery and reclaim
 

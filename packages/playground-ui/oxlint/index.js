@@ -123,6 +123,56 @@ function iconButtonSize(context) {
   };
 }
 
+const ICON_SIZE_CLASS = /(^|\s|:)(size|h|w)-(?!(icon-(xs|sm|md|lg)|full|auto|\[[\d.]+em\])(\s|$))\S+/;
+const ICON_SIZE_MESSAGE =
+  'Size an icon from its parent component or an <Icon size> wrapper, or with a size-icon-* class, not a size of its own.';
+
+function classValues(node) {
+  if (!node) return [];
+  switch (node.type) {
+    case 'Literal':
+      return [String(node.value)];
+    case 'TemplateLiteral':
+      return [...node.quasis.map(quasi => quasi.value.raw), ...node.expressions.flatMap(classValues)];
+    case 'JSXExpressionContainer':
+      return classValues(node.expression);
+    case 'CallExpression':
+      return node.arguments.flatMap(classValues);
+    case 'ArrayExpression':
+      return node.elements.flatMap(classValues);
+    case 'ObjectExpression':
+      return node.properties.flatMap(property => (property.type === 'Property' ? classValues(property.key) : []));
+    case 'ConditionalExpression':
+      return [...classValues(node.consequent), ...classValues(node.alternate)];
+    case 'LogicalExpression':
+      return [...classValues(node.left), ...classValues(node.right)];
+    default:
+      return [];
+  }
+}
+
+function iconSizeFromParent(context) {
+  const iconImports = new Set();
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers)
+        if (specifier.local.name !== 'Icon') iconImports.add(specifier.local.name);
+    },
+    JSXOpeningElement(node) {
+      if (node.name.type !== 'JSXIdentifier' || !iconImports.has(node.name.name)) return;
+      for (const attribute of node.attributes) {
+        if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
+        const name = attribute.name.name;
+        const sized =
+          (['size', 'width', 'height'].includes(name) && literalAttribute(attribute.value) !== undefined) ||
+          (name === 'className' && classValues(attribute.value).some(value => ICON_SIZE_CLASS.test(value)));
+        if (sized) context.report({ node: attribute, message: ICON_SIZE_MESSAGE });
+      }
+    },
+  };
+}
+
 // --- text-role -----------------------------------------------------------------------------------------
 // Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>). Tailwind's own
 // sizes stay defined as a safety net only; the roles live in playground-ui's theme/typography.css.
@@ -274,6 +324,7 @@ const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
     'icon-button-size': { meta: { type: 'suggestion', schema: false }, create: iconButtonSize },
+    'icon-size-from-parent': { meta: { type: 'suggestion', schema: false }, create: iconSizeFromParent },
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
@@ -298,6 +349,7 @@ export const copyRuleExclusions = {
 // (tests and stories, for example).
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
+  'playground-ui/icon-size-from-parent': 'error',
   'playground-ui/text-role': 'error',
   'playground-ui/txt-tone': 'error',
   'playground-ui/font-mono': 'error',

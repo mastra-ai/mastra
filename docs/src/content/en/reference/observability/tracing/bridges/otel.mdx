@@ -140,11 +140,11 @@ Force flushes the tracer provider and logger provider if they support `forceFlus
 async shutdown(): Promise<void>
 ```
 
-Shuts down the bridge and cleans up resources. Ends any spans that weren't properly closed, then flushes the providers so those spans are exported.
+Shuts down the bridge and cleans up resources. Ends any spans that weren't closed cleanly, then flushes the providers so those spans are exported.
 
 ## Usage examples
 
-### Basic Usage
+### Basic usage
 
 ```typescript
 import { Mastra } from '@mastra/core'
@@ -164,7 +164,7 @@ const mastra = new Mastra({
 })
 ```
 
-### Combined with Exporters
+### Combined with exporters
 
 The bridge can be used alongside exporters. The bridge handles OTEL context, while exporters send data to additional destinations:
 
@@ -223,7 +223,7 @@ const result = await agent.generate('Hello', {
 })
 ```
 
-### How Tags Are Stored
+### How tags are stored
 
 Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute:
 

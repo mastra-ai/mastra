@@ -81,7 +81,6 @@ export const useAddFactoryMutation = useCreateFactoryMutation;
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const saveGithubSelection = useSaveIntakeSelectionMutation('github');
   const saveGitlabSelection = useSaveIntakeSelectionMutation('gitlab');
   return useMutation({
     mutationFn: async ({
@@ -104,21 +103,20 @@ export function useLinkRepositoryMutation() {
         linkableRepo.installationStorageId,
         gitlab ? 'gitlab' : 'github',
       );
-      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo, selectIntake);
       await onLinked?.(linked);
       // Refresh the list alongside the intake write and wait for both, so the row
       // goes straight from "Linking…" to linked instead of flashing "Link" first.
-      const refreshed = invalidateFactoryRepositories(queryClient, factoryProjectId);
+      const refreshed = Promise.all([
+        invalidateFactoryRepositories(queryClient, factoryProjectId),
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeConfig() }),
+      ]);
       try {
-        if (selectIntake) {
+        // The server selects a GitHub repository with the link; a GitLab project is selected here.
+        if (selectIntake && gitlab) {
           const config = await fetchIntakeConfig(baseUrl);
-          if (gitlab) {
-            const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
-            if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
-          } else {
-            const githubSelection = selectIntakeSource(config.github, repo.fullName);
-            if (githubSelection !== config.github) await saveGithubSelection.mutateAsync(githubSelection);
-          }
+          const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
+          if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
         }
       } finally {
         await refreshed;

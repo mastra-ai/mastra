@@ -519,6 +519,13 @@ export type SkippableTest =
   | 'perStepConditional'
   | 'perStepNested'
   | 'perStepContinue'
+  | 'perStepRetry'
+  | 'perStepLoop'
+  | 'perStepBail'
+  | 'perStepBailRetry'
+  | 'perStepCancel'
+  | 'perStepNoBranch'
+  | 'perStepNestedBail'
   // Tracing tests
   | 'tracingContext'
   | 'tracingMultistep'
@@ -557,6 +564,8 @@ export type SkippableTest =
   // Run count tests
   | 'runCount'
   | 'retryCount'
+  // Retry of a resumed step keeps its resume data
+  | 'retryAfterResume'
   // Error persistence tests (require storage spy access)
   | 'errorPersistWithoutStack'
   | 'errorPersistMastraError'
@@ -656,6 +665,8 @@ export type SkippableTest =
   | 'resumeForeachPartial'
   // Foreach suspend/resume with partial concurrency and index
   | 'resumeForeachPartialIndex'
+  // Foreach resume hands each item its own suspend data
+  | 'resumeForeachSuspendData'
   // Branching - nested else/if-branch
   | 'branchingNestedConditions'
   // Foreach state batch and bail tests

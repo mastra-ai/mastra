@@ -231,7 +231,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                     }
                   >
                     <span className="sr-only">Close {tab.label}</span>
-                    <IconCrossMedium aria-hidden="true" className="size-3" />
+                    <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                   </TooltipTrigger>
                   <TooltipContent>Close {tab.label}</TooltipContent>
                 </Tooltip>
@@ -252,7 +252,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   className="tabular-nums"
                 >
                   +{hiddenTabs.length}
-                  <IconChevronDownMedium aria-hidden="true" className="size-3" />
+                  <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (
@@ -282,7 +282,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             }
                           >
                             <span className="sr-only">Close {tab.label}</span>
-                            <IconCrossMedium aria-hidden="true" className="size-3" />
+                            <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
                           </TooltipTrigger>
                           <TooltipContent side="right">Close {tab.label}</TooltipContent>
                         </Tooltip>

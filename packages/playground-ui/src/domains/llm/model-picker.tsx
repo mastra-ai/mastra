@@ -100,7 +100,7 @@ export function ModelPicker({
           </span>
         </>
       )}
-      <IconChevronDownMedium aria-hidden className="shrink-0" size={12} />
+      <IconChevronDownMedium aria-hidden className="size-icon-xs shrink-0" />
     </>
   );
 

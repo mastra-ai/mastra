@@ -56,6 +56,12 @@ export interface ExecutionEngineOptions {
   persistResumeClaim?: boolean;
 
   /**
+   * Skips reading a stored `canceled` status. See `WorkflowOptions.localCancellationOnly`.
+   * @internal
+   */
+  localCancellationOnly?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */

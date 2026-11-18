@@ -41,7 +41,7 @@ overrides:
   '@fastify/forwarded@<=3.0.1': 3.0.2
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.11: 4.13.11
+  hono@<4.13.18: 4.13.18
   better-auth: ^1.7.7
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
@@ -55,6 +55,9 @@ overrides:
   '@tootallnate/once@<3.0.1': 3.0.1
   'diff@>=4.0.0 <4.0.4': 4.0.4
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
+  # SEC-323 2026-11-16: GHSA-qrww-3xmv-qhgm (@opentelemetry/resources <2.12.1 / >=3.0.0 <3.1.1)
+  '@opentelemetry/resources@>=2.0.0 <2.12.1': 2.12.1
+  '@opentelemetry/resources@>=3.0.0 <3.1.1': 3.1.1
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'yargs@<18.1.0': 18.2.0
   'protobufjs@<8.8.0': 8.8.0

@@ -1,6 +1,8 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { AnnouncedLists } from '../../announced-lists.js';
+import type { ProjectListScope } from '../../announced-lists.js';
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
 const FACTORY_PROJECTS = 'factory_projects';
@@ -386,6 +388,10 @@ export interface SourceControlSession {
   updatedAt: Date;
 }
 
+export function isSeenBy(session: Pick<SourceControlSession, 'visibility' | 'userId'>, viewerUserId: string): boolean {
+  return session.visibility !== 'private' || session.userId === viewerUserId;
+}
+
 export interface CreateSourceControlSessionInput {
   sessionId: string;
   projectRepositoryId: string;
@@ -544,6 +550,8 @@ export interface SourceControlStorageHandle {
       factoryProjectId: string;
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
+    /** Every visibility, frozen and shared: filter per viewer before any of it reaches one. */
+    listSharedByProject(args: { orgId: string; factoryProjectId: string }): Promise<readonly SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /**
      * Sessions started as side sessions by `originSessionId`. System-level (no
@@ -813,9 +821,28 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
   #linkedRepositoryChangesShared = false;
+  readonly projectSessions = new AnnouncedLists<SourceControlSession>();
+  readonly #linkedSessions = new WeakMap<
+    readonly SourceControlSession[],
+    Map<string, readonly SourceControlSession[]>
+  >();
 
   constructor() {
     super('source-control');
+  }
+
+  #linkedTo(sessions: readonly SourceControlSession[], linkIds: ReadonlySet<string>): readonly SourceControlSession[] {
+    const key = [...linkIds].toSorted().join('\u0000');
+    let byLinks = this.#linkedSessions.get(sessions);
+    if (!byLinks) this.#linkedSessions.set(sessions, (byLinks = new Map()));
+    let linked = byLinks.get(key);
+    if (!linked) {
+      linked = Object.freeze(
+        sessions.filter(session => session.projectRepositoryId !== null && linkIds.has(session.projectRepositoryId)),
+      );
+      byLinks.set(key, linked);
+    }
+    return linked;
   }
 
   /**
@@ -874,13 +901,37 @@ export class SourceControlStorage extends FactoryStorageDomain {
   /** Record that a session's visibility was checked, making it private when `makePrivate`. */
   async markVisibilityChecked(sessionId: string, { makePrivate }: { makePrivate: boolean }): Promise<void> {
     const now = new Date();
-    await this.ops.updateMany(
-      SESSIONS,
-      { session_id: sessionId },
+    const row = await this.ops.updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () =>
       makePrivate
         ? { visibility: 'private', visibility_checked_at: now, updated_at: now }
         : { visibility_checked_at: now },
     );
+    if (row && makePrivate) this.#announceSessions([row]);
+  }
+
+  #announceSessions(rows: Iterable<Pick<SessionDbRow, 'org_id' | 'factory_project_id'>>): void {
+    const scopes = new Map<string, ProjectListScope>();
+    for (const row of rows) {
+      if (!row.factory_project_id) continue;
+      scopes.set(`${row.org_id}\u0000${row.factory_project_id}`, {
+        orgId: row.org_id,
+        factoryProjectId: row.factory_project_id,
+      });
+    }
+    for (const scope of scopes.values()) this.projectSessions.announce(scope);
+  }
+
+  async #stampOnce(
+    key: { id: string } | { session_id: string },
+    column: 'materialized_at' | 'first_message_at' | 'first_meaningful_exec_at',
+  ): Promise<void> {
+    const now = new Date();
+    // `IS NULL` in the filter keeps the first stamp across processes; a resume or a later message changes nothing.
+    if ((await this.ops.updateMany(SESSIONS, { ...key, [column]: null }, { [column]: now, updated_at: now })) === 0) {
+      return;
+    }
+    const row = await this.ops.findOne<SessionDbRow>(SESSIONS, key);
+    if (row) this.#announceSessions([row]);
   }
 
   /** Record that a session's threads are on their memory resource, so later starts skip it. */
@@ -905,6 +956,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   async #backfillSessionFactory(): Promise<void> {
     let unresolved = 0;
     let collisions = 0;
+    const backfilled: Array<Pick<SessionDbRow, 'org_id' | 'factory_project_id'>> = [];
     try {
       const pending = await this.ops.findMany<SessionDbRow>(SESSIONS, { factory_project_id: null });
       if (pending.length === 0) return;
@@ -938,6 +990,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         }
         try {
           await this.ops.updateMany(SESSIONS, { id: row.id }, { factory_project_id: projectId });
+          backfilled.push({ org_id: row.org_id, factory_project_id: projectId });
           taken.add(key);
         } catch (error) {
           if (!(error instanceof UniqueViolationError)) throw error;
@@ -948,6 +1001,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
       // Rows written before the failure keep their factory; the next init() resumes from the rest.
       console.warn(`[factory] session backfill stopped early: ${error instanceof Error ? error.message : error}`);
       return;
+    } finally {
+      this.#announceSessions(backfilled);
     }
     if (unresolved > 0 || collisions > 0) {
       console.warn(
@@ -1132,6 +1187,32 @@ export class SourceControlStorage extends FactoryStorageDomain {
       });
       if (!project || !(await getInstallation({ orgId: args.orgId, id: row.installation_id }))) return null;
       return toConnection(row);
+    };
+
+    const linkedProjectSessions = async ({
+      orgId,
+      factoryProjectId,
+    }: {
+      orgId: string;
+      factoryProjectId: string;
+    }): Promise<readonly SourceControlSession[]> => {
+      const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+        factory_project_id: factoryProjectId,
+        integration_id: integrationId,
+      });
+      const linkIds = new Set<string>();
+      for (const connection of connections) {
+        for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+          connection_id: connection.id,
+        })) {
+          linkIds.add(link.id);
+        }
+      }
+      const where = { factory_project_id: factoryProjectId, org_id: orgId };
+      const sessions = await this.projectSessions.read({ orgId, factoryProjectId }, async () =>
+        (await db().findMany<SessionDbRow>(SESSIONS, where)).map(toSession),
+      );
+      return this.#linkedTo(sessions, linkIds);
     };
 
     const requireConnection = async (args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection> => {
@@ -1400,18 +1481,22 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const projectRepositories = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
             connection_id: id,
           });
+          const deleted: SessionDbRow[] = [];
           // Same cleanup as `projectRepositories.unlink`, for every link of the connection.
           for (const projectRepository of projectRepositories) {
-            for (const session of await db().findMany<SessionDbRow>(SESSIONS, {
+            const sessions = await db().findMany<SessionDbRow>(SESSIONS, {
               project_repository_id: projectRepository.id,
-            })) {
+            });
+            for (const session of sessions) {
               await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
             }
             await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: projectRepository.id });
             await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
+            deleted.push(...sessions);
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
           await db().deleteMany(CONNECTIONS, { id, integration_id: integrationId });
+          this.#announceSessions(deleted);
           linkedRepositoriesChanged();
           return true;
         },
@@ -1581,12 +1666,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return false;
-          for (const session of await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id })) {
+          const sessions = await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id });
+          for (const session of sessions) {
             await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
           }
           await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
+          this.#announceSessions(sessions);
           linkedRepositoriesChanged();
           return true;
         },
@@ -1608,29 +1695,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
-        listByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
-          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
-            factory_project_id: factoryProjectId,
-            integration_id: integrationId,
-          });
-          if (connections.length === 0) return [];
-          const linkIds = new Set<string>();
-          for (const connection of connections) {
-            for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
-              connection_id: connection.id,
-            })) {
-              linkIds.add(link.id);
-            }
-          }
-          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
-            factory_project_id: factoryProjectId,
-            org_id: orgId,
-          });
-          return rows
-            .filter(row => linkIds.has(row.project_repository_id))
-            .filter(row => row.visibility !== 'private' || row.user_id === viewerUserId)
-            .map(toSession);
-        },
+        listSharedByProject: linkedProjectSessions,
+        listByProject: async ({ viewerUserId, ...project }) =>
+          (await linkedProjectSessions(project)).filter(session => isSeenBy(session, viewerUserId)),
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
@@ -1644,16 +1711,18 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return rows.filter((_, index) => linked[index]).map(toSession);
         },
         rename: async ({ sessionId, title }) => {
-          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             title,
             updated_at: new Date(),
           }));
+          if (row) this.#announceSessions([row]);
         },
         setOriginMuted: async ({ sessionId, muted }) => {
-          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             origin_muted_at: muted ? new Date() : null,
             updated_at: new Date(),
           }));
+          if (row) this.#announceSessions([row]);
         },
         setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
           const row = await db().updateAtomic<SessionDbRow>(
@@ -1661,6 +1730,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { session_id: sessionId, user_id: expectedUserId },
             () => ({ visibility, updated_at: new Date() }),
           );
+          if (row) this.#announceSessions([row]);
           return row ? toSession(row) : null;
         },
         getForBranch: async args => {
@@ -1729,6 +1799,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_at: now,
               updated_at: now,
             });
+            this.#announceSessions([row]);
             return toSession(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1747,6 +1818,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
           let refusedPrivate = false;
+          let moved = false;
           try {
             const updated = await db().updateAtomic<SessionDbRow>(
               SESSIONS,
@@ -1757,10 +1829,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
                   refusedPrivate = true;
                   return null;
                 }
-                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
+                if (current.user_id === toUserId) return null;
+                moved = true;
+                return { user_id: toUserId, updated_at: new Date() };
               },
             );
             if (updated) {
+              if (moved) this.#announceSessions([updated]);
               return refusedPrivate
                 ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
                 : { status: 'updated', session: toSession(updated) };
@@ -1774,47 +1849,22 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
-          await db().updateMany(
-            SESSIONS,
-            { id },
-            { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() },
-          );
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id }, () => ({
+            sandbox_id: sandboxId,
+            sandbox_workdir: sandboxWorkdir,
+            updated_at: new Date(),
+          }));
+          if (row) this.#announceSessions([row]);
         },
-        markMaterialized: async ({ id }) => {
-          // `materialized_at: null` in the filter compiles to `IS NULL`, making
-          // this a write-once update: session resumes (idle-reap, checkpoint
-          // restore, sandbox recreate) match zero rows and cannot overwrite the
-          // initial-materialize timestamp that `materialize_s` is derived from.
-          await db().updateMany(
-            SESSIONS,
-            { id, materialized_at: null },
-            { materialized_at: new Date(), updated_at: new Date() },
-          );
-        },
-        markFirstMessage: async ({ sessionId }) => {
-          // `first_message_at: null` in the filter compiles to `IS NULL`, making
-          // this an atomic one-shot: concurrent callers and later messages
-          // match zero rows. Sessions without a source-control row (chat-only
-          // channels) are a zero-row no-op too.
-          await db().updateMany(
-            SESSIONS,
-            { session_id: sessionId, first_message_at: null },
-            { first_message_at: new Date(), updated_at: new Date() },
-          );
-        },
-        markFirstMeaningfulExec: async ({ sessionId }) => {
-          // Same atomic one-shot shape as markFirstMessage: the NULL filter
-          // makes concurrent callers and later execs zero-row no-ops.
-          await db().updateMany(
-            SESSIONS,
-            { session_id: sessionId, first_meaningful_exec_at: null },
-            { first_meaningful_exec_at: new Date(), updated_at: new Date() },
-          );
-        },
+        markMaterialized: ({ id }) => this.#stampOnce({ id }, 'materialized_at'),
+        markFirstMessage: ({ sessionId }) => this.#stampOnce({ session_id: sessionId }, 'first_message_at'),
+        markFirstMeaningfulExec: ({ sessionId }) =>
+          this.#stampOnce({ session_id: sessionId }, 'first_meaningful_exec_at'),
         delete: async id => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
-          if (row) await db().deleteMany(SESSION_REPOSITORIES, { session_id: row.session_id });
-          await db().deleteMany(SESSIONS, { id });
+          if (!row) return;
+          await db().deleteMany(SESSION_REPOSITORIES, { session_id: row.session_id });
+          if ((await db().deleteMany(SESSIONS, { id })) > 0) this.#announceSessions([row]);
         },
       },
       sessionRepositories: {

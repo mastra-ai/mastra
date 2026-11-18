@@ -24,7 +24,7 @@ export function MetricsKpiCardLabel({
       <Txt as="span" variant="subheading" tone="ink">
         {children}
       </Txt>
-      <span aria-hidden className="shrink-0 text-muted-foreground [&>svg]:size-4">
+      <span aria-hidden className="shrink-0 text-muted-foreground [&>svg]:size-icon-md">
         {icon}
       </span>
     </span>

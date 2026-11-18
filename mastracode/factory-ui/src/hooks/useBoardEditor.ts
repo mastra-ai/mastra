@@ -16,6 +16,11 @@ export class BoardRequestError extends Error {
     super(message);
     this.name = 'BoardRequestError';
   }
+
+  /** The server's own reasons when it lists them, its message otherwise. */
+  get reasons() {
+    return this.conflicts.length > 0 ? this.conflicts.join(' ') : this.message;
+  }
 }
 
 type BoardRefusal = { board?: unknown; error?: string; message?: string; conflicts?: string[] };
@@ -39,6 +44,8 @@ async function sendBoardRequest(
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     ...(init ? { body: JSON.stringify(init.body) } : {}),
+  }).catch(() => {
+    throw new BoardRequestError(0, undefined, 'Factory could not be reached.');
   });
   const body = (await res.json().catch(() => undefined)) as (Partial<StoredBoardResponse> & BoardRefusal) | undefined;
   if (!res.ok || !body?.board) throw refusal(res.status, body);

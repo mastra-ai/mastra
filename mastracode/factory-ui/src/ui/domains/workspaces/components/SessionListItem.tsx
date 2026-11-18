@@ -1,3 +1,4 @@
+import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -69,7 +70,7 @@ export function SessionListItem({
         factoryId,
         session: row.session,
         owner: row.owner,
-        item: row.item,
+        cardId: row.cardId,
         board: row.board,
         threadId: row.threadId,
         repository: row.repository,
@@ -84,7 +85,9 @@ export function SessionListItem({
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={
-        ownUserSession && !row.session.branch.startsWith('slack/') ? handleVisibilityChange : undefined
+        ownUserSession && !row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
+          ? handleVisibilityChange
+          : undefined
       }
       changingVisibility={changing}
       pullRequest={row.pullRequest}

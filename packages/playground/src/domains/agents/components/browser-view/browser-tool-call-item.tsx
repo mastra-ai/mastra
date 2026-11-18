@@ -147,10 +147,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <IconLoadingCircle className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
+      return <IconLoadingCircle className="size-icon-xs shrink-0 animate-spin text-muted-foreground" />;
     case 'complete':
-      return <IconCheckmark2Medium className="h-3 w-3 shrink-0 text-success-indicator" />;
+      return <IconCheckmark2Medium className="size-icon-xs shrink-0 text-success-indicator" />;
     case 'error':
-      return <IconCrossMedium className="h-3 w-3 shrink-0 text-destructive-foreground" />;
+      return <IconCrossMedium className="size-icon-xs shrink-0 text-destructive-foreground" />;
   }
 }
