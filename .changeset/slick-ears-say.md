@@ -84,6 +84,11 @@ import { ThreadTrace } from '@mastra/playground-ui/domains/traces/components/thr
 ```
 
 - `DataKeysAndValues.ValueButton`: a value drawn like `ValueLink` that acts through `onClick`.
+- `SpanDataPanelView`, `TracePanel.SpanDetail` and `ThreadTrace.SpanDetail` take `input` and `output` to replace those tabs. Studio's own parts load what a view draws only once it shows: `LiveSpanInput` (the tool registry, for a span that offered tools), `LiveSpanOutput` (the trace's spans and the live tool cards, for a span that called tools), `LiveTraceMessages` and `LiveTurnMessages` (the MCP app tools, once messages show). `useLiveToolCalls({ enabled })` takes the same switch.
+
+```tsx
+<TracePanel.SpanDetail span={selectedSpan} input={<LiveSpanInput />} output={<LiveSpanOutput />} />
+```
 
 `TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList` and `TraceScoresTab` keep their props.
 
@@ -107,7 +112,7 @@ import { ThreadTrace } from '@mastra/playground-ui/domains/traces/components/thr
 <MessageRow message={message} />;
 
 // After
-const { data: mcpAppTools } = useMcpAppTools();
+const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
 <MessageRow message={message} mcpAppTools={mcpAppTools} />;
 ```
 

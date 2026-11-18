@@ -40,6 +40,16 @@ export interface SpanDataPanelViewProps extends TraceToolCallsProps {
   feedbackTabBadge?: ReactNode;
   /** Where the span opens its tools, delegated agents and workflows; defaults to the navigation of the root around it. */
   navigation?: TraceNavigation;
+  /**
+   * Replaces the Input tab, e.g. with a part that loads the tool registry when the tab opens (Studio:
+   * `LiveSpanInput`). `registeredTools` is then unused.
+   */
+  input?: ReactNode;
+  /**
+   * Replaces the Output tab, e.g. with a part that loads the trace's spans when the tab opens (Studio:
+   * `LiveSpanOutput`). `traceSpans`, `mcpAppTools` and `renderToolCall` are then unused.
+   */
+  output?: ReactNode;
   /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
   className?: string;
 }
@@ -66,6 +76,8 @@ export function SpanDataPanelView({
   mcpAppTools,
   renderToolCall,
   navigation,
+  input,
+  output,
   className,
 }: SpanDataPanelViewProps) {
   return (
@@ -91,9 +103,11 @@ export function SpanDataPanelView({
         />
       }
       details={<SpanDataPanel.Details />}
-      input={<SpanDataPanel.Input registeredTools={registeredTools} />}
+      input={input ?? <SpanDataPanel.Input registeredTools={registeredTools} />}
       output={
-        <SpanDataPanel.Output traceSpans={traceSpans} mcpAppTools={mcpAppTools} renderToolCall={renderToolCall} />
+        output ?? (
+          <SpanDataPanel.Output traceSpans={traceSpans} mcpAppTools={mcpAppTools} renderToolCall={renderToolCall} />
+        )
       }
       feedback={span && feedbackTabSlot?.({ span, traceId, spanId })}
       feedbackCount={feedbackTabBadge}

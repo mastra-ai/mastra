@@ -1,11 +1,10 @@
 import { useScorers, useTriggerScorer } from '@mastra/react/hooks/scores';
-import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useThreadHasOtherTraces, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
-import { useLiveToolCalls } from '../hooks/use-live-tool-calls';
 import { useStudioTraceNavigation } from '../hooks/use-studio-trace-navigation';
+import { LiveSpanInput, LiveSpanOutput, LiveTraceMessages } from '@/domains/traces/components/live-parts';
 import type { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TracePanel } from '@/domains/traces/components/trace-panel';
 import type {
@@ -140,13 +139,9 @@ export function TraceSpanPanel({
   // Passive: the full trace backs the Messages column, the signal labels and the tool results, and is
   // shared with the list's export; the trace list drives its refreshes.
   const fullTrace = useTraceSpans({ traceId, passive: true, queryOptions: { enabled: !!traceId } });
-  // Tools only matter to an open span: its Input tab links the tools it offered to their pages.
-  const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpanId } });
   const scorers = useScorers();
   const triggerScorer = useTriggerScorer();
   const download = useDownloadTraceJson();
-  // Studio draws the trace's tool calls with the chat's live cards (workflow graph, MCP app UI).
-  const toolCalls = useLiveToolCalls();
 
   const rootSpan = getTraceRootSpan(spans, anchorSpanId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
@@ -208,12 +203,12 @@ export function TraceSpanPanel({
                 <TracePanel.Side
                   messages={
                     hasMessages && (
-                      <TracePanel.Messages
+                      // Loads the MCP app tools for the live tool cards once the messages show.
+                      <LiveTraceMessages
                         spans={fullTrace.data?.spans}
                         isLoading={fullTrace.isLoading}
                         error={fullTrace.error ?? undefined}
                         onHighlightSpans={onHighlightSpans}
-                        {...toolCalls}
                       />
                     )
                   }
@@ -246,13 +241,13 @@ export function TraceSpanPanel({
               <TracePanel.SpanDetail
                 span={selectedSpanDetail.data?.span}
                 isLoading={selectedSpanDetail.isLoading}
-                traceSpans={fullTrace.data?.spans}
-                registeredTools={registeredTools}
                 activeTab={spanActiveTab}
                 onTabChange={onSpanTabChange}
                 feedbackTabBadge={spanFeedbackTabBadge}
                 feedbackTabSlot={spanFeedbackTabSlot}
-                {...toolCalls}
+                // Each tab loads what it draws when it opens: the tool registry, the live tool cards.
+                input={<LiveSpanInput />}
+                output={<LiveSpanOutput />}
               />
             }
           />

@@ -19,6 +19,7 @@ import {
 } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
+import { recordRequests } from '@/test/record-requests';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom reports zero-sized elements; give them a real size so the virtualized
@@ -79,6 +80,7 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
     ),
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json({})),
   );
 };
 
@@ -120,6 +122,87 @@ const renderPanel = (
   );
 
 describe('TraceSpanPanel', () => {
+  // Each part loads what it draws when it shows, not when the panel mounts: the MCP app tools cost a
+  // request per MCP server, and the traces page keeps this panel mounted while it is closed.
+  describe('when it loads what a part needs', () => {
+    const MCP_APP_TOOLS = '/api/mcp/v0/servers';
+    const TOOL_REGISTRY = '/api/tools';
+    const settle = async (queryClient: { isFetching: () => number }) => {
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    };
+
+    it('loads no MCP app tools while the panel is closed', async () => {
+      installHandlers();
+      const requests = recordRequests();
+      const { queryClient } = renderPanel({ traceId: undefined });
+
+      await settle(queryClient);
+
+      expect(requests).not.toContain(MCP_APP_TOOLS);
+    });
+
+    it('loads no MCP app tools for a trace shown without its messages', async () => {
+      installHandlers();
+      const requests = recordRequests();
+      const { queryClient } = renderPanel();
+
+      await screen.findByLabelText('View details for span Root agent run');
+      await settle(queryClient);
+
+      expect(requests).not.toContain(MCP_APP_TOOLS);
+    });
+
+    it('loads the MCP app tools once the turn’s messages show', async () => {
+      installHandlers();
+      const requests = recordRequests();
+      renderPanel({ showPartialThread: true });
+
+      await screen.findByTestId('messages-panel');
+
+      await waitFor(() => expect(requests).toContain(MCP_APP_TOOLS));
+    });
+
+    /** The opened span offered the model a tool, as a model span records it. */
+    const offeringTools = () =>
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+          HttpResponse.json({
+            span: {
+              ...spanDetailById.child1.span,
+              attributes: { tools: [{ type: 'function', name: 'weatherInfo', description: 'Weather of a city.' }] },
+            },
+          }),
+        ),
+      );
+
+    it('loads the tool registry once the Input tab of a span that offered tools opens', async () => {
+      installHandlers();
+      offeringTools();
+      const requests = recordRequests();
+      const { queryClient } = renderPanel({ initialSpanId: 'child1' });
+
+      await screen.findByRole('region', { name: 'First tool call' });
+      await settle(queryClient);
+      expect(requests).not.toContain(TOOL_REGISTRY);
+
+      fireEvent.click(screen.getByRole('tab', { name: /^Input/ }));
+
+      await waitFor(() => expect(requests).toContain(TOOL_REGISTRY));
+    });
+
+    it('loads no tool registry for a span that offered no tools, even on its Input tab', async () => {
+      installHandlers();
+      const requests = recordRequests();
+      const { queryClient } = renderPanel({ initialSpanId: 'child1' });
+
+      await screen.findByRole('region', { name: 'First tool call' });
+      fireEvent.click(screen.getByRole('tab', { name: /^Input/ }));
+      await settle(queryClient);
+
+      expect(requests).not.toContain(TOOL_REGISTRY);
+    });
+  });
+
   describe('given partial thread is enabled for an agent trace with a thread id', () => {
     it('when rendered, then the Messages column shows the chat turn without any tab click', async () => {
       installHandlers();

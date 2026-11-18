@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { SpanRecord, TraceSpanRecord } from '../../types';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import type { RegisteredTools } from '../span-payload/span-tools-section';
@@ -12,6 +13,10 @@ export interface ThreadTraceSpanDetailProps extends TraceToolCallsProps {
   traceSpans?: TraceSpanRecord[];
   /** The tool registry (`listTools`), so offered tools link to their pages. */
   registeredTools?: RegisteredTools;
+  /** Replaces the Input tab (Studio: `LiveSpanInput`). */
+  input?: ReactNode;
+  /** Replaces the Output tab (Studio: `LiveSpanOutput`). */
+  output?: ReactNode;
   className?: string;
 }
 
@@ -26,6 +31,8 @@ export function ThreadTraceSpanDetail({
   registeredTools,
   mcpAppTools,
   renderToolCall,
+  input,
+  output,
   className,
 }: ThreadTraceSpanDetailProps) {
   const { selected, selectSpan } = useThreadTrace();
@@ -43,6 +50,8 @@ export function ThreadTraceSpanDetail({
       registeredTools={registeredTools}
       mcpAppTools={mcpAppTools}
       renderToolCall={renderToolCall}
+      input={input}
+      output={output}
       onClose={() => selectSpan(selected.traceId, undefined)}
     />
   );

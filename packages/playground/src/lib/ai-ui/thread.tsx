@@ -152,8 +152,9 @@ const ThreadContent = ({
     onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
   });
 
-  // The agent's MCP app tools: the rows group and draw their calls as apps.
-  const { data: mcpAppTools } = useMcpAppTools();
+  // The agent's MCP app tools: the rows group and draw their calls as apps. A request per MCP server,
+  // so only once there are messages to draw.
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
 
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');

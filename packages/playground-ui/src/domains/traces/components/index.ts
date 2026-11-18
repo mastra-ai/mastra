@@ -35,3 +35,4 @@ export * from './span-payload';
 export * from './span-data-panel';
 export { useTraceNavigation, type TraceNavigation } from './trace-navigation';
 export { type TraceToolCallsProps } from './trace-tool-calls';
+export { LiveSpanInput, LiveSpanOutput, LiveTraceMessages, LiveTurnMessages } from './live-parts';
