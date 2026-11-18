@@ -15,6 +15,8 @@ import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
+import { continuesTranscript } from './domains/chat/context/transcriptKey';
+import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
@@ -254,8 +256,8 @@ function CardDraftRedirect() {
   return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services);
+export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?: () => boolean): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services, holdsNavigation);
   const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch, shouldRevalidate?: ShouldRevalidateFunction) => ({
     element: <Page />,
     ...loadOnEntry(prefetch, Page, shouldRevalidate),
@@ -388,5 +390,18 @@ export function createAppRouter(
   services: RouteLoaderServices,
   createRouter: (routes: RouteObject[]) => DataRouter = createBrowserRouter,
 ) {
-  return createRouter(createAppRoutes(services));
+  // The first load's loaders can run inside `createRouter`, before `router` is assigned.
+  let router: DataRouter | undefined;
+  router = createRouter(createAppRoutes(services, () => holdsNavigation(router)));
+  return router;
+}
+
+/**
+ * Clicks never wait for a page's reads. A draft continuing into its thread keeps the page on
+ * screen, so it waits for the thread's header and panel rather than blanking them; one that
+ * hands its prompt over shows that prompt at once instead.
+ */
+function holdsNavigation(router: DataRouter | undefined): boolean {
+  const state: unknown = router?.state.navigation.location?.state;
+  return router?.state.initialized === true && continuesTranscript(state) && !opensWithPrompt(state);
 }

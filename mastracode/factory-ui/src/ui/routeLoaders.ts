@@ -55,14 +55,16 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void;
+/** Starts a page's reads. A prefetch may return the reads a held navigation waits for. */
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<unknown>;
 
 /**
- * Route loaders start a page's code and reads as the navigation begins, and never wait for them:
- * the page opens on the click and shows its own loading states while the reads it shares with
- * the loader answer.
+ * Route loaders start a page's code and reads as the navigation begins, and a click never waits
+ * for them: the page opens at once and shows its own loading states while the reads it shares
+ * with the loader answer. Only a navigation that keeps the page on screen (`holdsNavigation`),
+ * such as a draft continuing into its thread, waits for the reads its prefetch returns.
  */
-export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
+export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
   return function loadOnEntry(
     prefetch?: Prefetch,
     page?: Pick<LazyPageComponent, 'preload'>,
@@ -72,7 +74,8 @@ export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
-        prefetch?.(services, args);
+        const reads = prefetch?.(services, args);
+        return holdsNavigation?.() ? reads : undefined;
       },
       shouldRevalidate,
     };
@@ -212,8 +215,9 @@ const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
 
 /**
  * A session's frame (its card, board and PR subscriptions) and its first message window, all
- * read at once. The page opens before they answer: the header, panel and transcript fill in
- * from their own loading states.
+ * read at once. A click opens the page before they answer, and the header, panel and transcript
+ * fill in from their own loading states. A draft continuing into its thread waits for the frame
+ * (the returned reads), not the transcript, which it already shows.
  */
 export const prefetchSessionFrame: Prefetch = (services, { params, request }) => {
   const { queryClient, api } = services;
@@ -221,18 +225,23 @@ export const prefetchSessionFrame: Prefetch = (services, { params, request }) =>
   const sessionId = params.sessionId ?? threadId;
   if (!factoryId || !sessionId || !threadId) return;
   prefetchThreadHistory(services, request, params.sessionId, sessionId, threadId);
-  if (params.sessionId) {
-    void queryClient
-      .query({
-        ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
-        ...CACHED_UNLESS_INVALIDATED,
-      })
-      .catch(noop);
-    void queryClient
-      .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
-      .catch(noop);
-  }
-  prefetchSessionSubscriptions(services, factoryId, sessionId, threadId).catch(noop);
+  const cardReads = params.sessionId
+    ? [
+        queryClient
+          .query({
+            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...CACHED_UNLESS_INVALIDATED,
+          })
+          .catch(noop),
+        queryClient
+          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .catch(noop),
+      ]
+    : [];
+  return Promise.all([
+    ...cardReads,
+    prefetchSessionSubscriptions(services, factoryId, sessionId, threadId).catch(noop),
+  ]);
 };
 
 /**
