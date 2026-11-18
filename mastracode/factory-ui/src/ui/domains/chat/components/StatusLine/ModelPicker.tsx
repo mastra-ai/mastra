@@ -206,6 +206,14 @@ function LockedModelMenu({
   );
 }
 
+export function ModelPickerLoading() {
+  return (
+    <span role="status" aria-label="Loading model" className="h-control-sm flex items-center">
+      <Skeleton aria-hidden className="h-3.5 w-24 motion-reduce:before:animate-none" />
+    </span>
+  );
+}
+
 export function ModelPicker() {
   const modelSwitch = useModelSwitch();
   const { modelsQuery, activeModelId, selectedModelId, scopeLoading, switchable, busy } = modelSwitch;
@@ -215,13 +223,7 @@ export function ModelPicker() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useOrganizationScopedFactory();
 
-  if (!selectedModelId && (isLoading || status === 'connecting')) {
-    return (
-      <span role="status" aria-label="Loading model" className="h-control-sm flex items-center">
-        <Skeleton aria-hidden className="h-3.5 w-24 motion-reduce:before:animate-none" />
-      </span>
-    );
-  }
+  if (!selectedModelId && (isLoading || status === 'connecting')) return <ModelPickerLoading />;
   if (!selectedModelId && error) {
     return (
       <span className="text-destructive-foreground" aria-label="Model unavailable" title={error.message}>

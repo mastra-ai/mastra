@@ -8,6 +8,7 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -19,8 +20,7 @@ import {
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ModelCombobox } from './ModelCombobox';
-import { OM_FLOW, OM_ROWS, OMRow } from './OMRow';
-import { OMSectionSkeleton } from './OMSectionSkeleton';
+import { OMFlow } from './OMRow';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 type OMRole = 'observer' | 'reflector';
@@ -35,6 +35,35 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
   return 'auto';
+}
+
+const CONTROL_SKELETON = <Skeleton aria-hidden className="h-control-sm w-full motion-reduce:before:animate-none" />;
+
+function AttachmentsControl({
+  value,
+  disabled,
+  onValueChange,
+}: {
+  value: AttachmentChoice | undefined;
+  disabled: boolean;
+  onValueChange?: (choice: AttachmentChoice) => void;
+}) {
+  return (
+    <SegmentedControl<AttachmentChoice | ''>
+      aria-label="Observe attachments"
+      size="sm"
+      value={value ?? ''}
+      disabled={disabled}
+      inert={value === undefined}
+      onValueChange={choice => {
+        if (choice) onValueChange?.(choice);
+      }}
+    >
+      <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+      <SegmentedControlItem value="on">On</SegmentedControlItem>
+      <SegmentedControlItem value="off">Off</SegmentedControlItem>
+    </SegmentedControl>
+  );
 }
 
 // Stays editable while saving: disabling would drop focus mid-edit.
@@ -135,7 +164,19 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) return <OMSectionSkeleton />;
+  if (omQuery.isPending) {
+    return (
+      <div role="status" aria-label="Loading observational-memory settings">
+        <OMFlow
+          observeAfter={CONTROL_SKELETON}
+          observer={CONTROL_SKELETON}
+          reflectAfter={CONTROL_SKELETON}
+          reflector={CONTROL_SKELETON}
+          attachments={<AttachmentsControl value={undefined} disabled={false} />}
+        />
+      </div>
+    );
+  }
 
   if (omQuery.data === undefined) {
     return (
@@ -149,7 +190,6 @@ export function OMSection({
   const modelsAvailable =
     config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
 
-  const attachmentChoice = attachmentToChoice(config.observeAttachments);
   return (
     <div className="flex flex-col gap-4">
       {error && (
@@ -169,60 +209,51 @@ export function OMSection({
         </div>
       )}
 
-      <div className={OM_FLOW}>
-        <ol className="flex flex-col">
-          <OMRow as="li" {...OM_ROWS.messages} />
-          <OMRow as="li" {...OM_ROWS.observeAfter}>
-            <TokenThresholdInput
-              value={config.observationThreshold}
-              onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
-            />
-          </OMRow>
-          <OMRow as="li" {...OM_ROWS.observer}>
-            <ModelCombobox
-              models={models}
-              value={config.observer.model}
-              auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model"
-              aria-label="Observer model"
-              size="sm"
-              disabled={busy}
-              onValueChange={modelId => switchModel('observer', modelId)}
-            />
-          </OMRow>
-          <OMRow as="li" {...OM_ROWS.reflectAfter}>
-            <TokenThresholdInput
-              value={config.reflectionThreshold}
-              onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
-            />
-          </OMRow>
-          <OMRow as="li" {...OM_ROWS.reflector}>
-            <ModelCombobox
-              models={models}
-              value={config.reflector.model}
-              auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model"
-              aria-label="Reflector model"
-              size="sm"
-              disabled={busy}
-              onValueChange={modelId => switchModel('reflector', modelId)}
-            />
-          </OMRow>
-        </ol>
-        <OMRow {...OM_ROWS.attachments}>
-          <SegmentedControl
-            aria-label="Observe attachments"
+      <OMFlow
+        observeAfter={
+          <TokenThresholdInput
+            value={config.observationThreshold}
+            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+          />
+        }
+        observer={
+          <ModelCombobox
+            models={models}
+            value={config.observer.model}
+            auto={{ effectiveModelId: config.observer.effectiveModelId }}
+            placeholder="Select observer model"
+            aria-label="Observer model"
             size="sm"
-            value={attachmentChoice}
+            disabled={busy}
+            onValueChange={modelId => switchModel('observer', modelId)}
+          />
+        }
+        reflectAfter={
+          <TokenThresholdInput
+            value={config.reflectionThreshold}
+            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+          />
+        }
+        reflector={
+          <ModelCombobox
+            models={models}
+            value={config.reflector.model}
+            auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+            placeholder="Select reflector model"
+            aria-label="Reflector model"
+            size="sm"
+            disabled={busy}
+            onValueChange={modelId => switchModel('reflector', modelId)}
+          />
+        }
+        attachments={
+          <AttachmentsControl
+            value={attachmentToChoice(config.observeAttachments)}
             disabled={busy}
             onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-          >
-            <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
-            <SegmentedControlItem value="on">On</SegmentedControlItem>
-            <SegmentedControlItem value="off">Off</SegmentedControlItem>
-          </SegmentedControl>
-        </OMRow>
-      </div>
+          />
+        }
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ComponentProps } from 'react';
 
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
@@ -22,11 +22,8 @@ export function FactoryDefaultModelForm({ scope, lane }: FactoryDefaultModelForm
   if (catalog.isPending)
     return (
       <div role="status" aria-label="Loading models">
-        <div aria-hidden>
-          <Field>
-            <FieldLabel>{label}</FieldLabel>
-            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
-          </Field>
+        <div inert>
+          <DefaultModelField label={label} models={[]} value="" onValueChange={() => undefined} />
         </div>
       </div>
     );
@@ -46,15 +43,12 @@ export function FactoryDefaultModelForm({ scope, lane }: FactoryDefaultModelForm
 
   return (
     <div className="flex flex-col gap-3">
-      <Field>
-        <FieldLabel>{label}</FieldLabel>
-        <ModelCombobox
-          models={catalog.models}
-          value={lane.modelId ?? ''}
-          onValueChange={lane.pickModel}
-          placeholder="Select a default model"
-        />
-      </Field>
+      <DefaultModelField
+        label={label}
+        models={catalog.models}
+        value={lane.modelId ?? ''}
+        onValueChange={lane.pickModel}
+      />
       {lane.pickUnavailable && (
         <Txt variant="caption" role="alert">
           Your previous model is no longer available. Choose another model.
@@ -63,5 +57,19 @@ export function FactoryDefaultModelForm({ scope, lane }: FactoryDefaultModelForm
       {scope === 'org' && <SharedCredentialNotice modelId={lane.modelId} />}
       {connectedProvider?.connectWithMastraAccount && <MastraGatewayCreditsNotice />}
     </div>
+  );
+}
+
+function DefaultModelField({
+  label,
+  models,
+  value,
+  onValueChange,
+}: { label: string } & Pick<ComponentProps<typeof ModelCombobox>, 'models' | 'value' | 'onValueChange'>) {
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <ModelCombobox models={models} value={value} onValueChange={onValueChange} placeholder="Select a default model" />
+    </Field>
   );
 }

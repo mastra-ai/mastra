@@ -2,6 +2,18 @@ import { SettingsContainer, SettingsItem, SettingsItemIcon } from '@mastra/playg
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { ReactNode } from 'react';
 import type { IntakeConfig, IntakeSelection } from '../../factory/services/intake';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+
+export type IntakeProvider = 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta';
+
+const INTAKE_PROVIDER_NAMES: Record<IntakeProvider, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  linear: 'Linear',
+  jira: 'Jira',
+  incidentio: 'incident.io',
+  vanta: 'Vanta',
+};
 
 export interface IntakeSectionProps {
   config: IntakeConfig;
@@ -24,9 +36,32 @@ export function toggleSource(selection: IntakeSelection, id: string): IntakeSele
   return withSourceIds(selection, toggleSourceId(selection.sourceIds, id));
 }
 
+export function IntakeProviderSummary({
+  provider,
+  details,
+  children,
+}: {
+  provider: IntakeProvider;
+  details?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <SettingsItem
+      media={
+        <SettingsItemIcon>
+          <SettingsIntegrationIcon provider={provider} />
+        </SettingsItemIcon>
+      }
+      title={INTAKE_PROVIDER_NAMES[provider]}
+      description={details}
+    >
+      {children}
+    </SettingsItem>
+  );
+}
+
 export function IntakeProviderCard({
-  name,
-  icon,
+  provider,
   account,
   listed,
   description,
@@ -34,8 +69,7 @@ export function IntakeProviderCard({
   connection,
   children,
 }: {
-  name: string;
-  icon: ReactNode;
+  provider: IntakeProvider;
   account?: string;
   listed: boolean;
   description?: string;
@@ -46,17 +80,16 @@ export function IntakeProviderCard({
   const hasActions = Boolean(action || connection);
   const hasDetails = Boolean(account || description);
   const summary = (
-    <SettingsItem
-      media={<SettingsItemIcon>{icon}</SettingsItemIcon>}
-      title={name}
-      description={hasDetails ? <IntakeProviderDetails account={account} description={description} /> : undefined}
+    <IntakeProviderSummary
+      provider={provider}
+      details={hasDetails ? <IntakeProviderDetails account={account} description={description} /> : undefined}
     >
       {hasActions ? <IntakeProviderActions action={action} connection={connection} /> : undefined}
-    </SettingsItem>
+    </IntakeProviderSummary>
   );
   if (!listed) return summary;
   return (
-    <SettingsContainer role="region" aria-label={name}>
+    <SettingsContainer role="region" aria-label={INTAKE_PROVIDER_NAMES[provider]}>
       {summary}
       {children}
     </SettingsContainer>

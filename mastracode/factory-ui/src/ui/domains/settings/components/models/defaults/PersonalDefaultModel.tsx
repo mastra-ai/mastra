@@ -10,7 +10,13 @@ export function PersonalDefaultModel() {
   const modelsQuery = usePersonalAvailableModelsQuery();
   const fallbackModelQuery = useFallbackModelQuery({ scope: 'user' });
 
-  if (defaultModelQuery.isPending) return <PersonalDefaultModelSkeleton />;
+  if (defaultModelQuery.isPending) {
+    return (
+      <div role="status" aria-label="Loading your default model" className="min-w-0">
+        <PersonalDefaultModelSkeleton />
+      </div>
+    );
+  }
   if (defaultModelQuery.error) {
     return (
       <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">

@@ -19,14 +19,7 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '../domains/auth/services/auth';
-import {
-  HOSTED_SIGN_IN_BUTTON_CLASS,
-  SIGN_IN_DESCRIPTION_CLASS,
-  SIGN_IN_FORM_CLASS,
-  SIGN_IN_FORM_TOGGLE_CLASS,
-  SIGN_IN_HEADER_CLASS,
-  SignInLayout,
-} from '../domains/auth/components/SignInLayout';
+import { HOSTED_SIGN_IN_BUTTON_CLASS, SignInLayout } from '../domains/auth/components/SignInLayout';
 import { SignInContentSkeleton } from '../domains/auth/components/SignInSkeleton';
 import '../domains/auth/components/sign-in-page.css';
 
@@ -97,7 +90,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   };
 
   return (
-    <Form onSubmit={handleSubmit} className={SIGN_IN_FORM_CLASS}>
+    <Form onSubmit={handleSubmit} className="w-full gap-5">
       {mode === 'sign-up' ? (
         <Field>
           <FieldLabel>Name</FieldLabel>
@@ -152,7 +145,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           type="button"
           variant="ghost"
           size="sm"
-          className={SIGN_IN_FORM_TOGGLE_CLASS}
+          className="self-center"
           onClick={() => {
             setError(null);
             setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
@@ -166,6 +159,22 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         </Txt>
       )}
     </Form>
+  );
+}
+
+function CredentialSignIn({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
+  return (
+    <>
+      <div className="mb-6">
+        <Txt font="display" as="h2" variant="title">
+          Welcome back
+        </Txt>
+        <Txt as="p" variant="body" tone="muted" className="mt-2">
+          Sign in to continue building with your team.
+        </Txt>
+      </div>
+      <CredentialSignInForm returnTo={returnTo} signUpDisabled={signUpDisabled} />
+    </>
   );
 }
 
@@ -201,10 +210,11 @@ export function SignInPage() {
   return (
     <SignInLayout>
       {checking ? (
-        <SignInContentSkeleton
-          label="Checking sign-in"
-          credential={credentialForm ? { signUpDisabled: auth.data?.signUpDisabled === true } : undefined}
-        />
+        <SignInContentSkeleton label="Checking sign-in">
+          {credentialForm ? (
+            <CredentialSignIn returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
+          ) : null}
+        </SignInContentSkeleton>
       ) : (
         <>
           {authError && !customDomainBlocked ? (
@@ -232,17 +242,7 @@ export function SignInPage() {
           ) : customDomainBlocked ? (
             <CustomDomainAuthError hostname={window.location.hostname} />
           ) : credentialForm ? (
-            <>
-              <div className={SIGN_IN_HEADER_CLASS}>
-                <Txt font="display" as="h2" variant="title">
-                  Welcome back
-                </Txt>
-                <Txt as="p" variant="body" tone="muted" className={SIGN_IN_DESCRIPTION_CLASS}>
-                  Sign in to continue building with your team.
-                </Txt>
-              </div>
-              <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
-            </>
+            <CredentialSignIn returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
           ) : (
             <Button
               variant="primary"

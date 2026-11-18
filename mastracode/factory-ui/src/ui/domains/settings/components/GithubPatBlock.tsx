@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -10,7 +11,7 @@ import {
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
 import type { GithubPatKind } from '../../workspaces/services/github';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
@@ -37,9 +38,6 @@ export function GithubPatBlock() {
 function TokenRows() {
   const statusQuery = useGithubPatStatusQuery();
 
-  if (statusQuery.isPending) {
-    return <SettingsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
-  }
   if (statusQuery.error) {
     return (
       <SettingsRow label="GitHub CLI tokens" errorMsg={statusQuery.error.message}>
@@ -50,19 +48,20 @@ function TokenRows() {
     );
   }
 
+  const status = statusQuery.data;
   return (
     <>
       <TokenRow
         kind="default"
         title="Worker token"
         description="Used by every sandbox."
-        configured={statusQuery.data.configured === true}
+        configured={status && status.configured === true}
       />
       <TokenRow
         kind="reviewer"
         title="Reviewer token (optional)"
         description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
-        configured={statusQuery.data.reviewerConfigured === true}
+        configured={status && status.reviewerConfigured === true}
       />
     </>
   );
@@ -77,7 +76,7 @@ function TokenRow({
   kind: GithubPatKind;
   title: string;
   description: string;
-  configured: boolean;
+  configured: boolean | undefined;
 }) {
   const removeMutation = useRemoveGithubPatMutation(kind);
   const [editing, setEditing] = useState(false);
@@ -89,9 +88,13 @@ function TokenRow({
   const label = (
     <span className="flex items-center gap-2">
       {title}
-      <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
-        {configured ? 'Configured' : 'Not set'}
-      </Badge>
+      {configured === undefined ? (
+        <Skeleton aria-hidden className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
+      ) : (
+        <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
+          {configured ? 'Configured' : 'Not set'}
+        </Badge>
+      )}
     </span>
   );
 
@@ -101,27 +104,33 @@ function TokenRow({
 
   return (
     <SettingsRow label={label} description={description} errorMsg={removeMutation.error?.message}>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          ref={editButton}
-          size="sm"
-          icon={configured ? <IconPencil /> : <IconPlusMedium />}
-          disabled={removeMutation.isPending}
-          onClick={() => setEditing(true)}
-        >
-          {configured ? 'Update token' : 'Add token'}
-        </Button>
-        {configured && (
+      {configured === undefined ? (
+        <span role="status" aria-label={`Loading ${title}`}>
+          <Skeleton aria-hidden className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
+        </span>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
+            ref={editButton}
             size="sm"
-            icon={<TrashIcon />}
+            icon={configured ? <IconPencil /> : <IconPlusMedium />}
             disabled={removeMutation.isPending}
-            onClick={() => removeMutation.mutate()}
+            onClick={() => setEditing(true)}
           >
-            {removeMutation.isPending ? 'Removing…' : 'Remove'}
+            {configured ? 'Update token' : 'Add token'}
           </Button>
-        )}
-      </div>
+          {configured && (
+            <Button
+              size="sm"
+              icon={<TrashIcon />}
+              disabled={removeMutation.isPending}
+              onClick={() => removeMutation.mutate()}
+            >
+              {removeMutation.isPending ? 'Removing…' : 'Remove'}
+            </Button>
+          )}
+        </div>
+      )}
     </SettingsRow>
   );
 }

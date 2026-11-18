@@ -36,7 +36,7 @@ import type { RuleEvent } from '../ruleLanes';
 import { boardName, phaseName } from '../ruleTargets';
 import { ConditionChips } from './ConditionChips';
 import { RuleTarget } from './RuleTarget';
-import { LANE_CARD, LANE_FOOTER, LaneHeading } from './RuleLaneFrame';
+import { LaneCard, LaneFooter } from './RuleLaneFrame';
 
 /** The part of a rule the builder opens at: its conditions or its destination. */
 export type RuleFocus = 'conditions' | 'action';
@@ -105,12 +105,7 @@ export function RuleLane({
         : 'No rules: the card stays where it is');
 
   return (
-    <section
-      aria-label={text.label}
-      className={cn(LANE_CARD, !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100')}
-    >
-      <LaneHeading event={event} />
-
+    <LaneCard event={event} dimmed={!rules.length && !incoming}>
       <div className="flex min-w-0 flex-col">
         <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
           {rules.map((rule, index) => {
@@ -326,10 +321,10 @@ export function RuleLane({
           {!only && (
             <li className="flex flex-wrap items-center gap-3">
               {catchAll < 0 && (
-                <Txt as="span" variant="caption" tone="muted" className={LANE_FOOTER}>
+                <LaneFooter>
                   <CircleDashed className="size-icon-md shrink-0" aria-hidden />
                   {fallback}
-                </Txt>
+                </LaneFooter>
               )}
               {canEdit && (
                 <Button variant="ghost" size="sm" icon={<Plus />} onClick={onAdd}>
@@ -341,7 +336,7 @@ export function RuleLane({
         </ol>
         {incoming}
       </div>
-    </section>
+    </LaneCard>
   );
 }
 

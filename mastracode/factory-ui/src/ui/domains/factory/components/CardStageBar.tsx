@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
@@ -8,7 +9,6 @@ import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/typ
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useCardSessions } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
-import { ButtonSkeleton } from '../../../ui/ButtonSkeleton';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
 import { phaseName } from '../boardStages';
@@ -24,7 +24,6 @@ import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconC
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
 const neighbourLabelClass = 'hidden @2xl:inline';
-const PLACEHOLDER_STAGES = { previous: 'Intake', current: 'Triage', next: 'Planning' };
 
 export function CardStageBar({
   item,
@@ -150,19 +149,11 @@ export function CardStageBar({
 export function CardStageBarSkeleton() {
   return (
     <div role="status" aria-label="Loading card stage" className={headerCapsuleClass}>
-      <ButtonSkeleton variant="ghost" size="sm">
-        <IconChevronLeftMedium />
-        <span className={neighbourLabelClass}>{PLACEHOLDER_STAGES.previous}</span>
-      </ButtonSkeleton>
-      <ButtonSkeleton variant="subtle" size="sm">
-        <BoardStageIcon stage="triage" decorative />
-        <span>{PLACEHOLDER_STAGES.current}</span>
-        <IconChevronDownMedium />
-      </ButtonSkeleton>
-      <ButtonSkeleton variant="ghost" size="sm">
-        <span className={neighbourLabelClass}>{PLACEHOLDER_STAGES.next}</span>
-        <IconChevronRightMedium />
-      </ButtonSkeleton>
+      <div aria-hidden className="contents">
+        <Skeleton className="h-control-sm w-control-sm rounded-full motion-reduce:before:animate-none @2xl:w-24" />
+        <Skeleton className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
+        <Skeleton className="h-control-sm w-control-sm rounded-full motion-reduce:before:animate-none @2xl:w-24" />
+      </div>
     </div>
   );
 }

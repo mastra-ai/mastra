@@ -9,12 +9,6 @@ export type ConnectorAnchors = Record<ModelLane, RefObject<HTMLDivElement | null
 
 type ConnectorLayout = { width: number; y: Record<ModelLane | ModelDefaults, number | undefined> };
 
-export const ROUTING_MAP_GRID_CLASS =
-  'grid grid-cols-1 gap-3 @min-[38rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[38rem]:gap-0';
-export const ROUTING_LANES_COLUMN = 'flex flex-col gap-3 self-center';
-export const ROUTING_CONNECTOR_COLUMN = 'hidden h-full w-full overflow-visible @min-[38rem]:block';
-export const ROUTING_DEFAULTS_COLUMN = 'flex min-w-0 flex-col gap-3 self-start';
-
 export function createConnectorAnchors(): ConnectorAnchors {
   return {
     chats: createRef<HTMLDivElement>(),
@@ -45,13 +39,11 @@ function measureConnectorLayout(svg: SVGSVGElement, anchors: ConnectorAnchors): 
 
 /** Connector ends follow the cards they join, so they are measured rather than laid out in CSS. */
 export function RoutingMapLayout({
-  anchors,
-  routes,
+  connectors,
   lanes,
   defaults,
 }: {
-  anchors: ConnectorAnchors;
-  routes: Record<ModelLane, ModelDefaults>;
+  connectors?: { anchors: ConnectorAnchors; routes: Record<ModelLane, ModelDefaults> };
   lanes: ReactNode;
   defaults: ReactNode;
 }) {
@@ -59,10 +51,12 @@ export function RoutingMapLayout({
   const svgRef = useRef<SVGSVGElement>(null);
   const defaultsRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<ConnectorLayout>();
+  const anchors = connectors?.anchors;
+  const routes = connectors?.routes;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg || !anchors) return;
     const measure = () => setLayout(measureConnectorLayout(svg, anchors));
     measure();
     const observer = new ResizeObserver(measure);
@@ -74,12 +68,13 @@ export function RoutingMapLayout({
 
   return (
     <div className="@container">
-      <div className={ROUTING_MAP_GRID_CLASS}>
-        <div ref={lanesRef} className={ROUTING_LANES_COLUMN}>
+      <div className="grid grid-cols-1 gap-3 @min-[38rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[38rem]:gap-0">
+        <div ref={lanesRef} className="flex flex-col gap-3 self-center">
           {lanes}
         </div>
-        <svg ref={svgRef} aria-hidden="true" className={ROUTING_CONNECTOR_COLUMN}>
+        <svg ref={svgRef} aria-hidden="true" className="hidden h-full w-full overflow-visible @min-[38rem]:block">
           {layout &&
+            routes &&
             MODEL_LANES.map(lane => {
               const fromY = layout.y[lane];
               const toY = layout.y[routes[lane]];
@@ -98,7 +93,7 @@ export function RoutingMapLayout({
               );
             })}
         </svg>
-        <div ref={defaultsRef} className={ROUTING_DEFAULTS_COLUMN}>
+        <div ref={defaultsRef} className="flex min-w-0 flex-col gap-3 self-start">
           {defaults}
         </div>
       </div>

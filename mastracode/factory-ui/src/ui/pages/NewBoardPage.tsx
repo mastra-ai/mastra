@@ -17,7 +17,6 @@ import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { draftOf, keyFromName, keyProblem, starterBoard } from '../domains/boardConfig/boardDraft';
 import type { BoardDraft } from '../domains/boardConfig/boardDraft';
 import { IntakeNote } from '../domains/boardConfig/components/IntakeNote';
-import { NewBoardFormSkeleton } from '../domains/boardConfig/components/NewBoardFormSkeleton';
 import { orderedBoards } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
@@ -94,9 +93,7 @@ export function NewBoardPage() {
       }
     >
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        {access.isPending ? (
-          <NewBoardFormSkeleton />
-        ) : !access.data?.canEdit ? (
+        {!access.isPending && !access.data?.canEdit ? (
           <Notice variant="info">Only organization admins can create boards.</Notice>
         ) : (
           <form
@@ -176,7 +173,7 @@ export function NewBoardPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={pending || name.trim() === '' || invalidKey !== undefined}
+                disabled={access.isPending || pending || name.trim() === '' || invalidKey !== undefined}
               >
                 {create.isPending ? 'Creating…' : 'Create board'}
               </Button>

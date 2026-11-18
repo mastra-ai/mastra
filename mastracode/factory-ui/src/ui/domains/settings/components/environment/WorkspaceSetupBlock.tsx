@@ -1,3 +1,4 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 
@@ -23,8 +24,8 @@ export function WorkspaceSetupBlock({
   children?: ReactNode;
 }) {
   return (
-    <SettingsContainer>
-      <SettingsRow label="Working directory" description="Absolute path where repositories are cloned.">
+    <WorkspaceSetupRows
+      workdir={
         <CommittedInput
           label="Working directory"
           placeholder="/workspace"
@@ -32,8 +33,8 @@ export function WorkspaceSetupBlock({
           disabled={disabled}
           onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
         />
-      </SettingsRow>
-      <SettingsRow label="Setup command" description="Runs from the working directory once every repository is cloned.">
+      }
+      command={
         <CommittedInput
           label="Setup command"
           value={command ?? ''}
@@ -41,6 +42,39 @@ export function WorkspaceSetupBlock({
           disabled={disabled}
           onCommit={next => onSave({ workspaceSetupCommand: next || null })}
         />
+      }
+    >
+      {children}
+    </WorkspaceSetupRows>
+  );
+}
+
+const INPUT_SKELETON = <Skeleton aria-hidden className="h-control-sm w-full motion-reduce:before:animate-none" />;
+
+export function WorkspaceSetupSkeleton({ children }: { children: ReactNode }) {
+  return (
+    <WorkspaceSetupRows workdir={INPUT_SKELETON} command={INPUT_SKELETON}>
+      {children}
+    </WorkspaceSetupRows>
+  );
+}
+
+function WorkspaceSetupRows({
+  workdir,
+  command,
+  children,
+}: {
+  workdir: ReactNode;
+  command: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <SettingsContainer>
+      <SettingsRow label="Working directory" description="Absolute path where repositories are cloned.">
+        {workdir}
+      </SettingsRow>
+      <SettingsRow label="Setup command" description="Runs from the working directory once every repository is cloned.">
+        {command}
       </SettingsRow>
       {children}
     </SettingsContainer>

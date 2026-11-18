@@ -127,8 +127,7 @@ export function LinearIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="Linear"
-      icon={<SettingsIntegrationIcon provider="linear" />}
+      provider="linear"
       account={status?.workspace?.name ?? undefined}
       listed={listed}
       connection={linearConnection()}

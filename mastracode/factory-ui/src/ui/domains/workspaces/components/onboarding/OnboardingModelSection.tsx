@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
@@ -63,9 +64,7 @@ export function OnboardingModelSection({
   return (
     <>
       {!local && (
-        <OnboardingStepCard
-          section="accounts"
-          headerEnd={<SectionDetail>Who pays for model usage?</SectionDetail>}
+        <AccountsCard
           notice={
             setup.companyLocked && (
               <Notice variant="info">
@@ -95,7 +94,7 @@ export function OnboardingModelSection({
               }}
             />
           )}
-        </OnboardingStepCard>
+        </AccountsCard>
       )}
       <OnboardingStepCard
         section="model"
@@ -140,6 +139,39 @@ export function OnboardingModelSection({
         </Button>
       </OnboardingPageAction>
     </>
+  );
+}
+
+export function OnboardingModelSectionSkeleton() {
+  return (
+    <>
+      <AccountsCard>
+        <OnboardingChoiceRowsSkeleton label="Loading account options" rows={3} />
+      </AccountsCard>
+      <OnboardingStepCard
+        section="model"
+        headerEnd={<SkeletonText line="text-meta" className="w-40 motion-reduce:before:animate-none" />}
+      >
+        <LoadingInset label="Loading model providers" rows={1} />
+      </OnboardingStepCard>
+      <OnboardingPageAction>
+        <Button variant="primary" disabled>
+          <CreateFactoryLabel creating={false} />
+        </Button>
+      </OnboardingPageAction>
+    </>
+  );
+}
+
+function AccountsCard({ notice, children }: { notice?: ReactNode; children: ReactNode }) {
+  return (
+    <OnboardingStepCard
+      section="accounts"
+      headerEnd={<SectionDetail>Who pays for model usage?</SectionDetail>}
+      notice={notice}
+    >
+      {children}
+    </OnboardingStepCard>
   );
 }
 

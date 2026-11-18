@@ -5,9 +5,9 @@ import { Link, useParams } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
-import { IntegrationItem } from './IntegrationItem';
+import { IntegrationItem, IntegrationItemSkeleton } from './IntegrationItem';
 import { RetryRow } from './common/ConnectionStateRows';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -51,7 +51,7 @@ export function ConnectedAccountsSection() {
   };
 
   if (accountsQuery.isPending) {
-    return <SettingsSkeleton variant="item" label="Loading connected accounts" rows={1} />;
+    return <IntegrationItemSkeleton {...slack} label="Loading connected accounts" />;
   }
 
   if (accountsQuery.error) {

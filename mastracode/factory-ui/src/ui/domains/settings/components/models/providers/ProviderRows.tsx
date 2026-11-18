@@ -10,24 +10,32 @@ import type { ReactNode } from 'react';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-export const PROVIDER_ROWS = 'divide-border divide-y';
 export const CONNECTED_ROW = 'flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3';
 export const ROW_TITLE = 'flex min-w-0 flex-1 flex-col';
 
 export function ProviderRows({
   children,
-  addDisabled,
+  addDisabled = false,
+  addInert = false,
   onAdd,
 }: {
-  children: ReactNode;
-  addDisabled: boolean;
-  onAdd: () => void;
+  children?: ReactNode;
+  addDisabled?: boolean;
+  addInert?: boolean;
+  onAdd?: () => void;
 }) {
   return (
-    <ul className={PROVIDER_ROWS}>
+    <ul className="divide-border divide-y">
       {children}
       <li>
-        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-10 w-full justify-start"
+          disabled={addDisabled}
+          inert={addInert}
+          onClick={onAdd}
+        >
           <IconPlusMedium aria-hidden="true" />
           Add provider
         </Button>

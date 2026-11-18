@@ -1,7 +1,6 @@
 import { cardThreadSession } from '@mastra/factory/work-items/card-context-sessions';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
@@ -10,7 +9,7 @@ import { useEffect, useEffectEvent } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
-import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
+import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { SessionView } from '../domains/chat/components/SessionView';
 import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
@@ -21,7 +20,7 @@ import { useDraftCard } from '../domains/factory/hooks/useDraftCard';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { factoryHomePath } from '../domains/workspaces/services/factoryPaths';
-import { cardDraftActionsClass, cardDraftHintClass, cardDraftTitleClass } from './cardDraftLayout';
+import { CardDraftIntro } from './CardDraftIntro';
 import { CardDraftSkeleton } from './CardDraftSkeleton';
 
 export function CardDraftPage({ workItemId }: { workItemId: string }) {
@@ -94,20 +93,21 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       start={openedSession ? { ...draftStart, ready: false } : draftStart}
       openingSession={Boolean(openedSession)}
       emptyState={
-        <section className={emptyThreadClass} aria-labelledby="card-draft-title">
-          <Logo size="md" aria-label="Mastra Code" />
-          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className={cardDraftTitleClass}>
-            {item.title}
-          </Txt>
-          <Txt variant="body-sm" tone="muted" className={cardDraftHintClass}>
-            No session yet. Your first message starts one.
-          </Txt>
-          <div className={cardDraftActionsClass}>
-            {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
-            <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
-            {board && <CardDraftActions factory={factory} item={item} board={board} />}
-          </div>
-        </section>
+        <CardDraftIntro
+          titleId="card-draft-title"
+          title={
+            <Txt as="h2" variant="title" tone="ink" id="card-draft-title">
+              {item.title}
+            </Txt>
+          }
+          actions={
+            <>
+              {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
+              <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
+              {board && <CardDraftActions factory={factory} item={item} board={board} />}
+            </>
+          }
+        />
       }
     />
   );

@@ -15,7 +15,7 @@ import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
-import { CREATE_FACTORY_WIZARD, CreateFactoryPalette } from './CreateFactoryPalette';
+import { CreateFactoryPalette } from './CreateFactoryPalette';
 import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
 import { CreateFactoryWizardSkeleton } from './CreateFactoryWizardSkeleton';
 
@@ -94,69 +94,64 @@ export function CreateFactoryWizard() {
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className={CREATE_FACTORY_WIZARD}>
-      <CreateFactoryPalette
-        {...STEP_CHROME[step]}
-        step={step}
-        value={value}
-        onValueChange={nextValue => setTyped({ step, value: nextValue })}
-        onBack={
-          // Once the final commit has written any server state (a Factory row or
-          // a linked repository), stepping back would let the user pick a new
-          // name or repository while the retry still resumes the prior IDs, so
-          // the Back affordance is dropped until the wizard completes.
-          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
-            ? undefined
-            : () => {
-                setTyped(undefined);
-                void flow.back();
-              }
-        }
-        onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
-      >
-        {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
-        {step === 'vcs' && (
-          <CreateFactoryRepositoryRows
+    <CreateFactoryPalette
+      {...STEP_CHROME[step]}
+      step={step}
+      value={value}
+      onValueChange={nextValue => setTyped({ step, value: nextValue })}
+      onBack={
+        // Once the final commit has written any server state (a Factory row or
+        // a linked repository), stepping back would let the user pick a new
+        // name or repository while the retry still resumes the prior IDs, so
+        // the Back affordance is dropped until the wizard completes.
+        step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
+          ? undefined
+          : () => {
+              setTyped(undefined);
+              void flow.back();
+            }
+      }
+      onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
+    >
+      {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
+      {step === 'vcs' && (
+        <CreateFactoryRepositoryRows
+          query={value}
+          githubRedirecting={githubRedirecting}
+          onConnect={() => {
+            setGithubRedirecting(true);
+            flow.persistBeforeRedirect(factoryId);
+            connectGithub(baseUrl);
+          }}
+          onManageConnection={() => {
+            flow.persistBeforeRedirect(factoryId);
+            manageGithubConnection(baseUrl);
+          }}
+          onSelectRepository={repository => void flow.chooseRepository(repository)}
+        />
+      )}
+      {step === 'project-management' && (
+        <>
+          <CreateFactoryLinearRows
             query={value}
-            githubRedirecting={githubRedirecting}
             onConnect={() => {
-              setGithubRedirecting(true);
               flow.persistBeforeRedirect(factoryId);
-              connectGithub(baseUrl);
+              connectLinear(baseUrl);
             }}
-            onManageConnection={() => {
-              flow.persistBeforeRedirect(factoryId);
-              manageGithubConnection(baseUrl);
-            }}
-            onSelectRepository={repository => void flow.chooseRepository(repository)}
+            onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
+            onSkip={() => void flow.skipProjectManagement()}
           />
-        )}
-        {step === 'project-management' && (
-          <>
-            <CreateFactoryLinearRows
-              query={value}
-              onConnect={() => {
-                flow.persistBeforeRedirect(factoryId);
-                connectLinear(baseUrl);
-              }}
-              onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
-              onSkip={() => void flow.skipProjectManagement()}
-            />
-            <CreateFactoryJiraRows
-              query={value}
-              onSelectProject={projectId => void flow.chooseJiraProject(projectId)}
-            />
-          </>
-        )}
-        {step === 'model-provider' && (
-          <CreateFactoryModelStep
-            query={value}
-            savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
-            error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
-          />
-        )}
-      </CreateFactoryPalette>
-    </div>
+          <CreateFactoryJiraRows query={value} onSelectProject={projectId => void flow.chooseJiraProject(projectId)} />
+        </>
+      )}
+      {step === 'model-provider' && (
+        <CreateFactoryModelStep
+          query={value}
+          savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
+          error={createFactory.error ? errorMessage(createFactory.error) : undefined}
+          onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
+        />
+      )}
+    </CreateFactoryPalette>
   );
 }

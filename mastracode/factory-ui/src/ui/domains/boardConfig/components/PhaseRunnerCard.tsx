@@ -1,4 +1,5 @@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
@@ -14,7 +15,15 @@ import { boardConfigPath, boardSkillPath } from '../boardConfigPaths';
 import { Muted } from './PhaseTimeline';
 import { SkillBadges } from './skills/SkillBadges';
 
-export const RUNNER_CHIP = 'flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5';
+const RUNNER_CHIP = 'flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5';
+
+export function PhaseRunnerCardSkeleton() {
+  return (
+    <Skeleton className={cn(RUNNER_CHIP, 'w-28 border-transparent motion-reduce:before:animate-none')}>
+      <span>{'\u200b'}</span>
+    </Skeleton>
+  );
+}
 
 /**
  * The agent working a phase, as a chip naming its skill. Hovering or focusing it shows what the agent is told: the

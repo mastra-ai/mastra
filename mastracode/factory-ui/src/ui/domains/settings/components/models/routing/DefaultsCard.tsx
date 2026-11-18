@@ -19,9 +19,6 @@ import {
 } from './model-routes';
 import type { ModelDefaults } from './model-routes';
 
-export const DEFAULTS_CARD_HEADER = 'flex items-center gap-3';
-export const DEFAULTS_CARD_BODY = 'flex flex-col gap-4 pt-4';
-
 export function DefaultsCard({
   defaults,
   inUse,
@@ -43,7 +40,7 @@ export function DefaultsCard({
     <SettingsContainer>
       <section id={anchor} aria-label={MODEL_DEFAULTS_LABELS[defaults]} className="scroll-mt-4">
         <Collapsible open={inUse || expanded} onOpenChange={setExpanded}>
-          <header ref={anchorRef} className={DEFAULTS_CARD_HEADER}>
+          <header ref={anchorRef} className="flex items-center gap-3">
             <div className={cn('flex min-w-0 flex-1 items-center gap-3', !inUse && 'opacity-60')}>
               <IconTile icon={MODEL_DEFAULTS_ICONS[defaults]} className={MODEL_DEFAULTS_TONES[defaults]} />
               <div className="flex min-w-0 flex-col">
@@ -67,7 +64,7 @@ export function DefaultsCard({
               />
             )}
           </header>
-          <CollapsibleContent className={DEFAULTS_CARD_BODY}>
+          <CollapsibleContent className="flex flex-col gap-4 pt-4">
             <DefaultsCardFields model={model} providers={providers} />
           </CollapsibleContent>
         </Collapsible>
@@ -76,7 +73,7 @@ export function DefaultsCard({
   );
 }
 
-export function DefaultsCardFields({ model, providers }: { model: ReactNode; providers: ReactNode }) {
+function DefaultsCardFields({ model, providers }: { model: ReactNode; providers: ReactNode }) {
   return (
     <>
       <Field className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2">

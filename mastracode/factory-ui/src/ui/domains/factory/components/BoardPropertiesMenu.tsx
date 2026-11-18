@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { LucideIcon } from 'lucide-react';
 
@@ -24,6 +25,16 @@ const SORT_ICONS: Record<BoardSort, LucideIcon> = {
   'created-oldest': IconFilterAsc,
 };
 
+const PROPERTIES_LABEL = 'Board properties';
+
+export function BoardPropertiesMenuPlaceholder() {
+  return (
+    <Button variant="default" size="icon-sm" aria-label={PROPERTIES_LABEL}>
+      <IconFilter1 aria-hidden />
+    </Button>
+  );
+}
+
 export function BoardPropertiesMenu({
   view,
   fields,
@@ -43,7 +54,7 @@ export function BoardPropertiesMenu({
 
   return (
     <PropertiesMenu
-      label="Board properties"
+      label={PROPERTIES_LABEL}
       variant="default"
       icon={<IconFilter1 aria-hidden />}
       changedCount={changes.length}

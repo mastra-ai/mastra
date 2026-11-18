@@ -1,3 +1,4 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
@@ -10,7 +11,17 @@ import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-export const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
+const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
+
+export function PhaseMovesSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-wrap gap-1.5">
+      {Array.from({ length: 4 }, (_, index) => (
+        <Skeleton key={index} className={cn(TILE, 'w-24 border-transparent motion-reduce:before:animate-none')} />
+      ))}
+    </div>
+  );
+}
 
 /**
  * The board's phases in board order, the way the board lays them out, each showing whether cards in this phase can

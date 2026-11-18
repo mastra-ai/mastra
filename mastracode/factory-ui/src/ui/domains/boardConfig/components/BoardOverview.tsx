@@ -2,7 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
@@ -24,11 +24,25 @@ import { StartsToggle } from './StartsToggle';
  */
 const MAP_GUTTER = 'px-[max(0.75rem,calc((100cqw_-_42rem)/2_-_1.25rem))]';
 
-export const PHASE_MAP = cn('mx-auto flex w-max', MAP_GUTTER);
-export const PHASE_COLUMN =
-  'before:via-border-strong relative flex w-64 shrink-0 flex-col px-2 not-first:before:absolute not-first:before:inset-y-0 not-first:before:left-0 not-first:before:w-px not-first:before:bg-linear-to-b not-first:before:from-transparent not-first:before:to-transparent';
-export const PHASE_COLUMN_HEAD = 'flex items-center gap-2 px-3 pt-3 pb-1';
-export const PHASE_COLUMN_BODY = 'px-3 py-3';
+export function PhaseMap({ children, ...props }: ComponentProps<'ol'>) {
+  return (
+    <ol {...props} className={cn('mx-auto flex w-max', MAP_GUTTER)}>
+      {children}
+    </ol>
+  );
+}
+
+export function PhaseColumn({ label, head, children }: { label?: string; head: ReactNode; children: ReactNode }) {
+  return (
+    <li
+      aria-label={label}
+      className="before:via-border-strong relative flex w-64 shrink-0 flex-col px-2 not-first:before:absolute not-first:before:inset-y-0 not-first:before:left-0 not-first:before:w-px not-first:before:bg-linear-to-b not-first:before:from-transparent not-first:before:to-transparent"
+    >
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1">{head}</div>
+      <div className="px-3 py-3">{children}</div>
+    </li>
+  );
+}
 
 /**
  * A board as a map: its phases as columns, in board order, each reading top to bottom as a card's way through it:
@@ -88,13 +102,15 @@ export function BoardOverview({
           </Txt>
         </SettingsColumn>
       )}
-      <ol aria-label="Phases" className={PHASE_MAP}>
+      <PhaseMap aria-label="Phases">
         {phases.map(phase => {
           const kind = phaseIconKind(boardId, phase.kind);
           const arriving = flow?.into.get(phase.key) ?? [];
           return (
-            <li key={phase.key} aria-label={phase.name} className={PHASE_COLUMN}>
-              <div className={PHASE_COLUMN_HEAD}>
+            <PhaseColumn
+              key={phase.key}
+              label={phase.name}
+              head={
                 <Link
                   to={boardConfigPath(factoryId, boardId, phase.key)}
                   className="flex min-w-0 items-center gap-2 hover:underline focus-visible:underline focus-visible:outline-hidden"
@@ -104,49 +120,48 @@ export function BoardOverview({
                     {phase.name}
                   </Txt>
                 </Link>
-              </div>
-              <div className={PHASE_COLUMN_BODY}>
-                <PhaseWalkthrough
-                  boardId={boardId}
-                  phase={outlineOfStored(phase, phases)}
-                  phases={outlines}
-                  arrivals={
-                    <>
-                      {loading ? (
-                        <SkeletonText line="text-caption" className="w-20 motion-reduce:before:animate-none" />
-                      ) : flow ? (
-                        arriving.length > 0 ? (
-                          <RuleCountCard
-                            rules={arriving}
-                            title={`Rules that move cards into ${phase.name}`}
-                            to={boardRulesPath(factoryId, boardId, { into: phase.key })}
-                            boardId={boardId}
-                            boards={catalog.data}
-                          />
-                        ) : (
-                          <Muted>No rule moves cards here</Muted>
-                        )
+              }
+            >
+              <PhaseWalkthrough
+                boardId={boardId}
+                phase={outlineOfStored(phase, phases)}
+                phases={outlines}
+                arrivals={
+                  <>
+                    {loading ? (
+                      <SkeletonText line="text-caption" className="w-20 motion-reduce:before:animate-none" />
+                    ) : flow ? (
+                      arriving.length > 0 ? (
+                        <RuleCountCard
+                          rules={arriving}
+                          title={`Rules that move cards into ${phase.name}`}
+                          to={boardRulesPath(factoryId, boardId, { into: phase.key })}
+                          boardId={boardId}
+                          boards={catalog.data}
+                        />
                       ) : (
-                        <Muted>Rules didn’t load</Muted>
-                      )}
-                      {phase.key === start && <Muted>New cards start here</Muted>}
-                    </>
-                  }
-                  starts={
-                    <StartsToggle
-                      label={phase.name}
-                      autoStart={phase.autoStart ?? false}
-                      autoStartWhen={phase.autoStartWhen}
-                      onChange={onAutoStart && (on => onAutoStart(phase.key, on))}
-                    />
-                  }
-                  agent={<PhaseRunnerCard factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />}
-                />
-              </div>
-            </li>
+                        <Muted>No rule moves cards here</Muted>
+                      )
+                    ) : (
+                      <Muted>Rules didn’t load</Muted>
+                    )}
+                    {phase.key === start && <Muted>New cards start here</Muted>}
+                  </>
+                }
+                starts={
+                  <StartsToggle
+                    label={phase.name}
+                    autoStart={phase.autoStart ?? false}
+                    autoStartWhen={phase.autoStartWhen}
+                    onChange={onAutoStart && (on => onAutoStart(phase.key, on))}
+                  />
+                }
+                agent={<PhaseRunnerCard factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />}
+              />
+            </PhaseColumn>
           );
         })}
-      </ol>
+      </PhaseMap>
     </section>
   );
 }

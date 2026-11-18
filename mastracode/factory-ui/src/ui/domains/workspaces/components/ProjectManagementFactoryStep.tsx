@@ -1,13 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useWorkSourceConnections } from '../hooks/useWorkSourceConnections';
 import type { BoardSource } from '../hooks/useWorkSourceConnections';
 import type { SourceControlRepository } from '../services/github';
 import { repositoryHost } from '../services/sourceControlHosts';
 import { OnboardingCodeHostRow } from './onboarding/OnboardingCodeHostRow';
 import { OnboardingInset } from './onboarding/OnboardingInset';
-import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
-import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
+import {
+  OnboardingLinearConnection,
+  OnboardingLinearConnectionSkeleton,
+} from './onboarding/OnboardingLinearConnection';
+import {
+  OnboardingPlatformConnection,
+  OnboardingPlatformConnectionSkeleton,
+} from './onboarding/OnboardingPlatformConnection';
 import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 
 export interface ProjectManagementFactoryStepProps {
@@ -41,13 +49,7 @@ export function ProjectManagementFactoryStep({
     </div>
   );
   return (
-    <OnboardingStepCard
-      section="project-management"
-      headerEnd={
-        <Txt variant="meta" tone="muted">
-          Where new issues come from
-        </Txt>
-      }
+    <ProjectManagementStepCard
       note={anyConnected ? 'You’ll choose which issues to bring in after setup' : undefined}
       primary={
         <Button variant={anyConnected ? 'primary' : 'ghost'} onClick={onContinue}>
@@ -55,18 +57,65 @@ export function ProjectManagementFactoryStep({
         </Button>
       }
     >
-      <OnboardingInset>
-        {codeHost}
-        <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
-          <OnboardingLinearConnection onConnect={onConnect} />
+      {codeHost}
+      <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
+        <OnboardingLinearConnection onConnect={onConnect} />
+      </div>
+      <div onMouseEnter={() => onPreviewSource?.('jira')} onFocus={() => onPreviewSource?.('jira')}>
+        <OnboardingPlatformConnection provider="jira" />
+      </div>
+      <div onMouseEnter={() => onPreviewSource?.('incident-io')} onFocus={() => onPreviewSource?.('incident-io')}>
+        <OnboardingPlatformConnection provider="incident-io" />
+      </div>
+    </ProjectManagementStepCard>
+  );
+}
+
+export function ProjectManagementFactoryStepSkeleton({
+  repository,
+  codeHostSync,
+}: Pick<ProjectManagementFactoryStepProps, 'repository' | 'codeHostSync'>) {
+  return (
+    <ProjectManagementStepCard
+      primary={<Skeleton aria-hidden className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />}
+    >
+      {repository && (
+        <div inert>
+          <OnboardingCodeHostRow
+            repository={repository}
+            enabled={codeHostSync !== false}
+            onEnabledChange={() => undefined}
+          />
         </div>
-        <div onMouseEnter={() => onPreviewSource?.('jira')} onFocus={() => onPreviewSource?.('jira')}>
-          <OnboardingPlatformConnection provider="jira" />
-        </div>
-        <div onMouseEnter={() => onPreviewSource?.('incident-io')} onFocus={() => onPreviewSource?.('incident-io')}>
-          <OnboardingPlatformConnection provider="incident-io" />
-        </div>
-      </OnboardingInset>
+      )}
+      <OnboardingLinearConnectionSkeleton />
+      <OnboardingPlatformConnectionSkeleton provider="jira" />
+      <OnboardingPlatformConnectionSkeleton provider="incident-io" />
+    </ProjectManagementStepCard>
+  );
+}
+
+function ProjectManagementStepCard({
+  note,
+  primary,
+  children,
+}: {
+  note?: string;
+  primary: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <OnboardingStepCard
+      section="project-management"
+      headerEnd={
+        <Txt variant="meta" tone="muted">
+          Where new issues come from
+        </Txt>
+      }
+      note={note}
+      primary={primary}
+    >
+      <OnboardingInset>{children}</OnboardingInset>
     </OnboardingStepCard>
   );
 }

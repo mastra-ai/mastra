@@ -38,8 +38,7 @@ export function GithubIntakeSection({
   const unavailable = statusQuery.isError || status?.reason === 'unavailable';
   return (
     <IntakeProviderCard
-      name="GitHub"
-      icon={<SettingsIntegrationIcon provider="github" />}
+      provider="github"
       account={status?.installations.map(installation => installation.accountLogin).join(', ')}
       listed={listed}
       connection={listed ? connected && <GithubManageButton /> : status?.enabled === true && <GithubConnectButton />}

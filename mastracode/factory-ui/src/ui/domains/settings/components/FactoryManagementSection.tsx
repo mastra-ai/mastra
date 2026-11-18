@@ -1,15 +1,12 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import {
-  SettingsContainer,
-  SettingsNoticeRow,
-  SettingsRow,
-  SettingsSkeleton,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 
 import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -31,11 +28,14 @@ export function FactoryManagementSection() {
     return (
       <>
         <EnvironmentSection factoryId={factoryId} />
-        <SettingsSubsection scope="factory" title="Danger zone">
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading Factory settings" rows={1} />
-          </SettingsContainer>
-        </SettingsSubsection>
+        <DangerZone
+          name={
+            <span role="status" aria-label="Loading Factory settings" className="inline-block align-middle">
+              <SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />
+            </span>
+          }
+          action={deleteButton({ inert: true })}
+        />
       </>
     );
   }
@@ -43,46 +43,66 @@ export function FactoryManagementSection() {
   return (
     <>
       <EnvironmentSection factoryId={factory.id} />
-      <SettingsSubsection scope="factory" title="Danger zone">
-        <SettingsContainer>
-          <SettingsRow label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
-            <AlertDialog>
-              <AlertDialog.Trigger
-                render={
-                  <Button
-                    size="sm"
-                    variant="destructive-ghost"
-                    disabled={deleteMutation.isPending}
-                    aria-label={`Delete ${factory.name}`}
-                  >
-                    <TrashIcon />
-                    Delete
-                  </Button>
-                }
-              />
-              <AlertDialog.Content>
-                <AlertDialog.Header>
-                  <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
-                  <AlertDialog.Description>
-                    This deletes the Factory and unlinks its repositories. It cannot be undone.
-                  </AlertDialog.Description>
-                </AlertDialog.Header>
-                <AlertDialog.Footer>
-                  <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                  <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
-                </AlertDialog.Footer>
-              </AlertDialog.Content>
-            </AlertDialog>
-          </SettingsRow>
-          {deleteMutation.isError && (
-            <SettingsNoticeRow>
-              <Notice variant="destructive">
-                {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
-              </Notice>
-            </SettingsNoticeRow>
-          )}
-        </SettingsContainer>
-      </SettingsSubsection>
+      <DangerZone
+        name={factory.name}
+        action={
+          <AlertDialog>
+            <AlertDialog.Trigger
+              render={deleteButton({ disabled: deleteMutation.isPending, label: `Delete ${factory.name}` })}
+            />
+            <AlertDialog.Content>
+              <AlertDialog.Header>
+                <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
+                <AlertDialog.Description>
+                  This deletes the Factory and unlinks its repositories. It cannot be undone.
+                </AlertDialog.Description>
+              </AlertDialog.Header>
+              <AlertDialog.Footer>
+                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
+              </AlertDialog.Footer>
+            </AlertDialog.Content>
+          </AlertDialog>
+        }
+      >
+        {deleteMutation.isError && (
+          <SettingsNoticeRow>
+            <Notice variant="destructive">
+              {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
+            </Notice>
+          </SettingsNoticeRow>
+        )}
+      </DangerZone>
     </>
+  );
+}
+
+function DangerZone({ name, action, children }: { name: ReactNode; action: ReactNode; children?: ReactNode }) {
+  return (
+    <SettingsSubsection scope="factory" title="Danger zone">
+      <SettingsContainer>
+        <SettingsRow label={<>Delete {name}</>} description="Also unlinks its repositories.">
+          {action}
+        </SettingsRow>
+        {children}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
+function deleteButton({
+  disabled = false,
+  inert = false,
+  label,
+}: {
+  disabled?: boolean;
+  inert?: boolean;
+  label?: string;
+}) {
+  return (
+    <Button size="sm" variant="destructive-ghost" disabled={disabled} inert={inert} aria-label={label}>
+      <TrashIcon />
+      Delete
+    </Button>
   );
 }

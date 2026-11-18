@@ -5,7 +5,7 @@ import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRig
 import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
 import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 import type { InstalledPhaseInfo, StoredPhaseInfo } from '../../../../api/types';
 import { nextPhasesOf } from '../boardDraft';
@@ -32,6 +32,48 @@ export function outlineOfInstalled(phase: InstalledPhaseInfo): PhaseOutline {
   return { ...phase, key: phase.id, name: phase.name ?? phase.title, runs: Boolean(phase.skill) };
 }
 
+export function WalkthroughSteps({
+  label,
+  arrivals,
+  starts,
+  workIcon,
+  work,
+  ends,
+  next,
+}: {
+  label?: string;
+  arrivals: ReactNode;
+  starts?: ReactNode;
+  workIcon: ComponentType<{ className?: string }>;
+  work: ReactNode;
+  ends?: ReactNode;
+  next: ReactNode;
+}) {
+  return (
+    <ol aria-label={label} className="flex flex-col">
+      <Step label="In" icon={IconArrowInbox}>
+        {arrivals}
+      </Step>
+      {starts !== undefined && (
+        <Step label="Starts" icon={IconPlay}>
+          {starts}
+        </Step>
+      )}
+      <Step label="Work" icon={workIcon}>
+        {work}
+      </Step>
+      {ends !== undefined && (
+        <Step label="Ends with" icon={IconFlag2}>
+          {ends}
+        </Step>
+      )}
+      <Step label="Next" icon={IconArrowRight}>
+        {next}
+      </Step>
+    </ol>
+  );
+}
+
 /**
  * A card's way through a phase, top to bottom: how it gets in, how the work starts, who does it, how it ends and where
  * the card can go next. The Overview and the board's column headers both read a phase this way; each brings what it
@@ -54,17 +96,13 @@ export function PhaseWalkthrough({
 }) {
   const idle = unattended(phase.kind);
   return (
-    <ol aria-label={`${phase.name}, step by step`} className="flex flex-col">
-      <Step label="In" icon={IconArrowInbox}>
-        {arrivals}
-      </Step>
-      {phase.runs && (
-        <Step label="Starts" icon={IconPlay}>
-          {starts}
-        </Step>
-      )}
-      <Step label="Work" icon={phase.runs ? IconRobot : idle.icon}>
-        {phase.runs ? (
+    <WalkthroughSteps
+      label={`${phase.name}, step by step`}
+      arrivals={arrivals}
+      starts={phase.runs ? starts : undefined}
+      workIcon={phase.runs ? IconRobot : idle.icon}
+      work={
+        phase.runs ? (
           <>
             {agent}
             {phase.tools?.map(id => (
@@ -73,19 +111,19 @@ export function PhaseWalkthrough({
           </>
         ) : (
           <Muted>{idle.text}</Muted>
-        )}
-      </Step>
-      {phase.exitTool && (
-        <Step label="Ends with" icon={IconFlag2}>
-          <Txt as="span" variant="caption" tone="ink" className="truncate">
-            {phase.exitTool.id}
-          </Txt>
-          <Muted>{approvalText(phase.exitTool)}</Muted>
-        </Step>
-      )}
-      <Step label="Next" icon={IconArrowRight}>
-        <NextPhases boardId={boardId} next={phase.nextPhases ?? []} phases={phases} />
-      </Step>
-    </ol>
+        )
+      }
+      ends={
+        phase.exitTool ? (
+          <>
+            <Txt as="span" variant="caption" tone="ink" className="truncate">
+              {phase.exitTool.id}
+            </Txt>
+            <Muted>{approvalText(phase.exitTool)}</Muted>
+          </>
+        ) : undefined
+      }
+      next={<NextPhases boardId={boardId} next={phase.nextPhases ?? []} phases={phases} />}
+    />
   );
 }

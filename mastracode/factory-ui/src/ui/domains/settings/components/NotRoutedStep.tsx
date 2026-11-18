@@ -12,37 +12,44 @@ import { useNotRoutedQuery, useRouteAgain } from '../../../../hooks/useIntakeOrd
 import { NOT_ROUTED_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { IntakeTesterDialog } from '../../intake/IntakeTesterDialog';
 
-const NOT_ROUTED_SECTION = 'flex scroll-mt-4 flex-col gap-3 px-3.5 pt-3 pb-3.5';
-
-function NotRoutedSummary({ summary }: { summary: ReactNode }) {
+function NotRoutedFrame({ summary, children }: { summary: ReactNode; children?: ReactNode }) {
   return (
-    <SettingsItem
-      media={
-        <SettingsItemIcon>
-          <CircleDashed />
-        </SettingsItemIcon>
-      }
-      title={
-        <span className="flex items-center gap-1">
-          Not routed
-          <InfoTooltip aria-label="When an item is not routed">
-            A new issue or pull request ends up here when no board’s rules take it. Change a board’s rules, then route
-            it again.
-          </InfoTooltip>
-        </span>
-      }
-      description={summary}
-    />
+    <section
+      id={NOT_ROUTED_ANCHOR}
+      aria-label="Not routed"
+      className="flex scroll-mt-4 flex-col gap-3 px-3.5 pt-3 pb-3.5"
+    >
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            <CircleDashed />
+          </SettingsItemIcon>
+        }
+        title={
+          <span className="flex items-center gap-1">
+            Not routed
+            <InfoTooltip aria-label="When an item is not routed">
+              A new issue or pull request ends up here when no board’s rules take it. Change a board’s rules, then route
+              it again.
+            </InfoTooltip>
+          </span>
+        }
+        description={summary}
+      />
+      {children}
+    </section>
   );
 }
 
 export function NotRoutedStepSkeleton() {
   return (
-    <div aria-hidden inert className={NOT_ROUTED_SECTION}>
-      <NotRoutedSummary
-        summary={<SkeletonText line="text-caption" className="w-48 motion-reduce:before:animate-none" />}
-      />
-    </div>
+    <NotRoutedFrame
+      summary={
+        <span aria-hidden>
+          <SkeletonText line="text-caption" className="w-48 motion-reduce:before:animate-none" />
+        </span>
+      }
+    />
   );
 }
 
@@ -80,8 +87,7 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
   );
 
   return (
-    <section id={NOT_ROUTED_ANCHOR} aria-label="Not routed" className={NOT_ROUTED_SECTION}>
-      <NotRoutedSummary summary={summary} />
+    <NotRoutedFrame summary={summary}>
       {(items.length > 0 || query.hasNextPage) && (
         <ul aria-label="Items not routed" className="ml-11 flex flex-col">
           {items.map(item => (
@@ -132,7 +138,7 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
           )}
         </ul>
       )}
-    </section>
+    </NotRoutedFrame>
   );
 }
 

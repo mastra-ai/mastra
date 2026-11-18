@@ -1,8 +1,10 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 
 import type { VoiceChoice, VoiceSettingsResponse } from '../../../../../api/types';
 import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
@@ -67,7 +69,13 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
   };
 
   return (
-    <SettingsContainer>
+    <VoiceModelRows
+      inUse={
+        <Txt as="span" variant="caption">
+          {inUseLabel(settings)}
+        </Txt>
+      }
+    >
       <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
         <Select value={selectedValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
           <SelectTrigger size="sm" aria-label={row.picker}>
@@ -83,11 +91,41 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
           </SelectContent>
         </Select>
       </SettingsRow>
+    </VoiceModelRows>
+  );
+}
+
+function VoiceModelRows({ inUse, children }: { inUse: ReactNode; children: ReactNode }) {
+  return (
+    <SettingsContainer>
+      {children}
       <SettingsItem title="In use for you" description="What the mic uses right now">
-        <Txt as="span" variant="caption">
-          {inUseLabel(settings)}
-        </Txt>
+        {inUse}
       </SettingsItem>
     </SettingsContainer>
+  );
+}
+
+export function VoiceModelSettingsSkeleton() {
+  return (
+    <div role="status" aria-label="Loading voice input">
+      <VoiceModelRows
+        inUse={
+          <span aria-hidden>
+            <SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />
+          </span>
+        }
+      >
+        <SettingsRow
+          aria-hidden
+          label={<SkeletonText line="text-label" className="w-28 motion-reduce:before:animate-none" />}
+          description={
+            <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
+          }
+        >
+          <Skeleton className="h-control-sm w-28 max-w-full rounded-full motion-reduce:before:animate-none" />
+        </SettingsRow>
+      </VoiceModelRows>
+    </div>
   );
 }

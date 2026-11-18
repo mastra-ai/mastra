@@ -93,8 +93,7 @@ export function VantaIntakeSection({
 
   return (
     <IntakeProviderCard
-      name="Vanta"
-      icon={<SettingsIntegrationIcon provider="vanta" />}
+      provider="vanta"
       account={connections.map(connectionName).join(', ')}
       listed={listed}
       description={description}

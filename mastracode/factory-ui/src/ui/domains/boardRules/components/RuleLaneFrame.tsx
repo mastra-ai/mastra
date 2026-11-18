@@ -1,14 +1,12 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 import { isOpenedLane, laneText } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { GithubOnlyBadge } from './GithubOnlyBadge';
 
-export const LANE_CARD = 'flex flex-col gap-3 rounded-xl border border-border bg-card p-4';
-export const LANE_FOOTER = 'flex flex-1 items-center gap-2.5 px-3 py-1.5';
-
-export function LaneHeading({ event }: { event: RuleEvent }) {
+function LaneHeading({ event }: { event: RuleEvent }) {
   const text = laneText(event);
   const Icon = text.icon;
   return (
@@ -26,6 +24,37 @@ export function LaneHeading({ event }: { event: RuleEvent }) {
         </Txt>
       )}
     </div>
+  );
+}
+
+export function LaneCard({
+  event,
+  dimmed = false,
+  children,
+}: {
+  event: RuleEvent;
+  dimmed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-label={laneText(event).label}
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border border-border bg-card p-4',
+        dimmed && 'opacity-60 focus-within:opacity-100 hover:opacity-100',
+      )}
+    >
+      <LaneHeading event={event} />
+      {children}
+    </section>
+  );
+}
+
+export function LaneFooter({ children }: { children: ReactNode }) {
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+      {children}
+    </Txt>
   );
 }
 

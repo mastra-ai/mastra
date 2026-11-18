@@ -3,10 +3,6 @@ import type { ReactNode } from 'react';
 
 import { FactoryHalftoneField } from './FactoryHalftoneField';
 
-export const SIGN_IN_HEADER_CLASS = 'mb-6';
-export const SIGN_IN_DESCRIPTION_CLASS = 'mt-2';
-export const SIGN_IN_FORM_CLASS = 'w-full gap-5';
-export const SIGN_IN_FORM_TOGGLE_CLASS = 'self-center';
 export const HOSTED_SIGN_IN_BUTTON_CLASS = 'w-80 max-w-full';
 
 export function SignInLayout({ children }: { children: ReactNode }) {

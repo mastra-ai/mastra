@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo } from '../../../../../api/types';
 import { useFactorySkillEditMutation } from '../../../../../hooks/useFactorySkills';
@@ -13,7 +14,9 @@ import { SkillBadges } from './SkillBadges';
 import { SkillDescription } from './SkillDescription';
 import { SkillInstructions } from './SkillInstructions';
 
-export const SKILL_TOOLBAR = 'flex min-h-8 flex-wrap items-center gap-2 empty:hidden';
+export function SkillToolbar({ children }: { children: ReactNode }) {
+  return <div className="flex min-h-8 flex-wrap items-center gap-2 empty:hidden">{children}</div>;
+}
 
 export function SkillEditor({
   factoryId,
@@ -72,7 +75,7 @@ export function SkillEditor({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
-        <div className={SKILL_TOOLBAR}>
+        <SkillToolbar>
           <SkillBadges skill={skill} />
           {(!canEdit || revertable || deletable) && (
             <div className="ml-auto flex items-center gap-1">
@@ -99,7 +102,7 @@ export function SkillEditor({
               )}
             </div>
           )}
-        </div>
+        </SkillToolbar>
         {confirmingDelete && (
           <Notice
             variant="warning"

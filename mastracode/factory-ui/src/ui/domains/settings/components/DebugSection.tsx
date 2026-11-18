@@ -1,8 +1,9 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsItem } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
@@ -20,6 +21,15 @@ function VersionValue({ children }: { children: string }) {
     <Txt tone="muted" as="span" variant="caption" font="mono" className="truncate tabular-nums">
       {children}
     </Txt>
+  );
+}
+
+function VersionsList({ packages, nodeVersion }: { packages: ReactNode; nodeVersion: ReactNode }) {
+  return (
+    <SettingsContainer>
+      {packages}
+      <SettingsItem title="Node.js">{nodeVersion}</SettingsItem>
+    </SettingsContainer>
   );
 }
 
@@ -48,7 +58,16 @@ export function DebugSection() {
       }
     >
       {query.isPending ? (
-        <DebugSectionSkeleton />
+        <div role="status" aria-label="Loading versions">
+          <VersionsList
+            packages={<DebugSectionSkeleton />}
+            nodeVersion={
+              <span aria-hidden>
+                <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />
+              </span>
+            }
+          />
+        </div>
       ) : query.isError ? (
         <SettingsContainer>
           <RetryRow label="Versions" errorMsg="Couldn't load versions." onRetry={() => void query.refetch()} />
@@ -61,16 +80,14 @@ export function DebugSection() {
               one.
             </Txt>
           )}
-          <SettingsContainer>
-            {query.data.packages.map(({ name, version }) => (
+          <VersionsList
+            packages={query.data.packages.map(({ name, version }) => (
               <SettingsItem key={name} title={name}>
                 <VersionValue>{version}</VersionValue>
               </SettingsItem>
             ))}
-            <SettingsItem title="Node.js">
-              <VersionValue>{query.data.nodeVersion}</VersionValue>
-            </SettingsItem>
-          </SettingsContainer>
+            nodeVersion={<VersionValue>{query.data.nodeVersion}</VersionValue>}
+          />
         </>
       )}
     </SettingsSubsection>

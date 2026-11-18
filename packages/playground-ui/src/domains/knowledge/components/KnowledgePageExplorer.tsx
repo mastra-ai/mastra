@@ -1,8 +1,8 @@
+import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import { flushSync } from 'react-dom';
 
-import { KNOWLEDGE_EXPLORER_VIEWS } from '../lib/explorerViews';
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
@@ -40,6 +40,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
@@ -777,7 +778,13 @@ function linkLists(pageId: string, { edges, pages }: KnowledgeExplorerPageLinks)
   return { out: side('fromPageId', 'toPageId'), in: side('toPageId', 'fromPageId') };
 }
 
-function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {
+export function KnowledgeSearchBox({
+  source,
+  onSelect,
+}: {
+  source: KnowledgeExplorerSource;
+  onSelect: (pageId: string) => void;
+}) {
   const [query, setQuery] = useState('');
   const search = source.useSearch(query);
   const results = query.trim().length >= MIN_SEARCH_LENGTH ? (search.data?.results ?? []) : [];
@@ -827,6 +834,65 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
         </div>
       ) : null}
     </div>
+  );
+}
+
+const VIEWS: ReadonlyArray<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly: boolean }> = [
+  { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
+  { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
+  { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
+];
+
+export function KnowledgeExplorerToolbar({
+  tabsRef,
+  view: requestedView,
+  selectedPageId,
+  onViewChange,
+  search,
+  end,
+  flush = false,
+}: {
+  tabsRef?: Ref<HTMLDivElement>;
+  view: KnowledgeExplorerView;
+  selectedPageId: string | null;
+  onViewChange: (view: KnowledgeExplorerView) => void;
+  search: ReactNode;
+  end?: ReactNode;
+  flush?: boolean;
+}) {
+  const narrow = useIsMobile(1024);
+  const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
+  const tabValue = explorerTab(view, view === 'page' && !!selectedPageId);
+  return (
+    <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
+      <ActionRow.Start>
+        <Tabs<KnowledgeExplorerView>
+          ref={tabsRef}
+          value={tabValue}
+          defaultTab={tabValue}
+          onValueChange={next => onViewChange(next)}
+          aria-label="View"
+        >
+          <TabList variant="pill-ghost" size="sm">
+            {VIEWS.map(option => (
+              <Tab
+                key={option.value}
+                value={option.value}
+                disabled={option.value === 'page' && !selectedPageId}
+                className={option.narrowOnly ? 'lg:hidden' : undefined}
+              >
+                <Icon size="xs">{option.icon}</Icon>
+                <Txt variant="caption" className="text-inherit">
+                  {option.label}
+                </Txt>
+              </Tab>
+            ))}
+          </TabList>
+        </Tabs>
+        {search}
+      </ActionRow.Start>
+      {end ? <ActionRow.End>{end}</ActionRow.End> : null}
+    </ActionRow>
   );
 }
 
@@ -1255,7 +1321,6 @@ export function KnowledgePageExplorer({
   // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
-  const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
@@ -1357,35 +1422,15 @@ export function KnowledgePageExplorer({
   return (
     <KnowledgePagesByRef.Provider value={fetchedPages}>
       <div className={`flex min-h-0 flex-1 flex-col ${flush ? '' : 'gap-2'}`}>
-        <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
-          <ActionRow.Start>
-            <Tabs<KnowledgeExplorerView>
-              ref={viewTabs}
-              value={tabValue}
-              defaultTab={tabValue}
-              onValueChange={next => onViewChange(next)}
-              aria-label="View"
-            >
-              <TabList variant="pill-ghost" size="sm">
-                {KNOWLEDGE_EXPLORER_VIEWS.map(option => (
-                  <Tab
-                    key={option.value}
-                    value={option.value}
-                    disabled={option.value === 'page' && !selectedPageId}
-                    className={option.narrowOnly ? 'lg:hidden' : undefined}
-                  >
-                    <Icon size="xs">{option.icon}</Icon>
-                    <Txt variant="caption" className="text-inherit">
-                      {option.label}
-                    </Txt>
-                  </Tab>
-                ))}
-              </TabList>
-            </Tabs>
-            <SearchBox source={source} onSelect={selectFromSearch} />
-          </ActionRow.Start>
-          {toolbarEnd ? <ActionRow.End>{toolbarEnd}</ActionRow.End> : null}
-        </ActionRow>
+        <KnowledgeExplorerToolbar
+          tabsRef={viewTabs}
+          view={requestedView}
+          selectedPageId={selectedPageId}
+          onViewChange={onViewChange}
+          search={<KnowledgeSearchBox source={source} onSelect={selectFromSearch} />}
+          end={toolbarEnd}
+          flush={flush}
+        />
         {!lazyMode && graph.truncated && !showPage ? (
           <Txt variant="caption" tone="muted" className={flush ? 'px-3 pt-2' : undefined}>
             The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.

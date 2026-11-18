@@ -15,7 +15,7 @@ import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
-import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
+import { WorkspaceSetupBlock, WorkspaceSetupSkeleton } from './environment/WorkspaceSetupBlock';
 import { useEnvironmentSave } from './environment/useEnvironmentSave';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -60,9 +60,9 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
             <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
           </WorkspaceSetupBlock>
         ) : (
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading environment" rows={4} />
-          </SettingsContainer>
+          <WorkspaceSetupSkeleton>
+            <SettingsSkeleton label="Loading environment" rows={2} />
+          </WorkspaceSetupSkeleton>
         )}
       </SettingsSubsection>
       <SettingsSubsection

@@ -1,7 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
@@ -69,14 +71,22 @@ export function AccountSettingsSection() {
 
 const PROFILE_DESCRIPTION = 'Your signed-in identity for this MastraCode deployment.';
 
+const ACCOUNT_VALUE_SKELETON = (
+  <span aria-hidden>
+    <SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />
+  </span>
+);
+
 function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }) {
   if (auth.isPending) {
     return (
-      <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading your account" rows={4} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <ProfileItems
+        name={ACCOUNT_VALUE_SKELETON}
+        email={ACCOUNT_VALUE_SKELETON}
+        authentication={ACCOUNT_VALUE_SKELETON}
+      >
+        <SettingsSkeleton label="Loading your account" rows={2} />
+      </ProfileItems>
     );
   }
 
@@ -96,27 +106,49 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
   const user = state.user;
 
   return (
+    <ProfileItems
+      name={<AccountValue>{user?.name ?? 'Not provided'}</AccountValue>}
+      email={<AccountValue>{user?.email ?? 'Not provided'}</AccountValue>}
+      authentication={<AccountValue>{authProviderLabel(state.provider)}</AccountValue>}
+    >
+      {user?.userId && (
+        <SettingsItem title="Account ID" description="Useful when contacting support.">
+          <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
+        </SettingsItem>
+      )}
+      {user?.organizationId && (
+        <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
+          <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
+        </SettingsItem>
+      )}
+    </ProfileItems>
+  );
+}
+
+function ProfileItems({
+  name,
+  email,
+  authentication,
+  children,
+}: {
+  name: ReactNode;
+  email: ReactNode;
+  authentication: ReactNode;
+  children: ReactNode;
+}) {
+  return (
     <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
       <SettingsContainer>
         <SettingsItem title="Name" description="From your sign-in provider.">
-          <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
+          {name}
         </SettingsItem>
         <SettingsItem title="Email" description="From your sign-in provider.">
-          <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
+          {email}
         </SettingsItem>
         <SettingsItem title="Authentication" description="How you signed in.">
-          <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
+          {authentication}
         </SettingsItem>
-        {user?.userId && (
-          <SettingsItem title="Account ID" description="Useful when contacting support.">
-            <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
-          </SettingsItem>
-        )}
-        {user?.organizationId && (
-          <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
-            <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
-          </SettingsItem>
-        )}
+        {children}
       </SettingsContainer>
     </SettingsSubsection>
   );

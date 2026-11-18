@@ -49,8 +49,7 @@ export function JiraIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="Jira"
-      icon={<SettingsIntegrationIcon provider="jira" />}
+      provider="jira"
       account={account}
       listed={listed}
       connection={

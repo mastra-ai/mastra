@@ -1,7 +1,11 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import {
+  KnowledgeExplorerToolbar,
+  KnowledgePageExplorer,
+  KnowledgeSearchBox,
+} from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
   KnowledgeExplorerView,
@@ -88,6 +92,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
         label="Loading knowledge"
         view={view}
         pageOpen={view === 'page' && selectedPageId !== null}
+        toolbar={
+          <KnowledgeExplorerToolbar
+            view={view}
+            selectedPageId={selectedPageId}
+            onViewChange={next => update({ view: next })}
+            search={<KnowledgeSearchBox source={source} onSelect={pageId => update({ page: pageId })} />}
+          />
+        }
       />
     );
   }

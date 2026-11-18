@@ -17,7 +17,7 @@ const RAIL_MARKS: Record<RailMark, ReactNode> = {
   none: null,
 };
 
-export const OM_ROWS = {
+const OM_ROWS = {
   messages: { rail: 'node', label: 'Messages' },
   observeAfter: { rail: 'edge', label: 'Observe after', info: 'Message tokens processed before the observer runs.' },
   observer: { rail: 'node', label: 'Observer', info: 'Summarizes the conversation into observations.' },
@@ -35,7 +35,40 @@ export const OM_ROWS = {
   },
 } satisfies Record<string, { rail: RailMark } & Omit<OMRowCellsProps, 'children'>>;
 
-export const OM_FLOW = '@container flex flex-col gap-3';
+export function OMFlow({
+  observeAfter,
+  observer,
+  reflectAfter,
+  reflector,
+  attachments,
+}: {
+  observeAfter: ReactNode;
+  observer: ReactNode;
+  reflectAfter: ReactNode;
+  reflector: ReactNode;
+  attachments: ReactNode;
+}) {
+  return (
+    <div className="@container flex flex-col gap-3">
+      <ol className="flex flex-col">
+        <OMRow as="li" {...OM_ROWS.messages} />
+        <OMRow as="li" {...OM_ROWS.observeAfter}>
+          {observeAfter}
+        </OMRow>
+        <OMRow as="li" {...OM_ROWS.observer}>
+          {observer}
+        </OMRow>
+        <OMRow as="li" {...OM_ROWS.reflectAfter}>
+          {reflectAfter}
+        </OMRow>
+        <OMRow as="li" {...OM_ROWS.reflector}>
+          {reflector}
+        </OMRow>
+      </ol>
+      <OMRow {...OM_ROWS.attachments}>{attachments}</OMRow>
+    </div>
+  );
+}
 
 type OMRowCellsProps = {
   label: string;
@@ -44,7 +77,7 @@ type OMRowCellsProps = {
   children?: ReactNode;
 };
 
-export function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
+function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
   return (
     <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
       <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">

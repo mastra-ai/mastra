@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components/SavedViews';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
@@ -13,16 +14,14 @@ import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
 import { BoardPropertiesMenu } from './BoardPropertiesMenu';
-import {
-  BOARD_DEFAULT_VIEW_LABEL,
-  BOARD_SEARCH_CLASS,
-  BOARD_VIEW_TABS_CLASS,
-  BoardViewControlsLayout,
-} from './BoardViewControlsLayout';
+import { BoardViewControlsLayout } from './BoardViewControlsLayout';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconLayersThree } from '@mastra/playground-ui/icons/central/IconLayersThree';
 import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
+const DEFAULT_VIEW_LABEL = 'All cards';
+const VIEWS_LABEL = 'Board views';
 
 function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
   return (
@@ -32,6 +31,71 @@ function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
         <Metadata.Item>{BOARD_SORT_LABELS[settings.sort]}</Metadata.Item>
       </Metadata>
     </Txt>
+  );
+}
+
+export function BoardDefaultViewTabs({ selected }: { selected: boolean }) {
+  return (
+    <div role="group" aria-label={VIEWS_LABEL} className="flex flex-wrap items-center gap-1.5">
+      <Button variant={selected ? 'subtle' : 'default'} size="sm" aria-pressed={selected}>
+        {DEFAULT_VIEW_LABEL}
+      </Button>
+      <Button size="icon-sm" tooltip="New view">
+        <IconLayersThree />
+      </Button>
+    </div>
+  );
+}
+
+export function BoardLayoutToggle({
+  value,
+  onValueChange,
+}: {
+  value: BoardLayout;
+  onValueChange?: (next: BoardLayout) => void;
+}) {
+  return (
+    <SegmentedControl
+      aria-label="Layout"
+      size="sm"
+      iconOnly
+      value={value}
+      onValueChange={next => onValueChange?.(next)}
+    >
+      <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
+        <IconListBullets aria-hidden />
+      </SegmentedControlItem>
+      <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
+        <IconKanbanView aria-hidden />
+      </SegmentedControlItem>
+    </SegmentedControl>
+  );
+}
+
+export function BoardSearchInput({
+  value,
+  inView,
+  onValueChange,
+}: {
+  value: string;
+  inView: boolean;
+  onValueChange?: (next: string) => void;
+}) {
+  return (
+    <SearchInput
+      label="Search cards"
+      placeholder={inView ? 'Search this view' : 'Search cards'}
+      value={value}
+      onValueChange={next => onValueChange?.(next)}
+      size="sm"
+      className="w-48 max-w-full max-sm:min-w-0 max-sm:flex-1"
+      onKeyDown={event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onValueChange?.('');
+        }
+      }}
+    />
   );
 }
 
@@ -48,7 +112,7 @@ export function BoardViewControls({
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
   currentUserId?: string;
-  aside?: ReactNode;
+  aside: ReactNode;
 }) {
   const { savedViews } = view;
   const { connectedSources, linearProjects } = useBoardFilterSources();
@@ -64,45 +128,24 @@ export function BoardViewControls({
 
   return (
     <BoardViewControlsLayout
-      views={
-        <>
-          <SavedViewTabs
-            aria-label="Board views"
-            className={BOARD_VIEW_TABS_CLASS}
-            views={savedViews}
-            fields={fields}
-            operators={BOARD_FILTER_OPERATORS}
-            defaultLabel={BOARD_DEFAULT_VIEW_LABEL}
-            newViewSettings={view.newViewSettings}
-            describeSettings={settings => <ViewSettingsSummary settings={settings} />}
-          />
-          <div className="flex shrink-0 items-center gap-2">
-            <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
-              <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
-                <IconListBullets aria-hidden />
-              </SegmentedControlItem>
-              <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
-                <IconKanbanView aria-hidden />
-              </SegmentedControlItem>
-            </SegmentedControl>
-            <BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />
-          </div>
-        </>
+      tabs={
+        <SavedViewTabs
+          aria-label={VIEWS_LABEL}
+          views={savedViews}
+          fields={fields}
+          operators={BOARD_FILTER_OPERATORS}
+          defaultLabel={DEFAULT_VIEW_LABEL}
+          newViewSettings={view.newViewSettings}
+          describeSettings={settings => <ViewSettingsSummary settings={settings} />}
+        />
       }
+      layoutToggle={<BoardLayoutToggle value={view.layout} onValueChange={view.setLayout} />}
+      properties={<BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />}
       search={
-        <SearchInput
-          label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view' : 'Search cards'}
+        <BoardSearchInput
           value={view.search}
+          inView={savedViews.applied !== undefined}
           onValueChange={view.setSearch}
-          size="sm"
-          className={BOARD_SEARCH_CLASS}
-          onKeyDown={event => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              view.setSearch('');
-            }
-          }}
         />
       }
       aside={aside}

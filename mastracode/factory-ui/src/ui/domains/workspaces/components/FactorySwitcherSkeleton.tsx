@@ -4,10 +4,12 @@ import { FACTORY_SWITCHER_TRIGGER, FactoryNameSkeleton, FactorySwitcherTriggerCo
 
 export function FactorySwitcherSkeleton() {
   return (
-    <Button variant="ghost" size="sm" disabled aria-hidden tabIndex={-1} className={FACTORY_SWITCHER_TRIGGER}>
-      <FactorySwitcherTriggerContent>
-        <FactoryNameSkeleton />
-      </FactorySwitcherTriggerContent>
-    </Button>
+    <div inert className="contents">
+      <Button type="button" variant="ghost" size="sm" aria-label="Select factory" className={FACTORY_SWITCHER_TRIGGER}>
+        <FactorySwitcherTriggerContent>
+          <FactoryNameSkeleton />
+        </FactorySwitcherTriggerContent>
+      </Button>
+    </div>
   );
 }

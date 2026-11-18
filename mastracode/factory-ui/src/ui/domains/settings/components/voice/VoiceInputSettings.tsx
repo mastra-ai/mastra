@@ -1,4 +1,3 @@
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
@@ -7,15 +6,7 @@ import { useVoiceSettings } from '../../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
 import { SpeechToTextKeys, SpeechToTextKeysSkeleton } from './SpeechToTextKeys';
 import { VoiceInputLayout } from './VoiceInputLayout';
-import { VoiceModelSettings } from './VoiceModelSettings';
-
-function SectionSkeleton() {
-  return (
-    <SettingsContainer>
-      <SettingsSkeleton label="Loading voice input" rows={2} />
-    </SettingsContainer>
-  );
-}
+import { VoiceModelSettings, VoiceModelSettingsSkeleton } from './VoiceModelSettings';
 
 export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
   const settingsQuery = useVoiceSettings(factoryId);
@@ -47,7 +38,7 @@ export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
       <VoiceInputLayout
         anchorRef={anchorRef}
         scope={undefined}
-        models={<SectionSkeleton />}
+        models={<VoiceModelSettingsSkeleton />}
         keys={<SpeechToTextKeysSkeleton />}
       />
     );

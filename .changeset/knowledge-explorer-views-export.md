@@ -2,17 +2,18 @@
 '@mastra/playground-ui': patch
 ---
 
-Exported `KNOWLEDGE_EXPLORER_VIEWS` from `@mastra/playground-ui/domains/knowledge/lib/explorerViews`: the view choices `KnowledgePageExplorer` offers (Tree, Graph, Page), so a host's loading placeholder can show the same tabs.
+Exported `KnowledgeExplorerToolbar` and `KnowledgeSearchBox` from `@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer`: the view tabs and search that `KnowledgePageExplorer` shows above its panes, so a host can show the same working toolbar while the knowledge graph loads.
 
 ```tsx
-import { KNOWLEDGE_EXPLORER_VIEWS } from '@mastra/playground-ui/domains/knowledge/lib/explorerViews';
+import {
+  KnowledgeExplorerToolbar,
+  KnowledgeSearchBox,
+} from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 
-export function ExplorerTabsPlaceholder() {
-  return KNOWLEDGE_EXPLORER_VIEWS.map(({ value, label, icon }) => (
-    <span key={value} aria-hidden>
-      {icon}
-      {label}
-    </span>
-  ));
-}
+<KnowledgeExplorerToolbar
+  view={view}
+  selectedPageId={selectedPageId}
+  onViewChange={setView}
+  search={<KnowledgeSearchBox source={source} onSelect={setSelectedPageId} />}
+/>;
 ```

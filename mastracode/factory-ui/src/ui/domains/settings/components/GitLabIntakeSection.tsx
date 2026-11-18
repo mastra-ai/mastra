@@ -48,8 +48,7 @@ export function GitLabIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="GitLab"
-      icon={<SettingsIntegrationIcon provider="gitlab" />}
+      provider="gitlab"
       account={status?.accounts?.join(', ')}
       listed={listed}
       connection={

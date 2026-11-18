@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,7 +7,18 @@ import type { CardRule } from '../boardDraft';
 import { startsText } from '../phaseSummary';
 import { Muted } from './PhaseTimeline';
 
-export const STARTS_ROW = 'flex items-center gap-3';
+const STARTS_ROW = 'flex items-center gap-3';
+
+export function StartsToggleSkeleton() {
+  return (
+    <div className={STARTS_ROW}>
+      <span className="min-w-0 flex-1">
+        <SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />
+      </span>
+      <Skeleton className="h-5 w-9 shrink-0 rounded-full motion-reduce:before:animate-none" />
+    </div>
+  );
+}
 
 /**
  * How a phase starts, with a switch to start it on its own when `onChange` is given. Turning it off drops the cards it
