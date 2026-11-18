@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../../src/*"],
+      "@mastra/playground-ui/components/*": ["../../src/ds/components/*"],
+      "@mastra/playground-ui/new/*": ["../../src/ds/new/*"],
+      "@mastra/playground-ui/icons/*": ["../../src/ds/icons/*"],
+      "@mastra/playground-ui/utils/*": ["../../src/utils/*"],
+      "@mastra/playground-ui/domains/*": ["../../src/domains/*"]
+    }
+  },
+  "include": ["pages/**/*.ts", "pages/**/*.tsx", "../../src/vite-env.d.ts"]
+}

@@ -10,6 +10,7 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 - use `e2e-tests-studio` skill — only when MSW cannot model the journey
 - use `react-best-practices` skill
 - use `mastra-frontend` and `tailwind-v4` skills
+- read `design/README.md` and the rule files it routes to
 
 ## Testing Priority (highest first)
 
