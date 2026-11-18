@@ -250,7 +250,6 @@ describe('PlatformGithubIntegration in connect mode', () => {
       {
         method: 'POST',
         path: '/v2/connections/conn-github/github/installation-token',
-        query: new URLSearchParams(),
         body: {
           repositories: ['app'],
           permissions: {

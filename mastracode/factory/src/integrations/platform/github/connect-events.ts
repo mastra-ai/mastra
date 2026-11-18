@@ -24,9 +24,10 @@ export interface ConnectGithubEventsConfig {
 }
 
 /**
- * Handles `factory-github` webhooks, for orgs that switched to the Mastra
- * Factory apps. Events from before an org's switch are the legacy GitHub
- * App's; events the platform couldn't verify are never acted on.
+ * Handles `factory-github` webhooks from the `connect` topic, for orgs that
+ * switched to the Mastra Factory apps. Events from before an org's switch are
+ * the `github-app` topic's; events the platform couldn't verify are never
+ * acted on.
  */
 export function connectGithubEventHandler(
   config: ConnectGithubEventsConfig,

@@ -21,7 +21,7 @@ export interface PlatformGithubConnectInstallation {
 export interface PlatformGithubModeRecord {
   version: 1;
   mode: PlatformGithubMode;
-  /** Epoch ms of the switch. Legacy GitHub App events from before it still run. */
+  /** Epoch ms of the switch. `github-app` events from before it still run. */
   switchedAt?: number;
   switchedBy?: string;
   installations?: PlatformGithubConnectInstallation[];

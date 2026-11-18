@@ -278,3 +278,24 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
   return run as IssueReconciler<TScope>;
 }
+
+/**
+ * Reconciles only the provider's cards whose external id `matches`, e.g. the
+ * one issue a provider event names. It still scans every project's cards to
+ * find matches, but reads nothing from the provider for cards that don't match,
+ * so an event for an untracked issue makes no provider call.
+ */
+export type IssueReconcileOne = (matches: (externalId: string) => boolean) => Promise<IssueReconcileSummary>;
+
+export function createIssueReconcileOne(options: IssueReconcilerOptions): IssueReconcileOne {
+  type Matcher = (externalId: string) => boolean;
+  const run = createIssueReconciler<Matcher>(options);
+  return matches =>
+    run({
+      scopes: [matches],
+      matches: (item, matcher) => {
+        const externalId = (options.externalSource?.(item) ?? item.externalSource)?.externalId;
+        return externalId !== undefined && matcher(externalId);
+      },
+    });
+}
