@@ -83,7 +83,7 @@ export function updateMergeRequestTool(proxy: PlatformProxy) {
             allow_maintainer_to_push: input.allow_maintainer_to_push,
           }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const mergeRequest = updateMergeRequestOutputSchema.parse(response.data);

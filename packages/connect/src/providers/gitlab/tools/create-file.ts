@@ -58,7 +58,7 @@ export function createFileTool(proxy: PlatformProxy) {
           ...(input.execute_filemode !== undefined && { execute_filemode: input.execute_filemode }),
           ...(input.start_branch !== undefined && { start_branch: input.start_branch }),
         },
-        retries: 10,
+        retries: 1,
       });
 
       const providerData = ProviderResponseSchema.parse(response.data);

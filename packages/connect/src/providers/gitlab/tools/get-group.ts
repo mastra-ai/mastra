@@ -67,6 +67,7 @@ export function getGroupTool(proxy: PlatformProxy) {
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/groups/#get-a-single-group
         endpoint: `/api/v4/groups/${gitlabPathSegment(input.id)}`,
+        params: { with_projects: false },
         retries: 3,
       });
 

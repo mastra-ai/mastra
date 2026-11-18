@@ -142,7 +142,7 @@ export function getReleaseTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Release not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           tag_name: input.tag_name,
         });
       }

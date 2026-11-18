@@ -86,7 +86,7 @@ export function getPipelineTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Pipeline not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           pipeline_id: input.pipeline_id,
         });
       }

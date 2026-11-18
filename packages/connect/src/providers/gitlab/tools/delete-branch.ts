@@ -36,12 +36,12 @@ export function deleteBranchTool(proxy: PlatformProxy) {
       // https://docs.gitlab.com/api/branches/#delete-repository-branch
       await platformProxy.delete({
         endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/branches/${gitlabPathSegment(input.branch)}`,
-        retries: 3,
+        retries: 1,
       });
 
       return {
         success: true,
-        project_id: input.project_id,
+        project_id: String(input.project_id),
         branch: input.branch,
       };
     },

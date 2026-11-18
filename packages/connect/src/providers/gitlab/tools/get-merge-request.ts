@@ -138,7 +138,7 @@ export function getMergeRequestTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Merge request not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           merge_request_iid: input.merge_request_iid,
         });
       }

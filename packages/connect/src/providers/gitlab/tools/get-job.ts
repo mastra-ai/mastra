@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const getJobInputSchema = z.object({
-  project_id: z.number().describe('Project ID. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('Project ID. Example: 82599306'),
   job_id: z.number().describe('Job ID. Example: 1'),
 });
 
@@ -165,7 +165,7 @@ export function getJobTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Job not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           job_id: input.job_id,
         });
       }

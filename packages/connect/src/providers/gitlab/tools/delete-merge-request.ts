@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const deleteMergeRequestInputSchema = z.object({
-  project_id: z.number().describe('The ID of the project containing the merge request. Example: 82599306'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID of the project containing the merge request. Example: 82599306'),
   merge_request_iid: z.number().describe('The internal ID of the merge request. Example: 1'),
 });
 
@@ -50,7 +52,7 @@ export function deleteMergeRequestTool(proxy: PlatformProxy) {
       const response = await platformProxy.delete({
         // https://docs.gitlab.com/api/merge_requests/#delete-a-merge-request
         endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
-        retries: 10,
+        retries: 1,
       });
 
       if (response.data && typeof response.data === 'object' && !Array.isArray(response.data)) {

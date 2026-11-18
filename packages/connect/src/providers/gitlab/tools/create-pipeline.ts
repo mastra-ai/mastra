@@ -119,7 +119,7 @@ export function createPipelineTool(proxy: PlatformProxy) {
           ref: input.ref,
         },
         data: requestData,
-        retries: 3,
+        retries: 1,
       });
 
       const providerPipeline = ProviderPipelineSchema.parse(response.data);

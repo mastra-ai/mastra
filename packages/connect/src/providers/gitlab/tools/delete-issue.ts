@@ -43,7 +43,7 @@ export function deleteIssueTool(proxy: PlatformProxy) {
 
       return {
         success: true,
-        project_id: input.project_id,
+        project_id: String(input.project_id),
         issue_iid: input.issue_iid,
       };
     },

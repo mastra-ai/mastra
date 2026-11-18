@@ -157,6 +157,78 @@ describe('generated GitLab tools', () => {
     });
   });
 
+  describe('project ids', () => {
+    it('accepts the numeric project id other tools return when deleting a pipeline', async () => {
+      const result = await run('gitlab_delete_pipeline', { project_id: 42, pipeline_id: 7 });
+
+      expect(result).toMatchObject({ project_id: '42' });
+      expect(requests[0]?.target).toBe('/api/v4/projects/42/pipelines/7');
+    });
+
+    it('accepts the project path list_jobs takes when reading a job', async () => {
+      answer = () => ({
+        status: 200,
+        body: { id: 9, name: 'rspec', status: 'pending', stage: 'test', ref: 'main', tag: false, allow_failure: false },
+      });
+
+      await run('gitlab_get_job', { project_id: 'team/app', job_id: 9 });
+
+      expect(requests[0]?.target).toBe('/api/v4/projects/team%2Fapp/jobs/9');
+    });
+  });
+
+  describe('request shape', () => {
+    it('sends several job statuses as a GitLab array', async () => {
+      answer = () => ({ status: 200, body: [] });
+
+      await run('gitlab_list_jobs', { project_id: 42, scope: ['pending', 'running'] });
+
+      expect(requests[0]?.target).toBe('/api/v4/projects/42/jobs?scope%5B%5D=pending&scope%5B%5D=running');
+    });
+
+    it('reads group metadata without the embedded project lists', async () => {
+      answer = () => ({ status: 200, body: { id: 5, name: 'team', path: 'team' } });
+
+      await run('gitlab_get_group', { id: 5 });
+
+      expect(requests[0]?.target).toBe('/api/v4/groups/5?with_projects=false');
+    });
+  });
+
+  describe('retries', () => {
+    it('does not replay a branch delete after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(run('gitlab_delete_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
+
+      expect(requests).toHaveLength(1);
+    });
+
+    it('does not replay a file update after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(
+        run('gitlab_update_file', {
+          project_id: 42,
+          file_path: 'a.txt',
+          branch: 'main',
+          content: 'x',
+          commit_message: 'update',
+        }),
+      ).rejects.toThrow();
+
+      expect(requests).toHaveLength(1);
+    });
+
+    it('still retries reads after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
+
+      expect(requests.length).toBeGreaterThan(1);
+    });
+  });
+
   describe('runner registration token', () => {
     const project = {
       id: 42,

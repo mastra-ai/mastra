@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createMergeRequestInputSchema = z.object({
-  project_id: z.number(),
+  project_id: z.union([z.number(), z.string()]),
   source_branch: z.string(),
   target_branch: z.string(),
   title: z.string(),
@@ -74,7 +74,7 @@ export function createMergeRequestTool(proxy: PlatformProxy) {
           ...(input.squash !== undefined && { squash: input.squash }),
           ...(input.allow_collaboration !== undefined && { allow_collaboration: input.allow_collaboration }),
         },
-        retries: 3,
+        retries: 1,
       };
 
       // https://docs.gitlab.com/api/merge_requests/#create-mr

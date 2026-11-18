@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const listPipelinesInputSchema = z.object({
-  project_id: z.number().describe('GitLab project ID. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('GitLab project ID. Example: 82599306'),
   cursor: z
     .string()
     .optional()

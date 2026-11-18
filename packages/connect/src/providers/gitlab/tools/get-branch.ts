@@ -80,7 +80,7 @@ export function getBranchTool(proxy: PlatformProxy) {
           throw new platformProxy.ActionError({
             type: 'not_found',
             message: 'Branch not found',
-            project_id: input.project_id,
+            project_id: String(input.project_id),
             branch: input.branch,
           });
         }

@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const listCommitsInputSchema = z.object({
-  project_id: z.number().describe('The ID of the project. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('The ID of the project. Example: 82599306'),
   ref_name: z
     .string()
     .optional()

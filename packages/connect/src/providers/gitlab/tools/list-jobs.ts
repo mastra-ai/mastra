@@ -20,8 +20,6 @@ export const listJobsInputSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Job status scope(s) to filter by'),
-  order_by: z.string().optional().describe('Order results by a field. Example: "id"'),
-  sort: z.string().optional().describe('Sort order. Example: "asc" or "desc"'),
   cursor: z.string().optional().describe('Pagination cursor (page number)'),
   per_page: z.number().optional().describe('Number of results per page. Default: 20'),
 });
@@ -69,7 +67,7 @@ export const listJobsOutputSchema = z.object({
 export function listJobsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_list_jobs',
-    description: 'List jobs from GitLab.',
+    description: 'List jobs from GitLab, newest first.',
     inputSchema: listJobsInputSchema,
     outputSchema: listJobsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listJobsOutputSchema>> => {
@@ -78,9 +76,7 @@ export function listJobsTool(proxy: PlatformProxy) {
         // https://docs.gitlab.com/api/jobs/
         endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs`,
         params: {
-          ...(input.scope !== undefined && { scope: input.scope }),
-          ...(input.order_by !== undefined && { order_by: input.order_by }),
-          ...(input.sort !== undefined && { sort: input.sort }),
+          ...(input.scope !== undefined && { 'scope[]': input.scope }),
           ...(input.per_page !== undefined && { per_page: input.per_page }),
           ...(input.cursor !== undefined && { page: input.cursor }),
         },

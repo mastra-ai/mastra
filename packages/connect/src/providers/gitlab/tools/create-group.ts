@@ -58,7 +58,7 @@ export function createGroupTool(proxy: PlatformProxy) {
       const response = await platformProxy.post({
         endpoint: '/api/v4/groups',
         data,
-        retries: 3,
+        retries: 1,
       });
 
       const providerGroup = ProviderGroupSchema.parse(response.data);

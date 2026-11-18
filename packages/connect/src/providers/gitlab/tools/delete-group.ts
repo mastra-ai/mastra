@@ -62,7 +62,7 @@ export function deleteGroupTool(proxy: PlatformProxy) {
       await platformProxy.delete({
         endpoint: `/api/v4/groups/${gitlabPathSegment(input.group_id)}`,
         params,
-        retries: 3,
+        retries: 1,
       });
 
       return {

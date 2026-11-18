@@ -96,7 +96,7 @@ export function getCommitTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Commit not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           sha: input.sha,
         });
       }

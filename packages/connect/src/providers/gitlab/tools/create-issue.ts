@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createIssueInputSchema = z.object({
-  project_id: z.number().describe('The global ID of the project. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('The global ID of the project. Example: 82599306'),
   title: z.string().describe('The title of the issue.'),
   description: z.string().optional().describe('The description of an issue.'),
   labels: z.string().optional().describe('Comma-separated label names to assign to the new issue.'),
@@ -78,7 +78,7 @@ export function createIssueTool(proxy: PlatformProxy) {
           ...(input.due_date !== undefined && { due_date: input.due_date }),
           ...(input.issue_type !== undefined && { issue_type: input.issue_type }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const providerIssue = ProviderIssueSchema.parse(response.data);

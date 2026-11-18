@@ -976,13 +976,105 @@ const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'delete-issue': 'Delete an issue in GitLab.',
   'delete-group':
     'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
+  'list-jobs': 'List jobs from GitLab, newest first.',
 };
+
+/**
+ * Input fixes: GitLab's jobs endpoint ignores `order_by` and `sort` (it always
+ * returns newest first), and `archived` on project lists filters rather than
+ * adding archived projects to the results.
+ */
+const GITLAB_INPUT_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> = {
+  'list-jobs': [
+    {
+      pattern: /\n\s*order_by: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'order_by',
+    },
+    {
+      pattern: /\n\s*sort: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'sort',
+    },
+  ],
+  'list-projects': [
+    {
+      pattern: /archived: z\.boolean\(\)\.optional\(\)\.describe\('Include archived projects\.'\)/,
+      replacement:
+        "archived: z.boolean().optional().describe('true returns only archived projects, false only active ones. Omit to return both.')",
+      count: 1,
+      what: 'archived description',
+    },
+  ],
+};
+
+/**
+ * Templates type `project_id` as a number in some tools and a string in others,
+ * so an id or path one tool returns can be rejected by the next. Every GitLab
+ * input accepts both; `gitlabPathSegment` turns either into one path segment.
+ */
+function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
+  const moduleStatements = action.moduleStatements.map(statement =>
+    /export const \w+InputSchema = z\b/.test(statement)
+      ? statement.replace(
+          /project_id: z(\s*)\.(?:number|string)\(\)/g,
+          'project_id: z$1.union([z.number(), z.string()])',
+        )
+      : statement,
+  );
+  // delete-project echoes the input id in a string output field.
+  const execBody = action.execBody.replace(
+    /\bproject_id: input\.project_id,/g,
+    'project_id: String(input.project_id),',
+  );
+  return { ...action, moduleStatements, execBody };
+}
+
+/**
+ * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
+ * first attempt already applied could run again: deleting a branch recreated
+ * by someone else meanwhile, committing a file change twice, or undoing a
+ * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * the template's retries.
+ */
+function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+  if (/platformProxy\.get\(/.test(action.execBody)) return action;
+  return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
+}
 
 function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   const slug = action.candidate.actionSlug;
-  let adapted = encodeGitLabPathSegments(action);
-  const schemaFixes = GITLAB_RESPONSE_SCHEMA_FIXES[slug];
-  if (schemaFixes) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
+  if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  if (slug === 'list-jobs') {
+    // GitLab reads several statuses only as `scope[]`; repeated bare `scope` keys keep just one.
+    let execBody = replaceOnce(
+      adapted.execBody,
+      /\{ scope: input\.scope \}/,
+      "{ 'scope[]': input.scope }",
+      adapted,
+      'scope array',
+    );
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.order_by !== undefined[^\n]*/, '', adapted, 'order_by param');
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.sort !== undefined[^\n]*/, '', adapted, 'sort param');
+    adapted = { ...adapted, execBody };
+  }
+  if (slug === 'get-group') {
+    // The tool returns group metadata only; skip the project lists GitLab embeds by default.
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /(endpoint: `\/api\/v4\/groups\/\$\{gitlabPathSegment\(input\.id\)\}`,)/,
+        '$1\n        params: { with_projects: false },',
+        adapted,
+        'with_projects',
+      ),
+    };
+  }
   if (slug === 'delete-project') {
     adapted = {
       ...adapted,

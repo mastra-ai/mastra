@@ -54,7 +54,7 @@ export function deleteFileTool(proxy: PlatformProxy) {
           ...(input.last_commit_id !== undefined && { last_commit_id: input.last_commit_id }),
           ...(input.start_branch !== undefined && { start_branch: input.start_branch }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const providerResponse = ProviderResponseSchema.parse(response.data || {});

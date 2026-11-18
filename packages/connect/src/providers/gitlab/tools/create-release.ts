@@ -106,7 +106,7 @@ export function createReleaseTool(proxy: PlatformProxy) {
         // https://docs.gitlab.com/api/releases/#create-a-release
         endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/releases`,
         data,
-        retries: 3,
+        retries: 1,
       });
 
       const providerRelease = ProviderReleaseSchema.parse(response.data);

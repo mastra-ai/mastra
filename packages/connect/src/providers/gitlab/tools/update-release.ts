@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const updateReleaseInputSchema = z.object({
-  project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
   tag_name: z.string().describe('The Git tag the release is associated with. Example: "v1.0.0"'),
   name: z.string().optional().describe('The release name.'),
   description: z.string().optional().describe('The description of the release. You can use Markdown.'),
@@ -64,14 +66,14 @@ export function updateReleaseTool(proxy: PlatformProxy) {
           ...(input.milestones !== undefined && { milestones: input.milestones }),
           ...(input.released_at !== undefined && { released_at: input.released_at }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       if (!response.data) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Release not found or update failed.',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           tag_name: input.tag_name,
         });
       }
