@@ -371,17 +371,24 @@ describe('envVarsSetAction', () => {
     expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
   });
 
-  it('rejects flags for vars that are not set', async () => {
-    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: {} })] });
+  it('rejects flags for vars that are not set without echoing the flag value', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { A: '1' } })] });
 
-    await expect(runSet(undefined, [], { secret: ['MISSING'] })).rejects.toThrow('MISSING is not set on my-app');
+    const error = await runSet(undefined, [], { secret: ['A'], config: ['ghp_abc123'] }).catch(e => e as Error);
+    expect(error.message).toBe('The variable in --config argument 1 is not set on my-app. Pass it as KEY=VALUE too.');
+    expect(error.message).not.toContain('abc123');
     expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
   });
 
-  it('rejects a var marked both --secret and --config', async () => {
-    await expect(runSet(undefined, ['A=1'], { secret: ['A'], config: ['A'] })).rejects.toThrow(
-      'both --secret and --config: A',
-    );
+  it('rejects an invalid flag name without echoing it', async () => {
+    const error = await runSet(undefined, [], { secret: ['sk-live-abc123'] }).catch(e => e as Error);
+    expect(error.message).toBe('Invalid variable name in --secret argument 1');
+    expect(mockFetchEnvironmentList).not.toHaveBeenCalled();
+  });
+
+  it('rejects a var marked both --secret and --config without echoing it', async () => {
+    const error = await runSet(undefined, ['A=1'], { secret: ['A'], config: ['A'] }).catch(e => e as Error);
+    expect(error.message).toBe('A variable cannot be marked both --secret and --config');
     expect(mockFetchEnvironmentList).not.toHaveBeenCalled();
   });
 

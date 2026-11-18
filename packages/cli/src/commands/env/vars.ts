@@ -204,14 +204,19 @@ export async function envVarsSetAction(
   const secretNames = options.secret ?? [];
   const configNames = options.config ?? [];
 
-  for (const name of [...secretNames, ...configNames]) {
+  // Flag arguments may be pasted values, so errors about names not yet confirmed
+  // on the environment refer to them by flag and position, never by text.
+  const flagNames = [
+    ...secretNames.map((name, index) => ({ name, label: `--secret argument ${index + 1}` })),
+    ...configNames.map((name, index) => ({ name, label: `--config argument ${index + 1}` })),
+  ];
+  for (const { name, label } of flagNames) {
     if (!ENV_VAR_NAME.test(name)) {
-      throw new Error(`Invalid env var name: ${name.replace(/[^\w.-]/g, '?')}`);
+      throw new Error(`Invalid variable name in ${label}`);
     }
   }
-  const both = secretNames.filter(name => configNames.includes(name));
-  if (both.length > 0) {
-    throw new Error(`Cannot mark a var as both --secret and --config: ${both.join(', ')}`);
+  if (secretNames.some(name => configNames.includes(name))) {
+    throw new Error('A variable cannot be marked both --secret and --config');
   }
   if (Object.keys(newVars).length === 0 && secretNames.length === 0 && configNames.length === 0) {
     throw new Error('Nothing to set. Pass KEY=VALUE pairs and/or --secret <key> / --config <key>.');
@@ -230,9 +235,9 @@ export async function envVarsSetAction(
   }
 
   const stored = environment.envVars ?? {};
-  for (const name of [...secretNames, ...configNames]) {
+  for (const { name, label } of flagNames) {
     if (!Object.hasOwn(stored, name) && !Object.hasOwn(newVars, name)) {
-      throw new Error(`${name} is not set on ${environment.slug}. Pass a value: ${name}=...`);
+      throw new Error(`The variable in ${label} is not set on ${environment.slug}. Pass it as KEY=VALUE too.`);
     }
   }
   for (const name of configNames) {
