@@ -11,12 +11,19 @@
       .stage{--background:#0D0D0D;--card:#141414;--fg:#FAFAFA;--muted:#8F8F8F;--subtle:#6B6B6B;--hairline:rgb(255 255 255/8%);--btn:#FAFAFA;--btn-ink:#0D0D0D;color:var(--fg)}
       .card{--accent-ink:var(--accent)}
       .stage[data-theme=light] .card{--accent-ink:color-mix(in oklab,var(--accent) 72%,black)}
+      .card .cart{--accent:var(--cart);--accent-ink:var(--cart)}
+      .stage[data-theme=light] .card .cart{--accent-ink:color-mix(in oklab,var(--cart) 62%,black)}
+      .card[data-tone=error] .cart{--accent:#FF4758;--accent-ink:#FF4758}
       .stage[data-theme=light]{--background:#FAFAFA;--card:#FFFFFF;--fg:#171717;--muted:#5E5E5E;--subtle:#8A8A8A;--hairline:rgb(0 0 0/9%);--btn:#171717;--btn-ink:#FFFFFF}
       body:has(.stage[data-theme=light]){background:#EDEDED}
       .top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:32px;max-width:1568px}
       .top h1{font-size:28px;line-height:34px;font-weight:500;letter-spacing:-.015em}
       .top p{font-size:14px;line-height:21px;color:var(--muted);max-width:620px;margin-top:6px}
       .controls{display:flex;gap:12px}
+      .top{position:sticky;top:0;z-index:5;background:var(--background);padding-block:12px}
+      .tfail{margin-left:auto;border:0;background:transparent;color:var(--muted);font:500 12px/16px "Mona Sans",system-ui;padding:4px 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--hairline);cursor:pointer}
+      .tfail[aria-pressed=true]{color:#FF4758;box-shadow:inset 0 0 0 1px #FF4758}
+      .tile>div:last-child{display:flex;align-items:center;gap:12px}
       .seg{display:flex;padding:3px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--hairline)}
       .seg button{border:0;background:transparent;color:var(--muted);font:500 12px/16px "Mona Sans",system-ui;padding:6px 12px;border-radius:999px;cursor:pointer;transition:color 150ms ease-out,background-color 150ms ease-out}
       .seg button[aria-pressed=true]{background:var(--hairline);color:var(--fg)}
@@ -204,8 +211,8 @@
         <div>
           <h1>Create states, Factory objects</h1>
           <p>
-            Hover or tab into a card to see its move. Switch the state at the top right, and swap drawings from each
-            card’s menu.
+            Hover or tab into a card to see its move. Switch the state at the top right, press F to flip every drawing
+            between empty and failed, or use a tile’s Fail toggle.
           </p>
         </div>
         <div class="controls">
@@ -272,6 +279,42 @@
           note: 'Creates one workspace per environment.',
         },
         {
+          key: 'filesystems',
+          name: 'Filesystems',
+          tier: 'Tier 1, turn on a capability',
+          file: 'FilesystemsEmptyState.tsx',
+          crumbs: ['Acme', 'support-agent', 'Filesystems'],
+          feature: 'blue',
+          title: 'Give every environment a filesystem',
+          desc: 'Persistent file storage your agents, tools and workflows read and write.',
+          button: 'Set up filesystems',
+          pending: 'Setting up',
+          note: 'Adds a storage bucket to each environment.',
+          pTitle: 'Setting up filesystems',
+          pDesc: 'Creating a storage bucket for each environment. This page updates when they’re ready.',
+          fTitle: 'Couldn’t set up filesystems',
+          fDesc: 'The storage buckets didn’t start. Try again, or contact support if it keeps failing.',
+          fButton: 'Try again',
+        },
+        {
+          key: 'sandboxes',
+          name: 'Sandboxes',
+          tier: 'Tier 1, turn on a capability',
+          file: 'SandboxesEmptyState.tsx',
+          crumbs: ['Acme', 'support-agent', 'Sandboxes'],
+          feature: 'yellow',
+          title: 'Give your agents a sandbox',
+          desc: 'Isolated machines where your agents run code and tools without touching your infrastructure.',
+          button: 'Set up sandboxes',
+          pending: 'Setting up',
+          note: 'Sandboxes start on demand and sleep when idle.',
+          pTitle: 'Setting up sandboxes',
+          pDesc: 'Preparing sandboxes for this project. This page updates when they’re ready.',
+          fTitle: 'Couldn’t set up sandboxes',
+          fDesc: 'The sandbox host didn’t respond. Try again, or contact support if it keeps failing.',
+          fButton: 'Try again',
+        },
+        {
           key: 'environments',
           name: 'Environments',
           tier: 'Tier 2, create the first object',
@@ -316,23 +359,30 @@
         fDesc: 'The workspaces couldn’t be created. Try again, or contact support if it keeps failing.',
         fButton: 'Try again',
       });
-      Object.assign(CARDS[2], {
-        pTitle: 'Creating production',
-        pDesc: 'Your environment is starting. This page updates when it’s ready.',
-        fTitle: 'Couldn’t create production',
-        fDesc: 'The environment couldn’t be created. Try again, or contact support if it keeps failing.',
-        fButton: 'Try again',
-      });
+      Object.assign(
+        CARDS.find(c => c.key === 'environments'),
+        {
+          pTitle: 'Creating production',
+          pDesc: 'Your environment is starting. This page updates when it’s ready.',
+          fTitle: 'Couldn’t create production',
+          fDesc: 'The environment couldn’t be created. Try again, or contact support if it keeps failing.',
+          fButton: 'Try again',
+        },
+      );
       const LIB = [
         ['knowledge', 'Filing cabinet', 'Knowledge', 'purple'],
         ['workspaces', 'Workbench', 'Workspaces', 'blue'],
+        ['filesystems', 'Folder tray', 'Filesystems', 'blue'],
+        ['sandboxes', 'Sandbox', 'Sandboxes', 'yellow'],
+        ['vault', 'Bank vault', 'Vault', 'yellow'],
+        ['secrets', 'Cryptex', 'Encrypted secrets', 'green'],
         ['environments', 'Server rack', 'Environments', 'green'],
         ['upgrade', 'Sorter', 'Trace Intelligence and its upgrade state', 'pink'],
         ['memory', 'Message rack', 'Memory instances, threads', 'orange'],
         ['api-keys', 'Key cabinet', 'Org and Gateway API keys', 'yellow'],
         ['connect', 'Plug and socket', 'Connect, shared connections', 'blue'],
         ['databases', 'Database stack', 'Databases', 'green'],
-        ['alerts', 'Pressure gauge', 'Alerts and its upgrade state', 'orange'],
+        ['alerts', 'Phone', 'Alerts and its upgrade state', 'orange'],
         ['deploys', 'Loading dock', 'Deploys', 'purple'],
         ['traces', 'Printer', 'Traces and spans setup', 'pink'],
         ['gateway', 'Router', 'Gateway requests and logs', 'blue'],
@@ -393,7 +443,7 @@
         const st = root.dataset.state === 'importing' ? 'pending' : root.dataset.state,
           err = st === 'failed';
         const accent = err ? '--accent:#FF4758' : m.accent ? `--accent:${BRAND[color]}` : '';
-        return `<div class="card tile" tabindex="0" style="${accent}"${err ? ' data-tone="error"' : ''}${st === 'pending' ? ' data-pending' : ''}><div class="visual">${ART[k]}</div><div><b>${n}</b><span>${used}</span></div></div>`;
+        return `<div class="card tile" tabindex="0" style="${accent}"${err ? ' data-tone="error"' : ''}${st === 'pending' ? ' data-pending' : ''}><div class="visual">${ART[k]}</div><div><div><b>${n}</b><span>${used}</span></div><button class="tfail" type="button" aria-pressed="${err}">Fail</button></div></div>`;
       }
       const NS = 'http://www.w3.org/2000/svg';
       const SPARK_A = 'M0,-3L0,-10M3,-2L8,-7M-3,-2L-8,-7M4,1L10,2';
@@ -449,6 +499,35 @@
             mount(current);
           }
         });
+      document.addEventListener('click', e => {
+        const b = e.target.closest('.tfail');
+        if (!b) return;
+        e.stopPropagation();
+        const t = b.closest('.tile'),
+          on = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(on));
+        if (on) {
+          t.dataset.accent = t.style.getPropertyValue('--accent');
+          t.style.setProperty('--accent', '#FF4758');
+          t.setAttribute('data-tone', 'error');
+        } else {
+          t.style.setProperty('--accent', t.dataset.accent || '');
+          t.removeAttribute('data-tone');
+        }
+      });
+      document.addEventListener('keydown', e => {
+        if (
+          e.key.toLowerCase() !== 'f' ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.altKey ||
+          e.target.closest('input,select,textarea')
+        )
+          return;
+        document
+          .querySelector(`.seg button[data-state=${root.dataset.state === 'failed' ? 'empty' : 'failed'}]`)
+          .click();
+      });
       document.addEventListener('change', e => {
         const s = e.target.closest('.swap');
         if (!s) return;

@@ -512,3 +512,10 @@
     animation-play-state: paused !important;
   }
 }
+
+[data-slot='empty-state-art'] .cart {
+  --art-hue: var(--cart);
+}
+.light [data-slot='empty-state-art'] .cart {
+  --art-hue: color-mix(in oklab, var(--cart) 62%, black);
+}
