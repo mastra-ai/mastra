@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, get } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { Mastra } from '@mastra/core';
@@ -41,7 +41,7 @@ const workspace = {
       { ts: '1700000100.000100', user: 'USAM', text: 'The staging deploy is failing on migrations' },
       { ts: '1700000050.000050', user: 'UALEX', text: 'Older: the STAGING deploy needs a rerun' },
     ],
-  } as Record<string, Array<Record<string, string>>>,
+  } as Record<string, Array<Record<string, unknown>>>,
 };
 
 let calls: Array<{ method: string; args: Record<string, string> }> = [];
@@ -59,6 +59,8 @@ function answer(method: string, args: Record<string, string>): Record<string, un
   switch (method) {
     case 'auth.test':
       return { team_id: TEAM, user_id: 'UBOT', bot_id: 'BBOT', url: 'https://mastra.slack.com/' };
+    case 'conversations.replies':
+      return { messages: workspace.history[args.channel!]?.filter(message => message.ts === args.oldest) ?? [] };
     case 'conversations.history': {
       const channel = workspace.channels.find(c => c.id === args.channel);
       if (!channel?.is_member) return { ok: false, error: 'not_in_channel' };
@@ -95,6 +97,12 @@ function answer(method: string, args: Record<string, string>): Record<string, un
 
 beforeAll(async () => {
   server = createServer((req, res) => {
+    if (req.url === '/api/files/wallpaper') {
+      calls.push({ method: 'file.download', args: { authorization: req.headers.authorization ?? '' } });
+      res.setHeader('content-type', 'image/jpeg');
+      res.end(Buffer.from('original image bytes'));
+      return;
+    }
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
@@ -115,7 +123,7 @@ beforeEach(() => {
   calls = [];
 });
 
-type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any> };
+type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any>; toModelOutput?: (output: any) => unknown };
 
 /**
  * A session linked to the Slack thread C1/171.1 and woken without a Slack
@@ -136,7 +144,12 @@ async function slackSession(settings?: Partial<SlackToolSettings>) {
       metadata: { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' },
     },
   });
-  const adapter = createSlackAdapter({ botToken: 'xoxb-test', signingSecret: 'secret', apiUrl });
+  const adapter = createSlackAdapter({
+    botToken: 'xoxb-test', signingSecret: 'secret', apiUrl,
+    fileTransport: (_url, _signal, headers) => new Promise((resolve, reject) => {
+      get(`${apiUrl}files/wallpaper`, { headers }, resolve).on('error', reject);
+    }),
+  });
   const channels = new AgentControllerChannels({ adapters: { slack: { adapter } } });
   channels.__setController({ id: 'mastra-code', getMastra: () => mastra } as any);
   await channels.initialize(mastra);
@@ -179,6 +192,38 @@ const sent = (method: string) => calls.filter(c => c.method === method).map(c =>
 const wide = { channels: 'all', directMessages: 'anyone' } as const;
 
 describe('Slack tools on a Factory session, by default', () => {
+  it('downloads the original bytes of a private image in its channel without exposing the bot token', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 20,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run, tool } = await slackSession();
+      const result = await run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      });
+      expect(Buffer.from(result.base64, 'base64').toString()).toBe('original image bytes');
+      expect(tool('downloadSlackAttachment')!.toModelOutput?.(result)).toEqual({
+        type: 'content', value: [{ type: 'image-data', data: result.base64, mediaType: 'image/jpeg' }],
+      });
+      expect(result).toMatchObject({ name: 'midnight-9.jpg', mimeType: 'image/jpeg' });
+      expect(sent('file.download')).toEqual([{ authorization: 'Bearer xoxb-test' }]);
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C2:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('outside the channels');
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:DOTHER:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow("someone else's direct message");
+      (workspace.history.C1![0]!.files as Array<{ size: number }>)[0]!.size = 9 * 1024 * 1024;
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('exceeds 8 MiB');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
   it('reads and posts in its own channel', async () => {
     const { run } = await slackSession();
 
