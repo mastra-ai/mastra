@@ -7,7 +7,7 @@ import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Link, NavigationType, useNavigate, useNavigationType, useParams } from 'react-router';
+import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useParams } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
@@ -25,7 +25,9 @@ export function FactorySkillPage() {
   const boardId = useBoardConfigRoute()?.boardId ?? '';
   const { skillName } = useParams<{ skillName: string }>();
   const navigate = useNavigate();
-  const openedInApp = useNavigationType() === NavigationType.Push;
+  const navigationType = useNavigationType();
+  const { key: historyKey } = useLocation();
+  const openedInApp = historyKey !== 'default' && navigationType !== NavigationType.Replace;
   const { isMobile, desktopState } = useSidebar();
   const sidebarHidden = isMobile || desktopState === 'collapsed';
   const board = useBoardQuery(factory.id, boardId).data?.board;
@@ -81,7 +83,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
       </div>
     );
   }
-  if (skills.isError) {
+  if (skills.isLoadingError) {
     return (
       <LoadErrorState
         title="Couldn’t load skills"

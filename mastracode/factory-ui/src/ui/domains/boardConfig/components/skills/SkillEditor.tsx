@@ -24,8 +24,10 @@ export function SkillEditor({
   canEdit: boolean;
   onDeleted: () => void;
 }) {
-  const [description, setDescription] = useState(skill.description);
-  const [instructions, setInstructions] = useState(skill.content);
+  const [editedDescription, setEditedDescription] = useState<string>();
+  const [editedInstructions, setEditedInstructions] = useState<string>();
+  const description = editedDescription ?? skill.description;
+  const instructions = editedInstructions ?? skill.content;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const save = useFactorySkillEditMutation(factoryId);
@@ -36,16 +38,13 @@ export function SkillEditor({
   const revertable = canEdit && Boolean(skill.edited);
   const deletable = canEdit && skill.origin === 'project';
 
-  const showUnlessEditedSince = (sent: { description: string; instructions: string }) => {
-    return (written: FactorySkillInfo | undefined) => {
-      if (!written) return;
-      setDescription(current => (current === sent.description ? written.description : current));
-      setInstructions(current => (current === sent.instructions ? written.content : current));
-    };
+  const keepEditsMadeSince = (sent: { description: string; instructions: string }) => () => {
+    setEditedDescription(current => (current === sent.description ? undefined : current));
+    setEditedInstructions(current => (current === sent.instructions ? undefined : current));
   };
   const discard = () => {
-    setDescription(skill.description);
-    setInstructions(skill.content);
+    setEditedDescription(undefined);
+    setEditedInstructions(undefined);
     save.reset();
   };
   const submit = () =>
@@ -54,12 +53,12 @@ export function SkillEditor({
         name: skill.name,
         content: composeSkillMarkdown({ name: skill.name, description, frontmatter: skill.frontmatter, instructions }),
       },
-      { onSuccess: showUnlessEditedSince({ description, instructions }) },
+      { onSuccess: keepEditsMadeSince({ description, instructions }) },
     );
   const revert = () =>
     remove.mutate(
       { name: skill.name, content: null },
-      { onSuccess: showUnlessEditedSince({ description, instructions }) },
+      { onSuccess: keepEditsMadeSince({ description, instructions }) },
     );
   const deleteSkill = () => remove.mutate({ name: skill.name, content: null }, { onSuccess: () => leave(onDeleted) });
   const keep = () => {
@@ -137,10 +136,10 @@ export function SkillEditor({
         <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
           {skill.name}
         </Txt>
-        <SkillDescription value={description} required readOnly={!canEdit} onChange={setDescription} />
+        <SkillDescription value={description} required readOnly={!canEdit} onChange={setEditedDescription} />
       </div>
 
-      <SkillInstructions value={instructions} readOnly={!canEdit} onChange={setInstructions} />
+      <SkillInstructions value={instructions} readOnly={!canEdit} onChange={setEditedInstructions} />
 
       {changed && (
         <SaveBar

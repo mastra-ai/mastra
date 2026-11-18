@@ -51,28 +51,30 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-3">
-        <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
-          <InlineText
-            value={name}
-            label="Name"
-            placeholder="skill-name"
-            readOnly={false}
-            autoFocus
-            variant="display-lg"
-            tone="ink"
-            onChange={value => setName(value.trim())}
-          />
-        </Txt>
-        {invalidName && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground">
-            {invalidName}
+      <div inert={create.isPending} className="flex flex-col gap-8">
+        <div className="flex flex-col gap-3">
+          <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
+            <InlineText
+              value={name}
+              label="Name"
+              placeholder="skill-name"
+              readOnly={false}
+              autoFocus
+              variant="display-lg"
+              tone="ink"
+              onChange={value => setName(value.trim())}
+            />
           </Txt>
-        )}
-        <SkillDescription value={description} required={false} readOnly={false} onChange={setDescription} />
-      </div>
+          {invalidName && (
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
+              {invalidName}
+            </Txt>
+          )}
+          <SkillDescription value={description} required={false} readOnly={false} onChange={setDescription} />
+        </div>
 
-      <SkillInstructions value={instructions} readOnly={false} onChange={setInstructions} />
+        <SkillInstructions value={instructions} readOnly={false} onChange={setInstructions} />
+      </div>
 
       {changed && (
         <SaveBar

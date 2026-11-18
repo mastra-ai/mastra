@@ -320,6 +320,73 @@ describe("a skill's page", () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
+  it("follows newer saves from elsewhere without dropping this admin's edits", async () => {
+    const { client } = openAt(`${SKILLS_PAGE}/changelog-lint`);
+    const serveChangelogLint = (changes: Partial<FactorySkillInfo>) =>
+      server.use(
+        http.get(SKILLS_URL, () =>
+          HttpResponse.json({
+            skills: skills.map(skill => (skill.name === 'changelog-lint' ? { ...skill, ...changes } : skill)),
+            canEdit: true,
+          } satisfies FactorySkillsResponse),
+        ),
+      );
+    const user = userEvent.setup();
+
+    const description = await screen.findByRole('textbox', { name: 'Description' });
+    serveChangelogLint({ description: 'Lint every changelog' });
+    await client.refetchQueries();
+    await waitFor(() => expect(description).toHaveValue('Lint every changelog'));
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+
+    await user.type(description, ' locally');
+    serveChangelogLint({ description: 'Lint every changelog', content: '# Lint all' });
+    await client.refetchQueries();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent('# Lint all'));
+    expect(description).toHaveValue('Lint every changelog locally');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('keeps unsaved edits when refreshing the skills fails', async () => {
+    const { client } = openAt(`${SKILLS_PAGE}/changelog-lint`);
+    const user = userEvent.setup();
+
+    const description = await screen.findByRole('textbox', { name: 'Description' });
+    await user.type(description, ' locally');
+    server.use(http.get(SKILLS_URL, () => HttpResponse.json({ error: 'unavailable' }, { status: 503 })));
+    await client.refetchQueries();
+    await user.type(description, ' still');
+
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('Lint changelogs locally still');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('asks before a reload or tab close drops unsaved edits', async () => {
+    openAt(`${SKILLS_PAGE}/changelog-lint`);
+    const unloadBlocked = () => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+    const user = userEvent.setup();
+
+    const description = await screen.findByRole('textbox', { name: 'Description' });
+    expect(unloadBlocked()).toBe(false);
+    await user.type(description, '!');
+    expect(unloadBlocked()).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(unloadBlocked()).toBe(false);
+  });
+
+  it('goes Back to where the skill was first opened from after browser back returns to it', async () => {
+    const boardConfigPage = `/factories/${FACTORY_ID}/work/config`;
+    const { router } = openAt(boardConfigPage);
+    const user = userEvent.setup();
+
+    await router.navigate(`${SKILLS_PAGE}/changelog-lint`);
+    await router.navigate(SKILLS_PAGE);
+    await router.navigate(-1);
+    await user.click(await screen.findByRole('button', { name: 'Back' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(boardConfigPage));
+  });
+
   it('reverts an edited skill to the original in place', async () => {
     const { writes, router, client } = openAt(SKILLS_PAGE, {
       catalog: skills.map(skill =>
