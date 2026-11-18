@@ -8,7 +8,7 @@
  * `process.memoryUsage()` and `v8.getHeapSpaceStatistics()` at baseline, peak,
  * post-burst, and after a forced `global.gc()` pass (requires `--expose-gc`).
  *
- * Writes two heap snapshots (baseline + post-GC) when `HARNESS_SNAPSHOTS=1`, so
+ * Writes two heap snapshots (baseline + post-GC) when `SNAPSHOTS=1`, so
  * you can diff them in Chrome DevTools for retainer paths.
  *
  * Env knobs:
@@ -19,6 +19,7 @@
  *   RETAIN               (default 0)    keep all runs resident until after GC (worst case)
  *   SNAPSHOTS            (default 0)    write heap snapshots to ./bench-out/
  *   LIST_AFTER           (default 1)    also listMessages() after saving, to force buffering
+ *   RUN_ISOLATED         (default 0)    give each run its own in-memory storage (default is one shared)
  *
  * Example:
  *   pnpm turbo build --filter ./packages/core
@@ -27,7 +28,7 @@
  *   MALLOC_ARENA_MAX=2 node --expose-gc scripts/bench/factory-memory-burst.mjs
  */
 import { randomUUID } from 'node:crypto';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import v8 from 'node:v8';
 
@@ -266,6 +267,8 @@ async function main() {
           TOOL_RESULT_RATIO,
           RETAIN,
           LIST_AFTER,
+          SNAPSHOTS,
+          RUN_ISOLATED,
           MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? null,
         },
         samples,
