@@ -15,6 +15,7 @@ import {
 import type { VantaVulnerability } from '../../vanta/sync.js';
 import type { PlatformConnection } from '../foundation/connect-binding.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
+import { logPlatformWarn } from '../logging.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 
 export interface PlatformVantaIntegrationConfig {
@@ -101,7 +102,8 @@ export class PlatformVantaIntegration extends PlatformConnectIntegration {
     orgId: string,
     factoryProjects: ReadonlyArray<{ id: string; orgId: string }>,
   ): Promise<VantaVulnerability[] | null> {
-    const connections = await this.listConnections();
+    // Fresh, so the unlinked check below compares against exactly what the sync reads.
+    const connections = await this.listConnections({ fresh: true });
     const ownerByProject = new Map(factoryProjects.map(project => [project.id, project.orgId]));
     // A global or unrecognized connection cannot be attributed safely across organizations.
     if (connections.some(connection => connection.resourceId && !ownerByProject.has(connection.resourceId)))
@@ -115,6 +117,20 @@ export class PlatformVantaIntegration extends PlatformConnectIntegration {
       connection.resourceId ? ownerByProject.get(connection.resourceId) === orgId : true,
     );
     if (owned.length === 0 || owned.some(connection => connection.status === 'needs_reauth')) return null;
+    // A Vanta connection the project can't see would read as all its vulnerabilities resolved.
+    const unlinked = await this.binding.unlinkedOrgConnections(connections);
+    if (unlinked.length > 0) {
+      logPlatformWarn('Skipping the Vanta sync until every Vanta connection is linked to the Factory project', {
+        connectionIds: unlinked,
+      });
+      // A refusal lands in needsLinking for the UI; a successful link re-runs the sync.
+      await this.binding.linkOrgConnections().catch(error =>
+        logPlatformWarn('Could not link Vanta connections to the Factory project', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return null;
+    }
     return this.listVulnerabilities(owned.filter(connection => connection.status === 'active'));
   }
 

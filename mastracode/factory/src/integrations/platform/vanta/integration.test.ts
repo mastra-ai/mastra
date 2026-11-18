@@ -5,6 +5,7 @@ import { createTestBoard } from '../../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import type { IssueReconcileSummary } from '../../issue-reconciler.js';
+import { VANTA_VULNERABILITIES_SOURCE_ID } from '../../vanta/sync.js';
 import { problem, startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
 import { PlatformVantaIntegration } from './integration.js';
@@ -30,6 +31,12 @@ function createIntegration(
     if (path === '/v2/projects/proj_factory/connections') {
       return Response.json({ connections: withIntegrationId(connections) });
     }
+    if (path === '/v2/connections') {
+      // The org listing shows global connections; every one here is linked to the project.
+      return Response.json({
+        connections: withIntegrationId(connections.filter(connection => !connection.resourceId)),
+      });
+    }
     if (path.includes('/proxy/v1/vulnerabilities')) {
       return Response.json({ results: { data: [vulnerability], pageInfo } });
     }
@@ -44,6 +51,10 @@ function createIntegration(
     },
   });
   return { integration, fetchImpl };
+}
+
+function vulnerabilityReads(fetchImpl: { mock: { calls: unknown[][] } }): number {
+  return fetchImpl.mock.calls.filter(call => String(call[0]).includes('/proxy/v1/vulnerabilities')).length;
 }
 
 describe('PlatformVantaIntegration reconciliation', () => {
@@ -97,7 +108,7 @@ describe('PlatformVantaIntegration reconciliation', () => {
     await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow(
       'Incomplete Vanta vulnerability snapshot',
     );
-    expect(fetchImpl).toHaveBeenCalledTimes(51);
+    expect(vulnerabilityReads(fetchImpl)).toBe(50);
   });
 
   it('rejects a page that claims more results without a cursor', async () => {
@@ -108,7 +119,7 @@ describe('PlatformVantaIntegration reconciliation', () => {
     await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow(
       'Incomplete Vanta vulnerability snapshot',
     );
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(vulnerabilityReads(fetchImpl)).toBe(1);
   });
 });
 
@@ -184,7 +195,10 @@ describe('Vanta sync through the Factory project connections', () => {
   async function setup(platform: FakePlatform) {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme' } });
-    await seeded.intake.saveConfig({ orgId: 'org-1', config: { vanta: { enabled: true, sourceIds: [] } } });
+    await seeded.intake.saveConfig({
+      orgId: 'org-1',
+      config: { vanta: { enabled: true, sourceIds: [VANTA_VULNERABILITIES_SOURCE_ID] } },
+    });
     const { item: filed } = await seeded.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -258,6 +272,65 @@ describe('Vanta sync through the Factory project connections', () => {
       { connectionId: 'conn-vanta', reason: expect.stringContaining('integrations:write') },
     ]);
     expect(platform.requests.some(request => request.path.includes('/proxy'))).toBe(false);
+  });
+
+  it('closes no cards when one of the org Vanta connections is not linked to the project', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [
+      { id: 'conn-linked', integrationId: 'vanta', status: 'active' },
+      { id: 'conn-refused', integrationId: 'vanta', status: 'active' },
+    ];
+    platform.linked.add('conn-linked');
+    platform.linkReplies.set('conn-refused', problem(403, 'forbidden'));
+    // The linked connection's list lacks vuln-filed, which only the unlinked one holds.
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const { vanta, ctx, commits } = await setup(platform);
+
+    vanta.workers(ctx);
+    const summary = await vanta.syncOnce(ctx);
+
+    expect(summary).toMatchObject({ projects: 0, checked: 0, closed: 0 });
+    expect(commits).not.toHaveBeenCalled();
+    expect(vanta.needsLinking).toEqual([{ connectionId: 'conn-refused', reason: expect.any(String) }]);
+  });
+
+  it('links a Vanta connection that appears after boot, skipping only the sync that found it', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-linked', integrationId: 'vanta', status: 'active' }];
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const { vanta, ctx, commits } = await setup(platform);
+    vanta.workers(ctx);
+    await vi.waitFor(() => expect(platform.linked.has('conn-linked')).toBe(true));
+
+    platform.orgConnections.push({ id: 'conn-later', integrationId: 'vanta', status: 'active' });
+    expect(await vanta.syncOnce(ctx)).toMatchObject({ projects: 0, checked: 0, closed: 0 });
+    expect(commits).not.toHaveBeenCalled();
+    expect(platform.linked.has('conn-later')).toBe(true);
+    expect(vanta.needsLinking).toEqual([]);
+
+    await vanta.syncOnce(ctx);
+    expect(platform.requests.some(request => request.path.startsWith('/v2/connections/conn-later/proxy'))).toBe(true);
+  });
+
+  it('reads a connection linked elsewhere since its listing was cached', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-linked', integrationId: 'vanta', status: 'active' }];
+    const onlyNew = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const onlyFiled = vulnerabilityPages([{ id: 'vuln-filed' }]);
+    platform.proxy = (connectionId, path, query) =>
+      connectionId === 'conn-later' ? onlyFiled(connectionId, path, query) : onlyNew(connectionId, path, query);
+    const { vanta, ctx } = await setup(platform);
+    vanta.workers(ctx);
+    await vi.waitFor(() => expect(platform.linked.has('conn-linked')).toBe(true));
+    await vanta.listConnections();
+
+    // Another replica, or the Platform UI, links a new connection to the project.
+    platform.orgConnections.push({ id: 'conn-later', integrationId: 'vanta', status: 'active' });
+    platform.linked.add('conn-later');
+    const summary = await vanta.syncOnce(ctx);
+
+    expect(platform.requests.some(request => request.path.startsWith('/v2/connections/conn-later/proxy'))).toBe(true);
+    expect(summary).toMatchObject({ closed: 0 });
   });
 
   it('closes no cards when Vanta fails partway through the vulnerability pages', async () => {
