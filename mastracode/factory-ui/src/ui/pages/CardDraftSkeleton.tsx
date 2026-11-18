@@ -22,7 +22,7 @@ export function CardDraftSkeleton() {
       aria-label="Loading card"
       className={cn('flex-1 [--chat-gutter:0.25rem]', chatColumnClass)}
     >
-      <ChatShell.Stage aria-hidden>
+      <ChatShell.Stage aria-hidden inert>
         <ChatShell.Viewport className={reservedSpaceClass.viewport}>
           <div className="relative flex min-h-full min-w-0 flex-1 flex-col">
             <ChatShell.Content className={cn('relative gap-0', transcriptTopClass)}>

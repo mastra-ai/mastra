@@ -6,7 +6,7 @@ import { SandboxEnvsTableHeader } from './SandboxEnvsTableHeader';
 export function SandboxEnvsSkeleton() {
   return (
     <div role="status" aria-label="Loading environment variables">
-      <Table variant="inset" aria-hidden>
+      <Table variant="inset" aria-hidden inert>
         <SandboxEnvsTableHeader />
         <Table.Body>
           {Array.from({ length: 2 }, (_, index) => (

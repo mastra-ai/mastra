@@ -82,7 +82,15 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeLoadingSkeleton label="Loading knowledge" view={view} />;
+  if (graph.isPending) {
+    return (
+      <KnowledgeLoadingSkeleton
+        label="Loading knowledge"
+        view={view}
+        pageOpen={view === 'page' && selectedPageId !== null}
+      />
+    );
+  }
   if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
   if (graph.data.pages.length === 0) {
     return (

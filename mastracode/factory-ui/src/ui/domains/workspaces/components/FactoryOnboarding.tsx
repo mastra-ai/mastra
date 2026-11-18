@@ -28,7 +28,7 @@ import { OnboardingWorkRow } from './onboarding/OnboardingWorkRow';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
-import { OnboardingFrame } from './onboarding/OnboardingFrame';
+import { OnboardingFrameVisual, useOnboardingMainRef } from './onboarding/OnboardingFrame';
 
 interface SectionPreview extends OnboardingModelPreview {
   repository?: SourceControlRepository;
@@ -71,7 +71,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const [previewSource, setPreviewSource] = useState<BoardSource>();
   const [preview, setPreview] = useState<SectionPreview>({});
-  const mainRef = useRef<HTMLElement>(null);
+  const mainRef = useOnboardingMainRef();
   const focusOpenedSection = useRef(false);
 
   // Continue, Skip and Change unmount with their section, so focus moves to the section that opened.
@@ -143,9 +143,8 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   const personalPreview = lanePreview(setup.personal, preview.personalProviderId, preview.personalMethod);
 
   return (
-    <OnboardingFrame
-      mainRef={mainRef}
-      visual={
+    <>
+      <OnboardingFrameVisual>
         <OnboardingPreview
           step={openStep}
           modelScope={setup.scope}
@@ -159,8 +158,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
           personalConnectionMethod={personalPreview.method}
           personalModel={personalPreview.model}
         />
-      }
-    >
+      </OnboardingFrameVisual>
       <OnboardingSlot>
         {openStep === 'vcs' ? (
           <VcsFactoryStep
@@ -218,6 +216,6 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
           </>
         )}
       </OnboardingSlot>
-    </OnboardingFrame>
+    </>
   );
 }

@@ -19,8 +19,15 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '../domains/auth/services/auth';
-import { SignInLayout } from '../domains/auth/components/SignInLayout';
-import { SignInSkeleton } from '../domains/auth/components/SignInSkeleton';
+import {
+  HOSTED_SIGN_IN_BUTTON_CLASS,
+  SIGN_IN_DESCRIPTION_CLASS,
+  SIGN_IN_FORM_CLASS,
+  SIGN_IN_FORM_TOGGLE_CLASS,
+  SIGN_IN_HEADER_CLASS,
+  SignInLayout,
+} from '../domains/auth/components/SignInLayout';
+import { SignInContentSkeleton } from '../domains/auth/components/SignInSkeleton';
 import '../domains/auth/components/sign-in-page.css';
 
 // Browsers can normalize backslashes into cross-origin redirects.
@@ -90,7 +97,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   };
 
   return (
-    <Form onSubmit={handleSubmit} className="w-full gap-5">
+    <Form onSubmit={handleSubmit} className={SIGN_IN_FORM_CLASS}>
       {mode === 'sign-up' ? (
         <Field>
           <FieldLabel>Name</FieldLabel>
@@ -145,7 +152,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           type="button"
           variant="ghost"
           size="sm"
-          className="self-center"
+          className={SIGN_IN_FORM_TOGGLE_CLASS}
           onClick={() => {
             setError(null);
             setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
@@ -181,67 +188,76 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
+  const checking = auth.isPending || !auth.isFetchedAfterMount;
+
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
-  if (auth.isPending || !auth.isFetchedAfterMount) return <SignInSkeleton label="Checking sign-in" />;
-
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
-  if (!auth.isFetching && !auth.isError && canReturnToApp) {
+  if (!checking && !auth.isFetching && !auth.isError && canReturnToApp) {
     return <Navigate to={returnTo} replace />;
   }
 
   return (
     <SignInLayout>
-      {authError && !customDomainBlocked ? (
-        <Notice
-          variant="destructive"
-          role="alert"
-          title={accessDenied ? 'Access denied' : 'Sign-in failed'}
-          className="mb-6"
-        >
-          {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
-          {accessDenied ? (
-            <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
-          ) : null}
-        </Notice>
-      ) : null}
-      {auth.isError ? (
-        <div role="alert" className="space-y-3">
-          <Txt as="p" variant="body" tone="muted">
-            Unable to check your sign-in status. Check your connection and try again.
-          </Txt>
-          <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
-            Try again
-          </Button>
-        </div>
-      ) : customDomainBlocked ? (
-        <CustomDomainAuthError hostname={window.location.hostname} />
-      ) : credentialForm ? (
-        <>
-          <div className="mb-6">
-            <Txt font="display" as="h2" variant="title">
-              Welcome back
-            </Txt>
-            <Txt as="p" variant="body" tone="muted" className="mt-2">
-              Sign in to continue building with your team.
-            </Txt>
-          </div>
-          <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
-        </>
+      {checking ? (
+        <SignInContentSkeleton
+          label="Checking sign-in"
+          credential={credentialForm ? { signUpDisabled: auth.data?.signUpDisabled === true } : undefined}
+        />
       ) : (
-        <Button
-          variant="primary"
-          size="lg"
-          className="w-80 max-w-full"
-          disabled={redirecting || auth.isPending}
-          onClick={() => {
-            setRedirecting(true);
-            redirectToLogin(baseUrl, returnTo);
-          }}
-        >
-          {studioAuth ? <LogoWithoutText className="w-4" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
-          {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
-        </Button>
+        <>
+          {authError && !customDomainBlocked ? (
+            <Notice
+              variant="destructive"
+              role="alert"
+              title={accessDenied ? 'Access denied' : 'Sign-in failed'}
+              className="mb-6"
+            >
+              {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
+              {accessDenied ? (
+                <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
+              ) : null}
+            </Notice>
+          ) : null}
+          {auth.isError ? (
+            <div role="alert" className="space-y-3">
+              <Txt as="p" variant="body" tone="muted">
+                Unable to check your sign-in status. Check your connection and try again.
+              </Txt>
+              <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+                Try again
+              </Button>
+            </div>
+          ) : customDomainBlocked ? (
+            <CustomDomainAuthError hostname={window.location.hostname} />
+          ) : credentialForm ? (
+            <>
+              <div className={SIGN_IN_HEADER_CLASS}>
+                <Txt font="display" as="h2" variant="title">
+                  Welcome back
+                </Txt>
+                <Txt as="p" variant="body" tone="muted" className={SIGN_IN_DESCRIPTION_CLASS}>
+                  Sign in to continue building with your team.
+                </Txt>
+              </div>
+              <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
+            </>
+          ) : (
+            <Button
+              variant="primary"
+              size="lg"
+              className={HOSTED_SIGN_IN_BUTTON_CLASS}
+              disabled={redirecting || auth.isPending}
+              onClick={() => {
+                setRedirecting(true);
+                redirectToLogin(baseUrl, returnTo);
+              }}
+            >
+              {studioAuth ? <LogoWithoutText className="w-4" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
+              {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+            </Button>
+          )}
+        </>
       )}
     </SignInLayout>
   );

@@ -74,7 +74,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   const skills = useFactorySkillsQuery(factoryId);
   const skillsPath = boardSkillsPath(factoryId, boardId);
 
-  if (skills.isPending) return <SkillEditorSkeleton />;
+  if (skills.isPending) return <SkillEditorSkeleton toolbar={skillName !== undefined} />;
   if (skills.isLoadingError) {
     return (
       <LoadErrorState

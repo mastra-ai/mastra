@@ -1,14 +1,21 @@
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { SKILL_TOOLBAR } from './SkillEditor';
+
 const INSTRUCTION_LINES = ['w-full', 'w-11/12', 'w-full', 'w-4/5', 'w-2/3'];
 
-export function SkillEditorSkeleton() {
+export function SkillEditorSkeleton({ toolbar }: { toolbar: boolean }) {
   return (
     <div role="status" aria-label="Loading skill">
       <div aria-hidden className="flex flex-col gap-8">
         <div className="flex flex-col gap-3">
+          {toolbar && (
+            <div className={SKILL_TOOLBAR}>
+              <Skeleton className="h-5 w-16 rounded-[7px] motion-reduce:before:animate-none" />
+            </div>
+          )}
           <SkeletonText line="text-display-lg" className="h-6 w-2/3 motion-reduce:before:animate-none" />
           <div className={textStyle({ variant: 'body' })}>
             <span className="inline-flex w-full flex-col align-[5px]">
