@@ -11,6 +11,7 @@ import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
 import { TracesExplorerRoot } from './traces-explorer-root';
 import { TracesExplorerSavedViews } from './traces-explorer-saved-views';
+import { TracesExplorerSearchProgress } from './traces-explorer-search-progress';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
@@ -23,6 +24,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
   SavedViews: TracesExplorerSavedViews,
+  SearchProgress: TracesExplorerSearchProgress,
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';

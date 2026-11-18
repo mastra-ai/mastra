@@ -12,14 +12,17 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
   const navigate = useNavigate();
 
   const toolbar = (
-    <ActionRow>
-      <ActionRow.Start>
-        <TracesExplorer.FilterBar />
-      </ActionRow.Start>
-      <ActionRow.End>
-        <TracesExplorer.ColumnsMenu />
-      </ActionRow.End>
-    </ActionRow>
+    <>
+      <ActionRow>
+        <ActionRow.Start>
+          <TracesExplorer.FilterBar />
+        </ActionRow.Start>
+        <ActionRow.End>
+          <TracesExplorer.ColumnsMenu />
+        </ActionRow.End>
+      </ActionRow>
+      <TracesExplorer.SearchProgress />
+    </>
   );
   const chart = <TracesExplorer.Histogram />;
   const content = (

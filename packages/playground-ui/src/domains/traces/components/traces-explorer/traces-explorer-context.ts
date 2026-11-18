@@ -53,6 +53,8 @@ export type TracesConfigContextValue = {
   withTimeToFirstTokenSort: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
+  /** The server searches a word search over more than 7 days one chunk at a time (`observabilityProgressiveSearch`). */
+  withProgressiveSearch: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
   withDiscovery: boolean;
   isCapabilitiesLoading: boolean;
@@ -112,7 +114,16 @@ export type TracesListContextValue = Pick<
   | 'error'
   | 'refetch'
   | 'autoRefetch'
+  | 'searchedRange'
+  | 'searching'
+  | 'stopped'
+  | 'stop'
+  | 'chunkError'
+  | 'fetchNextPage'
+  | 'timeRange'
 > & {
+  /** The list runs a progressive word search: one chunk of the range per page. */
+  progressive: boolean;
   sort: TracesSort;
   onSortChange: (next: TracesSort) => void;
 };

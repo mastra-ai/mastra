@@ -2,3 +2,5 @@ export { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } f
 export type { UseSpansFilterBarFieldsOptions, UseSpansFilterBarOptions } from './use-spans-filter-bar';
 export { spanRowId, useSpansListSource } from './use-spans-list-source';
 export type { UseSpansListSourceArgs } from './use-spans-list-source';
+export { useSpansHistogram } from './use-spans-histogram';
+export type { UseSpansHistogramArgs } from './use-spans-histogram';

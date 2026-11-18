@@ -35,6 +35,7 @@ import type {
   TracesSelectionActions,
   TracesSelectionContextValue,
 } from './traces-explorer-context';
+import { TracesHistogramProvider } from './traces-explorer-histogram';
 import { TracesListProvider } from './traces-explorer-list-provider';
 import {
   useFeedbackAvailable,
@@ -122,6 +123,7 @@ export function TracesExplorerRoot({
   const withTimeToFirstTokenSort =
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
+  const withProgressiveSearch = withQueryTrace && (capabilities?.capabilities.observabilityProgressiveSearch ?? false);
 
   const withTokenSearch =
     withQueryTrace &&
@@ -260,6 +262,7 @@ export function TracesExplorerRoot({
       withTimeToFirstToken,
       withTimeToFirstTokenSort,
       withDeltaPolling,
+      withProgressiveSearch,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
       metricsSupport,
@@ -287,6 +290,7 @@ export function TracesExplorerRoot({
       withTimeToFirstToken,
       withTimeToFirstTokenSort,
       withDeltaPolling,
+      withProgressiveSearch,
       withDiscovery,
       traceQuery.isLoading,
       metricsSupport,
@@ -334,9 +338,11 @@ export function TracesExplorerRoot({
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
           <TracesColumnsProvider>
-            <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
-              {children}
-            </TracesListProvider>
+            <TracesHistogramProvider>
+              <TracesListProvider key={rootSource ?? 'legacy'} sort={sort} onSortChange={onSortChange}>
+                {children}
+              </TracesListProvider>
+            </TracesHistogramProvider>
           </TracesColumnsProvider>
         </TracesSelectionContext.Provider>
       </TracesFiltersContext.Provider>

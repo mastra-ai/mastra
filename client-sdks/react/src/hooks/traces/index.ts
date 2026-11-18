@@ -15,6 +15,7 @@ export {
 export * from './use-span-aggregate';
 export * from './use-trace-aggregate';
 export * from './use-progressive-aggregate';
+export type { ProgressiveListState, SearchedRange } from '../shared/use-progressive-list';
 export * from './use-trace-query';
 export * from './use-query-spans';
 export * from './use-query-threads';

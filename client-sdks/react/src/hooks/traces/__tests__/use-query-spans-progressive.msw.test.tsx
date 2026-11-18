@@ -164,6 +164,7 @@ describe('useQuerySpans with a progressive word search', () => {
       await waitFor(() => expect(result.current.chunkError).not.toBeNull());
       expect(result.current.spans).toEqual(spanQueryFirstPage.spans);
       expect(result.current.isError).toBe(false);
+      expect(result.current.error).toBeNull();
       expect(result.current.searchedRange).toEqual({ from: '2026-10-14T00:00:00.000Z', to: TO });
     });
   });

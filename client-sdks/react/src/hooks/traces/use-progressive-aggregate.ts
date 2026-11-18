@@ -6,6 +6,7 @@ import type {
 } from '@mastra/client-js';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import { useProgressiveList } from '../shared/use-progressive-list';
 import type { ProgressiveListState } from '../shared/use-progressive-list';
@@ -76,10 +77,13 @@ function useProgressiveAggregate<
     error,
   });
 
-  const last = data?.pages.at(-1);
+  const merged = useMemo(() => {
+    const last = data?.pages.at(-1);
+    return data && last ? { ...last, rows: data.pages.flatMap(page => page.rows) } : undefined;
+  }, [data]);
   return {
     ...progress,
-    data: data && last && { ...last, rows: data.pages.flatMap(page => page.rows) },
+    data: merged,
     isLoading,
     isError: isError && !isFetchNextPageError,
     error,
