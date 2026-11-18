@@ -1195,6 +1195,8 @@ export function createDurableToolCallStep() {
       const approvalGated = suspendedForApproval || (requiresApproval && isFreshCall);
 
       if (approvalGated && !approvalDecision && isFreshCall) {
+        // Approval callbacks don't run for a queued call that shutdown reaches; recovery runs them.
+        await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
         const rejection = await runBeforeApprovalChecks({
           tool,
           input: args,
@@ -1825,6 +1827,8 @@ export function createDurableToolCallStep() {
       // already-running task is restarted to reattach hooks and
       // ladder failures degrade to sync execution to preserve forward
       // progress across transport/store boundaries.
+      // Dispatch can start the task's executor before it returns, so the call counts as running from here.
+      const settleBackgroundCall = startToolCall(registryEntry);
       const bgOutcome = await dispatchBackgroundTool({
         existingRunningTask: 'restart',
         dispatchFailure: 'fallback-to-sync',
@@ -2141,18 +2145,21 @@ export function createDurableToolCallStep() {
           onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
           onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
         }),
+      }).catch(error => {
+        settleBackgroundCall();
+        throw error;
       });
 
+      if (bgOutcome.status === 'sync' || bgOutcome.disposition !== 'awaited') settleBackgroundCall();
       if (bgOutcome.status !== 'sync') {
         if (bgOutcome.disposition === 'awaited') {
           let completedTask: Awaited<ReturnType<typeof bgOutcome.waitForCompletion>>;
-          // Shutdown keeps the run's claim while the awaited task runs, as it does for a foreground tool body.
-          const settleAwaitedTask = startToolCall(registryEntry);
           try {
             completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
-            settleAwaitedTask();
+            settleBackgroundCall();
           } catch (error) {
-            settleAwaitedTask();
+            // The wait rejects on abort before the task settles; shutdown keeps the claim until it does.
+            bgOutcome.waitForCompletion().then(settleBackgroundCall, settleBackgroundCall);
             if (!toolAbortSignal?.aborted || error !== toolAbortSignal.reason) throw error;
             return {
               ...typedInput,
