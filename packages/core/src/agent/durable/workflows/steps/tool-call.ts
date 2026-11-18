@@ -86,6 +86,7 @@ import {
   globalRunRegistry,
   markRunActive,
   startToolCall,
+  stopAtShutdownBoundary,
 } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -2233,6 +2234,8 @@ export function createDurableToolCallStep() {
 
       // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
       // running until the tool body settles, even after the abort grace hands control back to the loop.
+      // A queued call that shutdown reaches before it starts is left for recovery.
+      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       const settleRunTool = startRunStep(registryEntry);
       // Shutdown keeps the run's claim while a tool body runs, so a result it returns in time is checkpointed.
       const settleToolCall = startToolCall(registryEntry);

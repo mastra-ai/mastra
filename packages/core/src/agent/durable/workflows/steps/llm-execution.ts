@@ -308,7 +308,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
-      await stopAtShutdownBoundary(getRunRegistryEntry(runId, mastra as Mastra | undefined), ownership);
+      await stopAtShutdownBoundary(
+        getRunRegistryEntry(runId, mastra as Mastra | undefined),
+        ownership,
+        'model-request',
+      );
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
       // 1. Resolve runtime dependencies (tools from Mastra)

@@ -255,10 +255,13 @@ export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): 
 
 /** The tool calls each run's execution is running now, keyed by its registry entry. */
 const toolCallsInFlight = new WeakMap<RunRegistryEntry, number>();
+/** Runs with a tool call whose result is not checkpointed yet: set when the call starts, cleared at the next model request. */
+const toolResultsPending = new WeakSet<RunRegistryEntry>();
 
 /** Marks a tool call of this run as running. Call the returned function once its body has settled. */
 export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
   if (!entry) return () => {};
+  toolResultsPending.add(entry);
   toolCallsInFlight.set(entry, (toolCallsInFlight.get(entry) ?? 0) + 1);
   let settled = false;
   return () => {
@@ -271,13 +274,16 @@ export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
 }
 
 /**
- * Called by the durable LLM step before it starts a model request. A run that shutdown asked to stop once its tool
- * calls finished stops here: its tool results were checkpointed by the steps before this one.
+ * Called by the durable steps before a model request or a tool call starts. A run that shutdown asked to stop once
+ * its tool calls finished stops here. Before a model request its earlier tool results were checkpointed by the steps
+ * before this one; a tool call that has not started yet is left for recovery to run.
  */
 export async function stopAtShutdownBoundary(
   entry: RunRegistryEntry | undefined,
   ownership: { composeSignal(signal: AbortSignal | undefined): AbortSignal; throwIfLost(): void } | undefined,
+  before: 'model-request' | 'tool-call',
 ): Promise<void> {
+  if (entry && before === 'model-request') toolResultsPending.delete(entry);
   const reached = entry?.shutdownBoundary;
   if (!reached || !ownership) return;
   const lost = ownership.composeSignal(undefined);
@@ -301,10 +307,11 @@ export const SHUTDOWN_TOOL_SETTLE_MS = TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_
  * without writing and releases its run, so recovery can take it right away.
  * Executions that already settled are left alone.
  *
- * An execution running a tool call is first given up to `toolSettleMs` to finish it and reach its next model
- * request, so the tool's result is checkpointed rather than discarded and the tool run again on recovery. One whose
- * tool call is still running after that keeps its claim until the claim expires, so recovery can't run the tool a
- * second time while this process may still be running it.
+ * An execution with a tool result not checkpointed yet is first given up to `toolSettleMs` to finish its tool calls
+ * and reach its next model request, so the results are checkpointed rather than discarded and the tools run again on
+ * recovery. It starts no further tool calls meanwhile. One whose tool call is still running after that keeps its
+ * claim until the claim expires, so recovery can't run the tool a second time while this process may still be
+ * running it.
  */
 export async function abandonDurableAgentExecutions(
   mastra: Mastra,
@@ -317,7 +324,7 @@ export async function abandonDurableAgentExecutions(
       if (entry.mastra !== mastra || !fence) return;
       // A broker does not prove that this is the only executing process.
       if (detachesOnShutdown(mastra, entry)) return fence.detach();
-      if (toolCallsInFlight.has(entry)) {
+      if (toolResultsPending.has(entry)) {
         const boundary = new Promise<void>(resolve => (entry.shutdownBoundary = resolve));
         await settledOrElapsed(
           Promise.race([boundary, fence.whenSettled, ...(entry.workflowExecution ? [entry.workflowExecution] : [])]),

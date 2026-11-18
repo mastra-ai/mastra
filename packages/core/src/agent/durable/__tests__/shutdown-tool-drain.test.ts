@@ -6,11 +6,14 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { SHUTDOWN_TOOL_SETTLE_MS } from '../run-registry';
 import { buildAgreementGraph, createScriptModel, toolResults, waitFor } from './restart-agreement-support';
 import { createGate, loadGraph } from './restart-harness';
 
 const live: any[] = [];
+const gates: ReturnType<typeof createGate>[] = [];
 afterEach(async () => {
+  for (const gate of gates.splice(0)) gate.release();
   for (const gen of live.splice(0)) {
     await Promise.race([gen.mastra.shutdown({ drainTimeout: 0 }), new Promise(resolve => setTimeout(resolve, 2000))]);
   }
@@ -19,11 +22,16 @@ afterEach(async () => {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 describe.each(['auto', 'off'] as const)('durable agent shutdown with a tool call in flight (recovery=%s)', mode => {
-  async function setup(runId: string) {
+  async function setup(
+    runId: string,
+    { calls = 1, toolCallConcurrency }: { calls?: number; toolCallConcurrency?: number } = {},
+  ) {
     const { InMemoryStore } = await loadGraph();
     const storage = new InMemoryStore();
     const gate = createGate();
+    gates.push(gate);
     const executions: number[] = [];
+    const modelCalls: number[] = [];
     let toolStarted = false;
 
     const build = ({ core, generation, memory }: any) => {
@@ -39,8 +47,12 @@ describe.each(['auto', 'off'] as const)('durable agent shutdown with a tool call
           return { ok: true };
         },
       });
-      const model = createScriptModel(prompt =>
-        toolResults(prompt).length === 0 ? { tools: [{ name: 'sideEffect' }] } : { text: 'done' },
+      const model = createScriptModel(
+        prompt =>
+          toolResults(prompt).length === 0
+            ? { tools: Array.from({ length: calls }, () => ({ name: 'sideEffect' })) }
+            : { text: 'done' },
+        { onCall: () => modelCalls.push(generation) },
       );
       return new core.Agent({
         id: 'shutdown-tool',
@@ -63,25 +75,33 @@ describe.each(['auto', 'off'] as const)('durable agent shutdown with a tool call
 
     const gen1: any = await start(1);
     live.push(gen1);
-    const result = await gen1.runner.stream('go', { runId, memory: { thread: 't', resource: 'r' }, maxSteps: 5 });
+    const result = await gen1.runner.stream('go', {
+      runId,
+      memory: { thread: 't', resource: 'r' },
+      maxSteps: 5,
+      toolCallConcurrency,
+    });
     void (async () => {
       try {
         for await (const _ of result.fullStream) void _;
       } catch {}
     })();
     await waitFor(() => toolStarted);
-    return { storage, gate, executions, gen1, start };
+    return { storage, gate, executions, modelCalls, gen1, start };
   }
 
   it('checkpoints a tool that returns after the drain deadline and does not run it again on recovery', async () => {
     const runId = `shutdown-tool-late-${mode}`;
-    const { gate, executions, gen1, start } = await setup(runId);
+    const { gate, executions, modelCalls, gen1, start } = await setup(runId);
 
-    const shutdown = gen1.mastra.shutdown({ drainTimeout: 200 });
+    const drainTimeout = 200;
+    const shutdown = gen1.mastra.shutdown({ drainTimeout });
     // Past the drain deadline, within the time shutdown keeps the claim for a running tool.
-    setTimeout(() => gate.release(), 350);
+    setTimeout(() => gate.release(), drainTimeout + SHUTDOWN_TOOL_SETTLE_MS / 2);
     await shutdown;
     expect(executions).toEqual([1]);
+    // The run stopped before asking the model again; recovery makes that request with the saved tool result.
+    expect(modelCalls).toEqual([1]);
 
     const gen2: any = await start(2);
     live.push(gen2);
@@ -91,6 +111,29 @@ describe.each(['auto', 'off'] as const)('durable agent shutdown with a tool call
 
     expect(text).toBe('done');
     expect(executions).toEqual([1]);
+    expect(modelCalls).toEqual([1, 2]);
+  }, 30_000);
+
+  it('does not start a queued tool call while shutdown waits for the running one', async () => {
+    const runId = `shutdown-tool-queued-${mode}`;
+    const { gate, executions, gen1, start } = await setup(runId, { calls: 2, toolCallConcurrency: 1 });
+
+    const drainTimeout = 200;
+    const shutdown = gen1.mastra.shutdown({ drainTimeout });
+    setTimeout(() => gate.release(), drainTimeout + SHUTDOWN_TOOL_SETTLE_MS / 2);
+    await shutdown;
+    await sleep(50);
+    expect(executions).toEqual([1]);
+    // Without running checkpoints the run stopped inside the iteration has none to recover from.
+    if (mode === 'off') return;
+
+    const gen2: any = await start(2);
+    live.push(gen2);
+    const recovered = await gen2.runner.recover(runId);
+    let text = '';
+    for await (const chunk of recovered.fullStream) if (chunk.type === 'text-delta') text += chunk.payload.text;
+    expect(text).toBe('done');
+    expect(executions.filter(generation => generation === 1)).toHaveLength(1);
   }, 30_000);
 
   it('keeps the run claimed while a tool is still running after shutdown, so recovery cannot run it beside it', async () => {
