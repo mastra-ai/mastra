@@ -9,4 +9,8 @@ Board search and the search palette now find cards by a pasted link. Paste a Git
 - A branch name or card id, pasted whole, finds its card.
 - The number or key of an attached pull request (`acme/app#307`) finds the issue's card.
 
+```
+GET /web/factory/projects/:id/boards/:boardKey/phases?q=https%3A%2F%2Fgithub.com%2Facme%2Fapp%2Fpull%2F307%2Ffiles
+```
+
 Search still runs on the server against per-card data that is computed once, and a link is parsed once per search, so a search costs about the same as before.

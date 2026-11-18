@@ -228,11 +228,16 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
         const facts = card.workItem?.metadata;
         const number =
           facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
+        // The server's `cardSearch`, over the card as the wire carries it.
         const searched = searchableCard({
-          words: [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey],
-          ids: [card.id],
-          sourceKeys: [card.workItem?.key],
-          links: [card.url, card.workItem?.url],
+          id: card.id,
+          title: card.title,
+          number: typeof number === 'number' ? number : null,
+          sourceId: card.sourceKey,
+          key: card.workItem?.key,
+          urls: [card.url, card.workItem?.url],
+          sources: card.workItem?.sources ?? [],
+          sessions: card.sessions,
         });
         return matchesSearch(searched, terms);
       })
