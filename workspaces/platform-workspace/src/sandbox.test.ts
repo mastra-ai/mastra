@@ -177,6 +177,43 @@ describe('PlatformSandbox', () => {
     expect(init.data.env).toEqual({ GIT_TERMINAL_PROMPT: '0', GITLAB_HOST_TOKEN: 'glpat_kept' });
   });
 
+  it('drops GITHUB_TOKEN and only the github.com config pairs, renumbering the rest', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: {
+        GITHUB_TOKEN: 'ghs_real',
+        GH_ENTERPRISE_TOKEN: 'ghs_ent',
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_CONFIG_KEY_1: 'http.https://gitlab.com/group/proj.extraHeader',
+        GIT_CONFIG_VALUE_1: 'Authorization: Basic gitlab',
+        GIT_CONFIG_KEY_2: 'HTTP.https://github.com/octocat/hello.git.extraHeader',
+        GIT_CONFIG_VALUE_2: 'Authorization: Basic secret',
+      },
+    });
+
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.com/group/proj.extraHeader',
+      GIT_CONFIG_VALUE_0: 'Authorization: Basic gitlab',
+    });
+  });
+
   it('keeps per-call GitHub credentials for a VM that is not vault', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
