@@ -1,0 +1,4 @@
+{
+  "attachment": ["google/gemma-3-12b-it", "google/gemma-3-27b-it"],
+  "temperature": ["deepseek/deepseek-v3", "google/gemma-3-12b-it", "google/gemma-3-27b-it"]
+}

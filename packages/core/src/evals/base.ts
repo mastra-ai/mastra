@@ -6,7 +6,7 @@ import type { AgentInstructions, AgentMemoryOption, ToolsInput } from '../agent/
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -1497,7 +1497,8 @@ class MastraScorer<
 
     const prompt = await originalStep.createPrompt(context);
     const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
-    const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
+    const modelConfig: WidenedMastraModelConfig | undefined =
+      (originalStep.judge?.model as WidenedMastraModelConfig | undefined) ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
