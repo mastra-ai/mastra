@@ -1105,7 +1105,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         // A failed mint keeps the reconnect usable with the current token.
-        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        // A registration made while the sandbox withheld tokens (vault or
+        // unknown mode) holds no credential; when the new sandbox accepts
+        // one, install the org PAT if configured, before falling back to a mint.
+        const withheldPat =
+          githubProvider && !existingRegistration.ghToken && sandboxAcceptsGithubToken(target)
+            ? await getGithubPat(() => githubProvider.integrationStorage, session.orgId, existingRegistration.patKind)
+            : undefined;
+        if (withheldPat) existingRegistration.inject(withheldPat, true);
+        const refreshed = withheldPat ? true : await refreshStaleGithubToken().catch(() => false);
         if (!refreshed) {
           // Reinstalling the same credential must not reset its age.
           const { tokenIssuedAt } = existingRegistration;
