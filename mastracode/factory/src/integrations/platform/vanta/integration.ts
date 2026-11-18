@@ -1,11 +1,10 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake, IntakeSource } from '../../../capabilities/intake.js';
 import { loose } from '../../../routes/route.js';
-import type { FactoryIntegration, IntegrationContext } from '../../base.js';
-import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
+import type { IntegrationContext } from '../../base.js';
+import type { IssueReconciler } from '../../issue-reconciler.js';
 import { attachVantaRules } from '../../vanta/rules.js';
 import {
   createVantaSync,
@@ -14,11 +13,14 @@ import {
   vantaVulnerabilitiesSelected,
 } from '../../vanta/sync.js';
 import type { VantaVulnerability } from '../../vanta/sync.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
-import type { PlatformApiClientConfig } from '../api-client.js';
+import type { PlatformConnection } from '../foundation/connect-binding.js';
+import { PlatformConnectIntegration } from '../foundation/integration.js';
+import { logPlatformWarn } from '../logging.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 
 export interface PlatformVantaIntegrationConfig {
-  clientConfig?: PlatformApiClientConfig;
+  /** The Connect client, or options to build one; defaults to the platform environment. */
+  connect?: PlatformConnectOption;
   syncIntervalMs?: number;
 }
 
@@ -26,13 +28,6 @@ export interface PlatformVantaIntegrationConfig {
 const PLATFORM_VANTA_PROVIDER_KEY = 'vanta';
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50;
-
-interface PlatformIntegrationConnection {
-  id: string;
-  status: 'active' | 'needs_reauth';
-  accountLabel: string | null;
-  resourceId: string | null;
-}
 
 interface VantaVulnerabilityPage {
   results: {
@@ -43,13 +38,10 @@ interface VantaVulnerabilityPage {
 
 /**
  * Files Vanta vulnerabilities as `security`-labeled cards through Platform-managed (MastraConnect)
- * Vanta connections. Vanta has no webhooks Factory can consume, so a worker polls the active list.
+ * Vanta connections. Vanta has no webhooks Factory can consume, so its reconcile syncs the active
+ * list, every 15 minutes by default.
  */
-export class PlatformVantaIntegration implements FactoryIntegration {
-  readonly id = 'vanta';
-  readonly #client: PlatformApiClient;
-  readonly #syncIntervalMs: number;
-
+export class PlatformVantaIntegration extends PlatformConnectIntegration {
   readonly intake: Intake = {
     listSources: () => this.#listSources(),
     listItems: async () => ({ items: [], nextCursor: null }),
@@ -60,30 +52,24 @@ export class PlatformVantaIntegration implements FactoryIntegration {
   };
 
   constructor(config: PlatformVantaIntegrationConfig = {}) {
-    this.#client = new PlatformApiClient(config.clientConfig ?? platformApiClientConfigFromEnv());
-    this.#syncIntervalMs = config.syncIntervalMs ?? DEFAULT_VANTA_SYNC_INTERVAL_MS;
-  }
-
-  async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
-      'GET',
-      `/v2/connections?providerKey=${PLATFORM_VANTA_PROVIDER_KEY}`,
-    );
-    return result.connections;
-  }
-
-  async #activeConnections(): Promise<PlatformIntegrationConnection[]> {
-    const connections = await this.listConnections();
-    return connections.filter(connection => connection.status === 'active').sort((a, b) => a.id.localeCompare(b.id));
+    super({
+      id: 'vanta',
+      providerKeys: [PLATFORM_VANTA_PROVIDER_KEY],
+      ...(config.connect ? { connect: config.connect } : {}),
+      linkOrgConnectionsAtBoot: true,
+      connectProviders: [{ provider: 'vanta', integrationId: PLATFORM_VANTA_PROVIDER_KEY }],
+      ...(config.syncIntervalMs === undefined ? {} : { reconcileIntervalMs: config.syncIntervalMs }),
+      reconcileDefaultIntervalMs: DEFAULT_VANTA_SYNC_INTERVAL_MS,
+    });
   }
 
   async #listSources(): Promise<IntakeSource[]> {
-    if ((await this.#activeConnections()).length === 0) return [];
+    if ((await this.activeConnections()).length === 0) return [];
     return [{ id: VANTA_VULNERABILITIES_SOURCE_ID, name: 'Vulnerabilities', type: 'vulnerabilities' }];
   }
 
   /** Every active vulnerability from the supplied connections, de-duplicated by id. */
-  async listVulnerabilities(connections?: PlatformIntegrationConnection[]): Promise<VantaVulnerability[]> {
+  async listVulnerabilities(connections?: PlatformConnection[]): Promise<VantaVulnerability[]> {
     const selected = connections ?? (await this.listConnections()).sort((a, b) => a.id.localeCompare(b.id));
     if (selected.length === 0) throw new Error('There is no active Vanta connection.');
     const unreadable = selected.find(connection => connection.status !== 'active');
@@ -96,12 +82,11 @@ export class PlatformVantaIntegration implements FactoryIntegration {
           // A cut-off list would read as the rest being resolved.
           throw new Error(`Vanta connection ${connection.id} has more than ${MAX_PAGES} pages of vulnerabilities.`);
         }
-        const query = new URLSearchParams({ isDeactivated: 'false', pageSize: String(PAGE_SIZE) });
-        if (cursor) query.set('pageCursor', cursor);
-        const result: VantaVulnerabilityPage = await this.#client.request<VantaVulnerabilityPage>(
-          'GET',
-          `/v2/connections/${encodeURIComponent(connection.id)}/proxy/v1/vulnerabilities?${query}`,
-        );
+        const result = (await this.proxy(connection.id, {
+          method: 'GET',
+          path: 'v1/vulnerabilities',
+          query: { isDeactivated: 'false', pageSize: PAGE_SIZE, ...(cursor ? { pageCursor: cursor } : {}) },
+        })) as VantaVulnerabilityPage;
         for (const vulnerability of result.results.data) byId.set(vulnerability.id, vulnerability);
         if (!result.results.pageInfo.hasNextPage) break;
         if (!result.results.pageInfo.endCursor || page === MAX_PAGES - 1) {
@@ -113,26 +98,48 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     return [...byId.values()];
   }
 
-  async listVulnerabilitiesForOrg(orgId: string, factoryProjects: ReadonlyArray<{ id: string; orgId: string }>): Promise<VantaVulnerability[] | null> {
-    const connections = await this.listConnections();
+  async listVulnerabilitiesForOrg(
+    orgId: string,
+    factoryProjects: ReadonlyArray<{ id: string; orgId: string }>,
+  ): Promise<VantaVulnerability[] | null> {
+    // Fresh, so the unlinked check below compares against exactly what the sync reads.
+    const connections = await this.listConnections({ fresh: true });
     const ownerByProject = new Map(factoryProjects.map(project => [project.id, project.orgId]));
     // A global or unrecognized connection cannot be attributed safely across organizations.
-    if (connections.some(connection => connection.resourceId && !ownerByProject.has(connection.resourceId))) return null;
-    if (new Set(factoryProjects.map(project => project.orgId)).size > 1 &&
-        connections.some(connection => !connection.resourceId)) return null;
+    if (connections.some(connection => connection.resourceId && !ownerByProject.has(connection.resourceId)))
+      return null;
+    if (
+      new Set(factoryProjects.map(project => project.orgId)).size > 1 &&
+      connections.some(connection => !connection.resourceId)
+    )
+      return null;
     const owned = connections.filter(connection =>
       connection.resourceId ? ownerByProject.get(connection.resourceId) === orgId : true,
     );
     if (owned.length === 0 || owned.some(connection => connection.status === 'needs_reauth')) return null;
+    // A Vanta connection the project can't see would read as all its vulnerabilities resolved.
+    const unlinked = await this.binding.unlinkedOrgConnections(connections);
+    if (unlinked.length > 0) {
+      logPlatformWarn('Skipping the Vanta sync until every Vanta connection is linked to the Factory project', {
+        connectionIds: unlinked,
+      });
+      // A refusal lands in needsLinking for the UI; a successful link re-runs the sync.
+      await this.binding.linkOrgConnections().catch(error =>
+        logPlatformWarn('Could not link Vanta connections to the Factory project', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return null;
+    }
     return this.listVulnerabilities(owned.filter(connection => connection.status === 'active'));
   }
 
-  workers(ctx: IntegrationContext): MastraWorker[] {
+  protected override reconcile(ctx: IntegrationContext): IssueReconciler | null {
     const ingest = attachVantaRules(ctx);
-    if (!ingest) return [];
+    if (!ingest) return null;
     const { projects, intake } = ctx.storage;
-    const sync = createVantaSync({
-      connected: async () => (await this.#activeConnections()).length > 0,
+    return createVantaSync({
+      connected: async () => (await this.activeConnections()).length > 0,
       listVulnerabilities: async orgId => this.listVulnerabilitiesForOrg(orgId, await projects.listAll()),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>
@@ -142,7 +149,6 @@ export class PlatformVantaIntegration implements FactoryIntegration {
       ingest,
       userId: 'factory-rule-dispatcher',
     });
-    return [new IssueReconcileWorker({ integrationId: this.id, reconcile: sync, intervalMs: this.#syncIntervalMs })];
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
@@ -160,9 +166,5 @@ export class PlatformVantaIntegration implements FactoryIntegration {
         },
       }),
     ];
-  }
-
-  diagnostics(): Record<string, unknown> {
-    return { configured: true, mode: 'platform' };
   }
 }
