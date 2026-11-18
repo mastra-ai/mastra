@@ -3015,13 +3015,19 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
       this.#abortLocalController(runId);
       void this.requestRemoteAbort(runId);
-      if (await this.#cancelParkedRun(runId)) await this.#announceCanceledRun(runId);
+      if (await this.#cancelParkedRun(runId)) {
+        await this.#announceCanceledRun(runId);
+        // A canceled parked run can never resume; stop listening for aborts.
+        await releaseRemoteAbortListener(runId, this.#mastra);
+      }
       return true;
     }
     try {
       const canceled = await this.#cancelParkedRun(runId);
       if (canceled) await this.#announceCanceledRun(runId);
-      return (await requestAcknowledgedAbort(this.pubsub, runId)) || canceled;
+      const acknowledged = await requestAcknowledgedAbort(this.pubsub, runId);
+      if (canceled) await releaseRemoteAbortListener(runId, this.#mastra);
+      return acknowledged || canceled;
     } finally {
       this.#abortLocalController(runId);
     }
