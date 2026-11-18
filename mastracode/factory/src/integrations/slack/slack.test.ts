@@ -2707,9 +2707,9 @@ describe('a sender with no model of their own', () => {
 
   function setup({
     modelScope = 'hybrid',
-    personalDefault = null,
+    personalDefault,
     hasAccess = false,
-  }: { modelScope?: 'factory' | 'user' | 'hybrid'; personalDefault?: string | null; hasAccess?: boolean } = {}) {
+  }: { modelScope?: 'factory' | 'user' | 'hybrid'; personalDefault?: string; hasAccess?: boolean } = {}) {
     process.env.MASTRACODE_PUBLIC_URL = 'https://factory.example.com';
     modelAccess.mockImplementation(async () => hasAccess);
     const deps = {

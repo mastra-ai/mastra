@@ -130,37 +130,16 @@ export function createSlackConnectRoutes(deps: {
   };
 
   /**
-   * The Factory a fresh link belongs to: the one that started the flow, else the
-   * link's existing default, else the org's only factory. A link with no default
-   * yet gets the resolved one, so the next Slack mention routes without asking
-   * (the same stamp `resolveFactoryForLink` applies at dispatch time).
+   * The Factory the flow returns to: the one that started it, else the link's
+   * default, else the org's only factory (the one a Slack mention would route
+   * to). Several factories and no default leave it to Connections.
    */
-  async function routeNewLink({
-    tenant,
-    link,
-    key,
-  }: {
-    tenant: StateTenant;
-    link: ChannelAccountLink;
-    key: { platform: string; externalTeamId: string; externalUserId: string };
-  }): Promise<string | undefined> {
-    if (!projects) return tenant.factoryProjectId;
-    const orgId = tenant.orgId;
-    const exists = async (id: string | undefined) =>
-      id && orgId ? ((await projects.get({ orgId, id }).catch(() => null)) ?? undefined) : undefined;
-
-    const factory =
-      (await exists(tenant.factoryProjectId)) ??
-      (await exists(link.defaultFactoryProjectId)) ??
-      (orgId ? await projects.list({ orgId }).then(all => (all.length === 1 ? all[0] : undefined)) : undefined);
-    if (!factory) return tenant.factoryProjectId;
-
-    if (!link.defaultFactoryProjectId) {
-      await accountLinks
-        .setDefaultFactory({ ...key, userId: tenant.userId, factoryProjectId: factory.id })
-        .catch(() => false);
-    }
-    return factory.id;
+  async function landingFactoryId(tenant: StateTenant, link: ChannelAccountLink): Promise<string | undefined> {
+    if (tenant.factoryProjectId) return tenant.factoryProjectId;
+    if (link.defaultFactoryProjectId) return link.defaultFactoryProjectId;
+    if (!projects || !tenant.orgId) return undefined;
+    const factories = await projects.list({ orgId: tenant.orgId }).catch(() => []);
+    return factories.length === 1 ? factories[0]?.id : undefined;
   }
 
   return [
@@ -274,7 +253,6 @@ export function createSlackConnectRoutes(deps: {
           return failed();
         }
 
-        const key = { platform: 'slack', externalTeamId: teamId, externalUserId: slackUserId };
         const link = await accountLinks.saveAccountLink({
           platform: 'slack',
           externalTeamId: teamId,
@@ -285,7 +263,7 @@ export function createSlackConnectRoutes(deps: {
           externalUserName: typeof userName === 'string' ? userName : undefined,
         });
 
-        const factoryProjectId = await routeNewLink({ tenant, link, key });
+        const factoryProjectId = await landingFactoryId(tenant, link);
         return c.redirect(`${uiOrigin}${landingPath({ ...tenant, factoryProjectId }, 'connected')}`);
       },
     }),

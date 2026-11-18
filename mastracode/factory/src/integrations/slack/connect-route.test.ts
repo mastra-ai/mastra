@@ -286,7 +286,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
   };
 
   function oidcRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
-    const { store, saveAccountLink, setDefaultFactory } = fakeStore();
+    const { store, saveAccountLink } = fakeStore();
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
@@ -294,7 +294,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       oidc,
       ...overrides,
     });
-    return { routes, saveAccountLink, setDefaultFactory };
+    return { routes, saveAccountLink };
   }
 
   /** Unsigned JWT with the given payload — claims validation only, no signature. */
@@ -585,32 +585,25 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(tenantSigner.verify(state)).not.toHaveProperty('from');
   });
 
-  it('callback from Slack lands on the org only Factory setup and makes it the default', async () => {
+  it("callback from Slack lands on the setup page of the org's only Factory", async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
     );
-    const { routes, setDefaultFactory } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }]) });
+    const { routes } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }]) });
     const c = fakeCtx(tenantSigner.sign('org-9', 'user-9', { from: 'slack' }), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
-    expect(setDefaultFactory).toHaveBeenCalledWith({
-      platform: 'slack',
-      externalTeamId: 'T-77',
-      externalUserId: 'U-77',
-      userId: 'user-9',
-      factoryProjectId: 'fp-1',
-    });
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-1/setup?slack=connected&from=slack');
   });
 
-  it('callback from Slack keeps a link default and lands on that Factory setup', async () => {
+  it("callback from Slack lands on the setup page of the link's default Factory", async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
     );
-    const { routes, saveAccountLink, setDefaultFactory } = oidcRoutes({
+    const { routes, saveAccountLink } = oidcRoutes({
       projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
     });
     saveAccountLink.mockResolvedValue({ userId: 'user-9', defaultFactoryProjectId: 'fp-2', linkedAt: new Date() });
@@ -618,7 +611,6 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
-    expect(setDefaultFactory).not.toHaveBeenCalled();
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-2/setup?slack=connected&from=slack');
   });
 
@@ -627,12 +619,11 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
     );
-    const { routes, setDefaultFactory } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]) });
+    const { routes } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]) });
     const c = fakeCtx(tenantSigner.sign('org-9', 'user-9', { from: 'slack' }), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
-    expect(setDefaultFactory).not.toHaveBeenCalled();
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=connected');
   });
 
