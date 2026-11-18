@@ -11533,18 +11533,20 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
-  async resumeStreamUntilIdle<OUTPUT = TOutput>(
+  async resumeStreamUntilIdle(
     resumeData: any,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
       toolCallId?: string;
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<MastraModelOutput<OUTPUT>> {
-    return runResumeStreamUntilIdle<OUTPUT>(this, resumeData, streamOptions, {
-      activeStreams: this.activeStreamUntilIdle,
-      bgManager: this.#mastra?.backgroundTaskManager,
-    });
+  ): Promise<MastraModelOutput<any>> {
+    const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
+    const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
+    if (structuredOutput) {
+      return this.resumeStream(resumeData, { ...options, structuredOutput, untilIdle });
+    }
+    return this.resumeStream(resumeData, { ...options, untilIdle });
   }
 
   /**

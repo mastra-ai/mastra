@@ -1500,15 +1500,6 @@ export class DurableAgent<
     return result.output;
   }
 
-  /** @deprecated Use `resumeStream(resumeData, { untilIdle: true })` instead. */
-  override async resumeStreamUntilIdle(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>> {
-    const { maxIdleMs, ...options } = streamOptions ?? {};
-    return this.resumeStream(resumeData, {
-      ...options,
-      untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
-    });
-  }
-
   /**
    * Generate a complete response from the agent using durable execution.
    *
