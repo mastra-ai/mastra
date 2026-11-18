@@ -921,8 +921,15 @@ type AgentThreadStreamRuntimeEvent =
   // Without a streamId the sender found the run through the thread lease, not a stream it watches.
   | { type: 'run-abort-requested'; runId: string; streamId?: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
-  | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
-  | { type: 'user-message-delivered'; signalId: string }
+  // Presentations carry the run that owns them so `trimTopic` retires them with that
+  // run's output. Without a top-level runId the envelope falls back to the thread key,
+  // which no trim ever matches, so the entry replays to every new subscriber.
+  | {
+      type: 'user-message-presentation';
+      chunk: UserMessagePendingChunk | UserMessageCancelledChunk;
+      runId: string;
+    }
+  | { type: 'user-message-delivered'; signalId: string; runId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -3915,7 +3922,11 @@ export class AgentThreadStreamRuntime {
       const partType = (part as { type?: string } | null | undefined)?.type;
       const deliveredSignalId = userMessageSignalId(part);
       if (deliveredSignalId) {
-        await runtime.#publishAndWait(pubsub, key, { type: 'user-message-delivered', signalId: deliveredSignalId });
+        await runtime.#publishAndWait(pubsub, key, {
+          type: 'user-message-delivered',
+          signalId: deliveredSignalId,
+          runId: output.runId,
+        });
       }
       // Shutdown already announced this run's end; a later part would make observers track the stream again.
       if (runtime.#getState(pubsub).shutdownStreams.get(streamId) !== 'ended') {
@@ -4733,13 +4744,14 @@ export class AgentThreadStreamRuntime {
     status: 'pending' | 'queued',
   ) {
     const chunk = this.#pendingUserMessageChunk(runId, signal, status);
-    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk });
+    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk, runId });
   }
 
-  #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, signalIds: string[]) {
+  #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, runId: string, signalIds: string[]) {
     for (const id of signalIds) {
       this.#publish(pubsub, key, {
         type: 'user-message-presentation',
+        runId,
         chunk: { type: 'data-user-message-cancelled', runId: '', from: ChunkFrom.AGENT, transient: true, data: { id } },
       });
     }
@@ -7779,7 +7791,9 @@ export class AgentThreadStreamRuntime {
       .filter(([, entry]) => matches(entry.pendingIdle))
       .map(([signalId]) => signalId);
     const cancelledSignalIds = this.#cancelIdleSignals(state, key, matches);
-    this.#publishCancelledUserMessages(pubsub, key, cancelledSignalIds);
+    // The run holding the thread owns these cancellations: its completion clears the
+    // queue they were waiting in, and it is the run whose pending presentation they supersede.
+    this.#publishCancelledUserMessages(pubsub, key, state.activeThreadRunIds.get(key) ?? key, cancelledSignalIds);
     // The owner may hold a forwarded copy in its own queue.
     if (forwardedIds.length) this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: forwardedIds });
     if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
@@ -7860,7 +7874,8 @@ export class AgentThreadStreamRuntime {
     for (const id of this.#cancelIdleSignals(state, key, pending => matches(pending.signal))) cancelled.add(id);
     const control = state.threadControlSubscriptions.get(key);
     for (const id of cancelled) control?.admittedSignalIds.add(id);
-    this.#publishCancelledUserMessages(pubsub, key, [...cancelled]);
+    // Same owner as the pending presentation these replace: the run holding the thread.
+    this.#publishCancelledUserMessages(pubsub, key, state.activeThreadRunIds.get(key) ?? key, [...cancelled]);
     return { cancelledSignalIds: [...cancelled] };
   }
 
