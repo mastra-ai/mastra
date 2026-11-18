@@ -51,6 +51,8 @@ import {
   weatherTraceSpans,
   weatherTraceUsage,
   workflowTracesPage,
+  weatherThreadLightTraces,
+  weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
@@ -494,6 +496,50 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when the reader opens the full thread of an agent trace', () => {
+    const openFullThread = async () => {
+      setExplorerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(weatherThreadLightTraces)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json(weatherThreadTraceSpans),
+        ),
+      );
+      const utils = renderExplorer();
+      await settle(utils.queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const threadDialog = await screen.findByRole('dialog', { name: 'Thread weather-thread' });
+      return { ...utils, threadDialog };
+    };
+
+    it('stacks the thread in its own drawer above the trace drawer', async () => {
+      const { threadDialog } = await openFullThread();
+
+      expect(threadDialog.getAttribute('data-depth')).toBe('2');
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).toBeTruthy();
+    });
+
+    it('closes only the thread with "Back to trace"', async () => {
+      await openFullThread();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+
+    it('closes only the thread on Escape', async () => {
+      const { threadDialog } = await openFullThread();
+
+      fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
     });
   });
 

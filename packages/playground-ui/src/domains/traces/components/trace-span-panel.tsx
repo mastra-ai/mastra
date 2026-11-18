@@ -4,13 +4,11 @@ import { useSpanDetail, useThreadHasOtherTraces, useTraceSpans } from '@mastra/r
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
-import type { FeedbackOptions } from './feedback-options';
 import type { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
 import { TracePanel, pickSideView } from '@/domains/traces/components/trace-panel';
 import type { TraceSideView } from '@/domains/traces/components/trace-panel';
 import { getTraceRootSpan, getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
-import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
 
@@ -55,17 +53,12 @@ export interface TraceSpanPanelProps {
   featuredSpanIds?: string[];
   /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
   onHighlightSpans?: (spanIds: string[]) => void;
-  /** When true, opens the trace's thread (every turn) in a stacked drawer above the trace panel. */
-  isFullThreadOpen?: boolean;
-  /** Enables the in-place "Open full thread" swap; without it the action is not offered. */
-  onFullThreadOpenChange?: (open: boolean) => void;
-  /** Full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
-  /** Full-thread view: shows the per-trace Feedback tab. */
-  withFeedback: boolean;
-  feedbackOptions?: FeedbackOptions;
-  /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
-  onOpenScore: (traceId: string, scoreId: string) => void;
+  /**
+   * Offers "Open full thread" when the trace's thread holds other turns, and hands the thread id to the
+   * host, which shows the thread wherever it wants (e.g. a `TraceThreadPanel` stacked above). Without it,
+   * the action is not offered.
+   */
+  onOpenFullThread?: (threadId: string) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
@@ -94,9 +87,9 @@ export interface TraceSpanPanelProps {
 }
 
 /**
- * Studio's trace → span drilldown drawer: a `TracePanel` composition fed through the Mastra client, with
- * the trace's full thread stacked above it. It only loads data and hands it to the parts; a host with its
- * own transport composes `TracePanel` (and `ThreadTrace`) the same way with its own data.
+ * Studio's trace → span drilldown drawer: a `TracePanel` composition fed through the Mastra client. It
+ * only loads data and hands it to the parts; the trace's full thread is the host's to show. A host with
+ * its own transport composes `TracePanel` (and `ThreadTrace`) the same way with its own data.
  */
 export function TraceSpanPanel({
   traceId,
@@ -116,12 +109,7 @@ export function TraceSpanPanel({
   showPartialThread,
   featuredSpanIds,
   onHighlightSpans,
-  isFullThreadOpen,
-  onFullThreadOpenChange,
-  withQueryTrace,
-  withFeedback,
-  feedbackOptions,
-  onOpenScore,
+  onOpenFullThread,
   scoresTabBadge,
   scoresTabSlot,
   usage,
@@ -163,7 +151,7 @@ export function TraceSpanPanel({
     threadId: hasMessages ? threadId : undefined,
     queryOptions: { enabled: hasMessages },
   });
-  const showFullThreadAction = hasMessages && threadHasOtherTraces && !!onFullThreadOpenChange;
+  const fullThreadId = hasMessages && threadHasOtherTraces && onOpenFullThread ? threadId : undefined;
 
   const offeredSideViews: TraceSideView[] = [];
   if (hasMessages) offeredSideViews.push('messages');
@@ -174,114 +162,101 @@ export function TraceSpanPanel({
   const sideView = pickSideView(chosenSideView, offeredSideViews);
 
   return (
-    <>
-      <TracePanel
-        traceId={traceId}
-        spans={spans}
-        isLoading={isLoadingSpans}
-        anchorSpanId={anchorSpanId}
-        entityType={entityType}
-        selectedSpanId={initialSpanId ?? selectedSpanId}
-        onSpanSelect={onSpanSelect}
-        spanView={spanView}
-        onSpanViewChange={onSpanViewChange}
-        sideView={sideView}
-        onSideViewChange={setChosenSideView}
-        onClose={onClose}
-      >
-        <TracePanel.Frame title={title} size={size} depth={depth}>
-          {headerSlot}
-          <TracePanel.Header>
-            <TracePanel.Navigation onPrevious={onPrevious} onNext={onNext} />
-            <TracePanel.TraceId />
-            <TracePanel.Actions>
-              {headerActionsSlot}
-              <TracePanel.ScoreButton />
-              {onSaveAsDatasetItem && <TracePanel.DatasetButton onSaveAsDatasetItem={onSaveAsDatasetItem} />}
-              {traceHref && <TracePanel.OpenPageButton href={traceHref} LinkComponent={Link} />}
-              <TracePanel.DownloadButton onDownload={download.download} isPending={download.isPending} />
-              <TracePanel.CloseButton />
-            </TracePanel.Actions>
-          </TracePanel.Header>
-          <TracePanel.Summary
-            usage={usage}
-            entityHref={getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId)}
-            LinkComponent={Link}
-          />
-          <TracePanel.Body>
-            {traceId && sideView && (
-              <TracePanel.Side>
-                <TracePanel.SideHeader>
-                  <TracePanel.SideTabs>
-                    {hasMessages && <TracePanel.MessagesTab />}
-                    {feedbackTabSlot && <TracePanel.FeedbackTab count={feedbackTabBadge} />}
-                    {scoresTabSlot && <TracePanel.ScoresTab count={scoresTabBadge} />}
-                  </TracePanel.SideTabs>
-                  {showFullThreadAction && (
-                    <TracePanel.SideActions>
-                      <TracePanel.OpenFullThreadButton onClick={() => onFullThreadOpenChange(true)} />
-                    </TracePanel.SideActions>
-                  )}
-                </TracePanel.SideHeader>
-                {hasMessages && (
-                  <TracePanel.Messages
-                    spans={fullTrace.data?.spans}
-                    isLoading={fullTrace.isLoading}
-                    error={fullTrace.error ?? undefined}
-                    onHighlightSpans={onHighlightSpans}
-                  />
-                )}
-                {feedbackTabSlot && <TracePanel.Feedback>{feedbackTabSlot({ traceId })}</TracePanel.Feedback>}
-                {scoresTabSlot && (
-                  <TracePanel.Scores>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</TracePanel.Scores>
-                )}
-              </TracePanel.Side>
-            )}
-            <TracePanel.Main>
-              <TracePanel.SpansToolbar>
-                <TracePanel.Search />
-                <TracePanel.SpanViewSwitch />
-              </TracePanel.SpansToolbar>
-              <TracePanel.Spans
-                featuredSpanIds={featuredSpanIds}
-                streamingTimings={rootStreamingTimings}
-                traceSpans={fullTrace.data?.spans}
-              >
-                <TracePanel.RootError />
-              </TracePanel.Spans>
-            </TracePanel.Main>
-            <TracePanel.SpanPanel>
-              <TracePanel.SpanDetail
-                span={selectedSpanDetail.data?.span}
-                isLoading={selectedSpanDetail.isLoading}
-                traceSpans={fullTrace.data?.spans}
-                registeredTools={registeredTools}
-                activeTab={spanActiveTab}
-                onTabChange={onSpanTabChange}
-                feedbackTabBadge={spanFeedbackTabBadge}
-                feedbackTabSlot={spanFeedbackTabSlot}
-              />
-            </TracePanel.SpanPanel>
-          </TracePanel.Body>
-        </TracePanel.Frame>
-        {/* Next to the drawer, not inside it: a dialog nested in the drawer would leave its scorer list inert. */}
-        <TracePanel.ScoreDialog
-          scorers={scorers.data}
-          isLoadingScorers={scorers.isLoading}
-          onTriggerScorer={triggerScorer.mutateAsync}
+    <TracePanel
+      traceId={traceId}
+      spans={spans}
+      isLoading={isLoadingSpans}
+      anchorSpanId={anchorSpanId}
+      entityType={entityType}
+      selectedSpanId={initialSpanId ?? selectedSpanId}
+      onSpanSelect={onSpanSelect}
+      spanView={spanView}
+      onSpanViewChange={onSpanViewChange}
+      sideView={sideView}
+      onSideViewChange={setChosenSideView}
+      onClose={onClose}
+    >
+      <TracePanel.Frame title={title} size={size} depth={depth}>
+        {headerSlot}
+        <TracePanel.Header>
+          <TracePanel.Navigation onPrevious={onPrevious} onNext={onNext} />
+          <TracePanel.TraceId />
+          <TracePanel.Actions>
+            {headerActionsSlot}
+            <TracePanel.ScoreButton />
+            {onSaveAsDatasetItem && <TracePanel.DatasetButton onSaveAsDatasetItem={onSaveAsDatasetItem} />}
+            {traceHref && <TracePanel.OpenPageButton href={traceHref} LinkComponent={Link} />}
+            <TracePanel.DownloadButton onDownload={download.download} isPending={download.isPending} />
+            <TracePanel.CloseButton />
+          </TracePanel.Actions>
+        </TracePanel.Header>
+        <TracePanel.Summary
+          usage={usage}
+          entityHref={getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId)}
+          LinkComponent={Link}
         />
-      </TracePanel>
-      {/* Rendered after the trace panel: DataPanel stacking follows DOM order. */}
-      <TraceThreadPanel
-        open={!!(traceId && isFullThreadOpen && threadId)}
-        depth={depth && depth > 1 ? 3 : 2}
-        threadId={threadId ?? ''}
-        onOpenScore={onOpenScore}
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        feedbackOptions={feedbackOptions}
-        onClose={() => onFullThreadOpenChange?.(false)}
+        <TracePanel.Body>
+          {traceId && sideView && (
+            <TracePanel.Side>
+              <TracePanel.SideHeader>
+                <TracePanel.SideTabs>
+                  {hasMessages && <TracePanel.MessagesTab />}
+                  {feedbackTabSlot && <TracePanel.FeedbackTab count={feedbackTabBadge} />}
+                  {scoresTabSlot && <TracePanel.ScoresTab count={scoresTabBadge} />}
+                </TracePanel.SideTabs>
+                {fullThreadId && (
+                  <TracePanel.SideActions>
+                    <TracePanel.OpenFullThreadButton onClick={() => onOpenFullThread?.(fullThreadId)} />
+                  </TracePanel.SideActions>
+                )}
+              </TracePanel.SideHeader>
+              {hasMessages && (
+                <TracePanel.Messages
+                  spans={fullTrace.data?.spans}
+                  isLoading={fullTrace.isLoading}
+                  error={fullTrace.error ?? undefined}
+                  onHighlightSpans={onHighlightSpans}
+                />
+              )}
+              {feedbackTabSlot && <TracePanel.Feedback>{feedbackTabSlot({ traceId })}</TracePanel.Feedback>}
+              {scoresTabSlot && (
+                <TracePanel.Scores>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</TracePanel.Scores>
+              )}
+            </TracePanel.Side>
+          )}
+          <TracePanel.Main>
+            <TracePanel.SpansToolbar>
+              <TracePanel.Search />
+              <TracePanel.SpanViewSwitch />
+            </TracePanel.SpansToolbar>
+            <TracePanel.Spans
+              featuredSpanIds={featuredSpanIds}
+              streamingTimings={rootStreamingTimings}
+              traceSpans={fullTrace.data?.spans}
+            >
+              <TracePanel.RootError />
+            </TracePanel.Spans>
+          </TracePanel.Main>
+          <TracePanel.SpanPanel>
+            <TracePanel.SpanDetail
+              span={selectedSpanDetail.data?.span}
+              isLoading={selectedSpanDetail.isLoading}
+              traceSpans={fullTrace.data?.spans}
+              registeredTools={registeredTools}
+              activeTab={spanActiveTab}
+              onTabChange={onSpanTabChange}
+              feedbackTabBadge={spanFeedbackTabBadge}
+              feedbackTabSlot={spanFeedbackTabSlot}
+            />
+          </TracePanel.SpanPanel>
+        </TracePanel.Body>
+      </TracePanel.Frame>
+      {/* Next to the drawer, not inside it: a dialog nested in the drawer would leave its scorer list inert. */}
+      <TracePanel.ScoreDialog
+        scorers={scorers.data}
+        isLoadingScorers={scorers.isLoading}
+        onTriggerScorer={triggerScorer.mutateAsync}
       />
-    </>
+    </TracePanel>
   );
 }

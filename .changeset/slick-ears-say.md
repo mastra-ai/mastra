@@ -34,9 +34,20 @@ import { TracePanel } from '@mastra/playground-ui/domains/traces/components/trac
 - `TraceThreadPanelView`, `TraceScoresListView` and `TraceScoresTabView`, and `FeedbackThread` is exported with its props.
 - `useThreadTraceSpans` and `useTraceSearchResult` data hooks.
 
-`TraceSpanPanel`, `TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList`, `TraceScoresTab` and `TraceDataPanelView` keep their props.
+`TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList`, `TraceScoresTab` and `TraceDataPanelView` keep their props.
 
 **Changed**
+
+`TraceSpanPanel` no longer renders the full-thread drawer. It hands the thread id to `onOpenFullThread`, and you render the thread wherever you want, or not at all. `isFullThreadOpen`, `onFullThreadOpenChange`, `withQueryTrace`, `withFeedback`, `feedbackOptions` and `onOpenScore` are gone from its props.
+
+```tsx
+// Before
+<TraceSpanPanel {...panelProps} isFullThreadOpen={open} onFullThreadOpenChange={setOpen} withQueryTrace withFeedback onOpenScore={openScore} />
+
+// After
+<TraceSpanPanel {...panelProps} onOpenFullThread={setThreadId} />
+<TraceThreadPanel open={!!threadId} threadId={threadId ?? ''} onClose={() => setThreadId(undefined)} withQueryTrace withFeedback onOpenScore={openScore} />
+```
 
 These components used to load part of their data themselves; pass it in now:
 
