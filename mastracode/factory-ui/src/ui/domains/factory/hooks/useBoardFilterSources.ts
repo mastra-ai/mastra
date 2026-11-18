@@ -1,18 +1,22 @@
+import { useQuery } from '@tanstack/react-query';
+
+import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { activePlatformConnectionQueryOptions } from '../../../../hooks/usePlatformConnections';
 
 export function useBoardFilterSources() {
+  const { baseUrl } = useApiConfig();
   const githubStatus = useGithubStatusQuery();
   const gitlabStatus = useGitLabStatusQuery();
   const linearStatus = useLinearStatusQuery();
   const jiraStatus = useJiraStatusQuery();
   const incidentioStatus = useIncidentioStatusQuery();
-  // Vanta connects through Platform only; a deployment without Platform answers 403/404 and offers no Vanta.
-  const vantaConnections = usePlatformConnectionsQuery('vanta');
+  // Vanta connects through Platform only.
+  const vantaConnected = useQuery(activePlatformConnectionQueryOptions(baseUrl, 'vanta'));
   const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
 
   const connectedSources = new Set([
@@ -21,7 +25,7 @@ export function useBoardFilterSources() {
     ...(linearStatus.data?.enabled && linearStatus.data.connected ? ['linear'] : []),
     ...(jiraStatus.data?.enabled && jiraStatus.data.configured ? ['jira'] : []),
     ...(incidentioStatus.data?.enabled && incidentioStatus.data.configured ? ['incidentio'] : []),
-    ...(vantaConnections.data?.some(connection => connection.status === 'active') ? ['vanta'] : []),
+    ...(vantaConnected.data ? ['vanta'] : []),
   ]);
 
   return { connectedSources, linearProjects: linearProjects.data };
