@@ -5,6 +5,9 @@ packages:
   - "mastra"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # API reference
 
 ## Members API
@@ -269,6 +272,191 @@ The [`mastra api metric`](/reference/cli/mastra#mastra-api-metric-aggregate) com
 ```bash
 mastra api --url https://observability.eu.mastra.ai metric aggregate '<json>'
 ```
+
+## Alert webhooks
+
+A webhook [alert destination](/docs/mastra-platform/observability/alerts#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the destination's signing secret once, after you create it.
+
+### Payload
+
+The following example shows a failed deploy:
+
+```json
+{
+  "id": "deploy.failed:dep_8c2f1a:triggered",
+  "version": "2026-09-01",
+  "type": "deploy.failed",
+  "createdAt": "2026-09-24T14:03:11.000Z",
+  "fingerprint": "deploy.failed|prj_41d9e2|server|production",
+  "severity": "error",
+  "status": "triggered",
+  "summary": "Deploy failed on support-agent (production): Build failed",
+  "source": "mastra",
+  "data": {
+    "deployId": "dep_8c2f1a",
+    "projectName": "support-agent",
+    "gitBranch": "main",
+    "error": "Build failed",
+    "errorCode": "BUILD_FAILED",
+    "errorCategory": "build",
+    "deployUrl": "https://projects.mastra.ai/..."
+  },
+  "links": []
+}
+```
+
+| Field | Description |
+| - | - |
+| `id` | Notification ID. Stays the same when Mastra retries the same notification |
+| `version` | Payload version. The current version is `2026-09-01` |
+| `type` | Event type. See [Event types](#alert-event-types) |
+| `createdAt` | ISO 8601 time when the event occurred |
+| `fingerprint` | Identifies the incident the notification belongs to. Notifications for the same failing deploy target or service share a fingerprint |
+| `severity` | `critical`, `error`, `warning`, or `info`. These values match PagerDuty severities |
+| `status` | `triggered` for a new or repeated notification, `resolved` when the incident recovers |
+| `summary` | One-line description of the event |
+| `source` | Always `mastra` |
+| `data` | Event-specific details. Fields vary by event type |
+| `links` | Related links, each with `href` and `text`. Can be empty |
+
+### Alert event types
+
+The `type` field has one of these values:
+
+| Type | Trigger | Common `data` fields |
+| - | - | - |
+| `deploy.failed` | **Deploy failed** | `deployId`, `projectName`, `gitBranch`, `error`, `errorCode`, `errorCategory`, `deployUrl` |
+| `service.crashed` | **Service crashed** | Same as `deploy.failed` |
+| `service.oom` | **Service out of memory** | Same as `deploy.failed` |
+| `service.unreachable` | **Service unreachable** | `projectName`, `probeUrl`, `error`, `consecutiveFailures` |
+| `service.error_rate` | **Elevated error rate** | `requests`, `errors5xx`, `ratePct`, `windowMinutes`, `environmentSlug`, `error` |
+| `service.resource_usage` | **Resource usage threshold crossed** | `projectName`, `policyName`, `metric`, `unit`, `usage`, `limit`, `thresholdKind`, `thresholdValue`, `windowMinutes`, `error` |
+| `billing.usage_threshold` | **Usage threshold crossed** | `featureId`, `featureLabel`, `thresholdDisplay`, `error` |
+| `observability.rule` | An [observability alert](/docs/mastra-platform/observability/alerts) fires or recovers | `ruleId`, `ruleName`, `ruleUrl`, `value`, `threshold`, `summary`, `groups`, `firingCount` |
+
+Crash, out-of-memory, and unreachable events for the same service share a fingerprint, so one outage produces one incident. Usage threshold incidents don't send a `resolved` notification.
+
+Test notifications use `type: "deploy.failed"`, `severity: "info"`, and include `"test": true` in `data`.
+
+### Request headers
+
+| Header | Value |
+| - | - |
+| `content-type` | `application/json` |
+| `user-agent` | `Mastra-Alerts/1.0` |
+| `x-mastra-signature` | Signature of the request body. See [Verify webhook signatures](#verify-webhook-signatures) |
+| `x-mastra-idempotency-key` | Same value as the payload `id` |
+
+### Verify webhook signatures
+
+Verify the signature before you trust a request. The `x-mastra-signature` header has this format:
+
+```text
+t=1790258591,v1=5f0c9d3e...
+```
+
+`t` is the Unix time in seconds when Mastra signed the request. `v1` is a hex-encoded HMAC-SHA256 of the string `<t>.<raw request body>`, using the destination's signing secret as the key.
+
+To verify a request:
+
+1. Read the raw request body before parsing it as JSON. Parsing and serializing the body again can change it.
+1. Compute the HMAC of `<t>.<raw body>` and compare it with `v1` using a constant-time comparison.
+1. Reject requests where `t` is more than a few minutes old to prevent replayed requests.
+
+<Tabs>
+  <TabItem value="node" label="Node.js">
+    ```typescript title="verify-mastra-signature.ts"
+    import { createHmac, timingSafeEqual } from 'node:crypto'
+
+    const TOLERANCE_SECONDS = 300
+
+    export function verifyMastraSignature(
+      rawBody: string,
+      signatureHeader: string,
+      signingSecret: string,
+    ): boolean {
+      const parts = new Map(signatureHeader.split(',').map(part => part.split('=') as [string, string]))
+      const timestamp = Number(parts.get('t'))
+      const signature = parts.get('v1')
+      if (!Number.isInteger(timestamp) || !signature || !/^[0-9a-f]{64}$/.test(signature)) return false
+      if (Math.abs(Date.now() / 1000 - timestamp) > TOLERANCE_SECONDS) return false
+
+      const expected = createHmac('sha256', signingSecret)
+        .update(`${timestamp}.${rawBody}`)
+        .digest('hex')
+      const expectedBytes = Buffer.from(expected, 'hex')
+      const signatureBytes = Buffer.from(signature, 'hex')
+      return (
+        expectedBytes.length === signatureBytes.length && timingSafeEqual(expectedBytes, signatureBytes)
+      )
+    }
+    ```
+  </TabItem>
+
+  <TabItem value="python" label="Python">
+    ```python title="verify_mastra_signature.py"
+    import hashlib
+    import hmac
+    import time
+
+    TOLERANCE_SECONDS = 300
+
+
+    def verify_mastra_signature(raw_body: bytes, signature_header: str, signing_secret: str) -> bool:
+        parts = dict(part.partition("=")[::2] for part in signature_header.split(","))
+        try:
+            timestamp = int(parts["t"])
+            signature = parts["v1"]
+        except (KeyError, ValueError):
+            return False
+        if abs(time.time() - timestamp) > TOLERANCE_SECONDS:
+            return False
+
+        expected = hmac.new(
+            signing_secret.encode(),
+            f"{timestamp}.".encode() + raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    ```
+  </TabItem>
+</Tabs>
+
+Return a `401` status for a request that fails verification. After you rotate a destination's secret, requests are signed with the new secret immediately.
+
+### Retries and duplicates
+
+Mastra treats any `2xx` response as delivered and doesn't retry it. Persist or durably enqueue the notification before responding, and return a `5xx` response if that step fails so Mastra retries the delivery. Respond within 10 seconds and process the notification after responding if the work takes longer. Mastra doesn't follow redirects.
+
+When a request fails, Mastra retries based on the response:
+
+- **`4xx` response:** Mastra stops and marks the delivery **Config error**. Fix the endpoint, then open the destination and select **Send test** to confirm it works.
+- **`5xx` response, timeout, or network error:** Mastra retries twice within a few seconds. If those requests also fail, the delivery shows **Retrying** and Mastra tries again after about 30 seconds, doubling the wait each time up to 15 minutes. After 6 failed attempts, the delivery shows **Exhausted**.
+
+Discord, Microsoft Teams, PagerDuty, and incident.io destinations follow the same schedule. For those destinations, Mastra also retries `408` and `429` responses.
+
+Retries can deliver the same notification more than once. Store the `x-mastra-idempotency-key` value of each processed request and skip requests with a key you've already seen. Use `fingerprint` to group notifications that belong to the same incident.
+
+### PagerDuty and incident.io fields
+
+PagerDuty and incident.io destinations receive the same event, mapped to each service's format. Changes made in those services, such as acknowledging an incident, don't update the Mastra incident.
+
+| PagerDuty field | Value |
+| - | - |
+| `event_action` | `trigger` for a new or repeated notification, `resolve` for a recovery |
+| `dedup_key` | The Mastra incident ID |
+| `payload.summary` | The `summary` field |
+| `payload.severity` | The `severity` field |
+| `payload.source` | `mastra:<project>/<environment>` |
+| `payload.custom_details` | The `data` field |
+
+| incident.io field | Value |
+| - | - |
+| `status` | `firing` for a new or repeated notification, `resolved` for a recovery |
+| `deduplication_key` | The Mastra incident ID |
+| `title` | The `summary` field |
+| `description` | The error message, when the event has one |
+| `metadata` | The `data` field plus `source`, `event_type`, `severity`, `project_id`, and `environment` |
 
 ## Gateway proxy endpoints
 

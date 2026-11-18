@@ -1,114 +1,167 @@
 ---
-title: "Observability Alerts | Mastra platform"
-description: "Create Mastra platform alerts that watch traces, spans, and scores, then preview them against past data and send notifications when a threshold is crossed."
+title: "Alerts | Mastra platform"
+description: "Get notified in Slack, email, PagerDuty, and other destinations when a Mastra platform deploy or service fails, usage crosses a threshold, or traces cross a limit."
 packages:
   - "mastra"
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
-# Observability Alerts
+# Alerts
 
-An observability alert checks the data your Mastra application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview) and notifies your team when a value crosses a threshold. For example, an alert can fire when an agent fails more than 5% of its runs, a model's p95 latency goes above 8 seconds, or today's spend passes a budget.
+Alerts notify your team when something in your Mastra projects needs attention. When an alert's condition is met, Mastra sends a notification to the destinations you chose, such as a Slack channel, an email group, or PagerDuty.
 
-By the end of this page, you'll have an enabled alert, a preview of how often it would have fired, and a page that shows its current state.
+By the end of this page, you'll have a tested destination and an enabled alert that sends to it.
 
-Observability alerts are different from [platform alerts](/docs/mastra-platform/alerts), which react to deploy, service, and usage events. Both kinds are listed on the same **Alerts** page and send notifications to the same destinations.
+Mastra platform has two kinds of alerts. Both are managed on the same **Alerts** page and send to the same destinations.
+
+| Kind | Watches | Examples |
+| - | - | - |
+| **Observability alert** | Traces, spans, and scores that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). Fires when a value crosses a threshold you set. | An agent fails more than 5% of its runs, a model's p95 latency goes above 8 seconds, today's spend passes a budget |
+| **Platform alert** | Events from projects you deploy on Mastra platform, and organization usage. Fires when the event happens. | A production deploy fails, a service stops responding, usage nears a plan limit |
 
 ## Before you begin
 
-- Send traces to Mastra Platform Observability. Follow [Observability on Mastra platform](/docs/mastra-platform/observability/overview) if your project doesn't send data yet. A backtest needs recent data to show anything useful.
-- Use an organization admin account. Members and viewers can see alerts, but only admins can create, edit, enable, or delete them.
-- Check that your plan includes alerts. On a plan without alerts, **New alert** offers **Upgrade plan** instead of observability alerts.
-- Add a [destination](/docs/mastra-platform/alerts#add-a-destination), such as a Slack channel or email group, to receive notifications. You can add one on the **Destinations** tab of the **Alerts** page, or while you create the alert.
+- Use an organization admin account. Members and viewers can see alerts and destinations, but only admins can create, change, or delete them.
+- Check that your plan includes alerts. On a plan without alerts, **New alert** offers **Upgrade plan**.
+- For observability alerts, send traces to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). A backtest needs recent data to show anything useful.
 
-If **Alerts** doesn't appear under **Observability** in the sidebar, observability alerts aren't available for your organization yet.
+Open the [Mastra platform dashboard](https://projects.mastra.ai), then select **Observability** > **Alerts**. The page has three tabs:
+
+- **Alerts**: Every alert with its state, type, and destinations.
+- **Activity**: What fired and resolved, and where each notification went.
+- **Destinations**: Where alerts send notifications.
+
+If **Alerts** isn't under **Observability**, your organization still uses the earlier alerts page. Open your organization settings and select **Alerts** to manage platform alerts and destinations there.
+
+## Add a destination
+
+A destination is a place where Mastra sends notifications. One destination can serve many alerts of either kind.
+
+1. On the **Alerts** page, open the **Destinations** tab and select **New destination**.
+1. Choose a **Type** and fill in its fields. Expand a type below to see what it needs.
+1. Enter a **Name** that tells your team where the notifications go, for example `On-call team`, then select **Create destination**. For a webhook, copy the signing secret before you close the dialog. Mastra can't show it again.
+1. Open the new destination and select **Send test**. Check that the message arrives.
+
+You can also add a destination while you create an alert. Open the **Send to** list and select **New destination**.
+
+<div className="accordion-group">
+  <details>
+    <summary>Slack</summary>
+
+    Connect or choose a **Workspace**, then select **Channels**. Mastra creates one destination for each selected channel.
+
+    The Mastra Alerts app joins public channels automatically. For a private channel, invite `@Mastra Alerts` to the channel first. You can also paste a channel ID, which Slack shows under the channel name in **About**.
+  </details>
+
+  <details>
+    <summary>Email</summary>
+
+    Under **Recipients**, choose **All organization members**, roles, or members, or enter an address under **Add another email**. A destination can have up to 10 recipients. Role-based recipients update when organization membership changes.
+  </details>
+
+  <details>
+    <summary>Discord</summary>
+
+    In Discord, open the channel that should receive alerts, then select **Edit Channel** > **Integrations** > **Webhooks** > **New Webhook**, and copy the webhook URL. See [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) in the Discord documentation.
+
+    Paste the URL into **Webhook URL**. It must have the form `https://discord.com/api/webhooks/<id>/<token>`.
+
+    A recovery posts a separate green **Resolved** message, because Discord can't update earlier messages.
+  </details>
+
+  <details>
+    <summary>Microsoft Teams</summary>
+
+    In Teams, open the channel that should receive alerts, select **More options** > **Workflows**, and choose the template **Send webhook alerts to a channel**. Create the workflow, then copy its URL. See [Create incoming webhooks with Workflows](https://support.microsoft.com/en-us/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498) in the Microsoft documentation.
+
+    Paste the URL into **Webhook URL**. Mastra still accepts legacy `webhook.office.com` connector URLs.
+  </details>
+
+  <details>
+    <summary>PagerDuty</summary>
+
+    In PagerDuty, open the service that should receive alerts. On its **Integrations** tab, add an **Events API V2** integration and copy its **Integration Key**. See [Services and integrations](https://support.pagerduty.com/main/docs/services-and-integrations) in the PagerDuty documentation.
+
+    Paste the key into **Integration key**. Each Mastra incident opens one PagerDuty incident, which resolves when the Mastra incident resolves. **Send test** opens an `info` incident that you resolve in PagerDuty.
+  </details>
+
+  <details>
+    <summary>incident.io</summary>
+
+    In incident.io, create an HTTP alert source with the **Default** source type. Copy the alert source config ID, the last segment of its alert events URL, and the bearer token. See [Create an alert event](https://docs.incident.io/api-reference/alert-events-v2/create) in the incident.io documentation.
+
+    Paste the ID, or the full URL, into **Alert source ID**, and the token into **Token**.
+  </details>
+
+  <details>
+    <summary>Webhook</summary>
+
+    Enter an **Endpoint URL** that starts with `https://`. Mastra sends a signed JSON `POST` request for each notification.
+
+    Before you act on a request, verify its signature. See [Alert webhooks](/docs/mastra-platform/api#alert-webhooks) for the payload, headers, signature verification, and retries.
+  </details>
+</div>
 
 ## Create an alert
 
-<Steps>
-  <StepItem>
-    Open the [Mastra platform dashboard](https://projects.mastra.ai) without selecting a project, then select **Observability** > **Alerts**. The **Alerts** tab lists every alert in the organization.
-  </StepItem>
+Select **New alert** on the **Alerts** tab, then choose the kind of alert.
 
-  <StepItem>
-    Select **New alert** > **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. Select **Blank** to write your own query and condition instead.
-  </StepItem>
+<Tabs>
+  <TabItem value="observability" label="Observability alert">
+    1. Select **Observability alert**, then choose a template such as **Agent error rate** or **Daily cost budget**. Select **Blank** to write your own query and condition.
+    1. Enter a **Name**. Use **Description** to explain what the alert means and how to respond, for example with a link to a runbook.
+    1. Under **What to watch**, choose **All projects** or one project in **Applies to**. An alert for all projects reads the projects in one region, which you choose under **Region** if the field is shown. You can't change **Applies to** later.
+    1. Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then a **Metric** and, when offered, a **Statistic**, such as an error rate or a p95 duration. Add filters to narrow the data, for example to one agent.
+    1. Under **When it fires**, choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**.
+    1. Review the **Backtest** chart. It replays the alert over the last 6 hours, 1 day, or 2 days and draws the value against the threshold. Adjust the threshold or window until the alert would fire only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
+    1. Under **Notify**, choose one or more destinations in **Send to**. Leave **Enabled** on.
+    1. Select **Create alert**.
 
-  <StepItem>
-    Enter a **Name**. Use **Description** to explain what the alert means and how to respond, for example with a link to a runbook.
-  </StepItem>
+    The alert's state starts as **Not checked yet** and changes within about five minutes. See [Observability alert checks](#observability-alert-checks) to tune recovery, grouping, and delays.
+  </TabItem>
 
-  <StepItem>
-    Under **What to watch**, choose what the alert covers under **Applies to**: **All projects** or one project. An alert that applies to all projects reads the projects in one region, which you choose under **Region** if the field is shown. You can't change **Applies to** after you create the alert.
-  </StepItem>
+  <TabItem value="platform" label="Platform alert">
+    1. Select **Platform alert**, then choose a template, such as **Production deploy failed** or **Service unreachable**. Select **Blank** to start empty.
+    1. Enter a **Name**.
+    1. Under **What to watch**, choose one or more events in **Event**. See [Platform alert events](#platform-alert-events).
+    1. Choose what the alert covers. Leave **Applies to** empty to cover all projects, or select projects. You can narrow the alert to **Production**, **Staging**, or **Preview** environments. Leave an environment field empty to include every environment.
+    1. Under **Notify**, choose one or more destinations in **Send to**. In **Repeat**, choose how often Mastra can resend while the same incident stays open: **Every event**, **At most every 5 minutes**, **At most every 15 minutes**, or **At most every hour**.
+    1. Leave **Enabled** on, then select **Create alert**.
 
-  <StepItem>
-    Under **Watch**, choose **Spans**, **Traces**, or **Scores**, then choose a **Metric** and, when offered, a **Statistic**, such as an error rate or a p95 duration. Add filters to narrow the data, for example to one agent.
-  </StepItem>
+    The alert is listed on the **Alerts** tab with the type **Platform**.
+  </TabItem>
+</Tabs>
 
-  <StepItem>
-    Under **When it fires**, choose a comparison (**above**, **at or above**, **below**, or **at or below**) and enter a threshold. Under **Over**, choose a window, such as **the last 15m** or **today (since midnight)**.
-  </StepItem>
+### Create an alert from a dashboard card
 
-  <StepItem>
-    Review the **Backtest** chart. It replays the alert against past data, over the last 6 hours, 1 day, or 2 days where the rule allows it, and draws the value against the threshold. Adjust the threshold or window until the alert would fire only when you'd want someone to act.
+On the **Metrics** page of the organization or a project, admins see a **Create alert** action, shown as a bell icon, on dashboard cards. It opens a new observability alert with the card's measure, filters, and grouping filled in. From a project, the alert applies to that project. Review the threshold and window, then continue from the backtest step.
 
-    The backtest uses past data only. It doesn't send notifications or prove that a destination works.
-  </StepItem>
+Some cards can't become alerts, so their action is disabled. For example, the card shows every scorer instead of one, filters by labels or tags, uses a metric that alerts can't watch yet, or has filters that exclude every run. Hover over or focus the action to see the reason. See [Build custom dashboards](/docs/mastra-platform/observability/dashboards).
 
-  <StepItem>
-    Under **Notify**, choose one or more destinations in **Send to**. Leave **Enabled** on.
-  </StepItem>
+## How notifications work
 
-  <StepItem>
-    Select **Create alert**. Mastra opens the alert's page.
-  </StepItem>
+When an alert fires, Mastra opens an incident and sends a notification to each of the alert's destinations. The incident stays open while the condition lasts, then resolves with a recovery notification once the condition clears.
 
-  <StepItem>
-    Check the result. The alert's state starts as **Not checked yet**. Within about five minutes, it changes to **OK**, **Firing**, **No data**, or **Error**. The alert's page also shows the backtest chart over recent data.
-  </StepItem>
-</Steps>
+- **Observability alerts** send when they fire and when they recover, at most once every 15 minutes per group. Mastra doesn't send reminders while an alert keeps firing.
+- **Platform alerts** resend according to **Repeat**. The first notification, recovery notifications, and increases in severity always send immediately. Incidents for **Usage threshold crossed** stay open, because they don't resolve on their own.
 
-To confirm that notifications reach your team, open the **Destinations** tab on the **Alerts** page, select a destination, then select **Send test**.
+Slack messages update in place, for example when another group of the same observability alert starts firing. Discord and Microsoft Teams post a separate **Resolved** message.
 
-## How alerts work
+## Observability alert checks
 
-These sections explain how Mastra checks alerts, decides when they fire and recover, and sends notifications.
+Mastra checks every enabled observability alert every five minutes. Each check measures the window you chose: with **the last 1h**, each check measures the past hour. **today (since midnight)** measures from the start of the day in the timezone shown in the window's label.
 
-### Understand checks and windows
+Open **Advanced** in the alert form for these settings:
 
-Mastra checks every enabled alert every five minutes. Each check measures the window you chose. An alert with the window **the last 1h** checks every five minutes and each check measures the past hour of data. The window **today (since midnight)** measures from the start of the current day. The window's label shows which timezone the day starts in.
+- **Recovers below** or **Recovers above**: A level further from the threshold, so a value that hovers near it doesn't keep switching between firing and recovered. For example, an alert that fires above a 5% error rate and recovers below 2% stays firing until the error rate drops to 2%.
+- **Skip groups with fewer than**: For spans and traces, a minimum number of runs, so a group with one failure out of two runs doesn't fire the alert.
+- **Ingest delay**: A minute or two of the newest data to skip, if an alert on a short window fires before late data arrives. Most alerts work without a delay.
 
-If an alert fires on a short window and the value settles once late data arrives, open **Advanced** and set **Ingest delay** to a minute or two so each check skips that much of the newest data. Most alerts work without a delay.
+Some alerts can measure each group on its own. Under **Alert for**, choose **All traffic combined** for one check over everything, or **Each \<group>**, such as **Each agent** or **Each model**, so one failing agent isn't hidden by healthy ones. Mastra checks up to 50 groups, prioritizing those closest to firing. All groups of one alert share one incident.
 
-### Set a recovery level
-
-By default, an alert recovers as soon as the value is back on the safe side of the threshold. A value that hovers near the threshold can then keep switching between firing and recovered.
-
-Open **Advanced** and enter a number in **Recovers below** to set a level further from the threshold. For an alert that fires when a value drops too low, the field is **Recovers above**. For example, an alert that fires above a 5% error rate and recovers below 2% stays firing until the error rate drops to 2%.
-
-### Alert for each group
-
-Some alerts can measure all matching data together or each group on its own. Choose under **Alert for**:
-
-- **All traffic combined**: One check covers everything that matches. The alert fires once.
-- **Each \<group>**: For example, **Each agent**, **Each model**, or **Each user**. Each group is checked on its own, so one failing agent isn't hidden by healthy ones, and the alert names the group that fired.
-
-Mastra checks up to 50 groups, prioritizing the groups closest to firing. If more groups match, the alert's page says that only the top 50 groups were checked. For spans and traces, open **Advanced** and set **Skip groups with fewer than** so a group with only a few runs, such as one failure out of two runs, doesn't fire the alert.
-
-All groups of one alert share one incident. When another group starts firing, Slack destinations update the existing message to list it. Other destinations aren't notified again until the incident recovers.
-
-### Understand notifications
-
-Each destination gets a message when the alert fires and when it recovers, at most once every 15 minutes per group. Mastra doesn't send reminders while an alert keeps firing.
-
-The **Activity** tab on the **Alerts** page shows incidents and their delivery attempts.
-
-### Understand alert states
-
-The **Alerts** page and each alert's page show one of these states:
+An observability alert shows one of these states:
 
 | State | Meaning |
 | - | - |
@@ -120,22 +173,62 @@ The **Alerts** page and each alert's page show one of these states:
 | **Error** | The query failed, for example because it timed out. |
 | **Disabled** | The alert is turned off and isn't checked. |
 
-Only firing and recovery send notifications. **No data** and **Error** are shown on the alert's page. Alerts created through the API can instead treat missing data as firing and notify. Their page then shows a **When there is no data** setting. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
+**No data** and **Error** don't send notifications. If an alert stays in either state, check its filters and whether your application sent matching data during the window.
 
-## Manage alerts
+## Platform alert events
 
-Open an alert from the **Alerts** tab. Use the **Enabled** switch on the alert's page to pause or resume it. Select **Edit** to change the alert, then select **Save changes**. To remove an alert, select **Edit** > **Delete alert**, then confirm.
+Each platform alert watches one or more events:
 
-When you open **Alerts** inside a project, the page shows that project's alerts plus the organization's alerts that apply to all projects. Edit an alert that applies to all projects from the organization's **Alerts** page.
+| Event | Sends when |
+| - | - |
+| **Deploy failed** | A build or deploy fails to reach a running state. |
+| **Service crashed** | A running service exhausts its restart policy and stops. |
+| **Service out of memory** | A service is stopped after running out of memory. |
+| **Service unreachable** | Health checks get no response from a deployed service for several minutes in a row. |
+| **Elevated error rate** | More than 10% of requests to a deployed service return `5xx` errors over a 5-minute window. |
+| **Resource usage threshold crossed** | An environment uses more CPU, memory, or egress over a window than the thresholds you set. |
+| **Usage threshold crossed** | Organization usage nears or reaches a plan limit. |
+| **Alert rule firing** | An observability alert in the covered projects fires. Use it to route every observability alert to one place, such as an on-call PagerDuty service. |
 
-## Create an alert from a dashboard card
+**Resource usage threshold crossed** adds a **Usage window**, from **Last 15 minutes** to **Last 24 hours**, and thresholds for **CPU above**, **Memory above**, and **Egress above**. Enter an amount, or switch the unit to **% of monthly allowance**. Leave a metric empty to skip it. Mastra adds up each environment's usage every five minutes, about 10 minutes behind real time.
 
-On the **Metrics** page of the organization or a project, admins see a **Create alert** action, shown as a bell icon, on dashboard cards. Selecting it opens a new alert with the card's measure, filters, and grouping already filled in. From a project, the alert applies to that project. Review the threshold and window, then continue from the backtest step.
+**Usage threshold crossed** covers the whole organization, so it can't be combined with other events or limited to projects. Choose a **Meter**, such as **Usage credits**, or **Any meter**. Under **Sends when**, choose **Near or at the limit** or **At the limit**.
 
-Some cards can't become alerts, so their action is disabled. For example, the card shows every scorer instead of one, filters by labels or tags, uses a metric that alerts can't watch yet, or has filters that exclude every run. Hover over or focus the action to see the reason. See [Build custom dashboards](/docs/mastra-platform/observability/dashboards) for dashboard setup.
+## Manage alerts and destinations
+
+Open an alert from the **Alerts** tab to see its state, settings, and notification history. On the alert's page:
+
+- Use the switch next to the alert's name to turn it off or on.
+- Select **Edit** to change the alert, then select **Save changes**.
+- Select **Edit** > **Delete alert** to delete it. Its past incidents stay on the **Activity** tab.
+
+Inside a project, the **Alerts** page shows that project's alerts plus the organization's alerts that apply to all projects. Edit an alert that applies to all projects from the organization's **Alerts** page.
+
+Open a destination from the **Destinations** tab to see its deliveries and the alerts it serves. On the destination's page:
+
+- Turn off the switch next to its name to pause it. Alerts skip a paused destination until you turn it back on.
+- Select **Send test**, or select **Edit** to change its name or settings.
+- Select **More actions** > **Rotate secret** to replace a webhook's signing secret. The new secret takes effect immediately, so update your endpoint first.
+- Select **More actions** > **Remove** to delete the destination.
+
+When the last two deliveries to a destination fail, its page shows a **Failing** badge and the error. Select **Fix it** to edit the destination.
+
+## Review alert activity
+
+The **Activity** tab shows each time an alert fired or resolved, from the last 24 hours to the last 30 days. Use **Filter activity** to narrow the list by alert, event, destination, or delivery status.
+
+| Delivery status | Meaning |
+| - | - |
+| **Scheduled** | Queued to send. |
+| **Sent** | The destination accepted the notification. |
+| **Suppressed** | Not sent, because a matching notification went out recently. |
+| **Retrying** | The last attempt failed, and Mastra is trying again. |
+| **Exhausted** | Every retry failed. The notification wasn't delivered. |
+| **Config error** | The destination rejected the notification because its settings are wrong. Edit the destination to fix it. |
+| **Replayed** | A failed delivery that was sent again. |
 
 ## Related
 
-- [Alerts](/docs/mastra-platform/alerts)
+- [Alert webhooks](/docs/mastra-platform/api#alert-webhooks)
 - [Build custom dashboards](/docs/mastra-platform/observability/dashboards)
 - [Observability on Mastra platform](/docs/mastra-platform/observability/overview)
