@@ -84,7 +84,7 @@ import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import { PlatformConnectIntegration } from '../foundation/index.js';
-import type { PlatformConnectEventDelivery } from '../foundation/index.js';
+import type { PlatformConnectEventDelivery, PlatformConnectEventRoute } from '../foundation/index.js';
 import { logPlatformBootInfo, logPlatformError, logPlatformInfo, logPlatformWarn } from '../logging.js';
 import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
@@ -1252,6 +1252,12 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       reconcile: () => this.requestReconcile(),
       ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
     });
+  }
+
+  override connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute | null {
+    const route = super.connectEventRoute(ctx);
+    // Only the Mastra Factory app's installations send webhooks Factory handles.
+    return route && { ...route, eventProviderKeys: [FACTORY_GITHUB_PROVIDER_KEY] };
   }
 
   /**

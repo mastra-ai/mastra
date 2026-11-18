@@ -141,6 +141,62 @@ describe('PlatformGithubLegacyEventPoller', () => {
     expect(logs.reads.at(-1)?.cursor).toEqual({ afterEventId: '1600-0' });
   });
 
+  it("resumes from the cursors main's event worker saved", async () => {
+    const logs = legacyLogs();
+    logs.append(99, '1400-0', '1500-0');
+    logs.append(100, '700-0', '800-0');
+    // The settings blob the replaced worker wrote: one repository mid-log, one still at its start time.
+    const settings = settingsStorage({
+      version: 1,
+      repositories: { '99': { afterEventId: '1400-0' }, '100': { afterTimestamp: 750 } },
+    });
+    const { worker, handled } = poller({ logs, storage: settings.storage, repositoryIds: async () => [99, 100] });
+    await start(worker);
+
+    await vi.waitFor(() => expect(handled.map(event => event.id).sort()).toEqual(['1500-0', '800-0']));
+    expect(settings.storage.settings.save).toHaveBeenCalledWith('__platform_github_event_worker__', 'worker', {
+      version: 1,
+      repositories: expect.objectContaining({ '99': { afterEventId: '1500-0' } }),
+    });
+    await vi.waitFor(() =>
+      expect(settings.cursors()).toEqual({ '99': { afterEventId: '1500-0' }, '100': { afterEventId: '800-0' } }),
+    );
+  });
+
+  it('delivers an event again when its cursor could not be saved, never skipping past it', async () => {
+    const logs = legacyLogs();
+    logs.append(99, '1500-0');
+    const settings = settingsStorage({ version: 1, repositories: { '99': { afterEventId: '1-0' } } });
+    vi.mocked(settings.storage.settings.save).mockRejectedValueOnce(new Error('storage unavailable'));
+    const { worker, handled } = poller({ logs, storage: settings.storage });
+    await start(worker);
+
+    await vi.waitFor(() => expect(settings.cursors()).toEqual({ '99': { afterEventId: '1500-0' } }));
+    expect(handled.map(event => event.id)).toEqual(['1500-0', '1500-0']);
+  });
+
+  it('hands over to the next repository after ten pages and resumes the busy one next cycle', async () => {
+    const logs = legacyLogs();
+    logs.append(99, ...Array.from({ length: 5_001 }, (_, index) => `2000-${index}`));
+    logs.append(100, '2000-0');
+    const settings = settingsStorage({
+      version: 1,
+      repositories: { '99': { afterEventId: '1-0' }, '100': { afterEventId: '1-0' } },
+    });
+    const { worker, handled } = poller({
+      logs,
+      storage: settings.storage,
+      repositoryIds: async () => [99, 100],
+      intervalMs: 60_000,
+    });
+    await start(worker);
+
+    await vi.waitFor(() => expect(logs.reads.map(read => read.repositoryId)).toContain(100), { timeout: 10_000 });
+    expect(logs.reads.map(read => read.repositoryId)).toEqual([...Array.from({ length: 10 }, () => 99), 100]);
+    expect(handled).toHaveLength(5_001);
+    expect(settings.cursors()['99']).toEqual({ afterEventId: '2000-4999' });
+  });
+
   it('reads only linked repositories and picks up a newly linked one on the next cycle', async () => {
     const logs = legacyLogs();
     const linked = [99];
@@ -246,6 +302,36 @@ describe('PlatformGithubLegacyEventPoller', () => {
     await worker.stop();
     expect(releaseLease).toHaveBeenCalledWith('platform-github-events:github', expect.any(String));
     await vi.waitFor(() => expect(otherLogs.reads.length).toBeGreaterThan(0));
+  });
+
+  it('saves no cursor for an event whose handler outlived its lease', async () => {
+    // Only lease renewal runs on an interval; handler retries keep real timeouts.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const logs = legacyLogs();
+    logs.append(99, '1500-0');
+    const settings = settingsStorage({ version: 1, repositories: { '99': { afterEventId: '1-0' } } });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => (release = resolve));
+    const leases = {
+      acquireLease: vi
+        .fn()
+        .mockImplementationOnce(async (_key: string, owner: string) => ({ acquired: true, owner }))
+        .mockResolvedValue({ acquired: false, owner: 'other' }),
+      renewLease: vi.fn(async () => false),
+      releaseLease: vi.fn(async () => undefined),
+      getLeaseOwner: vi.fn(async () => 'other'),
+      transferLease: vi.fn(async () => false),
+    } as unknown as LeaseProvider;
+    const { worker, handled } = poller({ logs, storage: settings.storage, handle: () => blocked });
+    await start(worker, deps(leases));
+
+    await vi.waitFor(() => expect(logs.reads).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(leases.renewLease).toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(handled).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(settings.cursors()).toEqual({ '99': { afterEventId: '1-0' } });
   });
 
   it('stops reading once lease renewal reports the lease is lost', async () => {
