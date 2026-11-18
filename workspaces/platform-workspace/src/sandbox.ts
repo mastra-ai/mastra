@@ -213,6 +213,10 @@ interface CreateSandboxResponse {
 const CREATE_MAX_ATTEMPTS = 3;
 /** Base delay between create retries; multiplied by the attempt number. */
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+/** Max attempts for the `GET /sandbox/:id` vault-mode read before the start fails. */
+const VAULT_READ_MAX_ATTEMPTS = 4;
+/** Base delay between vault-mode read retries; multiplied by the attempt number. */
+const VAULT_READ_RETRY_BASE_DELAY_MS = 1_000;
 
 /**
  * Observability handle for a template that was requested but is still being
@@ -1016,18 +1020,40 @@ export class PlatformSandbox extends MastraSandbox {
 
   /**
    * Ask the platform for this sandbox's credential-vault mode
-   * (`GET /sandbox/:id`). A response without `vault` means the sandbox is not
-   * vault. Errors propagate and leave `vault` unchanged, so callers never fall
-   * back to handing out credentials when the platform could not be read.
+   * (`GET /sandbox/:id`). Only a successful response sets the mode: `vault: true`
+   * means vault, anything else means not vault. Network errors, 429 and 5xx are
+   * retried with backoff; when retries run out the error propagates and `vault`
+   * is left unchanged, so callers never fall back to handing out credentials.
+   * A 404/410 means the sandbox is gone: its state is cleared like any other
+   * destroyed sandbox and the error propagates, so the next start provisions.
    */
   async refreshVault(): Promise<boolean | undefined> {
     const sandboxId = this._sandboxId;
     if (!sandboxId) return this.vault;
-    const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
-    const json = (await response.json()) as CreateSandboxResponse;
-    // A replacement sandbox provisioned while this read was in flight has its own mode.
-    if (this._sandboxId === sandboxId) this.vault = json.vault === true;
-    return this.vault;
+    for (let attempt = 1; ; attempt++) {
+      let json: CreateSandboxResponse;
+      try {
+        const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
+        json = (await response.json()) as CreateSandboxResponse;
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) {
+          this._clearDestroyedState(sandboxId);
+          throw error;
+        }
+        const transient = !(error instanceof PlatformApiError) || error.status >= 500 || error.status === 429;
+        if (!transient || attempt >= VAULT_READ_MAX_ATTEMPTS) throw error;
+        this.logger.warn(`[PlatformSandbox] vault-mode read for ${sandboxId} failed (attempt ${attempt}); retrying`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await new Promise(resolve => setTimeout(resolve, VAULT_READ_RETRY_BASE_DELAY_MS * attempt));
+        // A replacement sandbox provisioned meanwhile has its own mode.
+        if (this._sandboxId !== sandboxId) return this.vault;
+        continue;
+      }
+      // A replacement sandbox provisioned while this read was in flight has its own mode.
+      if (this._sandboxId === sandboxId) this.vault = json.vault === true;
+      return this.vault;
+    }
   }
 
   private async _prepareLazyTemplate(): Promise<void> {
