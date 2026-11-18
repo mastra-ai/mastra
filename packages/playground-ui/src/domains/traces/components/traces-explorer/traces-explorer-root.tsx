@@ -123,7 +123,7 @@ export function TracesExplorerRoot({
   const withTimeToFirstTokenSort =
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
-  const withProgressiveSearch = withQueryTrace && (capabilities?.capabilities.observabilityProgressiveSearch ?? false);
+  const withProgressiveSearch = withQueryTrace && (capabilities?.capabilities.progressiveTokenSearch ?? false);
 
   const withTokenSearch =
     withQueryTrace &&

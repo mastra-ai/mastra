@@ -19,7 +19,7 @@ const SELECTION_CLOCK = new Date(0);
 
 /**
  * Trace and error counts over the list's time range, built from the same filters as the list query. A word search
- * over more than 7 days loads one chunk at a time when the server can (`observabilityProgressiveSearch`).
+ * over more than 7 days loads one chunk at a time when the server can (`progressiveTokenSearch`).
  */
 export function useTracesHistogram(enabled: boolean): HistogramView {
   const {

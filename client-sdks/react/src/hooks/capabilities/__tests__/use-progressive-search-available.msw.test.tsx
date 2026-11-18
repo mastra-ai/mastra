@@ -36,7 +36,7 @@ describe('useProgressiveSearchAvailable', () => {
     });
   });
 
-  describe('when the server declares observabilityProgressiveSearch', () => {
+  describe('when the server declares progressiveTokenSearch', () => {
     it('is enabled', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(progressiveSearchCapabilities)));
 
@@ -46,7 +46,7 @@ describe('useProgressiveSearchAvailable', () => {
     });
   });
 
-  describe('when the server does not declare observabilityProgressiveSearch', () => {
+  describe('when the server does not declare progressiveTokenSearch', () => {
     it('is not enabled', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(traceQueryCapabilities)));
 

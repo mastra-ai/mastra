@@ -26,7 +26,7 @@ export type TraceQueryResponse = Response<'POST /observability/traces/query'>;
 export type TraceQueryTraceResponse = Extract<TraceQueryResponse, { traces: unknown[] }>;
 /**
  * Opt-in progressive word search, on span and trace queries and aggregates. A server that reports the
- * `observabilityProgressiveSearch` capability searches a long range one chunk (up to 7 days) per request.
+ * `progressiveTokenSearch` capability searches a long range one chunk (up to 7 days) per request.
  * Servers without it reject these fields, so send them only when the capability is on.
  */
 export type ProgressiveSearchRequest = {

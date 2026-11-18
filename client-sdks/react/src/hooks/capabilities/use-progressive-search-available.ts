@@ -10,6 +10,6 @@ export const useProgressiveSearchAvailable = (): { isLoading: boolean; enabled: 
 
   return {
     isLoading,
-    enabled: !isLoading && (data?.capabilities.observabilityProgressiveSearch ?? false),
+    enabled: !isLoading && (data?.capabilities.progressiveTokenSearch ?? false),
   };
 };

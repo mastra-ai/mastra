@@ -6,4 +6,4 @@
 '@mastra/react': patch
 ---
 
-Added the `observabilityProgressiveSearch` observability capability (`false` by default). Hosts whose observability API searches long ranges in chunks report `true` so Studio searches them chunk by chunk.
+Added the `progressiveTokenSearch` observability capability (`false` by default). Hosts whose observability API searches long ranges in chunks report `true` so Studio searches them chunk by chunk.
