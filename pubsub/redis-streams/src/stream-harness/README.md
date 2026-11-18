@@ -31,7 +31,7 @@ are not approval/replay qualification.
 ## Focused guards
 
 ```sh
-(cd pubsub/redis-streams && pnpm exec vitest run src/stream-harness/compare.test.ts src/stream-harness/expected.test.ts src/stream-harness/fault-symptoms.test.ts src/stream-harness/normalise.test.ts src/stream-harness/observations.test.ts --maxWorkers=1 --reporter=dot && pnpm run check:test && pnpm run lint)
+(cd pubsub/redis-streams && pnpm exec vitest run src/stream-harness/compare.test.ts src/stream-harness/expected.test.ts src/stream-harness/fault-symptoms.test.ts src/stream-harness/normalise.test.ts src/stream-harness/observations.test.ts src/stream-harness/report.test.ts --maxWorkers=1 --retry=0 --reporter=dot && pnpm run check:test && pnpm run lint)
 ```
 
 `check:test` excludes `*.test.ts`; it is not a test-file typing guarantee.
