@@ -113,7 +113,7 @@ export function createSlackChatTools({
     downloadSlackAttachment: createTool({
       id: 'downloadSlackAttachment',
       description:
-        'Inspect a JPEG, PNG, WebP, or GIF attachment from a Slack message in a channel this session can read. Use the threadId and message id from fetchMessages, plus the zero-based attachmentIndex. Images must fit within 8 MiB and 5 MB when base64-encoded; they are shown directly to the model without storing a sandbox file.',
+        'Inspect a JPEG, PNG, or WebP attachment from a Slack message in a channel this session can read. For top-level messages (including DMs), find the message id with fetchChannelMessages; for threaded replies use fetchMessages. Supply its threadId, messageId, and zero-based attachmentIndex. Images must fit within 5 MB when base64-encoded; they are shown directly to the model without storing a sandbox file.',
       inputSchema: z.object({
         threadId: z.string().min(1),
         messageId: z.string().regex(/^\d+\.\d+$/),
@@ -129,8 +129,8 @@ export function createSlackChatTools({
         if (!attachment) throw new Error('Attachment not found on this message.');
         const mimeType = attachment.mimeType;
         if (!mimeType?.startsWith('image/')) throw new Error('Only image attachments can be inspected.');
-        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mimeType)) {
-          throw new Error('Unsupported image format; use JPEG, PNG, WebP, or GIF.');
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+          throw new Error('Unsupported image format; use JPEG, PNG, or WebP.');
         }
         if (!attachment.fetchData) throw new Error('This attachment cannot be downloaded.');
         const maxBytes = 8 * 1024 * 1024;

@@ -62,11 +62,11 @@ function answer(method: string, args: Record<string, string>): Record<string, un
     case 'conversations.replies': {
       const messages = workspace.history[args.channel!] ?? [];
       if (!args.ts || !messages.some(message => message.ts === args.ts)) return { messages: [] };
-      return { messages: messages.filter(message => message.ts === args.oldest) };
+      return { messages: messages.filter(message => message.ts === args.oldest && args.inclusive === 'true') };
     }
     case 'conversations.history': {
       const channel = workspace.channels.find(c => c.id === args.channel);
-      if (!channel?.is_member) return { ok: false, error: 'not_in_channel' };
+      if (!channel?.is_member && args.channel !== 'D1') return { ok: false, error: 'not_in_channel' };
       // Newest first, at most 2 per page (Slack may return fewer than asked), so reads have to follow cursors.
       const all = workspace.history[args.channel!] ?? [];
       const start = Number(args.cursor || 0);
@@ -241,6 +241,8 @@ describe('Slack tools on a Factory session, by default', () => {
     }];
     try {
       const { run } = await slackSession(undefined, 'slack:D1:');
+      const history = await run('fetchChannelMessages', { channelId: 'slack:D1', limit: 5, direction: 'backward' });
+      expect(history.messages[0].id).toBe('1700000400.000400');
       const result = await run('downloadSlackAttachment', {
         threadId: 'slack:D1:', messageId: '1700000400.000400', attachmentIndex: 0,
       });
@@ -277,6 +279,15 @@ describe('Slack tools on a Factory session, by default', () => {
     }];
     try {
       const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Unsupported image format');
+      expect(sent('file.download')).toHaveLength(0);
+
+      workspace.history.C1![0]!.files = [{
+        id: 'F1', name: 'animated.gif', mimetype: 'image/gif', size: 20,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/animated.gif',
+      }];
       await expect(run('downloadSlackAttachment', {
         threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
       })).rejects.toThrow('Unsupported image format');
