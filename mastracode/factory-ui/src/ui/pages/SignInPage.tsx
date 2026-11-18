@@ -12,7 +12,7 @@ import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
-import { useFactoryAuth } from '../../hooks/useFactoryAuth';
+import { authCheckFailed, useFactoryAuth } from '../../hooks/useFactoryAuth';
 import {
   navigateAfterSignIn,
   redirectToLogin,
@@ -188,12 +188,13 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
-  const checking = auth.isPending || !auth.isFetchedAfterMount;
+  const failed = auth.isError || authCheckFailed(auth);
+  const checking = !failed && (auth.isPending || !auth.isFetchedAfterMount);
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
-  if (!checking && !auth.isFetching && !auth.isError && canReturnToApp) {
+  if (!checking && !auth.isFetching && !failed && canReturnToApp) {
     return <Navigate to={returnTo} replace />;
   }
 
@@ -219,7 +220,7 @@ export function SignInPage() {
               ) : null}
             </Notice>
           ) : null}
-          {auth.isError ? (
+          {failed ? (
             <div role="alert" className="space-y-3">
               <Txt as="p" variant="body" tone="muted">
                 Unable to check your sign-in status. Check your connection and try again.

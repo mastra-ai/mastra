@@ -1,7 +1,7 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { authCheckFailed, useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
@@ -21,14 +21,16 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
+  const { isPending, data, errorUpdateCount } = useFactoryAuth({ monitorSession: true });
   const location = useLocation();
   const [wasSignedIn, setWasSignedIn] = useState(false);
 
   if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
+  if (authCheckFailed({ data, errorUpdateCount })) {
+    return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  }
   if (isPending) return <RouteFrameSkeleton label="Checking sign-in" />;
-  if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
   if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
