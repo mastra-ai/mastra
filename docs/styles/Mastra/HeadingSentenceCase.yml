@@ -172,6 +172,7 @@ exceptions:
   - 'Zod'
   # Product and feature names that stay capitalized mid-heading.
   - 'Angular'
+  - 'Apps'
   - 'Bedrock'
   - 'Browserbase'
   - 'Builder'
