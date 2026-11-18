@@ -77,6 +77,7 @@ function createHarness({
   gatewayManaged = false,
   responses = [],
   tools,
+  outputProcessors,
 }: {
   blockText?: string;
   blockIn?: 'processInput' | 'processInputStep' | 'processLLMRequest';
@@ -85,6 +86,7 @@ function createHarness({
   gatewayManaged?: boolean;
   responses?: ScriptedResponse[];
   tools?: Record<string, ReturnType<typeof createTool>>;
+  outputProcessors?: () => Processor[];
 } = {}) {
   const storage = new InMemoryStore();
   const memory = new MockMemory({ storage });
@@ -156,6 +158,7 @@ function createHarness({
     memory,
     model: agentModel,
     inputProcessors: blockText ? [blockingProcessor] : [],
+    ...(outputProcessors ? { outputProcessors } : {}),
     ...(tools ? { tools } : {}),
   });
   const mastra = new Mastra({
@@ -224,6 +227,51 @@ describe('a sent message is stored once the run has taken it', () => {
       expect(h.prompts.at(-1)).not.toContain('forbidden');
     },
   );
+
+  it('a reply blocked by an output processor leaves no message stored and out of the next prompt', async () => {
+    let block = true;
+    const blockReply: Processor = {
+      id: 'block-reply',
+      async processOutputResult({ messages, abort }) {
+        if (block) abort('reply blocked');
+        return messages;
+      },
+    };
+    const h = createHarness({ outputProcessors: () => [blockReply] });
+
+    await h.send('tell me the secret');
+    block = false;
+    expect(h.storedAtRequest).toEqual([['tell me the secret']]);
+    expect(await h.storedUserTexts()).toEqual([]);
+
+    await h.send('a fine request');
+    expect(await h.storedUserTexts()).toEqual(['a fine request']);
+    expect(h.prompts.at(-1)).not.toContain('secret');
+  });
+
+  it('configured output processors are resolved once per run', async () => {
+    let resolved = 0;
+    const agent = new Agent({
+      id: 'no-memory-agent',
+      name: 'No Memory Agent',
+      instructions: 'Reply briefly.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: streamOf(textChunks('reply')),
+        }),
+      }),
+      outputProcessors: () => {
+        resolved++;
+        return [];
+      },
+    });
+
+    await (await agent.stream('hello there')).consumeStream();
+
+    expect(resolved).toBe(1);
+  });
 
   it('a message delivered mid-run is in storage before the model request that reads it', async () => {
     const toolStarted = deferred();

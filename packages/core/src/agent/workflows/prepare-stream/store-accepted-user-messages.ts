@@ -13,6 +13,12 @@ import { isUserAuthoredMessage } from '../../signals';
 
 export type StoreAcceptedUserMessages = (args: { messageList: MessageList; model: unknown }) => Promise<void>;
 
+export type AcceptedUserMessageStore = {
+  store: StoreAcceptedUserMessages;
+  /** Removes the rows this run stored early. Used when an output processor blocks the turn, which stores nothing. */
+  undo: () => Promise<void>;
+};
+
 /** Gateway-managed memory is the gateway's to store. Same answer the observational memory processor gives. */
 async function isGatewayMemoryManaged(model: unknown): Promise<boolean> {
   if (typeof model !== 'object' || model === null) return false;
@@ -52,7 +58,7 @@ export function createStoreAcceptedUserMessages({
   requestContext?: RequestContext;
   authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   logger?: IMastraLogger;
-}): StoreAcceptedUserMessages | undefined {
+}): AcceptedUserMessageStore | undefined {
   if (!memory || !threadId) return undefined;
   const runtimeConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
   const config = memory.getMergedThreadConfig(runtimeConfig ?? memoryConfig);
@@ -69,7 +75,7 @@ export function createStoreAcceptedUserMessages({
   }
 
   const stored = new Set<string>();
-  return async ({ messageList, model }) => {
+  const store: StoreAcceptedUserMessages = async ({ messageList, model }) => {
     const ids = new Set(
       messageList.get.input
         .db()
@@ -97,4 +103,14 @@ export function createStoreAcceptedUserMessages({
       });
     }
   };
+  const undo = async () => {
+    if (stored.size === 0) return;
+    try {
+      await memory.deleteMessages([...stored]);
+      stored.clear();
+    } catch (error) {
+      logger?.error('Could not remove a sent message stored before a blocked turn', { error, threadId });
+    }
+  };
+  return { store, undo };
 }
