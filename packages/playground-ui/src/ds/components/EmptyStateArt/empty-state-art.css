@@ -353,10 +353,10 @@
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
   18% {
-    rotate: var(--rot);
+    rotate: var(--rot, 0deg);
   }
   62% {
-    rotate: var(--rot);
+    rotate: var(--rot, 0deg);
     animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
   }
   80%,
