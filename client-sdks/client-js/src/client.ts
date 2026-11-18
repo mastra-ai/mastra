@@ -1336,13 +1336,22 @@ export class MastraClient extends BaseResource {
    * Queries completed logical traces using recursive trace and related-record predicates.
    * Grouped results remain supported but are deprecated. Use `queryTraceThreads()` to retrieve thread identities.
    */
-  queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
-  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
-  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
-  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
-    return this.observability.queryTraces(params);
+  queryTraces(params: QueryTracesGroupedInput, options?: { signal?: AbortSignal }): Promise<TraceQueryGroupResponse>;
+  queryTraces(
+    params: QueryTracesDeltaInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(
+    params: QueryTracesPaginatedInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(
+    params: QueryTracesKeysetInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<TraceQueryKeysetTraceResponse>;
+  queryTraces(params: QueryTracesInput, options?: { signal?: AbortSignal }): Promise<TraceQueryResponse>;
+  queryTraces(params: QueryTracesInput, options?: { signal?: AbortSignal }): Promise<TraceQueryResponse> {
+    return this.observability.queryTraces(params, options);
   }
 
   /**
@@ -1358,8 +1367,8 @@ export class MastraClient extends BaseResource {
    * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
    * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
-    return this.observability.aggregateSpans(params);
+  aggregateSpans(params: AggregateSpansArgs, options?: { signal?: AbortSignal }): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params, options);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -1384,8 +1393,8 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed spans using a span predicate, returning one row per matching span. */
-  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
-    return this.observability.querySpans(params);
+  querySpans(params: QuerySpansInput, options?: { signal?: AbortSignal }): Promise<QuerySpansResult> {
+    return this.observability.querySpans(params, options);
   }
 
   /**
