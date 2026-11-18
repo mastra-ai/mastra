@@ -34553,9 +34553,9 @@
     },
     "job:e2e/no-bundling": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-13",
-      "reason": "pr-job-fail",
+      "since": "2026-11-18",
+      "last_failure": "2026-11-18",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131942713367": {
           "date": "2026-11-13",
