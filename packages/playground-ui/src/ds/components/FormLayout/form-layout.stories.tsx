@@ -21,7 +21,7 @@ const meta = {
       description: {
         component: [
           'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `PageLayout` with no breadcrumb bar, holding a centered 640px column (the `SettingsLayout` width) under a back link and the page title.',
-          'The back link and title are inset to line up with each `SettingsTitle` below them, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
+          'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
           'Use `SettingsLayout` in a `PageLayout` with breadcrumbs for a settings page that someone browses to and changes in place. Use `PageLayout variant="narrow"` with a `PageHeader` for a one-column page to read, such as an overview, a feed or a detail page.',
         ].join('\n\n'),
       },
@@ -91,7 +91,7 @@ export const Create: Story = {
     const title = canvas.getByRole('heading', { level: 1, name: 'New alert' });
     const details = canvas.getByRole('heading', { level: 2, name: 'Details' });
     const notify = canvas.getByRole('heading', { level: 2, name: 'Notify' });
-    const column = canvasElement.querySelector<HTMLElement>('[data-slot="settings-layout"]');
+    const column = canvasElement.querySelector<HTMLElement>('[data-slot="form-layout"]');
     if (!column) throw new Error('Missing the form column');
 
     const main = canvas.getByRole('main');
@@ -99,6 +99,7 @@ export const Create: Story = {
     await expect(column.getBoundingClientRect().width).toBeLessThanOrEqual(640);
     await expect(back.getBoundingClientRect().left).toBe(details.getBoundingClientRect().left);
     await expect(title.getBoundingClientRect().left).toBe(details.getBoundingClientRect().left);
+    await expect(details.getBoundingClientRect().left).toBe(column.getBoundingClientRect().left);
 
     const firstSection = details.closest('section');
     const secondSection = notify.closest('section');

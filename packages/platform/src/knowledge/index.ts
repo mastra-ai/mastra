@@ -211,7 +211,9 @@ export class PlatformKnowledge extends Knowledge {
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
     const apiUrl = options.apiUrl ?? (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ?? DEFAULT_API_URL;
     if (!token || !instanceId) {
-      throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');
+      throw new Error(
+        'PlatformKnowledge requires a Knowledge token or Platform access token, and a Knowledge instance ID',
+      );
     }
     const {
       accessToken: _accessToken,

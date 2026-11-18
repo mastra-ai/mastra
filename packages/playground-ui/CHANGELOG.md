@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 70.1.0-alpha.1
+
+### Minor Changes
+
+- Added `EmptyStateArt`, 23 animated drawings for empty states where people create, set up, or upgrade something. Each drawing loops on hover, keeps looping while setup is running, and shows its own failure when setup fails. ([#30734](https://github.com/mastra-ai/mastra/pull/30734))
+
+  `EmptyState` also gets a `layout="split"` option that puts the drawing beside the text, and a `statusSlot` for a short line under the actions, such as a cost note or live import progress.
+
+  ```tsx
+  import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+  import { EmptyStateArt } from '@mastra/playground-ui/components/EmptyStateArt';
+
+  <EmptyState
+    layout="split"
+    titleSlot="Give your agents shared knowledge"
+    descriptionSlot="A store of pages your agents search, read and write."
+    iconSlot={<EmptyStateArt name="knowledge" state={setup.isPending ? 'working' : 'idle'} />}
+    actionSlot={<Button variant="primary">Set up knowledge</Button>}
+    statusSlot="Creates a dedicated Postgres database."
+  />;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/client-js@1.61.1-alpha.1
+  - @mastra/react@1.15.2-alpha.1
+
 ## 70.0.1-alpha.0
 
 ### Patch Changes

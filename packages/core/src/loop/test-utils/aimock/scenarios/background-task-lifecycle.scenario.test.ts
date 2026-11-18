@@ -1,8 +1,12 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { it, expect, vi } from 'vitest';
+import { it, expect, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../../../agent';
+import { agentThreadStreamRuntime } from '../../../../agent/thread-stream-runtime';
 import { MockMemory } from '../../../../memory/mock';
 import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
@@ -14,7 +18,15 @@ import {
   describeForAllEngines,
   isDurableEngineVariant,
 } from '../aimock-scenario';
+import { ExecutionFence, executionLeaseKey, resolveLeaseProvider } from '../../../../agent/durable/execution-fence';
 import { BackgroundTaskManager } from '../../../../background-tasks/manager';
+import type { PubSub } from '../../../../events/pubsub';
+import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
+import type { Mastra } from '../../../../mastra';
+import type { MemoryStorage } from '../../../../storage/domains/memory/base';
+import { WorkflowsInMemory } from '../../../../storage/domains/workflows/inmemory';
+import { RUN_FENCE_CONFLICT_ERROR_ID } from '../../../../storage/run-fencing';
+import { SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Regression classes: the end-to-end background-task lifecycle driven by real
@@ -578,7 +590,11 @@ describeForAllEngines(
     // A chat that reloads the thread while a deferred background tool waits for input must
     // still see the open request on the tool call, and the resumed tool must know which
     // request it is answering. (#28986)
-    function makeSuspendingResearchTool(seenOnResume: unknown[], transform?: ToolPayloadTransform) {
+    function makeSuspendingResearchTool(
+      seenOnResume: unknown[],
+      transform?: ToolPayloadTransform,
+      gate?: Promise<void>,
+    ) {
       return createTool({
         id: 'research-with-approval',
         description: 'Research a topic after analyst approval',
@@ -589,6 +605,7 @@ describeForAllEngines(
         execute: async ({ topic }, options) => {
           const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
           if (!resumeData) {
+            await gate;
             return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as any;
           }
           seenOnResume.push(options?.agent?.suspendPayload);
@@ -718,6 +735,1204 @@ describeForAllEngines(
         (t: any) => t?.status === 'completed',
       );
       expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'solana' }]);
+    }, 30_000);
+
+    // Durable engines release the run's claim once it finishes. Tests that need the run fully
+    // over before a background task acts wait for storage to show that. Runs without a claim
+    // have no record.
+    async function waitForRunToRelease(mastra: Mastra, runId: string) {
+      const workflows = await mastra.getStorage()!.getStore('workflows');
+      await waitFor(
+        async () => (await workflows?.getRunOwnership?.({ runId }))?.live ?? false,
+        live => !live,
+      );
+    }
+
+    // Technical: the background executor runs the origin run's suspend bookkeeping before the
+    // task's own suspend. Its memory save required the finished run to still own its claim,
+    // which can't be verified once the claim is released, so the task failed with
+    // DURABLE_AGENT_EXECUTION_UNVERIFIED instead of suspending. (#30182)
+    it('parks a deferred tool that asks for input after the reply was sent, and resumes it (#30182)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const seenOnResume: unknown[] = [];
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-suspend-after-finish-thread', resourceId: 'bg-suspend-after-finish-user' };
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research near',
+        tools: { researchWithApproval: makeSuspendingResearchTool(seenOnResume, undefined, gate) },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm =>
+          onReportTurns(llm, 'Research near', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst answered.',
+          }),
+      });
+      // The run has replied and ended before the tool asks for input.
+      expect(await output.text).toBe('Waiting for the analyst.');
+      const manager = mastra.backgroundTaskManager!;
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      const taskId = started.payload.taskId as string;
+      await waitForRunToRelease(mastra, started.runId);
+      release();
+
+      const parked = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+      )) as any;
+      expect({ status: parked.status, error: parked.error?.message }).toEqual({
+        status: 'suspended',
+        error: undefined,
+      });
+      expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+      const open = await waitFor(
+        () => storedToolCall(memory, thread),
+        s => s.suspended?.taskId !== undefined,
+      );
+      expect(open.suspended).toMatchObject({ taskId, suspendPayload: { awaiting: 'analyst-approval', topic: 'near' } });
+
+      await manager.resume(taskId, { notes: 'looks promising' });
+      const done = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      )) as any;
+      expect(done.result).toEqual({ summary: 'Research on "near": looks promising' });
+      expect(seenOnResume).toEqual([{ awaiting: 'analyst-approval', topic: 'near' }]);
+    }, 30_000);
+
+    // Technical: two deferred tools from one turn share the finished run's claim. Answering the
+    // first finishes it and wakes the agent to report it, which runs on the thread again. The
+    // second tool's late suspend still carries the first run's claim and must still park. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks the second of two deferred tools after the first was answered and reported (#30182)',
+      async () => {
+        let releaseAlpha!: () => void;
+        let releaseBeta!: () => void;
+        const gates: Record<string, Promise<void>> = {
+          alpha: new Promise<void>(resolve => (releaseAlpha = resolve)),
+          beta: new Promise<void>(resolve => (releaseBeta = resolve)),
+        };
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-sibling-thread', resourceId: 'bg-suspend-sibling-user' };
+        const prompt = 'Research alpha and beta';
+        const tool = createTool({
+          id: 'research-with-approval',
+          description: 'Research a topic after analyst approval',
+          inputSchema: z.object({ topic: z.string() }),
+          outputSchema: z.object({ summary: z.string() }),
+          background: { enabled: true },
+          execute: async ({ topic }, options) => {
+            const resumeData = options?.agent?.resumeData as { notes?: string } | undefined;
+            if (!resumeData) {
+              await gates[topic];
+              return options?.agent?.suspend?.({ awaiting: 'analyst-approval', topic }) as any;
+            }
+            return { summary: `Research on "${topic}": ${resumeData.notes}` };
+          },
+        });
+        const { chunks, mastra, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt,
+          tools: { researchWithApproval: tool },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, prompt, {
+              dispatch: {
+                toolCalls: [
+                  { id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'alpha' } },
+                  { id: 'call-bg-2', name: 'researchWithApproval', arguments: { topic: 'beta' } },
+                ],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'Alpha answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.filter(c => c.type === 'background-task-started') as Array<Chunk & { runId: string }>;
+        expect(started).toHaveLength(2);
+        const tasks = await Promise.all(started.map(c => manager.getTask(c.payload.taskId as string)));
+        const taskFor = (topic: string) => tasks.find(t => (t?.args as { topic?: string })?.topic === topic)!.id;
+        const alpha = taskFor('alpha');
+        const beta = taskFor('beta');
+        await waitForRunToRelease(mastra, started[0].runId);
+
+        releaseAlpha();
+        await waitFor(
+          () => manager.getTask(alpha),
+          (t: any) => t?.status === 'suspended',
+        );
+        await manager.resume(alpha, { notes: 'looks promising' });
+        await waitFor(
+          () => manager.getTask(alpha),
+          (t: any) => t?.status === 'completed',
+        );
+        // The wake run reported the first tool and ended.
+        await waitFor(storedText(memory, thread), s => s.includes('Alpha answered.'));
+        await waitForRunToRelease(mastra, started[0].runId);
+
+        releaseBeta();
+        const parked = (await waitFor(
+          () => manager.getTask(beta),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        expect({ status: parked.status, error: parked.error?.message }).toEqual({
+          status: 'suspended',
+          error: undefined,
+        });
+        expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'beta' });
+      },
+      30_000,
+    );
+
+    // Technical: one turn dispatches a deferred tool and also calls a tool that needs approval.
+    // Approving it resumes the same run under a new claim generation, and only then does the
+    // deferred tool call suspend(). The durable engine parks it. Known limit: the evented engine
+    // counts the resume's claim as another execution's, so the task fails with "lost its
+    // execution lease", as it does on main. Telling this resume from a real takeover would widen
+    // this fix, so the evented result is pinned. Inngest isn't covered here. (#30182)
+    it.runIf(engine === 'durable' || engine === 'evented')(
+      'parks a deferred tool that asks for input after an approval in the same turn resumed the run (#30182)',
+      async () => {
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const llm = getMock();
+        const thread = { threadId: 'bg-suspend-after-resume-thread', resourceId: 'bg-suspend-after-resume-user' };
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look up a user record',
+          inputSchema: z.object({ name: z.string() }),
+          outputSchema: z.object({ id: z.string() }),
+          requireApproval: true,
+          execute: async ({ name }) => ({ id: `user-${name}` }),
+        });
+        const shared = await createSharedAgent(llm, {
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate), lookup },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          engine,
+        });
+        const prompt = 'Research near and look up dero';
+        // The mock server is shared by the suite. The previous test's agent still reports its parked
+        // task to the model as that test ends, and a request landing here would take this turn's
+        // tool calls. Answer only this thread's requests; aimock counts the sequence per predicate.
+        const ownRequest = (req: unknown) => JSON.stringify(req).includes(prompt);
+        llm.on(
+          { endpoint: 'chat', predicate: ownRequest, sequenceIndex: 0 },
+          {
+            toolCalls: [
+              { id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } },
+              { id: 'call-lookup-1', name: 'lookup', arguments: { name: 'dero' } },
+            ],
+          },
+        );
+        for (let i = 1; i < 8; i++) {
+          llm.on({ endpoint: 'chat', predicate: ownRequest, sequenceIndex: i }, { content: `Reply ${i}.` });
+        }
+
+        const first = await runLoopScenario({
+          engine,
+          llm,
+          prompt,
+          sharedAgent: shared,
+          fixtures: () => {},
+          memory,
+          ...thread,
+          streamUntilIdle: true,
+          manualStreamConsumption: true,
+        });
+        const firstChunks = await collectUntil(
+          first.output.fullStream as ReadableStream<unknown>,
+          'tool-call-approval',
+        );
+        const started = firstChunks.find(c => c.type === 'background-task-started');
+        expect(firstChunks.find(c => c.type === 'tool-call-approval')?.payload.toolCallId).toBe('call-lookup-1');
+        const taskId = started!.payload.taskId as string;
+        const workflows = (await shared.mastra.getStorage()!.getStore('workflows'))!;
+        const before = await workflows.getRunOwnership({ runId: first.output.runId });
+
+        const resumed = await shared.agent.resumeStreamUntilIdle(
+          { approved: true },
+          {
+            runId: first.output.runId,
+            toolCallId: 'call-lookup-1',
+            memory: { thread: thread.threadId, resource: thread.resourceId },
+          },
+        );
+        // The resume claimed the same run again before the deferred tool suspends.
+        await waitFor(
+          () => workflows.getRunOwnership({ runId: first.output.runId }),
+          o => o !== null && o.generation !== before?.generation,
+        );
+        release();
+        const resumedChunks = collect(resumed.fullStream as AsyncIterable<unknown>);
+
+        const parked = (await waitFor(
+          () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        if (engine === 'durable') {
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+        } else {
+          expect(parked.status).toBe('failed');
+          expect(parked.error?.message).toContain('lost its execution lease');
+        }
+        const lookupResult = (await resumedChunks).find(
+          c => c.type === 'tool-result' && c.payload?.toolName === 'lookup',
+        );
+        expect(lookupResult?.payload.result).toEqual({ id: 'user-dero' });
+      },
+      60_000,
+    );
+
+    // Technical: the late suspend above is only allowed while no other execution has claimed the
+    // run. Once a successor claims it, the old execution's suspension must not reach memory or
+    // park the task, and the successor's claim must stay as it was. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over the run (#30182)",
+      async () => {
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-after-takeover-thread', resourceId: 'bg-suspend-after-takeover-user' };
+        const { chunks, mastra, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research near',
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate) },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, 'Research near', {
+              dispatch: {
+                toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'The analyst answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+        const taskId = started.payload.taskId as string;
+        await waitForRunToRelease(mastra, started.runId);
+
+        // Another execution claims the run, as a recovery or a new turn would.
+        const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+        const released = await workflows.getRunOwnership({ runId: started.runId });
+        const successor = await workflows.claimRunOwnership({
+          runId: started.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        release();
+
+        const settled = (await waitFor(
+          () => manager.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        expect({ status: settled.status, error: settled.error?.message }).toEqual({
+          status: 'failed',
+          // DURABLE_AGENT_EXECUTION_SUPERSEDED
+          error: expect.stringContaining(`Durable run ${started.runId} lost its execution lease`),
+        });
+        expect(settled.suspendPayload).toBeUndefined();
+        expect((await storedToolCall(memory, thread)).suspended).toBeUndefined();
+        const after = await workflows.getRunOwnership({ runId: started.runId });
+        expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+          ownerId: 'successor-execution',
+          generation: successor.record.generation,
+          live: true,
+        });
+      },
+      30_000,
+    );
+
+    // Technical: with ownership only in a pubsub lease (storage without run fencing), a released
+    // lease keeps no record, so it can't show whether another execution claimed and finished the
+    // run since, and no storage fence stands behind the write. The late suspend keeps the strict
+    // check: the task fails as before rather than write over a run a recovery finished. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after its run finished when ownership is only a lease (#30182)",
+      async () => {
+        vi.spyOn(WorkflowsInMemory.prototype, 'supportsRunFencing').mockReturnValue(false);
+        onTestFinished(() => vi.restoreAllMocks());
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => (release = resolve));
+        const memory = new MockMemory();
+        const thread = { threadId: 'bg-suspend-lease-only-thread', resourceId: 'bg-suspend-lease-only-user' };
+        const { chunks, mastra, agent, output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research near',
+          tools: { researchWithApproval: makeSuspendingResearchTool([], undefined, gate) },
+          agentBackgroundTasks: { tools: { researchWithApproval: true } },
+          backgroundTasks: BG_CONFIG,
+          memory,
+          ...thread,
+          stopWhen: stepCountIs(3),
+          collectChunks: true,
+          fixtures: llm =>
+            onReportTurns(llm, 'Research near', {
+              dispatch: {
+                toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+              },
+              ack: 'Waiting for the analyst.',
+              report: 'The analyst answered.',
+            }),
+        });
+        expect(await output.text).toBe('Waiting for the analyst.');
+        const manager = mastra.backgroundTaskManager!;
+        const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+        const taskId = started.payload.taskId as string;
+        const agentPubsub = (mastra.getAgentById(agent.id) as { pubsub?: PubSub }).pubsub ?? mastra.pubsub;
+        const leases = resolveLeaseProvider(agentPubsub);
+        const key = executionLeaseKey(agent.id, started.runId);
+        // The run finished: its fence is gone and its lease released.
+        await waitFor(
+          async () => ({ fence: ExecutionFence.getLocalActive(started.runId), owner: await leases.getLeaseOwner(key) }),
+          ({ fence, owner }) => fence === undefined && owner === undefined,
+        );
+
+        // Another process recovers the run, finishes it and releases the lease.
+        expect((await leases.acquireLease(key, 'recovery-execution', 60_000)).acquired).toBe(true);
+        await leases.releaseLease(key, 'recovery-execution');
+        release();
+
+        const settled = (await waitFor(
+          () => manager.getTask(taskId),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+        const unverified = `Durable run ${started.runId}: could not verify that this execution still owns the run`;
+        expect({ status: settled.status, error: settled.error?.message }).toEqual({
+          status: 'failed',
+          // DURABLE_AGENT_EXECUTION_UNVERIFIED
+          error: expect.stringContaining(unverified),
+        });
+        expect(settled.suspendPayload).toBeUndefined();
+        // Memory records the tool call as failed. The refused suspension's `suspendedTools` entry
+        // still reaches memory next to that error, as it does on main (not yet investigated).
+        const stored = await waitFor(
+          () => storedToolCall(memory, thread),
+          s => s.invocation?.state === 'output-error',
+        );
+        expect(stored.invocation.errorText).toContain(unverified);
+      },
+      30_000,
+    );
+
+    // Starts the deferred research tool, lets the run finish and release its claim, and holds
+    // one cleanup step open, as slow storage would, until `finishCleanup`: retiring the run's
+    // memory fence, releasing the thread's lease (evented, with a shared `pubsub`), or the claim
+    // release itself, which storage has applied but not yet returned to the run. `cleanedUp`
+    // resolves once the held step has finished. With `releaseAckFails`, the claim release is
+    // applied in storage but its response fails, as a dropped connection would. With
+    // `outcome: 'result'`, the tool returns a result once let go instead of asking for input.
+    async function startResearchDuringCleanup(
+      threadId: string,
+      {
+        hold = 'memory-fence',
+        pubsub,
+        releaseAckFails = false,
+        outcome = 'suspend',
+      }: {
+        hold?: 'memory-fence' | 'thread-lease' | 'claim-release';
+        pubsub?: PubSub;
+        releaseAckFails?: boolean;
+        outcome?: 'suspend' | 'result';
+      } = {},
+    ) {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      let finishCleanup!: () => void;
+      const cleanupGate = new Promise<void>(resolve => (finishCleanup = resolve));
+      let signalCleanedUp!: () => void;
+      const cleanedUp = new Promise<void>(resolve => (signalCleanedUp = resolve));
+      const memory = new MockMemory();
+      const memoryStore = (await memory.storage.getStore('memory'))!;
+      let retiring = false;
+      const holdOpen = async <T>(step: () => Promise<T>): Promise<T> => {
+        retiring = true;
+        await cleanupGate;
+        try {
+          return await step();
+        } finally {
+          signalCleanedUp();
+        }
+      };
+      if (releaseAckFails) {
+        const releaseRunOwnership = WorkflowsInMemory.prototype.releaseRunOwnership;
+        const spy = vi
+          .spyOn(WorkflowsInMemory.prototype, 'releaseRunOwnership')
+          .mockImplementationOnce(async function (this: WorkflowsInMemory, fence) {
+            await releaseRunOwnership.call(this, fence);
+            throw new Error('connection lost after the release was applied');
+          });
+        onTestFinished(() => spy.mockRestore());
+      }
+      if (hold === 'memory-fence') {
+        const retireRunFence = memoryStore.retireRunFence.bind(memoryStore);
+        vi.spyOn(memoryStore, 'retireRunFence').mockImplementation(fence => holdOpen(() => retireRunFence(fence)));
+      } else if (hold === 'claim-release') {
+        // The scenario builds its own store, so the hold goes on the in-memory workflows domain.
+        const releaseRunOwnership = WorkflowsInMemory.prototype.releaseRunOwnership;
+        const spy = vi
+          .spyOn(WorkflowsInMemory.prototype, 'releaseRunOwnership')
+          .mockImplementation(async function (this: WorkflowsInMemory, fence) {
+            const released = await releaseRunOwnership.call(this, fence);
+            return holdOpen(async () => released);
+          });
+        onTestFinished(() => spy.mockRestore());
+      } else {
+        const releaseLease = agentThreadStreamRuntime.releaseDurableThreadLease.bind(agentThreadStreamRuntime);
+        const spy = vi
+          .spyOn(agentThreadStreamRuntime, 'releaseDurableThreadLease')
+          .mockImplementation((...args) => holdOpen(() => releaseLease(...args)));
+        onTestFinished(() => spy.mockRestore());
+      }
+      const thread = { threadId, resourceId: `${threadId}-user` };
+      const researchTool =
+        outcome === 'result'
+          ? createTool({
+              id: 'research-with-approval',
+              description: 'Research a topic',
+              inputSchema: z.object({ topic: z.string() }),
+              outputSchema: z.object({ summary: z.string() }),
+              background: { enabled: true },
+              execute: async ({ topic }) => {
+                await gate;
+                return { summary: `Research on "${topic}"` };
+              },
+            })
+          : makeSuspendingResearchTool([], undefined, gate);
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research near',
+        tools: { researchWithApproval: researchTool },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        ...(pubsub ? { pubsub } : {}),
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm =>
+          onReportTurns(llm, 'Research near', {
+            dispatch: {
+              toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'near' } }],
+            },
+            ack: 'Waiting for the analyst.',
+            report: 'The analyst answered.',
+          }),
+      });
+      expect(await output.text).toBe('Waiting for the analyst.');
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      await waitForRunToRelease(mastra, started.runId);
+      await waitFor(
+        async () => retiring,
+        isRetiring => isRetiring,
+      );
+      const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+      const settledTask = async () =>
+        (await waitFor(
+          () => mastra.backgroundTaskManager!.getTask(started.payload.taskId as string),
+          (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+        )) as any;
+      return {
+        memory,
+        memoryStore,
+        thread,
+        workflows,
+        runId: started.runId,
+        release,
+        finishCleanup,
+        cleanedUp,
+        settledTask,
+      };
+    }
+
+    // Waits until a held memory save is on its way to storage. A regression that fails the task
+    // before it saves would otherwise leave the test waiting until its 30 s timeout.
+    async function untilSaveHeld(saveStarted: Promise<void>): Promise<void> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('save never reached storage')), 2_000);
+      });
+      try {
+        await Promise.race([saveStarted, timedOut]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // Technical: a finished run releases its claim, then retires its memory fence. Until that
+    // retirement resolves, the execution stays registered in this process, and the late suspend's
+    // check asked it to prove it still held the claim it had just released, so the task failed
+    // with DURABLE_AGENT_EXECUTION_SUPERSEDED though no other execution had claimed the run. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks a deferred tool that asks for input while the finished run is still cleaning up (#30182)',
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-during-cleanup-thread');
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          // Accepting the late suspend left the released claim as it was.
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the cleanup window above must not let a superseded execution through: once a
+    // successor claims the run, the late suspend still fails without writing. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over a run still cleaning up (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-cleanup-takeover-thread');
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const successor = await run.workflows.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        run.release();
+        try {
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // DURABLE_AGENT_EXECUTION_SUPERSEDED
+            error: expect.stringContaining(`Durable run ${run.runId} lost its execution lease`),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record.generation,
+            live: true,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the late suspend's ownership check passes while no successor exists, but its
+    // memory save can reach storage later. A finished run stops fencing its own writes once it
+    // settles, so the save went through unfenced: a successor that claimed the run and raised the
+    // memory fence in between found the old execution's suspension in memory and the task parked.
+    // The save now carries the finished run's claim, and storage rejects it. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool whose suspension reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-slow-save-takeover-thread');
+        let signalSaveStarted!: () => void;
+        const saveStarted = new Promise<void>(resolve => (signalSaveStarted = resolve));
+        let finishSave!: () => void;
+        const saveGate = new Promise<void>(resolve => (finishSave = resolve));
+        const saveMessages = run.memoryStore.saveMessages.bind(run.memoryStore);
+        vi.spyOn(run.memoryStore, 'saveMessages').mockImplementation(async args => {
+          signalSaveStarted();
+          await saveGate;
+          return saveMessages(args);
+        });
+        try {
+          run.release();
+          // The suspension passed its ownership check; its save is on the way to storage.
+          await untilSaveHeld(saveStarted);
+          // The finished run completes its cleanup. Then a successor claims the run and raises
+          // the memory fence, as recovery or a new turn does before it touches memory.
+          run.finishCleanup();
+          await run.cleanedUp;
+          const released = await run.workflows.getRunOwnership({ runId: run.runId });
+          const successor = await run.workflows.claimRunOwnership({
+            runId: run.runId,
+            ownerId: 'successor-execution',
+            leaseMs: 60_000,
+            expectedGeneration: released!.generation,
+          });
+          expect(successor.acquired).toBe(true);
+          const successorFence = {
+            runId: run.runId,
+            generation: successor.record!.generation,
+            ownerId: successor.record!.ownerId,
+          };
+          expect(await run.memoryStore.raiseRunFence(successorFence)).toBe(true);
+          finishSave();
+
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // STORAGE_RUN_FENCE_CONFLICT
+            error: expect.stringContaining("is no longer the run's current claim"),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record!.generation,
+            live: true,
+          });
+        } finally {
+          finishSave();
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: settlement releases the claim, and only once storage's release call returns
+    // did the run count as released. The late suspend checked ownership in between: storage
+    // already showed the claim released, so the strict check failed and marked the execution
+    // lost though nobody had taken over. Waiting for the release's reply instead left the task
+    // running for as long as that reply took, forever on a stalled connection. Here the reply is
+    // held until the task has settled. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "parks a deferred tool that asks for input while the finished run's claim release has not returned (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-during-claim-release-thread', {
+          hold: 'claim-release',
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        expect(released?.live).toBe(false);
+        run.release();
+        try {
+          // The release's reply is still held: the task settles without it.
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: accepting a late suspend before the release's reply returns must not let a
+    // superseded execution through: a successor that claimed the run during the release still
+    // makes the late suspend fail without writing. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over a run whose claim release has not returned (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-claim-release-takeover-thread', {
+          hold: 'claim-release',
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const successor = await run.workflows.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        run.release();
+        try {
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // DURABLE_AGENT_EXECUTION_SUPERSEDED
+            error: expect.stringContaining(`Durable run ${run.runId} lost its execution lease`),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record.generation,
+            live: true,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: storage applied the finished run's claim release, but the response failed, as a
+    // dropped connection would. The fence treated the release as never made and stayed strict, so
+    // a late suspend during the remaining cleanup read the released claim, marked the execution
+    // lost though nobody had taken over, and the task failed before it suspended. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      'parks a deferred tool that asks for input after the finished run lost the reply to its claim release (#30182)',
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-after-lost-release-ack-thread', {
+          releaseAckFails: true,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        expect(released).toMatchObject({ leaseExpiresAt: null, live: false });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: counting a release whose reply was lost as made must not let a superseded
+    // execution through: once a successor claims the run, the late suspend fails without
+    // writing. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't park a deferred tool that asks for input after another execution took over a run that lost the reply to its claim release (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-lost-release-ack-takeover-thread', {
+          releaseAckFails: true,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        const successor = await run.workflows.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'successor-execution',
+          leaseMs: 60_000,
+          expectedGeneration: released!.generation,
+        });
+        expect(successor.acquired).toBe(true);
+        run.release();
+        try {
+          const settled = await run.settledTask();
+          expect({ status: settled.status, error: settled.error?.message }).toEqual({
+            status: 'failed',
+            // DURABLE_AGENT_EXECUTION_SUPERSEDED
+            error: expect.stringContaining(`Durable run ${run.runId} lost its execution lease`),
+          });
+          expect(settled.suspendPayload).toBeUndefined();
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: 'successor-execution',
+            generation: successor.record.generation,
+            live: true,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: a background task's result is written to memory through the same post-settlement
+    // check as a late suspend. While the finished run is still cleaning up, that check now accepts
+    // the write when nobody has taken over, so the result reaches memory. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "records a deferred tool's result that arrives while the finished run is still cleaning up (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-result-during-cleanup-thread', { outcome: 'result' });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const done = await run.settledTask();
+          expect({ status: done.status, error: done.error?.message }).toEqual({
+            status: 'completed',
+            error: undefined,
+          });
+          expect(done.result).toEqual({ summary: 'Research on "near"' });
+          // The dispatch left a placeholder result; the task's own result replaces it.
+          const answered = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.invocation?.result?.summary !== undefined,
+          );
+          expect(answered.invocation).toMatchObject({ state: 'result', result: { summary: 'Research on "near"' } });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+          });
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Holds the `nth` memory save (counting from 1) until `finishSave`. `saveStarted` resolves once
+    // it is held; `saveOutcome` resolves once it reached storage, to its error or `undefined`.
+    function holdMemorySave(memoryStore: MemoryStorage, nth: number) {
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>(resolve => (signalSaveStarted = resolve));
+      let finishSave!: () => void;
+      const saveGate = new Promise<void>(resolve => (finishSave = resolve));
+      let settleOutcome!: (error: unknown) => void;
+      const saveOutcome = new Promise<unknown>(resolve => (settleOutcome = resolve));
+      const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+      let saves = 0;
+      const spy = vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async args => {
+        if (++saves !== nth) return saveMessages(args);
+        signalSaveStarted();
+        await saveGate;
+        try {
+          const saved = await saveMessages(args);
+          settleOutcome(undefined);
+          return saved;
+        } catch (error) {
+          settleOutcome(error);
+          throw error;
+        }
+      });
+      onTestFinished(() => {
+        finishSave();
+        spy.mockRestore();
+      });
+      return { saveStarted, finishSave, saveOutcome, saveMessages };
+    }
+
+    // The finished run completes its cleanup. Then a successor claims the run and raises the
+    // memory fence, as recovery or a new turn does before it touches memory.
+    async function takeOverAfterCleanup(run: Awaited<ReturnType<typeof startResearchDuringCleanup>>) {
+      run.finishCleanup();
+      await run.cleanedUp;
+      const released = await run.workflows.getRunOwnership({ runId: run.runId });
+      const successor = await run.workflows.claimRunOwnership({
+        runId: run.runId,
+        ownerId: 'successor-execution',
+        leaseMs: 60_000,
+        expectedGeneration: released!.generation,
+      });
+      expect(successor.acquired).toBe(true);
+      expect(
+        await run.memoryStore.raiseRunFence({
+          runId: run.runId,
+          generation: successor.record!.generation,
+          ownerId: successor.record!.ownerId,
+        }),
+      ).toBe(true);
+      return successor.record!;
+    }
+
+    async function expectSuccessorUnchanged(
+      run: Awaited<ReturnType<typeof startResearchDuringCleanup>>,
+      successor: { generation: number },
+    ) {
+      const after = await run.workflows.getRunOwnership({ runId: run.runId });
+      expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+        ownerId: 'successor-execution',
+        generation: successor.generation,
+        live: true,
+      });
+    }
+
+    // Technical: after a late suspend saves its open request, the background-task manager saves
+    // the task's metadata again (`onExecution`). That save passed the post-settlement check but
+    // reached storage only after the finished run's cleanup and a successor's claim, which raised
+    // the memory fence and cleared the request. It carried no claim fence, so it restored the
+    // superseded execution's open request. It now carries the finished run's claim. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't restore a deferred tool's open request when its task metadata reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-suspend-slow-metadata-save-takeover-thread');
+        // The first save is the suspension's own; the second is the manager's metadata save.
+        const save = holdMemorySave(run.memoryStore, 2);
+        try {
+          run.release();
+          await untilSaveHeld(save.saveStarted);
+          const successor = await takeOverAfterCleanup(run);
+          // The successor works on the thread: here it drops the open request.
+          const { messages } = await run.memoryStore.listMessages({ ...run.thread, perPage: false });
+          const cleared = structuredClone(messages);
+          for (const message of cleared) delete message.content.metadata?.suspendedTools;
+          await save.saveMessages({ messages: cleared });
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+
+          save.finishSave();
+          expect(await save.saveOutcome).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+          expect((await storedToolCall(run.memory, run.thread)).suspended).toBeUndefined();
+          await expectSuccessorUnchanged(run, successor);
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: a background task's result reaches memory through the same post-settlement check
+    // as a late suspend. A result save that passed it but reached storage after a successor
+    // claimed the run and raised the memory fence went through, since it carried no claim fence,
+    // so a superseded execution wrote the tool's result. It now carries the finished run's
+    // claim. (#30182)
+    it.runIf(isDurableEngineVariant(engine))(
+      "doesn't record a deferred tool's result that reaches storage after another execution took over (#30182)",
+      async () => {
+        const run = await startResearchDuringCleanup('bg-result-slow-save-takeover-thread', { outcome: 'result' });
+        const save = holdMemorySave(run.memoryStore, 1);
+        try {
+          run.release();
+          await untilSaveHeld(save.saveStarted);
+          const successor = await takeOverAfterCleanup(run);
+
+          save.finishSave();
+          expect(await save.saveOutcome).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+          // Memory keeps the dispatch placeholder, not the superseded execution's result.
+          expect((await storedToolCall(run.memory, run.thread)).invocation?.result?.summary).toBeUndefined();
+          await expectSuccessorUnchanged(run, successor);
+        } finally {
+          run.finishCleanup();
+        }
+      },
+      30_000,
+    );
+
+    // Technical: on a shared transport, an evented run's worker releases the run's claim, then
+    // the thread's lease, and only then stops its participant fence. Until the lease release
+    // returns, that fence stays registered, and the late suspend's check asked it to prove it
+    // still held the claim it had just released, so the task failed with
+    // DURABLE_AGENT_EXECUTION_SUPERSEDED though nobody took over. (#30182)
+    it.runIf(engine === 'evented')(
+      'parks a deferred tool that asks for input while a shared evented run is still releasing its thread (#30182)',
+      async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
+        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const run = await startResearchDuringCleanup('bg-suspend-during-lease-release-thread', {
+          hold: 'thread-lease',
+          pubsub,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+          await run.cleanedUp;
+          await pubsub.close();
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+      30_000,
+    );
+
+    // Technical: the same in-flight release as above, on the worker's participant fence: an
+    // evented worker on a shared transport releases the run's claim itself, and a late suspend
+    // that read the released claim before that release returned marked the execution lost, or
+    // waited on the release's reply. The reply is held until the task has settled. (#30182)
+    it.runIf(engine === 'evented')(
+      "parks a deferred tool that asks for input while a shared evented run's claim release has not returned (#30182)",
+      async () => {
+        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
+        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const run = await startResearchDuringCleanup('bg-suspend-during-shared-claim-release-thread', {
+          hold: 'claim-release',
+          pubsub,
+        });
+        const released = await run.workflows.getRunOwnership({ runId: run.runId });
+        run.release();
+        try {
+          const parked = await run.settledTask();
+          expect({ status: parked.status, error: parked.error?.message }).toEqual({
+            status: 'suspended',
+            error: undefined,
+          });
+          expect(parked.suspendPayload).toEqual({ awaiting: 'analyst-approval', topic: 'near' });
+          const open = await waitFor(
+            () => storedToolCall(run.memory, run.thread),
+            s => s.suspended?.taskId !== undefined,
+          );
+          expect(open.suspended).toMatchObject({ taskId: parked.id });
+          const after = await run.workflows.getRunOwnership({ runId: run.runId });
+          expect({ ownerId: after?.ownerId, generation: after?.generation, live: after?.live }).toEqual({
+            ownerId: released?.ownerId,
+            generation: released?.generation,
+            live: false,
+          });
+        } finally {
+          run.finishCleanup();
+          await run.cleanedUp;
+          await pubsub.close();
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+      30_000,
+    );
+
+    // Technical: same path as above, reached through a deferred sub-agent: when its tool needs
+    // approval, the delegation tool suspends the background task with that approval. (#30182)
+    it('parks a deferred sub-agent whose tool needs approval after the reply was sent, and resumes it (#30182)', async () => {
+      const mock = getMock();
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const published: string[] = [];
+      const publishTool = createTool({
+        id: 'publish',
+        description: 'Publish a post',
+        inputSchema: z.object({ title: z.string() }),
+        requireApproval: true,
+        execute: async ({ title }) => {
+          published.push(title);
+          return { published: title };
+        },
+      });
+      const helper = new Agent({
+        id: 'helper',
+        name: 'Helper',
+        description: 'Publishes posts',
+        instructions: 'Publish posts with publishTool.',
+        model: openai(SCENARIO_MODEL_ID),
+        tools: { publishTool },
+        // Holds the sub-agent until the supervisor's run is over.
+        inputProcessors: [
+          {
+            id: 'wait-for-supervisor',
+            processInput: async ({ messages }) => {
+              await gate;
+              return messages;
+            },
+          },
+        ],
+      });
+      const toolNames = (req: any): string[] => (req?.tools ?? []).map((t: any) => t.function?.name);
+      const isSupervisor = (req: unknown) => toolNames(req).includes('agent-helper');
+      const isHelper = (req: unknown) => toolNames(req).includes('publishTool');
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-subagent-approval-thread', resourceId: 'bg-subagent-approval-user' };
+      const { chunks, mastra, output } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Publish the launch post',
+        agents: { helper },
+        agentBackgroundTasks: { tools: { helper: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isSupervisor(req) && !hasToolResult(req) },
+            { toolCalls: [{ id: 'call-bg-1', name: 'agent-helper', arguments: { prompt: 'Publish "Launch"' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isSupervisor(req) && hasToolResult(req) },
+            { content: 'Handed to the helper.' },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isHelper(req) && !hasToolResult(req) },
+            { toolCalls: [{ id: 'call-publish-1', name: 'publishTool', arguments: { title: 'Launch' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', predicate: (req: unknown) => isHelper(req) && hasToolResult(req) },
+            { content: 'Published Launch.' },
+          );
+        },
+      });
+      expect(await output.text).toBe('Handed to the helper.');
+      const manager = mastra.backgroundTaskManager!;
+      const started = chunks!.find(c => c.type === 'background-task-started') as Chunk & { runId: string };
+      const taskId = started.payload.taskId as string;
+      await waitForRunToRelease(mastra, started.runId);
+      release();
+
+      const parked = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'pending' && t?.status !== 'running',
+      )) as any;
+      expect({ status: parked.status, error: parked.error?.message }).toEqual({
+        status: 'suspended',
+        error: undefined,
+      });
+      expect(published).toEqual([]);
+
+      await manager.resume(taskId, { approved: true });
+      const done = (await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status !== 'suspended' && t?.status !== 'running' && t?.status !== 'pending',
+      )) as any;
+      expect({ status: done.status, error: done.error?.message }).toEqual({ status: 'completed', error: undefined });
+      expect(published).toEqual(['Launch']);
     }, 30_000);
 
     it('clears the open request from memory when a suspended deferred task is cancelled (#28986)', async () => {

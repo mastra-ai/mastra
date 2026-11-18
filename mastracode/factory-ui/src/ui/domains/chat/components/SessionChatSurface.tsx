@@ -40,7 +40,7 @@ export function SessionChatSurface({
   contentOverlay,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
-  const { historyInitializing, preparing: threadPreparing } = useChatMessagePreparation();
+  const { preparing: threadPreparing } = useChatMessagePreparation();
   const preparing = threadPreparing || openingSession;
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
   const conversationStarted = transcript.entries.some(entry => entry.kind !== 'notice');
@@ -69,7 +69,7 @@ export function SessionChatSurface({
               // A sibling selector, not `:has()`: under `:has()` every new message would restyle the whole transcript.
               className="relative gap-0 pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6"
             >
-              <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
+              <SessionPreparationOverlay preparing={preparing} />
               <ChatShell.Transcript className="flex-1">
                 <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>
