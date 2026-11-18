@@ -3259,14 +3259,6 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Settle a watched run; when it fails terminally, tell the item's followers.
-   * A retryable failure says nothing, since the retry reports. How a run that
-   * ran ends (done, blocked, an error) is reported by the session's own
-   * listener; this covers failures no run end shows. The reporter skips
-   * recipients that already have a final report from this run, and never
-   * throws, so reporting can't change the decision's outcome.
-   */
-  /**
    * An unreadable stop counts as a stop: retrying would clear the marker and restart a run a person
    * may have just stopped, while a wrongly settled run only leaves the card idle until started again.
    */
@@ -3282,6 +3274,14 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * Settle a watched run; when it fails terminally, tell the item's followers.
+   * A retryable failure says nothing, since the retry reports. How a run that
+   * ran ends (done, blocked, an error) is reported by the session's own
+   * listener; this covers failures no run end shows. The reporter skips
+   * recipients that already have a final report from this run, and never
+   * throws, so reporting can't change the decision's outcome.
+   */
   async #reportingRunEnd(
     {
       binding,
