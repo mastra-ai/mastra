@@ -3631,8 +3631,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * watching that run can be on another replica. Keyed by session alone: the abort request was
    * already authorized for this session.
    */
-  async requestRunBindingStop(input: { sessionId: string; at: Date }): Promise<number> {
-    return this.#db.updateMany(
+  async requestRunBindingStop(input: { sessionId: string; at: Date }): Promise<void> {
+    await this.#db.updateMany(
       'factory_run_bindings',
       { session_id: input.sessionId, status: 'active' },
       { stop_requested_at: input.at },
