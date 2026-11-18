@@ -1907,7 +1907,9 @@ describe('agent-controller routes', () => {
         const frames: any[] = [];
         let last: any;
         do {
-          last = (await reader.read()).value;
+          const { done, value } = await reader.read();
+          expect(done).toBe(false);
+          last = value;
           if (typeof last !== 'string') frames.push(last);
         } while (
           !(
