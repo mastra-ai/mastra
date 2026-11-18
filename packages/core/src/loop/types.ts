@@ -17,6 +17,7 @@ import type { SaveQueueManager } from '../agent/save-queue';
 import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { AgentStreamPublisher } from '../agent/streams/publisher';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
+import type { StoreAcceptedUserMessages } from '../agent/workflows/prepare-stream/store-accepted-user-messages';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
@@ -327,6 +328,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
   actor?: ActorSignal;
+  /** @internal Stores the accepted user messages before a model request. */
+  storeAcceptedUserMessages?: StoreAcceptedUserMessages;
   /** MCP protocol context forwarded to tools executed by this loop. */
   mcp?: MCPToolExecutionContext;
   methodType: ModelMethodType;

@@ -862,8 +862,12 @@ describe('agent error surfaces', () => {
           ?.filter(part => part.type === 'text')
           .map(part => ({ type: part.type, text: part.text })),
       ).toEqual([{ type: 'text', text: 'chunk-1 chunk-2 chunk-3 chunk-4 ' }]);
-      expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
-      expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual(
+      // The user message is stored before the model request; the abort save then writes the turn.
+      expect(saveMessagesSpy).toHaveBeenCalledTimes(2);
+      expect(saveMessagesSpy.mock.calls[0]?.[0].messages.map(message => message.id)).toEqual([
+        recalled.messages[0]?.id,
+      ]);
+      expect(saveMessagesSpy.mock.calls[1]?.[0].messages.map(message => message.id)).toEqual(
         recalled.messages.map(message => message.id),
       );
 

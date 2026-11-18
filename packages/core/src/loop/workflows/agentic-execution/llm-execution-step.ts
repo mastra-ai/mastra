@@ -1338,6 +1338,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   eagerCoordinator,
   eagerToolCallStep,
   runAbortSignal,
+  storeAcceptedUserMessages,
 }: OuterLLMRun<TOOLS, OUTPUT> & {
   toolCallForeachOptions?: ToolCallForeachOptions;
   eagerCoordinator?: EagerToolExecutionCoordinator;
@@ -2139,6 +2140,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               })
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
+
+          // Every input processor has accepted the user messages by now: store them before the
+          // model is asked, so a reloaded transcript shows them while it answers.
+          await storeAcceptedUserMessages?.({ messageList, model: currentStep.model });
         }
         // A cached reply may come from a different prompt under a custom cache key, so it never
         // counts as having answered a background result.

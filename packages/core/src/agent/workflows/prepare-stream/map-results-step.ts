@@ -33,6 +33,7 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+import { createStoreAcceptedUserMessages } from './store-accepted-user-messages';
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -321,6 +322,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
       resolvedScopes,
       requestContext: result.requestContext!,
       actor: options.actor,
+      storeAcceptedUserMessages: createStoreAcceptedUserMessages({
+        memory,
+        memoryConfig,
+        threadId: result.threadId,
+        resourceId: result.resourceId,
+        configuredOutputProcessors:
+          options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext)),
+        requestContext: result.requestContext,
+        authorizeMemory,
+        logger: capabilities.logger,
+      }),
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       agentRunSpan: agentSpan,
