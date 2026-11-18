@@ -640,4 +640,7 @@ test('stable and enter-prerelease dispatches share one release group whatever re
   // Two overlapping stable runs could reopen main while the other has left alpha mode.
   for (const type of ['stable', 'enter-prerelease']) assert.match(group, new RegExp(`'${type}'`));
   assert.match(group, /github\.ref/, 'other publish types keep their per-ref group');
+  // With the default queue a newly queued run cancels the pending one, so a later
+  // dispatch (or a main push) could drop a waiting stable release.
+  assert.match(text, /^concurrency:\n {2}group: .+\n {2}queue: max\n/m);
 });

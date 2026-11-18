@@ -34,9 +34,12 @@ on:
 # Stable and enter-prerelease both push to main and change its prerelease mode, so
 # they share one group whatever ref they were dispatched on: an overlapping stable
 # run could otherwise reopen main while the other has taken it out of alpha mode.
-# Other publish types keep one group per ref.
+# Other publish types keep one group per ref. queue: max keeps every waiting run:
+# with the default queue a later dispatch or main push would cancel a pending
+# publish. (queue can't be an expression, so it applies to every group here.)
 concurrency:
   group: ${{ github.workflow }}-${{ (inputs.publish_type == 'stable' || inputs.publish_type == 'enter-prerelease') && 'main-release' || github.ref }}
+  queue: max
 
 jobs:
   # ===========================================
