@@ -17,9 +17,16 @@ import { useRenameSession } from '../hooks/useRenameSession';
 /** The server keeps 80 characters. Counted as code points, so an emoji is one, not two. */
 const MAX_TITLE_LENGTH = 80;
 
+/** How long the server will count the title: it trims it and collapses runs of whitespace first. */
+function storedLength(value: string): number {
+  return [...value.replace(/\s+/g, ' ').trim()].length;
+}
+
 function withinTitleLimit(value: string): string {
+  if (storedLength(value) <= MAX_TITLE_LENGTH) return value;
   const characters = [...value];
-  return characters.length > MAX_TITLE_LENGTH ? characters.slice(0, MAX_TITLE_LENGTH).join('') : value;
+  while (storedLength(characters.join('')) > MAX_TITLE_LENGTH) characters.pop();
+  return characters.join('');
 }
 
 export function RenameSessionDialog({

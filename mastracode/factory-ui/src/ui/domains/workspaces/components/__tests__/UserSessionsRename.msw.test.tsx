@@ -161,6 +161,20 @@ describe('Renaming a session by hand', () => {
     expect(input).toHaveValue('🚀'.repeat(80));
   });
 
+  it('does not count whitespace the server drops against the limit', async () => {
+    useFactoryFixtures(() => [session]);
+
+    const user = userEvent.setup();
+    renderSection();
+
+    const input = await openRename(user, 'dropdown');
+    await user.clear(input);
+    const spaced = `A${' '.repeat(79)}B`;
+    await user.paste(spaced);
+
+    expect(input).toHaveValue(spaced);
+  });
+
   it("offers no rename on a teammate's session", async () => {
     useFactoryFixtures(() => [session], 'user-2');
 
