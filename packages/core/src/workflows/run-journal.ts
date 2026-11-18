@@ -265,7 +265,22 @@ export class RunJournal {
     if (this.#closed) return;
     this.#closed = true;
     // Nothing is sent once closed, so these are the last calls.
-    void Promise.allSettled(this.#pending).then(() => this.#resolveSettledLastSeq(this.#lastSeq));
+    void Promise.allSettled(this.#pending).then(async () => {
+      this.#resolveSettledLastSeq(this.#lastSeq);
+      // The drive is over, so the state versions it handed out to nested runs are either built on
+      // by now or no longer wanted. Skipped by the store if anything wrote to the run since.
+      if (this.store?.supportsRunJournal() && this.#lastSeq !== undefined) {
+        // Stores log their own failures; a store older than this method throws that it isn't supported.
+        await this.store
+          .dropUnusedStateEntries({
+            workflowName: this.workflowName,
+            runId: this.runId,
+            expectedLastSeq: this.#lastSeq,
+            expectedRunToken: this.#runToken,
+          })
+          .catch(() => undefined);
+      }
+    });
   }
 
   /**

@@ -157,7 +157,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it),
-   * among its entries up to `upToSeq` (all without it). Steps without such an entry are left out.
+   * among its entries up to `upToSeq` (all without it). Steps without such an entry are left out,
+   * which includes a step written again after `upToSeq`: that write deleted its earlier entries.
    * Null when the run isn't stored, or when `expectedLastSeq` is given and the run's `lastSeq`
    * differs from it (the run was written to since). Stores that return `runToken` must also reject
    * a differing `expectedRunToken` (the run was deleted and recreated). The identity/sequence checks
@@ -224,7 +225,9 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * Append one entry per given step to a storage v2 run, then one `step-patch` entry per step in
    * `stepPatches` (its ops change the step's latest result, see `latestStepResults`; a step is in
    * `steps` or `stepPatches`, not both), then the full state or a state patch when given (at most
-   * one of them). With `header`, writes it, creating the run if it isn't stored; without, keeps the
+   * one of them). A step's appended entry deletes the step's earlier entries and patches, and the
+   * step keeps the place it was first written at (see `latestStepResults`). With `header`, writes
+   * it, creating the run if it isn't stored; without, keeps the
    * stored one (see `WorkflowRunAppendHeader`), returns null when the run isn't stored, and then
    * writes a full state when the run's state is due one (`isStateCheckpointDue`). With
    * `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
@@ -310,6 +313,22 @@ export abstract class WorkflowsStorage extends StorageDomain {
       | { state: Record<string, any> }
     ),
   ): Promise<{ seq: number }> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Delete the state entries of a storage v2 run that nothing reads any more (see
+   * `unusedStateEntries`), for an engine to call once a drive of the run has ended. Does nothing
+   * when the run was written after `expectedLastSeq`, or isn't the run `expectedRunToken` names. A
+   * failure is logged, not thrown: the rows stay until a later drive's call drops them.
+   * @experimental
+   */
+  async dropUnusedStateEntries(_args: {
+    workflowName: string;
+    runId: string;
+    expectedLastSeq: number;
+    expectedRunToken?: string;
+  }): Promise<void> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 

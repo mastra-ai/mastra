@@ -650,6 +650,14 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * function returning JSON-safe data — the snapshot may cross a pubsub
    * codec boundary. Defaults to identity (no change).
    *
+   * On storage version 2 it's called once, when the run finishes, with every
+   * step result, and only for a workflow that sets `storageVersion: 2` itself.
+   * Suspended runs aren't pruned: their later steps read earlier results from
+   * storage. Step results the hook returns as the same object aren't written
+   * again, and the run's result keeps the unpruned step results. Replace step
+   * results rather than removing them: on the default engine, a step result
+   * the hook leaves out stays stored.
+   *
    * Used internally by agent-loop workflows to strip data that is never
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
@@ -661,12 +669,12 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * each write sends only what changed.
    *
    * Version 2 requires the default or evented execution engine and a storage
-   * adapter that supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and
-   * can't be combined with `pruneSnapshot`. Steps read earlier results with
-   * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
-   * they were created with: a run resumed after this option changes continues
-   * in its stored version. A nested workflow's run uses its parent run's
-   * version, so this option applies only when the workflow runs on its own.
+   * adapter that supports it (in-memory, `@mastra/pg`, `@mastra/libsql`).
+   * Steps read earlier results with `getStepResultAsync`; sync `getStepResult`
+   * throws. Runs keep the version they were created with: a run resumed after
+   * this option changes continues in its stored version. A nested workflow's
+   * run uses its parent run's version, so this option applies only when the
+   * workflow runs on its own.
    *
    * On version 2 a run's result holds its step results as an async loader,
    * `await result.steps()`, so returning a result doesn't read them all back.

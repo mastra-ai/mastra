@@ -708,12 +708,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * The workflow's `pruneSnapshot` option, except on storage v2 runs, which skip it as on the
-   * default engine: their later steps load earlier results from storage, so pruning a stored
-   * result would change what those steps read.
+   * The workflow's `pruneSnapshot` option. Storage v2 runs prune only once they `finished`, and only
+   * for a workflow that sets `storageVersion: 2` itself, as on the default engine: until then their
+   * later steps load earlier results from storage, so pruning a stored result would change what
+   * those steps read.
    */
-  #pruneSnapshotOf(workflow: Workflow | undefined) {
-    return currentStorageVersion() === 2 ? undefined : workflow?.options?.pruneSnapshot;
+  #pruneSnapshotOf(workflow: Workflow | undefined, finished = false) {
+    if (currentStorageVersion() !== 2) return workflow?.options?.pruneSnapshot;
+    return finished && workflow?.options?.storageVersion === 2 ? workflow.options.pruneSnapshot : undefined;
   }
 
   /** Whether this run's step writes carry start/completion guards. */
@@ -735,13 +737,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId,
     runId,
     terminalHandoff = false,
+    finished = false,
   }: {
     workflow: Workflow | undefined;
     workflowId: string;
     runId: string;
     terminalHandoff?: boolean;
+    /** Set when the run finished (see `#pruneSnapshotOf`). */
+    finished?: boolean;
   }): Promise<void> {
-    const pruneSnapshot = this.#pruneSnapshotOf(workflow);
+    const pruneSnapshot = this.#pruneSnapshotOf(workflow, finished);
     if (!pruneSnapshot && !terminalHandoff) return;
     let guarded = false;
     try {
@@ -1520,6 +1525,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         // Nested completion still has to transfer ownership to its parent loop.
         terminalHandoff: !parentWorkflow,
+        finished: true,
       });
     }
 
@@ -1812,6 +1818,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
       });
+      // Storage v1 runs pruned each step result as it was written.
+      if (currentStorageVersion() === 2) {
+        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId, finished: true });
+      }
     }
 
     // handle nested workflow
@@ -4227,13 +4237,25 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (currentStorageVersion() === 2 && newStepResults && Object.keys(newStepResults).length > 0) {
           // v2 returns only this step's result. A branch reads its siblings as of its own write, as
           // v1's write returns them: of two branches finishing together, exactly one sees both.
-          const siblings =
-            isParallelBranch && (rawStep?.type === 'parallel' || rawStep?.type === 'conditional')
-              ? await runStorage.loadSteps(rawStep.steps.filter(isSingleStepEntry).map(getSingleStepEntryId), {
-                  upToSeq: written!.seq,
-                })
-              : {};
+          let siblings: Record<string, StepResult<any, any, any, any>> = {};
+          let laterSiblings: string[] = [];
+          if (isParallelBranch && (rawStep?.type === 'parallel' || rawStep?.type === 'conditional')) {
+            const siblingIds = rawStep.steps
+              .filter(isSingleStepEntry)
+              .map(getSingleStepEntryId)
+              .filter(id => id !== stepId);
+            siblings = await runStorage.loadSteps(siblingIds, { upToSeq: written!.seq });
+            // A sibling missing as of this write but stored now wrote after it: that write replaced
+            // its older entries, and the sibling reads this branch's result as of its own write. It
+            // is unfinished here, not whatever stale copy this event carries. Only a carried copy
+            // past `running` could be mistaken for its result, so only those need the extra read.
+            const missing = siblingIds.filter(
+              id => !siblings[id] && stepResults[id] && stepResults[id].status !== 'running',
+            );
+            if (missing.length) laterSiblings = Object.keys(await runStorage.loadSteps(missing));
+          }
           newStepResults = { ...stepResults, ...siblings, ...newStepResults };
+          for (const id of laterSiblings) delete newStepResults[id];
         }
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;

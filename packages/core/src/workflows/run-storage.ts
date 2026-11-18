@@ -414,11 +414,21 @@ class RunStorageV2 implements RunStorage {
   async loadStep(stepId: string): Promise<StepSnapshot | null> {
     const store = await this.#getStore();
     const args = { workflowName: this.#workflowName, runId: this.#runId };
-    const stored = await store?.loadWorkflowRunHeader(args);
-    if (!stored) return null;
-    // Bounded by the header's `lastSeq`, so a write landing between the two reads isn't half-seen.
-    const context = (await store!.loadWorkflowRunSteps({ ...args, stepIds: [stepId], upToSeq: stored.lastSeq })) ?? {};
-    return { ...stored.header, context } as StepSnapshot;
+    // The header and the step must be the same version of the run. A write landing between the
+    // two reads makes the step read null (the run's `lastSeq` moved), so read both again. Reading
+    // the step as of the header's `lastSeq` instead would miss a step whose older entries that
+    // write replaced.
+    for (;;) {
+      const stored = await store?.loadWorkflowRunHeader(args);
+      if (!stored) return null;
+      const context = await store!.loadWorkflowRunSteps({
+        ...args,
+        stepIds: [stepId],
+        expectedLastSeq: stored.lastSeq,
+        expectedRunToken: stored.runToken,
+      });
+      if (context) return { ...stored.header, context } as StepSnapshot;
+    }
   }
 
   async loadSteps(stepIds: string[], { upToSeq }: { upToSeq?: number } = {}): Promise<StepResults> {

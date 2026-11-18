@@ -91,6 +91,7 @@ export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
 const retryCountStorage = new AsyncLocalStorage<number>();
 /** The journal of the storage-v2 execution whose entries run in the current async context. */
 const executionJournal = new AsyncLocalStorage<RunJournal | undefined>();
+const FINISHED_STATUSES = new Set<WorkflowRunStatus>(['success', 'failed', 'canceled', 'tripwire']);
 
 /** A step result without the `nestedRunId` metadata kept to find its nested run. */
 function withoutNestedRunId(stepResult: any): any {
@@ -137,6 +138,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   getRunJournal(runId: string): RunJournal | undefined {
     const journal = executionJournal.getStore();
     return journal?.runId === runId ? journal : undefined;
+  }
+
+  /**
+   * @internal Whether the last write of a storage v2 execution that ends with `status` prunes the run
+   * with `pruneSnapshot`. A v2 run prunes once, when it finished, and only for a workflow that sets
+   * `storageVersion: 2` itself. While the run can still continue, its steps read earlier results
+   * from storage, so pruning would change what they read. Runs on v2 through `autoStorageVersion` or
+   * their parent run don't prune.
+   */
+  prunesLastWrite(journal: RunJournal | undefined, status: WorkflowRunStatus): journal is RunJournal {
+    return (
+      !!journal && this.options.storageVersion === 2 && !!this.options.pruneSnapshot && FINISHED_STATUSES.has(status)
+    );
   }
 
   /** Returns the last status persisted for a given run in this process, if any. */
@@ -1105,6 +1119,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowStatus: 'canceled',
             requestContext: currentRequestContext,
             phase: 'canceled',
+            lastWrite: true,
           });
 
           workflowSpan?.end({
@@ -1318,6 +1333,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
+          // The result keeps the unpruned step results, as on storage v1.
+          if (this.prunesLastWrite(journal, lastOutput.result.status)) await journal.hydrate(stepResults);
           let result = (await this.#fmtResult(
             journal,
             params.pubsub,
@@ -1353,6 +1370,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             requestContext: currentRequestContext,
             tracingContext: persistTracingContext,
             phase: 'terminal',
+            lastWrite: true,
           });
 
           if (this.writeRejectedByCancellation(runId, result.status)) {
@@ -1472,6 +1490,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
+      // The result keeps the unpruned step results, as on storage v1.
+      if (this.prunesLastWrite(journal, lastOutput.result.status)) await journal.hydrate(stepResults);
       let result = (await this.#fmtResult(
         journal,
         params.pubsub,
@@ -1493,6 +1513,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         error: result.error,
         requestContext: currentRequestContext,
         phase: 'workflow-end',
+        lastWrite: true,
       });
 
       if (this.writeRejectedByCancellation(runId, result.status)) {

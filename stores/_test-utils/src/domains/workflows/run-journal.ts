@@ -1,6 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import type { RunFenceScope, WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
+import type {
+  RunFenceScope,
+  StateVersion,
+  WorkflowsStorage,
+  WorkflowRun,
+  WorkflowRunHeader,
+} from '@mastra/core/storage';
 import {
   getSnapshotMemoryInfo,
   isRunFenceConflictError,
@@ -632,19 +638,24 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await load({ lastSeq: appended.lastSeq, runToken: recreated.runToken })).toEqual({ a: ok(3) });
       });
 
-      it('loads the latest result of each step up to a seq', async () => {
+      it('loads the latest result of each step up to a seq, leaving out steps written again since', async () => {
         const id = runId();
         const run = { workflowName, runId: id };
         const header = makeHeader(id);
         const { lastSeq: first } = (await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(1) } }))!;
         const { lastSeq: second } = (await store.appendWorkflowRunEntries({ ...run, header, steps: { b: ok(2) } }))!;
-        await store.appendWorkflowRunEntries({ ...run, header, steps: { a: ok(10), b: ok(20) } });
 
         const steps = (upToSeq?: number) => store.loadWorkflowRunSteps({ ...run, stepIds: ['a', 'b'], upToSeq });
         expect(await steps(first)).toEqual({ a: ok(1) });
         expect(await steps(second)).toEqual({ a: ok(1), b: ok(2) });
-        expect(await steps()).toEqual({ a: ok(10), b: ok(20) });
         expect(await steps(0)).toEqual({});
+
+        // Writing a again deletes its earlier entry, so as of an earlier seq a has none.
+        await store.appendWorkflowRunEntries({ ...run, header, steps: { a: ok(10) } });
+        expect(await steps(second)).toEqual({ b: ok(2) });
+        await store.appendWorkflowRunEntries({ ...run, header, steps: { b: ok(20) } });
+        expect(await steps(second)).toEqual({});
+        expect(await steps()).toEqual({ a: ok(10), b: ok(20) });
       });
 
       it('loads the header without the entries, and only for v2 runs', async () => {
@@ -707,6 +718,35 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         const edited: any = (await loadRun(id))!.steps;
         edited.each.metadata.foreachProgress[2] = { output: 30 };
         expect((await loadRun(id))!.steps).toEqual({ a: ok(1), each });
+      });
+
+      it('keeps a step where it was first written when a new entry replaces it and its patches, on every reader', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(1), each: running({}), z: ok(9) } }));
+        await patch(id, { each: [progress(0, 10)] });
+        const { lastSeq: patched } = (await patch(id, { each: [progress(1, 20)] }))!;
+        // each is replaced twice, so its place carries through an entry that itself replaced others.
+        await append(id, makeSnapshot(id, { context: { each: running({ 0: { output: 10 } }) } }), ['each']);
+        await append(id, makeSnapshot(id, { context: { each: running({ 0: { output: 10 } }), late: ok(3) } }), [
+          'late',
+        ]);
+        await append(id, makeSnapshot(id, { context: { each: running({ 0: { output: 10 }, 1: { output: 20 } }) } }), [
+          'each',
+        ]);
+        await append(id, makeSnapshot(id, { context: { a: ok(2) } }), ['a']);
+        await patch(id, { each: [{ op: 'set', path: ['status'], value: 'success' }] });
+
+        const each = { ...running({ 0: { output: 10 }, 1: { output: 20 } }), status: 'success' };
+        expect(await stepsOf(id)).toEqual({ a: ok(2), each, z: ok(9), late: ok(3) });
+        const byId = await store.getWorkflowRunById({ workflowName, runId: id });
+        const readers = [(await loadRun(id))!.steps, (await loadRun(id, 'summary'))!.steps];
+        for (const context of [...readers, (await load(id))!.context, parsed(byId!).context]) {
+          expect(Object.keys(context)).toEqual(['a', 'each', 'z', 'late']);
+        }
+        // Their earlier entries are gone, so as of an earlier seq neither has a result.
+        expect(
+          await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: ['a', 'each'], upToSeq: patched }),
+        ).toEqual({});
       });
 
       it('summarizes a step that is successful once patched, from its patched result', async () => {
@@ -1198,6 +1238,74 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await statesOf(child)).state).toEqual({ list: ['a'], c: 1 });
         expect((await statesOf(sibling)).state).toEqual({ list: ['a', 'b'] });
       });
+
+      // A parent drive: full states and patches, a draft no run built on, and a chain of drafts a
+      // child built on; then a resumed drive starting from `driveStart`.
+      async function parentWithDrafts() {
+        const { run, parent, child, header, childOf } = family();
+        const write = async (extra: Record<string, any>) =>
+          (await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, ...extra }))!.lastSeq;
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { a: 1 } });
+        await write({ statePatch: [set(['b'], 1)] });
+        await write({ state: { a: 2 } });
+        const driveStart = await write({ statePatch: [set(['c'], 1)] });
+        const unused = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { seq: driveStart },
+          ops: [set(['d'], 1)],
+        });
+        const chained = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { seq: driveStart },
+          ops: [set(['e'], 1)],
+        });
+        const used = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { ...chained, draft: true },
+          ops: [set(['f'], 1)],
+        });
+        await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('parent'),
+          steps: {},
+          stateBase: { ...parent, seq: used.seq, draft: true },
+        });
+        const lastSeq = await write({ startStateSeq: driveStart, statePatch: [set(['g'], 1)] });
+        const buildOn = (base: StateVersion) =>
+          store.writeWorkflowRunCheckpoint({
+            ...run(`late-${base.seq}`),
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, ...base },
+          });
+        return { parent, child, driveStart, unused, lastSeq, buildOn };
+      }
+
+      it('drops the state entries no version in use reads, keeping every version that is', async () => {
+        const { parent, child, driveStart, unused, lastSeq, buildOn } = await parentWithDrafts();
+
+        await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq });
+
+        expect((await statesOf(parent)).state).toEqual({ a: 2, c: 1, g: 1 });
+        expect(await store.loadWorkflowRunState({ ...parent, seq: driveStart })).toEqual({ a: 2, c: 1 });
+        expect((await statesOf(child)).state).toEqual({ a: 2, c: 1, e: 1, f: 1 });
+        expect((await store.loadWorkflowRunHeader(parent))!.lastSeq).toBe(lastSeq);
+        // A run starting on the dropped draft after the drive ended fails instead of reading other state.
+        await expect(buildOn({ seq: unused.seq, draft: true })).rejects.toThrow();
+        await buildOn({ seq: driveStart });
+      });
+
+      it('drops nothing when the run was written since, or is another run under the same id', async () => {
+        const { parent, unused, lastSeq, buildOn } = await parentWithDrafts();
+        const { runToken } = (await store.loadWorkflowRunHeader(parent))!;
+
+        await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq - 1 });
+        await store.dropUnusedStateEntries({ ...parent, expectedLastSeq: lastSeq, expectedRunToken: `${runToken}-x` });
+        await store.dropUnusedStateEntries({ workflowName: 'missing', runId: parent.runId, expectedLastSeq: lastSeq });
+
+        await buildOn({ seq: unused.seq, draft: true });
+        expect((await statesOf(parent)).state).toEqual({ a: 2, c: 1, g: 1 });
+      });
     });
 
     describe('concurrent writers', () => {
@@ -1261,6 +1369,30 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         const stored = await loadRun(id);
         expect(stored!.steps).toEqual(Object.fromEntries(ids.map(i => [`s${i}`, ok(i)])));
         expect(stored!.state).toEqual(Object.fromEntries(ids.map(i => [`k${i}`, i])));
+      });
+
+      it('keeps one result per step, where it was first written, when appends of the same steps race', async () => {
+        const id = runId();
+        const run = { workflowName, runId: id };
+        const header = makeHeader(id);
+        await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(-1), b: ok(-1) }, state: {} });
+        const ids = Array.from({ length: 20 }, (_, i) => i);
+        // Both append paths (with and without a header) replace a, and every third write b too.
+        await Promise.all(
+          ids.map(i =>
+            store.appendWorkflowRunEntries({
+              ...run,
+              ...(i % 2 ? { header } : {}),
+              steps: i % 3 ? { a: ok(i) } : { b: ok(i), a: ok(i) },
+            }),
+          ),
+        );
+
+        const steps = (await loadRun(id))!.steps as Record<string, { output: number }>;
+        expect(Object.keys(steps)).toEqual(['a', 'b']);
+        expect(ids).toContain(steps.a!.output);
+        expect(ids.filter(i => i % 3 === 0)).toContain(steps.b!.output);
+        expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['a', 'b'] })).toEqual(steps);
       });
 
       it('merges concurrent foreach iterations into the latest result, each seeing the others', async () => {

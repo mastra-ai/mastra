@@ -30,6 +30,7 @@ import {
   stateBaseOf,
   stateColumnsWrite,
   summarizeStepResult,
+  unusedStateEntries,
 } from './journal';
 import type {
   StateRef,
@@ -762,6 +763,38 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return { seq };
   }
 
+  async dropUnusedStateEntries({
+    workflowName,
+    runId,
+    expectedLastSeq,
+    expectedRunToken,
+  }: {
+    workflowName: string;
+    runId: string;
+    expectedLastSeq: number;
+    expectedRunToken?: string;
+  }): Promise<void> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record || record.lastSeq !== expectedLastSeq) return;
+    if (expectedRunToken !== undefined && record.runToken !== expectedRunToken) return;
+    const refs: StateRef[] = [];
+    for (const entries of this.db.workflowRunEntries.values()) {
+      for (const entry of entries) {
+        if (entry.kind === 'state-base' && entry.base.workflowName === workflowName && entry.base.runId === runId) {
+          refs.push(entry.base);
+        }
+      }
+    }
+    const entries = this.db.workflowRunEntries.get(key) ?? [];
+    const unused = new Set(unusedStateEntries(entries, record.startStateSeq, refs));
+    if (unused.size)
+      this.db.workflowRunEntries.set(
+        key,
+        entries.filter(entry => !unused.has(entry.seq)),
+      );
+  }
+
   /**
    * Writes the header (or with none, merges `requestContext` into the stored one) and one entry per
    * step and step patch, then the state, state base or state patch. A checkpoint first drops the old
@@ -809,13 +842,30 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const now = new Date();
     let seq = existing?.lastSeq ?? 0;
     const previous = this.db.workflowRunEntries.get(key) ?? [];
+    // An appended step entry replaces the step's earlier entries, so they are deleted; it keeps the
+    // step's first-write position as `firstSeq`.
+    const firstSeqs = new Map<string, number>();
     const entries: WorkflowRunEntry[] = append
-      ? previous
+      ? previous.filter(entry => {
+          if ((entry.kind !== 'step' && entry.kind !== 'step-patch') || !Object.hasOwn(steps, entry.stepId))
+            return true;
+          if (entry.kind === 'step') {
+            firstSeqs.set(entry.stepId, Math.min(entry.firstSeq ?? entry.seq, firstSeqs.get(entry.stepId) ?? Infinity));
+          }
+          return false;
+        })
       : existing?.stateShared
         ? previous.filter(entry => entry.kind !== 'step' && entry.kind !== 'step-patch')
         : [];
     for (const [stepId, result] of Object.entries(steps)) {
-      entries.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
+      const firstSeq = firstSeqs.get(stepId);
+      entries.push({
+        seq: ++seq,
+        kind: 'step',
+        stepId,
+        result: cloneRunData(result),
+        ...(firstSeq !== undefined && { firstSeq }),
+      });
     }
     for (const [stepId, ops] of Object.entries(stepPatches ?? {})) {
       entries.push({ seq: ++seq, kind: 'step-patch', stepId, ops: cloneRunData(ops) });

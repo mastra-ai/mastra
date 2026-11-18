@@ -187,6 +187,11 @@ export interface PersistStepUpdateParams {
    * execution it is made from (see `getRunJournal`).
    */
   journal?: RunJournal;
+  /**
+   * Storage v2: set by the engine's last write of an execution. When the run finished, this write
+   * prunes it (see `DefaultExecutionEngine.prunesLastWrite`).
+   */
+  lastWrite?: boolean;
 }
 
 // Every status but `canceled`, so only a persisted cancellation rejects the write.
@@ -291,9 +296,14 @@ export async function persistStepUpdate(
     const guardCancellation = workflowStatus !== 'canceled' && engine.honorsStoredCancellation(runId);
     const journal = params.journal ?? engine.getRunJournal(runId);
     if (journal) {
+      const prune =
+        params.lastWrite && engine.prunesLastWrite(journal, workflowStatus) ? engine.options.pruneSnapshot : undefined;
+      // The hook reads every result, so the evicted ones are loaded first. A pruned copy of a stub
+      // isn't a stub, and writing it would replace the stored result with its summary.
+      if (prune) await journal.hydrate(stepResults);
       const written = await journal.write({
         resourceId,
-        snapshot,
+        snapshot: prune ? prune({ snapshot, workflowStatus }) : snapshot,
         stepIds,
         foreachItems,
         ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),

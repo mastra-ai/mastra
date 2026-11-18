@@ -523,9 +523,9 @@ describe('evented step messages on storage v2', () => {
       return appended;
     };
     const loadSteps = store.loadWorkflowRunSteps.bind(store);
-    // Hold the branches' loads of each other until both have written.
+    // Hold the branches' loads of each other (the only reads bounded by a seq) until both have written.
     store.loadWorkflowRunSteps = async args => {
-      if (args.stepIds.length > 1) await both;
+      if (args.upToSeq !== undefined) await both;
       return loadSteps(args);
     };
 
@@ -533,6 +533,64 @@ describe('evented step messages on storage v2', () => {
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ left: { left: true }, right: { right: true } });
     expect(joins).toBe(1);
+  });
+
+  it('join parallel branches once per loop iteration when both write before either loads the other', async () => {
+    let joins = 0;
+    const arm = (id: string) =>
+      createStep({ id, inputSchema: looseObject, outputSchema: looseObject, execute: async () => ({ [id]: true }) });
+    const after = createStep({
+      id: 'after',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData }) => {
+        joins++;
+        return inputData;
+      },
+    });
+    const body = createWorkflow({ id: 'join-body', inputSchema: looseObject, outputSchema: looseObject })
+      .parallel([arm('left'), arm('right')])
+      .then(after)
+      .commit();
+    const workflow = createWorkflow({
+      id: 'join-loop',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .dowhile(body, async ({ iterationCount }) => iterationCount < 3)
+      .commit();
+
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const successes = { left: 0, right: 0 };
+    let waiting: (() => void)[] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      const appended = await append(args);
+      for (const [id, result] of Object.entries(args.steps)) {
+        if ((id === 'left' || id === 'right') && result.status === 'success') successes[id]++;
+      }
+      if (successes.left === successes.right) {
+        const ready = waiting;
+        waiting = [];
+        for (const resolve of ready) resolve();
+      }
+      return appended;
+    };
+    const loadSteps = store.loadWorkflowRunSteps.bind(store);
+    // In every iteration, hold the branches' loads of each other until both have written.
+    store.loadWorkflowRunSteps = async args => {
+      if (args.upToSeq !== undefined && successes.left !== successes.right) {
+        await new Promise<void>(resolve => waiting.push(resolve));
+      }
+      return loadSteps(args);
+    };
+
+    const { result } = await runWorkflow(workflow, storage);
+    expect(result.status).toBe('success');
+    expect(successes).toEqual({ left: 3, right: 3 });
+    expect(joins).toBe(3);
   });
 });
 
