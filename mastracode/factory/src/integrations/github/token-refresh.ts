@@ -24,7 +24,7 @@ export interface GithubRefreshTarget {
    */
   mint?: () => Promise<string>;
   /** How the session's started sandbox authenticates GitHub; `token` before it starts. */
-  sandboxAuth?: () => SandboxGithubAuth;
+  sandboxAuth?: () => SandboxGithubAuth | Promise<SandboxGithubAuth>;
 }
 
 /** Recorded by the workspace resolver once it has authorized a GitHub-backed

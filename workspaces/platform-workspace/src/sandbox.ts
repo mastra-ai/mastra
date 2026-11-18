@@ -976,11 +976,31 @@ export class PlatformSandbox extends MastraSandbox {
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
     // A fresh provision reports `vault` only when it is on. A reattach by
-    // recovery id that does not report it leaves the mode unknown.
+    // recovery id that does not report it leaves the mode unknown until the
+    // sandbox record says.
     this.vault = typeof json.vault === 'boolean' ? json.vault : json.reattached ? undefined : false;
+    if (this.vault === undefined) await this.refreshVault();
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
+  }
+
+  /**
+   * Ask the platform for this sandbox's credential-vault mode
+   * (`GET /sandbox/:id`) and record it when the response reports one. Callers
+   * use it to learn a mode the start left unknown. Failures leave
+   * `vault` unchanged, so an unknown mode stays unknown.
+   */
+  async refreshVault(): Promise<boolean | undefined> {
+    if (!this._sandboxId) return this.vault;
+    try {
+      const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+      const json = (await response.json()) as CreateSandboxResponse;
+      if (typeof json.vault === 'boolean') this.vault = json.vault;
+    } catch (error) {
+      this.logger.warn(`Could not read the credential-vault mode of sandbox ${this._sandboxId}`, { error });
+    }
+    return this.vault;
   }
 
   private async _prepareLazyTemplate(): Promise<void> {
