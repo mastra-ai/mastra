@@ -59,6 +59,74 @@ const CLAIM_POLL_INTERVAL_MS = 100;
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
 
+/**
+ * What a release of a claim answered, or false when it has not answered within one renewal interval. A release can
+ * hang; a renewal result must never wait on one longer than that.
+ */
+async function releaseAnswer(
+  release: Promise<boolean> | undefined,
+  deadline = Date.now() + EXECUTION_LEASE_RENEW_INTERVAL_MS,
+): Promise<boolean> {
+  if (!release) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unanswered = new Promise<boolean>(resolve => {
+    timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now()));
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([release, unanswered]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The releases of one claim this fence knows about, as one answer: true as soon as any of them confirmed the claim,
+ * false once every one answered without confirming it. A failed release left the claim held, so a later one can
+ * confirm it, and an earlier release that hangs must not hide that. A release added while the answer is still open
+ * joins that same answer, so a renewal already waiting on it sees the later confirmation.
+ */
+class ReleaseAnswers {
+  #answer?: Promise<boolean>;
+  #resolve?: (confirmed: boolean) => void;
+  #unanswered = 0;
+  #confirmed = false;
+
+  /** The current answer, or undefined while no release was added. */
+  get answer(): Promise<boolean> | undefined {
+    return this.#answer;
+  }
+
+  /**
+   * The current answer, opened now when no release was added yet, so a waiter also sees a release that starts
+   * later. It stays unanswered until a release answers; callers bound the wait.
+   */
+  awaitAnswer(): Promise<boolean> {
+    if (this.#confirmed) return Promise.resolve(true);
+    if (!this.#resolve) this.#answer = new Promise<boolean>(resolve => (this.#resolve = resolve));
+    return this.#answer!;
+  }
+
+  add(release: Promise<boolean>): void {
+    if (this.#confirmed) return;
+    if (!this.#resolve) this.#answer = new Promise<boolean>(resolve => (this.#resolve = resolve));
+    const resolve = this.#resolve!;
+    this.#unanswered += 1;
+    void release.then(confirmed => {
+      if (this.#resolve !== resolve) return;
+      if (confirmed) {
+        this.#confirmed = true;
+        this.#resolve = undefined;
+        resolve(true);
+      } else if (--this.#unanswered === 0) {
+        // Every release so far answered without confirming. A later release starts a new answer.
+        this.#resolve = undefined;
+        resolve(false);
+      }
+    });
+  }
+}
+
 export { MASTRA_DURABLE_EXECUTIONS_KEY };
 
 export const EXECUTION_SUPERSEDED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_SUPERSEDED';
@@ -330,6 +398,8 @@ export interface UntrackedRunLiveness {
   ttlMs: number;
 }
 
+type RenewalResult = { renewed: true; leaseExpiresAt?: Date | null } | { renewed: false; released: boolean };
+
 /** Where a run's ownership lives. One instance per run. */
 interface OwnershipBackend {
   /** Whether a claim lapses unless renewed. */
@@ -348,13 +418,18 @@ interface OwnershipBackend {
   /** Read-only active ownership observation by a worker, never a renewal. */
   observe(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
   /**
-   * Extend `claim`. `renewed: false` once another execution owns the run; throws on backend errors.
-   * `leaseExpiresAt` is the new expiry on the store's clock, when the backend reports one.
+   * Extend `claim`. `renewed: false` once the claim was released or another execution owns the run; throws on
+   * backend errors. `leaseExpiresAt` is the new expiry on the store's clock, when the backend reports one.
+   * `released` is true when the backend shows `claim` itself released the run and nobody claimed it since.
    */
-  renew(claim: DurableExecutionClaim): Promise<{ renewed: boolean; leaseExpiresAt?: Date | null }>;
+  renew(claim: DurableExecutionClaim): Promise<RenewalResult>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
-  release(claim: DurableExecutionClaim): Promise<void>;
+  /**
+   * Release `claim`. Resolves true when the backend confirmed `claim` still held the run as it released it, so no
+   * other execution had claimed the run before then; false when it could not confirm that.
+   */
+  release(claim: DurableExecutionClaim): Promise<boolean>;
   /**
    * Release `claim` so the run can be recovered at once, and make storage
    * reject its remaining writes. Returns the claim that superseded it, when
@@ -409,13 +484,20 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
         );
       }
     },
-    renew: async claim => ({ renewed: await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS) }),
+    // A released lease is gone, so a failed renewal can't tell a release from a takeover.
+    renew: async claim =>
+      (await provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS))
+        ? { renewed: true }
+        : { renewed: false, released: false },
     async isSuperseded(claim) {
       const owner = await provider.getLeaseOwner(key);
       return owner !== undefined && owner !== claim.executionId;
     },
+    // `releaseLease` does not report whether it released anything, so a release never confirms the claim still held
+    // the run, and a late failed renewal still counts as a loss.
     async release(claim) {
       await provider.releaseLease(key, claim.executionId);
+      return false;
     },
     // A lease has no generation to move past: releasing is all it can do.
     async abandon(claim, whileOwned) {
@@ -492,9 +574,14 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       }
       if (!record?.live) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     },
+    // A failed renewal reports the run's record. A claim keeps its owner and generation when released, and any later
+    // claim raises the generation, so a record still naming `claim` with no lease means `claim` was released.
     async renew(claim) {
-      const { renewed, record } = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
-      return { renewed, leaseExpiresAt: record?.leaseExpiresAt };
+      const result = await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS });
+      // Some adapters build a renewed result's `record` with `!` from a read that can miss, so it may still be null.
+      if (result.renewed) return { renewed: true, leaseExpiresAt: result.record?.leaseExpiresAt };
+      const { record } = result;
+      return { renewed: false, released: !!record && matchesRunFence(record, fence(claim)) && !record.leaseExpiresAt };
     },
     // Release keeps the record, so a missing one means the store lost it:
     // the holder is unknown.
@@ -502,8 +589,9 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       const record = await store.getRunOwnership({ runId });
       return !record || record.generation !== claim.generation;
     },
+    // Matches owner and generation atomically: false once another execution claimed the run.
     async release(claim) {
-      await store.releaseRunOwnership(fence(claim));
+      return store.releaseRunOwnership(fence(claim));
     },
     // Releasing alone keeps accepting the claim's writes until the next claim.
     // Claiming under a fresh owner first moves the generation past them; the
@@ -537,6 +625,17 @@ export type ExecutionSettlement = 'owned' | 'orphaned' | 'superseded';
 export const DURABLE_PARTICIPANT_FENCES = createRunScopeKey<Map<string, ExecutionFence>>('durable-participant-fences');
 const fencesByExecutionId = new Map<string, ExecutionFence>();
 const activeFenceByRunId = new Map<string, ExecutionFence>();
+/**
+ * Fences whose heartbeat is running or has a renewal in flight, by claim. A coordinator and its participants in one
+ * process share a claim, so a release by any of them reaches the others' late renewals. The key names the run and the
+ * generation as well as the execution, so a release only ever reaches fences of the claim it released.
+ */
+const renewingFencesByClaim = new Map<string, Set<ExecutionFence>>();
+
+/** Identifies one claim on one run. Storage raises the generation on every claim; a lease claim has a fresh id. */
+function claimKey(runId: string, claim: DurableExecutionClaim): string {
+  return [runId, claim.executionId, claim.generation ?? ''].join('\u0000');
+}
 
 /**
  * One execution's claim on a durable run. Inside {@link ExecutionFence.run},
@@ -569,6 +668,22 @@ export class ExecutionFence implements RunFenceScope {
   #leaseExpiresAt: number;
   #heartbeat?: ReturnType<typeof setInterval>;
   #renewalInFlight = false;
+  /**
+   * Set when this execution starts releasing its claim, here or in another fence of the same execution. Resolves true
+   * once the backend confirmed, for any of those releases, that the claim still held the run as it was released, and
+   * false while none did. A renewal sent before the release can reach the backend after it and come back unrenewed;
+   * only that confirmation shows nobody took the run over first. A renewal that succeeded always counts: it reached
+   * the backend while the claim was still held.
+   */
+  #ownRelease = new ReleaseAnswers();
+  /**
+   * Set when this process starts releasing the claim as abandoned. Resolves true once one of those releases was
+   * confirmed: nothing will settle the run, so an unsettled fence gets no grace. A release that failed or found the
+   * claim already released leaves the grace for a later release of the claim.
+   */
+  #abandonedRelease = new ReleaseAnswers();
+  /** The grace for a release of this claim is spent: a renewal already found it released before this fence settled. */
+  #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
@@ -687,11 +802,49 @@ export class ExecutionFence implements RunFenceScope {
     return fence;
   }
 
-  /** Release only the captured claim; a successor is never affected. */
-  static async releaseSharedClaim(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<void> {
+  /**
+   * Release only the captured claim; a successor is never affected. `settled`: the run's root settled, so a renewal
+   * this process's fences of the execution still have in flight is answered by the release, not a takeover.
+   * `abandoned`: nothing settled the run, and a live coordinator must see the loss.
+   */
+  static async releaseSharedClaim(
+    mastra: Mastra,
+    runId: string,
+    claim: DurableExecutionClaim,
+    reason: 'settled' | 'abandoned',
+  ): Promise<void> {
     if (!claim.agentId) return;
     const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
-    await backend?.release(claim);
+    if (!backend) return;
+    const key = claimKey(runId, claim);
+    const released = backend.release(claim);
+    if (reason === 'settled') ExecutionFence.#noteOwnRelease(key, released);
+    else ExecutionFence.#noteAbandonedRelease(key, released);
+    await released;
+  }
+
+  /**
+   * Tell the fences of the claim at `key` that are still renewing that this process is releasing that claim as
+   * abandoned. Only a confirmed release takes their grace: nothing will settle the run, so their next failed renewal
+   * is the loss.
+   */
+  static #noteAbandonedRelease(key: string, released: Promise<boolean>): void {
+    const confirmed = released.catch(() => false);
+    for (const fence of renewingFencesByClaim.get(key) ?? []) {
+      fence.#abandonedRelease.add(confirmed);
+    }
+  }
+
+  /**
+   * Tell the fences of the claim at `key` that are still renewing that the execution is releasing that claim.
+   * `releasing` is the fence making the release, which records it itself. The others keep renewing: one that has not
+   * settled by its next renewal never heard the run's terminal event, and that renewal reports the loss.
+   */
+  static #noteOwnRelease(key: string, released: Promise<boolean>, releasing?: ExecutionFence): void {
+    const confirmed = released.catch(() => false);
+    for (const fence of renewingFencesByClaim.get(key) ?? []) {
+      if (fence !== releasing) fence.#noteReleaseStarted(confirmed);
+    }
   }
 
   /** Join an existing claim without acquiring ownership or advancing its generation. */
@@ -933,6 +1086,19 @@ export class ExecutionFence implements RunFenceScope {
   stopHeartbeat(): void {
     if (this.#heartbeat) clearInterval(this.#heartbeat);
     this.#heartbeat = undefined;
+    this.#stopTrackingIfQuiet();
+  }
+
+  /**
+   * Forget this fence once its heartbeat can no longer report on the claim. A lost fence is forgotten at once, even with
+   * a renewal still pending: loss is final, and a renewal that never answers would otherwise keep it tracked forever.
+   */
+  #stopTrackingIfQuiet(): void {
+    if (this.#heartbeat || (this.#renewalInFlight && !this.#lossError)) return;
+    const key = claimKey(this.runId, this.claim);
+    const fences = renewingFencesByClaim.get(key);
+    fences?.delete(this);
+    if (fences?.size === 0) renewingFencesByClaim.delete(key);
   }
 
   /** Cancel only this worker's invocations, keeping the shared claim valid for survivors. */
@@ -1047,9 +1213,32 @@ export class ExecutionFence implements RunFenceScope {
     }
   }
 
+  /** Record a release of this claim. A failed release left the claim held, so a later one can still confirm it. */
+  #noteReleaseStarted(confirmed: Promise<boolean>): void {
+    this.#ownRelease.add(confirmed);
+  }
+
+  /**
+   * Whether this execution's own release, not a takeover, explains a renewal that came back unrenewed:
+   * `recordShowsRelease` (the run's record still names this claim with no lease) or a confirmed release in this
+   * process. A settled fence ignores it. An unsettled fence ignores it once, unless this process abandoned the claim.
+   */
+  async #releaseExplainsFailedRenewal(recordShowsRelease: boolean): Promise<boolean> {
+    // One deadline for the whole decision, so waiting on both releases still takes at most one renewal interval.
+    const deadline = Date.now() + EXECUTION_LEASE_RENEW_INTERVAL_MS;
+    if (!recordShowsRelease && !(await releaseAnswer(this.#ownRelease.answer, deadline))) return false;
+    if (this.#settlement) return true;
+    if (this.#releaseSeen || (await releaseAnswer(this.#abandonedRelease.answer, deadline))) return false;
+    this.#releaseSeen = true;
+    return true;
+  }
+
   async #release(): Promise<void> {
+    const released = this.#backend.release(this.claim);
+    this.#noteReleaseStarted(released.catch(() => false));
+    ExecutionFence.#noteOwnRelease(claimKey(this.runId, this.claim), released, this);
     try {
-      await this.#backend.release(this.claim);
+      await released;
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
@@ -1138,9 +1327,26 @@ export class ExecutionFence implements RunFenceScope {
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
    * fence lost, which notifies {@link onLost} listeners. Backend errors are
-   * tolerated until the local lease deadline.
+   * tolerated until the local lease deadline. A failed renewal can be caused
+   * by this execution's own release: in this process, when the backend
+   * confirmed the claim still held the run as it was released (without that
+   * confirmation another execution claimed the run first); in another process,
+   * when the failed renewal finds the record still naming this claim with its
+   * lease cleared.
+   *
+   * Such a release is ignored once this fence settled. An unsettled fence gets
+   * until its next renewal to settle (a released run's terminal event is on
+   * its way); a release nothing settles, such as an abandoned terminal or a
+   * terminal event that never reached this fence's caller, is then a loss. A
+   * confirmed abandoned release made in this process gets no grace. A failed
+   * renewal waits at most one renewal interval for a release in flight to
+   * answer, and a successful one never waits.
    */
   #startHeartbeat(): void {
+    const key = claimKey(this.runId, this.claim);
+    let fences = renewingFencesByClaim.get(key);
+    if (!fences) renewingFencesByClaim.set(key, (fences = new Set()));
+    fences.add(this);
     this.#heartbeat = setInterval(() => {
       if (this.#settlement || this.#lossError) return;
       const now = Date.now();
@@ -1157,20 +1363,26 @@ export class ExecutionFence implements RunFenceScope {
       const startedAt = Date.now();
       void this.#backend
         .renew(this.claim)
-        .then(({ renewed, leaseExpiresAt }) => {
-          if (renewed) {
-            // The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran later:
-            // trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+        .then(async result => {
+          if (result.renewed) {
+            // The claim was still held when the renewal reached the backend, whatever a release in flight will
+            // answer. The lease runs at least a TTL from when the renewal was sent. A queued storage renewal ran
+            // later: trust the store's expiry, less a clock skew allowance, but never past a TTL from now.
+            const { leaseExpiresAt } = result;
             const reported = leaseExpiresAt
               ? Math.min(leaseExpiresAt.getTime() - STORE_CLOCK_SKEW_MS, Date.now() + EXECUTION_LEASE_TTL_MS)
               : 0;
             this.#leaseExpiresAt = Math.max(startedAt + EXECUTION_LEASE_TTL_MS, reported);
             return;
           }
+          if (await this.#releaseExplainsFailedRenewal(result.released)) return;
           this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
           return this.#noteTakeover();
         })
-        .catch(cause => {
+        .catch(async cause => {
+          // A settled fence's own confirmed release explains a renewal that errored after it. The fence may still be
+          // running its terminal writes, with its release not started yet, so wait up to one renewal interval for it.
+          if (this.#settlement && (await releaseAnswer(this.#ownRelease.awaitAnswer()))) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;
@@ -1179,6 +1391,7 @@ export class ExecutionFence implements RunFenceScope {
         })
         .finally(() => {
           this.#renewalInFlight = false;
+          this.#stopTrackingIfQuiet();
         });
     }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
     this.#heartbeat.unref?.();
@@ -1250,6 +1463,7 @@ export function __resetExecutionFencesForTests(): void {
   for (const fence of fencesByExecutionId.values()) fence.stopHeartbeat();
   fencesByExecutionId.clear();
   activeFenceByRunId.clear();
+  renewingFencesByClaim.clear();
 }
 
 /**
