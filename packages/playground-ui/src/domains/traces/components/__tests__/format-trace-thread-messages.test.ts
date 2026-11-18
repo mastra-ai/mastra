@@ -313,6 +313,42 @@ describe('formatTraceThreadMessages', () => {
 
       expect(messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Plan a weekend in Paris' }]);
     });
+
+    it('opens with the signal itself when it is not a user message, such as a skill', () => {
+      const spans = basicAgentTrace.spans.map(span =>
+        span.spanType === SpanType.AGENT_RUN
+          ? {
+              ...span,
+              attributes: {
+                ...span.attributes,
+                signal: { id: 'skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'trip-planner' } },
+              },
+              input: {
+                __isCreatedSignal: true,
+                id: 'skill-1',
+                type: 'reactive',
+                tagName: 'skill',
+                attributes: { name: 'trip-planner' },
+                contents: 'Plan a weekend.\n\nARGUMENTS: Paris',
+                toDBMessage: '[Function]',
+              },
+            }
+          : span,
+      );
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.map(message => message.role)).toEqual(['signal', 'assistant']);
+      expect(messages[0]).toMatchObject({
+        type: 'skill',
+        content: {
+          parts: [{ type: 'text', text: 'Plan a weekend.\n\nARGUMENTS: Paris' }],
+          metadata: {
+            signal: { id: 'skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'trip-planner' } },
+          },
+        },
+      });
+    });
   });
 
   describe('when the agent returns structured output without text', () => {

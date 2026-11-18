@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -48,6 +49,16 @@ function ErrorProbe() {
   return <div>{error ? 'error' : 'ok'}</div>;
 }
 
+function renderDraft(probes: ReactNode) {
+  return renderWithProviders(
+    <ChatSessionContext.Provider value={draftSession}>
+      <ChatConnectionContext.Provider value={{ status: 'connecting' }}>
+        <ChatModelsProvider>{probes}</ChatModelsProvider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>,
+  );
+}
+
 describe('ChatModelsProvider', () => {
   it.each([
     { modelScope: 'factory', kind: 'factory', expected: 'deepseek/deepseek-flash' },
@@ -63,7 +74,9 @@ describe('ChatModelsProvider', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
           HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5.5' })),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
+        ),
       );
 
       server.use(
@@ -121,17 +134,11 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    renderDraft(<ActiveModelProbe />);
 
     expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
   });
@@ -147,17 +154,11 @@ describe('ChatModelsProvider', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultPending;
-        return HttpResponse.json({ modelId: null });
+        return HttpResponse.json({ modelId: null, thinkingLevel: null });
       }),
     );
 
-    const { client } = renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <LoadingProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    const { client } = renderDraft(<LoadingProbe />);
 
     expect(await screen.findByText('loading')).toBeVisible();
     resolveDefault();
@@ -165,27 +166,27 @@ describe('ChatModelsProvider', () => {
     expect(screen.getByText('ready')).toBeVisible();
   });
 
-  it('surfaces personal default loading failures instead of treating them as no default', async () => {
+  it("surfaces personal default loading failures instead of starting a personal-routed chat on the Factory's model", async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
+        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({ error: 'model_defaults_unavailable' }, { status: 503 }),
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-          <ErrorProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
+    renderDraft(
+      <>
+        <ActiveModelProbe />
+        <ErrorProbe />
+        <LoadingProbe />
+      </>,
     );
 
-    expect(await screen.findByText('openrouter/fable-5')).toBeVisible();
-    expect(await screen.findByText('error')).toBeVisible();
+    expect(await screen.findByText('ready')).toBeVisible();
+    expect(screen.getByText('error')).toBeVisible();
+    expect(screen.queryByText('openrouter/fable-5')).not.toBeInTheDocument();
   });
 
   it('uses the live session state model', async () => {
@@ -194,7 +195,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
     const liveSession: ChatSessionContextApi = {

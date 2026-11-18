@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';
+import {
+  createFactorySecretEncryption,
+  createPlaintextFactorySecretEncryption,
+  FactorySecretDecryptionError,
+  secretKeyMismatchHint,
+} from './secret-encryption.js';
 
 const key = (fill: number) => new Uint8Array(32).fill(fill);
 
@@ -73,6 +78,32 @@ describe('createFactorySecretEncryption', () => {
     await expect(
       encryption.decrypt(`${prefix}${Buffer.from(JSON.stringify(tampered)).toString('base64url')}`),
     ).rejects.toThrow('Unable to decrypt');
+  });
+
+  it("reports a key that can't read the value as a key mismatch, and nothing else", async () => {
+    const encrypted = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } }).encrypt('secret');
+    const keyMismatches = await Promise.all(
+      [
+        createFactorySecretEncryption({ primary: { id: 'v1', key: key(2) } }),
+        createFactorySecretEncryption({ primary: { id: 'v2', key: key(1) } }),
+        createPlaintextFactorySecretEncryption(),
+      ].map(encryption => encryption.decrypt(encrypted).catch((error: unknown) => error)),
+    );
+    for (const error of keyMismatches) {
+      expect(error).toBeInstanceOf(FactorySecretDecryptionError);
+      expect(secretKeyMismatchHint(error)).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
+    }
+    const [wrongKey, unknownKeyId, noKey] = keyMismatches;
+    expect(secretKeyMismatchHint(wrongKey)).toContain('using a different one than before');
+    expect(secretKeyMismatchHint(unknownKeyId)).toContain('using a different one than before');
+    expect(secretKeyMismatchHint(noKey)).toContain("doesn't have one set");
+    expect(secretKeyMismatchHint(wrongKey)).not.toContain('`');
+
+    const malformed = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } })
+      .decrypt('mastra:factory-secret:v1:not-json')
+      .catch((error: unknown) => error);
+    expect(secretKeyMismatchHint(malformed)).toBeUndefined();
+    expect(secretKeyMismatchHint(new Error('connection refused'))).toBeUndefined();
   });
 
   it('validates key length and unique ids', () => {

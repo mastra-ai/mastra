@@ -37,6 +37,7 @@
 import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
+import type { DefinitionSource } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
@@ -283,13 +284,14 @@ export interface WorkspaceConfig<
 
   /**
    * Vector store for semantic search.
-   * When provided along with embedder, enables vector and hybrid search.
+   * When provided along with embedder, enables vector and hybrid search. A store that generates
+   * embeddings itself, such as `MongoDBVector` with `autoEmbed`, needs no embedder.
    */
   vectorStore?: MastraVector;
 
   /**
    * Embedder function for generating vectors.
-   * Required when vectorStore is provided.
+   * Required when vectorStore is provided, unless the store generates embeddings itself.
    */
   embedder?: Embedder;
 
@@ -472,6 +474,8 @@ export interface RegisteredWorkspace {
   source: 'mastra' | 'agent';
   agentId?: string;
   agentName?: string;
+  /** Where the registering agent is defined, for agent workspaces. */
+  agentSource?: DefinitionSource;
 }
 
 // =============================================================================
@@ -697,16 +701,18 @@ export class Workspace<
       this._browser = config.browser;
     }
 
-    // Validate vector search config - embedder is required with vectorStore
-    if (config.vectorStore && !config.embedder) {
+    // Validate vector search config - a vectorStore needs an embedder unless it embeds server-side
+    const embedsServerSide = !config.embedder && config.vectorStore?.isSelfEmbedding === true;
+    if (config.vectorStore && !config.embedder && !embedsServerSide) {
       throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
     }
 
     // Create search engine if search is configured
-    if (config.bm25 || (config.vectorStore && config.embedder)) {
+    if (config.bm25 || (config.vectorStore && (config.embedder || embedsServerSide))) {
       const buildIndexName = (): string => {
-        // Sanitize default name: replace all non-alphanumeric chars with underscores
-        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        // Sanitize default name: replace all non-alphanumeric chars with underscores.
+        // A store that embeds server-side keeps its index apart from one holding client-supplied vectors.
+        const defaultName = `${this.id}_search${embedsServerSide ? '_selfembed' : ''}`.replace(/[^a-zA-Z0-9_]/g, '_');
         const indexName = config.searchIndexName ?? defaultName;
 
         // Validate SQL identifier format
@@ -730,7 +736,7 @@ export class Workspace<
       this._searchEngine = new SearchEngine({
         bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
         vector:
-          config.vectorStore && config.embedder
+          config.vectorStore && (config.embedder || embedsServerSide)
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
@@ -883,8 +889,15 @@ export class Workspace<
     if (!this._filesystemResolver) return this._fs;
     let pending = this._filesystemRequestCache.get(requestContext);
     if (!pending) {
-      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      pending = Promise.resolve().then(() => this._filesystemResolver!({ requestContext }));
       this._filesystemRequestCache.set(requestContext, pending);
+      // Don't keep a failure around: a transient resolver error would otherwise
+      // disable filesystem and skill tools for the rest of the request.
+      pending.catch(() => {
+        if (this._filesystemRequestCache.get(requestContext) === pending) {
+          this._filesystemRequestCache.delete(requestContext);
+        }
+      });
     }
     return pending;
   }

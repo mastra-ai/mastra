@@ -194,11 +194,6 @@ describeParity('stop-when parity', target => {
     }
 
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
-    if (target === 'durable') {
-      expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
-    } else {
-      // COR-1466: evented retries a throwing loop condition up to its delivery-attempt limit.
-      expect(calls.get('evented')!.length, 'evented: the predicate was consulted three times').toBe(3);
-    }
+    expect(calls.get(target)!.length, `${target}: the predicate was consulted once`).toBe(1);
   });
 });

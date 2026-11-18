@@ -49,9 +49,6 @@ describe('GitLab issue reconciler', () => {
         orgId: project.orgId,
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: project.createdBy,
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace',
       });
       await seeded.intake.saveConfig({
         orgId: project.orgId,
@@ -63,7 +60,6 @@ describe('GitLab issue reconciler', () => {
         integrationId: 'gitlab',
         sourceId: SOURCE_ID,
         factoryProjectId: project.id,
-        board: 'work',
       });
       await seeded.workItems.upsert({
         orgId: project.orgId,
@@ -142,7 +138,7 @@ describe('GitLab issue reconciler', () => {
 
       await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
       const [trustedItem] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-      expect(trustedItem?.metadata).toMatchObject({ author: 'Maintainer Person', authorTrusted: true });
+      expect((trustedItem)).toMatchObject({ metadata: {authorTrusted: true}, workItem: { metadata: {author: 'Maintainer Person'} } });
       accessLevel = 10;
       await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
       const decisions = await seeded.workItems.listDeferredDecisions(project.orgId, project.id);
@@ -151,12 +147,7 @@ describe('GitLab issue reconciler', () => {
         decision: { type: 'transition', board: 'work', stage: 'done' },
       });
       const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-      expect(item?.metadata).toMatchObject({
-        author: 'Maintainer Person',
-        authorTrusted: false,
-        state: 'closed',
-        labelColors: { bug: '#428BCA' },
-      });
+      expect((item)).toMatchObject({ metadata: {authorTrusted: false}, workItem: { metadata: {author: 'Maintainer Person', state: 'closed', labelColors: { bug: '#428BCA' }} } });
     },
   );
 });

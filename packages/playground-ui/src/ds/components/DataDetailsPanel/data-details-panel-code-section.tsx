@@ -1,9 +1,10 @@
-import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { IconAlignmentJustify } from '@/ds/icons/central/IconAlignmentJustify';
+import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +47,7 @@ export function DataDetailsPanelCodeSection({
         <div
           className={cn(
             'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
-            '[&>svg]:size-3.5',
+            '[&>svg]:size-icon-sm',
           )}
         >
           {icon}
@@ -58,10 +59,11 @@ export function DataDetailsPanelCodeSection({
             <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
+                size="icon-md"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
-                {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+                {showAsMultilineText ? <IconAlignmentLeft /> : <IconAlignmentJustify />}
               </Button>
             )}
           </ButtonsGroup>

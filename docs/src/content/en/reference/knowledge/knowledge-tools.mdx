@@ -1,0 +1,445 @@
+---
+title: 'Reference: Knowledge tools | Knowledge'
+description: 'Arguments, operations, required roles and errors of the six Knowledge tools.'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge tools
+
+Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
+
+| Group | Tools | Enabled by |
+| - | - | - |
+| Read | `knowledge_list`, `knowledge_search`, `knowledge_read` | `tools: true` or `tools: { read: true }` |
+| Write | `knowledge_page`, `knowledge_note` | `tools: true` or `tools: { write: true }` |
+| Pins | `knowledge_pin` | `pinnedContext` |
+
+Every tool acts with the run's scopes and the roles Knowledge declarations give them. A run that holds no scopes fails with:
+
+```text
+Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.
+```
+
+Tool errors come back to the model as the tool result, not as exceptions. A page or note the run can't read looks absent: the error says it wasn't found, never that access was denied.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## Page references
+
+Arguments named `page` (and `into`, `parent`, `from`) take any of these:
+
+- A page ID.
+- A scope address, such as `org:acme`, for the scope's own page.
+- A page path, `<scope>#<key>[/<key>…]`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`.
+- An exact page name.
+
+In a page path, a `/` before the `#` names a child scope, and a `/` after it names a child page. Leading, trailing and doubled slashes in the page part are dropped, so `org:acme#policies/` and `org:acme#policies` are the same page. Paths resolve when used. A moved page answers only to its new path.
+
+A name that matches more than one readable page is refused with the candidates' refs:
+
+```text
+Knowledge page name "Chargeback Playbook" is ambiguous; use one of these refs: team:acme:billing#chargeback-playbook, team:acme:support#chargeback-playbook.
+```
+
+Tool results name each page by `ref`, which any of these arguments accepts:
+
+- The scope address, for a scope's page.
+- The full path, for a page with a key on every level, such as `docs:acme#guides/observability/logging`.
+- The page ID, otherwise.
+
+A read of a page that doesn't exist lists up to three close matches by `ref`.
+
+## `knowledge_search`
+
+Searches the pages and notes the run can read.
+
+The query is split into words, and quote marks are ignored. Each word matches case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words. A note matches when its own text does.
+
+Keyword results are ranked in this order:
+
+1. Pages whose name contains the whole query.
+1. Other pages, by how many query words they contain, then by where the words are (name over description, description over body), then most recently updated.
+1. Notes, by how many query words they contain, then newest.
+
+Access checks and `scope` filter results before ranking. `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so this order no longer holds.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description:
+      'Words to look for. A result contains at least one of them, case-insensitively. An empty query returns nothing.',
+  },
+  { name: 'scope', type: 'string[]', description: 'Only search pages in these scope addresses.', isOptional: true },
+  { name: 'limit', type: 'number', description: 'Maximum results, 1 to 50.', isOptional: true, defaultValue: '10' },
+]}
+/>
+
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. These searches also return `more`:
+
+- A search that finds nothing suggests different key words or `knowledge_list`:
+
+  ```text
+  results: no page or note contains any word of "enterprise pricing tiers". Search again with different key words, or browse with knowledge_list.
+  ```
+
+- A search that fills `limit` says how many results were shown, and to narrow the query or raise `limit` (up to 50) when none of them fits.
+
+`scope` takes scope addresses only. A page ref such as `docs:acme#billing` is refused with a pointer to `knowledge_list`.
+
+## `knowledge_list`
+
+Lists the page tree under a starting point, so an agent can see how a scope or section is organized before it searches or reads. Without `from`, it lists the scopes the run can read. Scopes the run can't read are left out.
+
+<PropertiesTable
+  content={[
+  { name: 'from', type: 'string', description: 'Where to start: a page reference.', isOptional: true },
+  {
+    name: 'depth',
+    type: 'number',
+    description: 'How many levels below `from` to list, 1 to 3.',
+    isOptional: true,
+    defaultValue: '1',
+  },
+  { name: 'limit', type: 'number', description: 'Maximum entries, 1 to 100.', isOptional: true, defaultValue: '50' },
+  {
+    name: 'descriptions',
+    type: 'boolean',
+    description: "Add each page's description to its entry.",
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    description:
+      "The previous result's `nextCursor`, or the cursor `more` gives. Pass the same `from`. A cursor keeps the `depth` and `limit` of the result it came from.",
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `{ from?, entries, nextCursor?, more? }`. `from` is `{ ref, name }`. Each entry is `{ ref, name, depth, children, scope? }`, plus `description` when `descriptions` is `true`: `depth` is 1 for the starting point's children, `children` counts the readable child pages (and child scopes, for a scope), and `scope` is `true` for a scope.
+
+A result stops at `limit` entries or at the read cap (about 1,000 tokens of entries by default), whichever comes first, and always holds at least one entry. When it stops early, `more` says how many entries were left out and gives the cursor that continues where it stopped.
+
+## `knowledge_read`
+
+Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages and child scopes. Without `page`, it lists the scopes the run holds.
+
+<PropertiesTable
+  content={[
+  { name: 'page', type: 'string', description: 'A page reference.', isOptional: true },
+  {
+    name: 'outline',
+    type: 'boolean',
+    description: "Return the body's headings, each with its level, line and size in tokens, instead of the body.",
+    isOptional: true,
+  },
+  {
+    name: 'section',
+    type: 'string',
+    description:
+      'Return only the section under this heading, subsections included, as numbered lines with their `range`. A unique part of the title works.',
+    isOptional: true,
+  },
+  {
+    name: 'match',
+    type: 'string | string[]',
+    description:
+      'Return only the lines that contain this term, or any of these terms (up to 10), case-insensitively, with `context` lines around each, like `grep -C`.',
+    isOptional: true,
+  },
+  {
+    name: 'context',
+    type: 'number',
+    description: 'With `match`: lines to show before and after each matching line, 0 to 20.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'from',
+    type: '{ line: number; col?: number }',
+    description:
+      'Where to start reading: in the chosen `section`, otherwise in the body. With `match`, where to continue matching. `more` gives it when a result is cut short. `col` (0-based) only appears inside a line too long for one read.',
+    isOptional: true,
+  },
+  {
+    name: 'notes',
+    type: 'boolean',
+    description: "Return only the page's notes, however long, without the body.",
+    isOptional: true,
+  },
+  {
+    name: 'mentionedIn',
+    type: 'boolean',
+    description: 'Return only the notes on other pages that mention this page, however long, without the body.',
+    isOptional: true,
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    description: "The previous result's `nextCursor`. Returns only the next notes.",
+    isOptional: true,
+  },
+  {
+    name: 'mentionedInCursor',
+    type: 'string',
+    description: "The previous result's `mentionedInCursor`. Returns only the next notes that mention this page.",
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum notes, child pages and mentioning notes, 1 to 50.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+]}
+/>
+
+A whole read returns `{ page, notes, children, childScopes?, mentionedIn, nextCursor?, mentionedInCursor?, more? }`, with the body on `page`. Anything cut short is listed in `more`, with how to get the rest:
+
+- **Body.** A body that fits in the read cap (1,000 tokens unless [`tools.read.maxTokens`](/reference/knowledge/knowledge-class#constructor-options) sets it) comes back as `page.body`. A longer one comes back as `page.lines`, numbered (`12│text`), with `page.range`, the lines it covers, and `page.lineCount`. `more` says where to read on, such as `body: showing lines 1–40 of 412. Read on with from: {"line":41}.`
+- **First read of a long page.** A plain read (no `section` or `from`) of a body with headings shows the whole page at a glance instead: `page.lines` holds every heading with its line number and the first lines under it, shared out within the read cap, with `⋯ lines a–b` where lines are left out and `…` where a line is cut short. It has `page.lineCount` but no `page.range`, so it can't be written back: read a `section` or `from` a line first, and edit with the `range` that read returns. A body with no headings, or with more headings than fit in the cap, comes back as its first lines with `page.range` instead, plus `page.outline` of the headings it didn't reach (up to about 500 tokens of them).
+- **Notes and mentions.** A whole read fetches up to `limit` notes and up to `limit` mentioning notes. Each list comes along while those fetched notes stay under 1,000 tokens. A longer list is replaced by `notesLeftOut` or `mentionedInLeftOut`, the number of notes fetched, and `more` says to read it with `notes: true` or `mentionedIn: true`. When there are more notes than `limit`, both that number and the token estimate in `more` cover only the fetched notes, so the list is larger.
+- **Child pages and scopes.** Past `limit`, `more` says to list them with `knowledge_list`.
+
+A `range` is `{ start: { line, col? }, end: { line, col? } }`. Lines start at 1. A read gives `col` only when a line is too long for one read. It's 0-based, and an end `col` is exclusive. Pass a range to `knowledge_page` to replace those lines.
+
+`match` returns `matches`, each `{ range, lines }`. When the matches run past the read cap (1,000 tokens by default), `more` gives the line to continue from, such as `match: stopped at about 1,000 tokens; more matches from line 120. Read again with the same match and from: {"line":120}.`
+
+`outline`, `section`, `match` and `from` return only that part of the body, with no notes, child pages or mentions. Pass at most one of `outline`, `section` and `match`. `notes`, `mentionedIn` and both cursors return only those notes, with no body, and can't be combined with the body options:
+
+```text
+knowledge_read: read notes or mentionedIn on their own, without outline, section, match or from.
+```
+
+## `knowledge_page`
+
+Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`, and a delete ignores it. All three act on the page's own scope.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'op',
+    type: "'write' | 'move' | 'merge' | 'delete'",
+    description: '`write` with `page` edits it; without `page` it creates one.',
+  },
+  { name: 'page', type: 'string', description: 'The page to edit, move, merge or delete.', isOptional: true },
+  {
+    name: 'scope',
+    type: 'string',
+    description: 'Create: the home scope. Move: the destination scope.',
+    isOptional: true,
+  },
+  { name: 'parent', type: 'string', description: 'Create or move: a parent page in that scope.', isOptional: true },
+  {
+    name: 'into',
+    type: 'string',
+    description: "Merge: the page that remains. Both pages' notes are kept.",
+    isOptional: true,
+  },
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'Create: one path segment, unique among the page\'s siblings, with no "/", "#" or "%". `parent` supplies the rest of the path.',
+    isOptional: true,
+  },
+  { name: 'name', type: 'string', description: 'The page name. Required on create.', isOptional: true },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'A short synopsis, about 100 tokens at most. An empty string clears it.',
+    isOptional: true,
+  },
+  {
+    name: 'body',
+    type: 'string',
+    description:
+      'The curated long-form summary, in markdown. Replaces the whole body, or with `range` only those lines. An empty `body` with `range` removes the lines.',
+    isOptional: true,
+  },
+  {
+    name: 'range',
+    type: '{ start: { line: number; col?: number }; end: { line: number; col?: number } }',
+    description:
+      'Edit: the lines to replace, from a `knowledge_read` `range` or `matches` entry, or a smaller range inside one. Needs `expectedVersion`.',
+    isOptional: true,
+  },
+  {
+    name: 'expectedVersion',
+    type: 'number',
+    description: 'The version you read. The write is refused if the page changed since.',
+    isOptional: true,
+  },
+]}
+/>
+
+A `body` write without `range` is refused when the stored body is longer than one read returns (the read cap, 1,000 tokens by default). A `range` is refused without `expectedVersion`, when it starts after it ends or runs past the end of the body, and when it covers more than one read from its first line shows:
+
+```text
+Lines 1–150 run past what one knowledge_read from line 1 shows, so this can't be a range a read gave you. Edit the body part by part: write each part back with the range its own read returned.
+```
+
+A `body` that still has the line numbers from a read is refused: `This body still has the line numbers a knowledge_read put in front of each line ("12│"). Write the text without them.`
+
+| Operation | Role needed |
+| - | - |
+| Create (`write` without `page`) | `contributor` on `scope` |
+| Edit (`write` with `page`) | `editor` on the page's scope |
+| Move within a scope | `editor` on the page's scope |
+| Move to another scope | `owner` on the page's scope and on `scope` |
+| Merge | `owner` on the merged page's scope; on the scope of `into`, `editor` if it's the same scope and `owner` if it's another, since the merged page's children move there |
+| Delete | `owner` on the page's scope |
+
+Template pages, declared in a scope's `pages`, can be edited, annotated with notes and merged into, but not moved, merged away or deleted, whatever the run's role.
+
+A scope page's name and description come from config, so `write` on a scope page changes only its body. The scope page can't be moved, merged or deleted.
+
+`delete` removes a page from reads, search and pins. It's refused while the page has child pages, for a scope page and for a template page.
+
+Errors:
+
+```text
+Creating a page needs scope and name.
+Editing a page needs at least one of name, description or body.
+Editing a page takes no scope, parent or key; use op "move" to relocate it.
+Moving a page needs the destination scope.
+Merging needs into: the page that remains.
+"Escalation" has child pages; move or delete them first.
+"org:acme" is a scope page; scope pages can't be moved, merged or deleted.
+"org:acme" is a scope page; its name and description come from config, so only its body can be written.
+Knowledge page "org:acme#policies/escalation" not found.
+Knowledge page key "a/b" must not contain "/", "#" or "%"
+Knowledge page key "escalation" already exists under page aa8f6099-6111-4952-b9cb-04cb97eb2bb5. Keys are unique among siblings; pick another key or move one of the pages.
+"org:acme#policies/refund" is declared in config; change the scope's pages to move it.
+"org:acme#policies/refund" is declared in config; change the scope's pages to remove it.
+Editing a page needs editor on "team:acme:support"; this run has viewer there.
+Moving a page across scopes needs owner on "org:acme"; this run has editor there.
+Merging a page away needs owner on "team:acme:support"; this run has editor there.
+Merging a page across scopes needs owner on "team-public:acme:support"; this run has editor there.
+Deleting a page needs owner on "org:acme"; this run has editor there.
+Knowledge page description exceeds the 100 token limit; put long-form text in the page body
+Knowledge record version conflict: 37c1e879-b328-47a9-9d3c-5788ad35ca2d
+```
+
+## `knowledge_note`
+
+Adds, restamps and removes notes. A note is one durable fact on a page. Link other pages with `[[Page Name]]`. Its stamp scopes say who can see it: a run reads a note when it can read the page and at least one stamp scope.
+
+<PropertiesTable
+  content={[
+  { name: 'op', type: "'add' | 'restamp' | 'remove'", description: 'What to do.' },
+  { name: 'page', type: 'string', description: 'Add: the page.', isOptional: true },
+  { name: 'note', type: 'string', description: 'Restamp or remove: the note ID.', isOptional: true },
+  {
+    name: 'scope',
+    type: 'string[]',
+    description: 'Add and restamp: the stamp scope addresses. Required for both.',
+    isOptional: true,
+  },
+  {
+    name: 'text',
+    type: 'string',
+    description: 'Add: the note, about 250 tokens at most; inline markdown is fine.',
+    isOptional: true,
+  },
+  {
+    name: 'when',
+    type: 'string',
+    description:
+      'Add: when it was true or observed, as an ISO 8601 date-time (`2026-10-29T14:30:00Z`) or a plain date (`2026-10-29`).',
+    isOptional: true,
+  },
+]}
+/>
+
+| Operation | Role needed |
+| - | - |
+| `add` | `contributor` on the page's scope and on each stamp scope |
+| `restamp` | `editor` on the page's scope, `contributor` on each new stamp scope |
+| `remove` | `editor` on the page's scope |
+
+Removing a note and adding it again creates a new note ID. Errors:
+
+```text
+Adding a note needs page and text.
+Adding a note needs scope: the stamp scopes.
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+Removing a note needs editor on "team:acme:support"; this run has viewer there.
+Knowledge note text exceeds the 250 token limit; split it into separate notes or put long-form text in the page body
+```
+
+## `knowledge_pin`
+
+Pins a page, or a listing of the pages under it, into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pinned context](/docs/knowledge/pinned-context).
+
+<PropertiesTable
+  content={[
+  { name: 'op', type: "'pin' | 'unpin'", description: 'What to do.' },
+  { name: 'page', type: 'string', description: 'The page to pin or unpin.' },
+  { name: 'audience', type: 'string[]', description: 'Scope addresses whose runs receive the pin.' },
+  {
+    name: 'kind',
+    type: "'page' | 'list'",
+    description:
+      '`page` pins the page. `list` pins a listing of the pages under it. A page can have one pin of each kind, pinned and unpinned separately.',
+    isOptional: true,
+    defaultValue: "'page'",
+  },
+  {
+    name: 'depth',
+    type: 'number',
+    description:
+      'Levels a `list` pin shows below the page, 1 to 3. Pinning a listing again sets its new depth. Only with `op: "pin"` and `kind: "list"`.',
+    isOptional: true,
+    defaultValue: '1',
+  },
+]}
+/>
+
+Pinning and unpinning need `editor` on the page's scope and, for each audience scope, holding it or `editor` on it. A pinned page reaches only runs that can read it, and a pinned listing shows only the pages the run can read. Pinning a listing needs a storage adapter version that stores pin kinds. With an older adapter, page pins still work and a listing pin is refused before anything is stored.
+
+```text
+Pinning a page needs editor on "policy:acme"; this run has viewer there.
+Pinning for "role:acme:sales" needs holding it or editor on it; this run has neither.
+Pin audience "project:x" does not match a declared scope type.
+```
+
+## What each operation needs
+
+| Operation | Role | On |
+| - | - | - |
+| Search, read, list | `viewer` | The page's scope |
+| Create a page | `contributor` | `scope` |
+| Edit a page | `editor` | The page's scope |
+| Move within a scope | `editor` | The page's scope |
+| Move to another scope | `owner` | Both scopes |
+| Merge | `owner` | The page that goes away |
+| | `editor` | The page that stays, in the same scope |
+| | `owner` | The page that stays, in another scope |
+| Delete a page | `owner` | The page's scope |
+| Add a note | `contributor` | The page's scope and each stamp |
+| Restamp, remove a note | `editor` | The page's scope (and `contributor` on each new stamp) |
+| Pin, unpin a page or listing | `editor` | The page's scope, plus authority over each audience |
+
+A call that's in reach but needs a stronger role names the role it needs:
+
+```text
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+```
+
+## Related
+
+- [Agents and tools](/docs/knowledge/agents-and-tools)
+- [Knowledge class](/reference/knowledge/knowledge-class)
+- [Limits](/reference/knowledge/limits)
+- [Tool instructions](/reference/knowledge/tool-instructions)

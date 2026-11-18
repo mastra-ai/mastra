@@ -42,10 +42,20 @@ Pick the highest rung that fits; each step down needs a reason:
 - Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-body-sm` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 - Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
 
+## Settings pages: SettingsRow vs SettingsItem
+
+Settings cards (`@mastra/playground-ui/new/settings`) hold two kinds of rows. Pick by what the row is, not by how it looks:
+
+- **`SettingsRow`** (or `SettingsFieldsetRow` for a group of controls): a setting the person changes. Label, optional one-line description, and the control that changes it (input, select, switch, segmented control). It is a form field: the label names the control. A setting someone may not change keeps `SettingsRow` with `viewOnly`.
+- **`SettingsItem`**: one thing in a list (an account, member, session, API key, connection, repository, a package version). Title, optional media and one-line description, and its status or per-item actions (Remove, Revoke, Copy) on the right. Lists usually come from a `.map` and start with a `SettingsListHeader`; an empty list is one `SettingsEmptyRow`.
+
+A row that only shows a value, status or per-item actions is a `SettingsItem`, and so is each record of a list (accounts, keys, versions) even when it comes from a `.map`. A `.map` over settings (one switch per tool) still renders `SettingsRow`s: what matters is whether the row's control changes a setting.
+
 ## Review smells
 
 - Look overrides on DS components: `bg-*`, text color or size, border color, `rounded-*`, `shadow-*`, or padding via `className`
 - A new component that duplicates an existing `ds/` or `domains/` component
+- A `SettingsRow` per list entry or read-only value (versions, members, keys), or a `SettingsItem` wrapping a control that changes a setting: see "Settings pages" above
 - `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
 - Token names that don't exist in `theme.css` (guessed from memory)
 - `bg-[var(--x)]` — use `bg-(--x)`
@@ -58,3 +68,5 @@ Pick the highest rung that fits; each step down needs a reason:
 - A `font-mono` class anywhere outside `packages/playground-ui/src/ds` (lint rejects it): use `<Txt font="mono">` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, `tabular-nums` for numbers. `<pre>` and `<code>` are already mono
 - Mono on text a person wrote or reads as language (labels, headings, status, prose): mono is for machine identifiers (IDs, hashes, log lines) and time (timestamps and durations). Other numbers, such as counts, costs, and scores, use the body face with `tabular-nums`. KPI values, chart axes, and chart tooltips stay in the body face even for time, so dashboards read in one face. See the Typography section of `packages/playground-ui/README.md`
 - Code as plain or mono text, or a hand-styled `<code className="rounded bg-…">`: use `InlineCode` in a sentence and a highlighted `CodeBlock` (with `lang`) for anything longer
+- Title Case on a button, link button, menu item, tab, tooltip, or `aria-label` ("Add Persistent Server"): actions use sentence case ("Add persistent server", "Open in Studio"). Capitalize only the first word and proper nouns: brands and products (Mastra, Studio, GitHub, MCP) and plan names ("Upgrade to Team"). Feature names are lowercase ("Edit working memory"). Lint (`mastra/sentence-case-labels`) catches static text; labels built in variables, props, or default values need the same care
+- A trailing ellipsis or Title Case in a placeholder ("Search agents...", "Search Issues"): placeholders read like the system search field on macOS and iOS, sentence case with no ending punctuation ("Search agents", "Filter by name"). Only progress text shown in the field keeps its ellipsis ("Loading agents…"). Lint (`playground-ui/placeholder-text`) checks string `placeholder` and `*Placeholder` values

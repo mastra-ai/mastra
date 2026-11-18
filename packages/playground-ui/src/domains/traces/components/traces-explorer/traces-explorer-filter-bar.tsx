@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../trace-filters';
 import type { TraceDatePreset } from '../../types';
-import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../trace-time-range-chip';
-import type { TraceTimeRangeChipProps } from '../trace-time-range-chip';
+import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
+import type { FilterBarTimeRangeProps } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
   'last-24h',
@@ -51,7 +52,7 @@ export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarPro
       {children ?? (
         <>
           <TracesExplorerFilterChips />
-          <FilterBar.Input placeholder="Filter traces…" />
+          <FilterBar.Input placeholder="Filter traces" />
         </>
       )}
     </FilterBar>
@@ -65,12 +66,12 @@ export type TracesExplorerFilterChipsProps = {
   renderChip?: (item: FilterBarItem) => ReactNode;
 };
 
-/** The bar's chips: the time range chip in its slot, then one chip per filter. */
+/** The bar's chips: the time range in its slot, then one chip per filter. */
 export function TracesExplorerFilterChips({ timeRange, renderChip }: TracesExplorerFilterChipsProps) {
   return (
     <FilterBar.Chips
       renderChip={item =>
-        item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+        item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
           (timeRange ?? <TracesExplorerTimeRangeChip />)
         ) : renderChip ? (
           renderChip(item)
@@ -83,7 +84,7 @@ export function TracesExplorerFilterChips({ timeRange, renderChip }: TracesExplo
 }
 
 export type TracesExplorerTimeRangeChipProps = Partial<
-  Pick<TraceTimeRangeChipProps, 'presets' | 'minDate' | 'maxRangeMs'>
+  Pick<FilterBarTimeRangeProps, 'presets' | 'minDate' | 'maxRangeMs'>
 >;
 
 /** Its own component so a list loading flip only re-renders the chip, not the whole bar. */
@@ -92,11 +93,11 @@ export function TracesExplorerTimeRangeChip({
   minDate,
   maxRangeMs,
 }: TracesExplorerTimeRangeChipProps) {
-  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange, resetDateRange } = useTracesFilters();
   const { isLoading } = useTracesList();
 
   return (
-    <TraceTimeRangeChip
+    <FilterBar.TimeRange
       preset={filters.datePreset}
       onPresetChange={setDatePreset}
       dateFrom={dateFrom}
@@ -105,6 +106,8 @@ export function TracesExplorerTimeRangeChip({
       onDateRangeChange={setDateRange}
       disabled={isLoading}
       presets={presets}
+      defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
+      onReset={() => resetDateRange(DEFAULT_TRACES_FILTERS.datePreset)}
       minDate={minDate}
       maxRangeMs={maxRangeMs}
     />

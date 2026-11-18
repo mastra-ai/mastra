@@ -29,7 +29,7 @@ type Story = StoryObj<typeof Textarea>;
 
 export const Default: Story = {
   args: {
-    placeholder: 'Type something...',
+    placeholder: 'Type something',
     className: 'w-75',
   },
 };
@@ -55,7 +55,7 @@ export const Sizes: Story = {
 
 export const Error: Story = {
   args: {
-    placeholder: 'Invalid input...',
+    placeholder: 'Invalid input',
   },
   render: args => (
     <Field invalid className="w-75">
@@ -68,7 +68,7 @@ export const Error: Story = {
 
 export const Disabled: Story = {
   args: {
-    placeholder: 'Disabled...',
+    placeholder: 'Disabled',
     disabled: true,
     className: 'w-75',
   },

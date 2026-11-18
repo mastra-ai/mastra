@@ -8,11 +8,11 @@ import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 
 type TextMessage = {
   type: 'text';
@@ -29,6 +29,8 @@ type ToolMessage = {
 };
 
 export type AgentMessage = TextMessage | ToolMessage;
+
+const DelegationIcon = agentGlyph('delegating');
 
 export interface AgentBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
@@ -121,7 +123,7 @@ export const AgentBadge = ({
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="agent-badge"
-      icon={<AgentIcon className="text-span-agent" />}
+      icon={<DelegationIcon className="text-span-agent" />}
       title={agentId}
       status={status}
       initialCollapsed={shouldCollapseContent}

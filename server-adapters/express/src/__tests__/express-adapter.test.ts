@@ -138,30 +138,29 @@ describe('Express Server Adapter', () => {
             stream: response.body,
             headers,
           };
-        } else {
-          // JSON response - check content type to decide how to parse
-          let data: unknown;
-          const responseContentType = response.headers.get('content-type') || '';
-
-          if (responseContentType.includes('application/json')) {
-            try {
-              data = await response.json();
-            } catch {
-              // If JSON parsing fails, return empty object
-              data = {};
-            }
-          } else {
-            // Not JSON content type, read as text
-            data = await response.text();
-          }
-
-          return {
-            status: response.status,
-            type: 'json',
-            data,
-            headers,
-          };
         }
+        // JSON response - check content type to decide how to parse
+        let data: unknown;
+        const responseContentType = response.headers.get('content-type') || '';
+
+        if (responseContentType.includes('application/json')) {
+          try {
+            data = await response.json();
+          } catch {
+            // If JSON parsing fails, return empty object
+            data = {};
+          }
+        } else {
+          // Not JSON content type, read as text
+          data = await response.text();
+        }
+
+        return {
+          status: response.status,
+          type: 'json',
+          data,
+          headers,
+        };
       } finally {
         // Always close server
         await new Promise<void>(resolve => {
@@ -1341,6 +1340,8 @@ describe('Express Server Adapter', () => {
 
   createBodyLimitTestSuite({
     suiteName: 'Body Size Limit',
+    // The Express adapter never reads text/plain or octet-stream bodies; they are left to host-level parsers.
+    skipNonJsonStreamedBody: true,
 
     createApp: () => {
       const app = express();

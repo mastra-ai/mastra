@@ -195,6 +195,20 @@ function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
   return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
+/**
+ * Append the provider's expiring cookies for legacy copies of the session
+ * cookie (see `ISessionProvider.getLegacySessionClearCookies`). Best-effort:
+ * never fails the response.
+ */
+function appendLegacySessionClearCookies(headers: Headers, auth: unknown) {
+  try {
+    const cookies = (auth as Partial<ISessionProvider>).getLegacySessionClearCookies?.();
+    for (const cookie of cookies ?? []) headers.append('Set-Cookie', cookie);
+  } catch {
+    // ignore
+  }
+}
+
 // ============================================================================
 // GET /auth/capabilities
 // ============================================================================
@@ -532,6 +546,8 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      // Signing in also expires legacy (e.g. shared parent-domain) session cookies.
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(null, {
         status: 302,
@@ -605,6 +621,7 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(JSON.stringify({ success: true, redirectTo }), {
         status: 200,
@@ -663,6 +680,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+      appendLegacySessionClearCookies(headers, auth);
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,

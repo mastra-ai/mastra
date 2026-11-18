@@ -18,6 +18,8 @@ import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import { ANTHROPIC_THINKING_BUDGET_TOKENS, getAnthropicThinkingCapability } from './anthropic-thinking.js';
 import type { ThinkingLevel } from './openai-codex.js';
 
+const PROVIDER_NAME = 'Anthropic';
+
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
 
@@ -58,7 +60,7 @@ export function setAuthStorage(storage: AuthStorage | undefined): void {
  * Required for Claude Max OAuth authentication
  */
 export const claudeCodeMiddleware: LanguageModelMiddleware = {
-  specificationVersion: 'v3',
+  specificationVersion: 'v4',
   transformParams: async ({ params }) => {
     // Prepend the Claude Code identity as the first system message
     const systemMessage = {
@@ -89,7 +91,7 @@ export const claudeCodeMiddleware: LanguageModelMiddleware = {
  * - Conversation history up to the last message
  */
 export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): LanguageModelMiddleware => ({
-  specificationVersion: 'v3',
+  specificationVersion: 'v4',
   transformParams: async ({ params }) => {
     const prompt = [...params.prompt];
 
@@ -176,7 +178,7 @@ export function createAnthropicThinkingMiddleware(
   if (level === 'off') return undefined;
 
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       const anthropicOptions = (params.providerOptions?.anthropic ?? {}) as Record<string, unknown>;
       // Don't override explicit per-request thinking configuration.
@@ -221,7 +223,9 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
+      throw storage.get('anthropic')?.type === 'oauth'
+        ? ProviderAuthRequiredError.signInExpired(PROVIDER_NAME)
+        : ProviderAuthRequiredError.notSignedIn(PROVIDER_NAME);
     }
 
     // Preserve Request headers and let explicit init headers override them.
@@ -240,7 +244,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
     const requestUrl = url instanceof URL ? url.toString() : typeof url === 'string' ? url : url.url;
     try {
       return await rejectUnauthorizedResponse(await fetch(url, { ...init, headers }), {
-        providerName: 'Anthropic',
+        providerName: PROVIDER_NAME,
         requestUrl,
       });
     } catch (error) {

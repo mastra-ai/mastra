@@ -35,7 +35,6 @@ import { Agent } from '../../../../agent';
 import type { IterationCompleteContext, IterationCompleteResult } from '../../../../agent/agent.types';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -216,12 +215,11 @@ async function runThrowingVariantOnEngine(variant: ThrowingVariant, engine: Pari
     },
   });
 
-  const pubsub = new EventEmitterPubSub();
   const wrapper =
     engine === 'durable'
-      ? createDurableAgent({ agent, pubsub })
+      ? createDurableAgent({ agent })
       : engine === 'evented'
-        ? createEventedAgent({ agent, pubsub })
+        ? createEventedAgent({ agent })
         : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
@@ -259,7 +257,6 @@ async function runThrowingVariantOnEngine(variant: ThrowingVariant, engine: Pari
     threw = String((error as { message?: string })?.message ?? error).slice(0, 200);
   } finally {
     await host.shutdown();
-    await pubsub.close();
   }
 
   return {

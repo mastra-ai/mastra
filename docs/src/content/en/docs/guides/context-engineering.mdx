@@ -158,8 +158,8 @@ export const workspace = new Workspace({
   autoIndexPaths: ['**/*.md'],
 })
 
-// Agents receive tools including read_file, list_files, grep,
-// mastra_workspace_search, and mastra_workspace_index.
+// Agents receive tools including mastra_workspace_read_file, mastra_workspace_list_files,
+// mastra_workspace_grep, mastra_workspace_search, and mastra_workspace_index.
 await workspace.init()
 ```
 
@@ -234,7 +234,7 @@ Observations are added in stable chunks, which helps providers reuse the existin
 
 ## Signals
 
-[Signals](/docs/harness/signals) add messages or system-generated context to a memory-backed thread. Delivery depends on the thread's state: a signal can wake an idle agent or enter an active loop. It can also wait for the next turn or persist without waking the agent.
+[Signals](/docs/signals/overview) add messages or system-generated context to a memory-backed thread. Delivery depends on the thread's state: a signal can wake an idle agent or enter an active loop. It can also wait for the next turn or persist without waking the agent.
 
 State signals require memory and an existing thread. Notification inbox signals require a storage adapter with notification support.
 
@@ -283,7 +283,7 @@ If you've used Claude Code, you may have seen compaction happen during a long se
 
 Compaction waits until a conversation reaches a token threshold. It then summarizes the transcript and replaces earlier messages. It's a blunt fallback. The compaction turn adds latency, and a single summary has to represent everything that came before. Repeated summaries can flatten chronology or lose details that later become important.
 
-Prefer [Observational Memory](#observational-memory) for long-running conversations. It can process history asynchronously in the background while preserving temporal context. Reflection revisits accumulated memories and naturally prunes details that no longer matter. Mastra doesn't provide compaction out of the box, though you could implement it with a custom [processor](/docs/agents/processors).
+Prefer [Observational Memory](#observational-memory) for long-running conversations. It can process history asynchronously in the background while preserving temporal context. Reflection revisits accumulated memories and prunes details that no longer matter. Mastra doesn't provide compaction out of the box, though you could implement it with a custom [processor](/docs/agents/processors).
 
 ### Processors
 

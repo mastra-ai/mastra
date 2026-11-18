@@ -803,7 +803,12 @@ describe('Agent signals: follow-up drain', () => {
 
       releaseFirst();
       const run = await firstRunPromise;
-      expect(run.value.parts.filter((part: any) => part.data?.contents === 'Hello by run id')).toHaveLength(1);
+      const signalParts = run.value.parts.filter((part: any) => part.data?.contents === 'Hello by run id');
+      // An accepted user message is first shown as pending, then delivered under the same id.
+      expect(signalParts.map((part: any) => part.type)).toEqual(
+        type === 'user-message' ? ['data-user-message-pending', 'data-user-message'] : ['data-signal'],
+      );
+      expect(new Set(signalParts.map((part: any) => part.data.id)).size).toBe(1);
       await expect(stream.text).resolves.toBe('run id first responserun id signal response');
       expect(streamCount).toBe(2);
       expect(JSON.stringify(prompts[1])).toContain('Hello by run id');

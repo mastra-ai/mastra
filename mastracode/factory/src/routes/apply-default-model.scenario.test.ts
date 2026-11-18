@@ -3,7 +3,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
@@ -109,12 +109,57 @@ describe('scenario: apply-default-model reaches a live run', () => {
     });
 
     const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ applied: [thread.id], skipped: [] });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
     expect(session.model.get()).toBe('openai/gpt-5.2-codex');
 
-    await session.model.syncFromPersisted();
-    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    await vi.waitFor(async () => {
+      await session.model.syncFromPersisted();
+      expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    });
+  });
+
+  // Factory unloads idle sessions, so most bound cards are not in memory when an admin applies the default.
+  it('a bound run whose session was unloaded adopts the project default when it loads again', async () => {
+    const storage = new InMemoryStore({ id: 'apply-default-model-unloaded' });
+    const { seed, project } = await seedProject('anthropic/claude-opus-4-6');
+    const controller = await buildController(storage, 'code');
+    const session = await controller.createSession({ id: 'unloaded', resourceId: 'resource-1', ownerId: 'user-1' });
+    const thread = await session.thread.create();
+    await session.model.switch('openai/gpt-5.2-codex');
+
+    await bindRun({
+      seed,
+      projectId: project.id,
+      sessionId: 'unloaded',
+      threadId: thread.id,
+      resourceId: 'resource-1',
+      externalId: 'github-issue:3',
+    });
+    expect(await controller.deleteSession({ sessionId: 'unloaded' })).toBe(true);
+
+    const app = mount({
+      auth: fakeRouteAuth(),
+      projects: seed.projects,
+      sourceControl: seed.sourceControl,
+      workItems: seed.workItems,
+      controller,
+    });
+
+    const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
+    expect(response.status).toBe(202);
+
+    await vi.waitFor(async () => {
+      const stored = await controller.queryThreadById({ threadId: thread.id });
+      expect(stored?.metadata?.currentModelId).toBe('anthropic/claude-opus-4-6');
+    });
+    const reloaded = await controller.createSession({
+      id: 'unloaded',
+      resourceId: 'resource-1',
+      ownerId: 'user-1',
+      threadId: thread.id,
+    });
+    expect(reloaded.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
   it('updates the bound thread without changing a sibling thread', async () => {
@@ -147,14 +192,17 @@ describe('scenario: apply-default-model reaches a live run', () => {
     });
 
     const response = await app.request(`/web/factory/projects/${project.id}/apply-default-model`, { method: 'POST' });
-    expect(await response.json()).toMatchObject({ applied: [boundThread.id], skipped: [] });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ modelId: 'anthropic/claude-opus-4-6', status: 'started' });
 
     expect(session.thread.getId()).toBe(siblingThread.id);
     await session.model.syncFromPersisted();
     expect(session.model.get()).toBe('openai/gpt-5.5');
 
     await session.thread.switch({ threadId: boundThread.id });
-    await session.model.syncFromPersisted();
-    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    await vi.waitFor(async () => {
+      await session.model.syncFromPersisted();
+      expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+    });
   });
 });

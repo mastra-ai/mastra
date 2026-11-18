@@ -94,6 +94,81 @@ describe.each(engines)('foreach partial progress ($name engine)', ({ name, creat
     expect(state?.steps.slow?.endedAt).toBeTypeOf('number');
   });
 
+  // #27939: queued side effects must wait for the suspended item to finish.
+  it.each([
+    { indexed: false, suspendItem: 2 },
+    { indexed: true, suspendItem: 2 },
+    { indexed: false, suspendItem: 4 },
+    { indexed: true, suspendItem: 4 },
+  ])(
+    'resumes a sequential foreach before starting later items (indexed: $indexed, item: $suspendItem)',
+    async ({ indexed, suspendItem }) => {
+      const order: string[] = [];
+      const body = createStep({
+        id: 'body',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          order.push(`${resumeData ? 'resume' : 'start'}:${inputData}`);
+          if (inputData === suspendItem && !resumeData) return await suspend({ approval: true });
+          order.push(`finish:${inputData}`);
+          return inputData * 10;
+        },
+      });
+      const workflow = createWorkflow({
+        id: `foreach-sequential-suspend-${name}-${indexed}-${suspendItem}`,
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+      })
+        .foreach(body, { concurrency: 1 })
+        .commit();
+      mastra = new Mastra({
+        workflows: { [workflow.id]: workflow },
+        storage: new MockStore(),
+        pubsub: name === 'evented' ? new EventEmitterPubSub() : undefined,
+        logger: false,
+      });
+      if (name === 'evented') await mastra.startWorkers();
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: [1, 2, 3, 4] });
+      expect(result.status).toBe('suspended');
+      expect(order).toEqual(
+        suspendItem === 2
+          ? ['start:1', 'finish:1', 'start:2']
+          : ['start:1', 'finish:1', 'start:2', 'finish:2', 'start:3', 'finish:3', 'start:4'],
+      );
+      const suspended = await workflow.getWorkflowRunById(run.runId);
+      expect(suspended?.steps.body?.status).toBe('suspended');
+      expect(suspended?.steps.body?.suspendedAt).toBeTypeOf('number');
+      expect(suspended?.steps.body?.endedAt).toBeUndefined();
+
+      const resumed = await run.resume({
+        step: 'body',
+        resumeData: { ok: true },
+        ...(indexed ? { forEachIndex: suspendItem - 1 } : {}),
+      });
+      expect(resumed.status).toBe('success');
+      if (resumed.status === 'success') expect(resumed.result).toEqual([10, 20, 30, 40]);
+      expect(order).toEqual(
+        suspendItem === 2
+          ? ['start:1', 'finish:1', 'start:2', 'resume:2', 'finish:2', 'start:3', 'finish:3', 'start:4', 'finish:4']
+          : ['start:1', 'finish:1', 'start:2', 'finish:2', 'start:3', 'finish:3', 'start:4', 'resume:4', 'finish:4'],
+      );
+      const final = await workflow.getWorkflowRunById(run.runId);
+      expect(final?.steps.body?.status).toBe('success');
+      expect(final?.steps.body?.output).toEqual([10, 20, 30, 40]);
+      expect(final?.steps.body?.suspendedAt).toBeUndefined();
+      expect(final?.steps.body?.endedAt).toBeTypeOf('number');
+      const store = (await mastra.getStorage()!.getStore('workflows'))!;
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      const context = z
+        .object({ body: z.object({ status: z.literal('success'), suspendedAt: z.number().optional() }) })
+        .parse(snapshot?.context);
+      expect(context.body.suspendedAt).toBeUndefined();
+    },
+  );
+
   it('does not end a suspended foreach while a sibling finishes', async () => {
     const item = z.object({ n: z.number() });
     let releaseSibling!: () => void;
@@ -162,6 +237,7 @@ describe.each(engines)('foreach partial progress ($name engine)', ({ name, creat
     expect(resumed.status).toBe('success');
     const final = await workflow.getWorkflowRunById(run.runId);
     expect(final?.steps.slow?.status).toBe('success');
+    expect(final?.steps.slow?.suspendedAt).toBeUndefined();
     expect(final?.steps.slow?.output).toEqual([{ n: 1 }, { n: 2 }]);
     expect(final?.steps.slow?.endedAt).toBeTypeOf('number');
   });

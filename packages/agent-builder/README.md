@@ -25,6 +25,21 @@ const result = await builder.generate('Create a weather agent with a typed forec
 console.log(result.text);
 ```
 
+### Workflows
+
+`agentBuilderWorkflows`, `agentBuilderTemplateWorkflow`, `workflowBuilderWorkflow` and `planningAndApprovalWorkflow` are shared objects, created once when the package loads. A workflow uses the storage, logger and agents of the last Mastra instance that registered it, and keeps its unfinished runs in memory. Share them only in a process with a single Mastra instance.
+
+When one process runs several Mastra instances, such as one per tenant or per test, give each instance its own set with `createAgentBuilderWorkflows()`:
+
+```typescript
+import { createAgentBuilderWorkflows } from '@mastra/agent-builder';
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({ workflows: createAgentBuilderWorkflows() });
+```
+
+`createAgentBuilderTemplateWorkflow()`, `createWorkflowBuilderWorkflow()` and `createPlanningAndApprovalWorkflow()` build a single new workflow. The agent-builder routes in `@mastra/server` already create one set per instance.
+
 ## Documentation
 
 `AgentBuilder` extends Mastra's `Agent` with defaults intended for code generation. It can inspect an existing project, summarize available tools, write generated files to disk, and keep long builder sessions within the model's token limits.

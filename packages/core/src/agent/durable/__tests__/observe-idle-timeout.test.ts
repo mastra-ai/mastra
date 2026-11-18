@@ -1,7 +1,9 @@
+import type { ReadableStream } from 'node:stream/web';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../execution-fence';
 import {
   createDurableAgentStream,
   emitChunkEvent,
@@ -89,6 +91,43 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
     }) as DurableAgentStreamResult<any>;
+
+  it.each(['finish', 'abort', 'error'] as const)(
+    'still times out after rejecting a superseded %s terminal',
+    async type => {
+      const runId = `superseded-${type}-idle`;
+      const stream = makeStream(runId, {
+        idleTimeoutMs: IDLE,
+        onTerminalEvent: async () => {
+          throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+            runId,
+            agentId: 'idle-agent',
+            executionId: 'superseded-execution',
+          });
+        },
+      });
+      const reader = readFullStream(stream.output.fullStream);
+      await stream.ready;
+      try {
+        const data =
+          type === 'error'
+            ? { error: { message: 'Superseded execution failed', name: 'Error' } }
+            : type === 'abort'
+              ? { steps: [] }
+              : finishData;
+        await pubsub.publish(`agent.stream.${runId}`, { type, runId, data });
+        await stream.waitForEventDelivery();
+        expect(await settleWithin(reader.done, IDLE * 10)).toBe('done');
+        expect(reader.getThrown()).toBeUndefined();
+        const errors = reader.chunks.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0].payload.error.message).toContain(`idle for ${IDLE}ms`);
+        expect(reader.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+      } finally {
+        stream.detach();
+      }
+    },
+  );
 
   it('terminates on silence when isAlive returns false', async () => {
     // Locks in: a producerless topic (no terminal event) does NOT hang — after
@@ -388,6 +427,43 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
     expect(reader.isClosed()).toBe(true);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
+
+  it('does not time out while an observer at an offset is still reading the history before it', async () => {
+    // Locks in: step-finish events carry only the response messages that changed, so a reader at
+    // an offset first reads the skipped history. Events wait for that read; their wait is not the
+    // run going quiet, and the idle countdown starts only once the read is done.
+    const runId = 'idle-offset-replay';
+    await emitChunkEvent(pubsub, runId, textChunk('before'));
+    let releaseHistory!: () => void;
+    const historyHeld = new Promise<void>(resolve => (releaseHistory = resolve));
+    const getHistory = pubsub.getHistory.bind(pubsub);
+    vi.spyOn(pubsub, 'getHistory').mockImplementation(async (...args) => {
+      await historyHeld;
+      return getHistory(...args);
+    });
+
+    const { output, cleanup, ready } = makeStream(runId, {
+      offset: 1,
+      replayResponseMessagesBeforeOffset: true,
+      idleTimeoutMs: IDLE,
+      isAlive: () => false,
+    });
+    await ready;
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitChunkEvent(pubsub, runId, textChunk('after'));
+
+    // Several idle windows pass while the history read is held.
+    await delay(IDLE * 3);
+    expect(reader.isClosed()).toBe(false);
+
+    releaseHistory();
+    await emitFinishEvent(pubsub, runId, finishData);
+    expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
+    expect(reader.chunks.filter(c => c.type === 'text-delta').map((c: any) => c.payload.text)).toEqual(['after']);
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     cleanup();

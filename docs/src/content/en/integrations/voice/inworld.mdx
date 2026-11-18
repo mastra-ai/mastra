@@ -356,7 +356,7 @@ await voice.send(microphoneStream)
 voice.close()
 ```
 
-> Inworld API keys are pre-Basic-encoded. Paste them verbatim into `INWORLD_API_KEY`. The package doesn't re-encode them.
+> Inworld API keys are pre-Basic-encoded: paste them verbatim into `INWORLD_API_KEY`, and the package doesn't re-encode them.
 
 ### Constructor parameters
 
@@ -775,7 +775,7 @@ Returns: `void`
 
 #### `getSpeakers()`
 
-Returns the curated voice list bundled with the package. Inworld's catalog is larger than this list; any voice ID can be passed to `speaker` at runtime.
+Returns the curated voice list bundled with the package. Inworld's catalog is larger than this list. Any voice ID can be passed to `speaker` at runtime.
 
 Returns: `Promise<Array<{ voiceId: string }>>`
 

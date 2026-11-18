@@ -230,7 +230,7 @@ describe('experiments comparison table', () => {
       // Waits for the loaded item, whose header replaces the loading one.
       await within(panel).findByRole('region', { name: 'Input' });
 
-      fireEvent.click(within(panel).getByRole('button', { name: 'Close Panel' }));
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close panel' }));
 
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dataset item item-a' })).toBeNull());
     });
@@ -385,6 +385,27 @@ describe('experiments comparison table', () => {
         expect(within(sideOf('item-a', 'Baseline')).getByText('Metadata')).toBeTruthy();
       });
       expect(within(sideOf('item-a', 'Contender 1')).queryByText('Metadata')).toBeNull();
+    });
+
+    it('shows the metadata as JSON in a collapsible card, like the output', async () => {
+      makePayloadsOverflow();
+      renderComparison();
+
+      const metadata = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('region', { name: 'Metadata' }),
+      );
+      expect(within(metadata).getByText(/"model-a"/)).toBeTruthy();
+      expect(within(metadata).getByRole('button', { name: 'Expand' })).toBeTruthy();
+    });
+
+    it('lets the metadata be copied', async () => {
+      renderComparison();
+
+      await waitFor(() => {
+        expect(within(sideOf('item-a', 'Baseline')).getAllByRole('button', { name: 'Copy to clipboard' })).toHaveLength(
+          2,
+        );
+      });
     });
   });
 

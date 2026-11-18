@@ -6,11 +6,6 @@ const generator = coreStorage.buildStoredPreview as
   | undefined;
 export const canGeneratePreviews = typeof generator === 'function';
 
-/** SQL detection only; preview formatting stays in TypeScript. Empty strings are intentional. */
-export function missingPreviewSql(column: string): string {
-  return canGeneratePreviews ? `${column} IS NULL` : 'FALSE';
-}
-
 export function needsPreview(value: unknown): boolean {
   return canGeneratePreviews && value == null;
 }

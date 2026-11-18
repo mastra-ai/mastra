@@ -3,6 +3,8 @@ import { Memory } from '@mastra/memory';
 
 import { webSearchTool } from '../tools/web-search';
 
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5-mini';
+
 export const docsExpert = new Agent({
   id: 'docs-expert',
   name: 'Docs Expert',
@@ -42,7 +44,7 @@ A numbered list of every source you cited:
 - If you cannot find a reliable source after searching, say "I couldn't find an authoritative source for this" — do not guess.
 - When answering about a specific version, confirm the version in the search results before citing.
 - Keep answers concise. A good answer is 100–300 words in the Detail section, not 1000.`,
-  model: 'mastra/openai/gpt-5-mini',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
   },

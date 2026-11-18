@@ -12,6 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -41,21 +42,15 @@ const existingSession: FactoryUserSession = {
 function stubFactoryWithRepository(sessions: FactoryUserSession[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -90,6 +85,74 @@ function renderSection(initialEntry = '/factories/fp-1') {
 }
 
 describe('Session row open', () => {
+  it.each(['context', 'dropdown'] as const)(
+    'opens the Slack thread and its pull request from the %s menu',
+    async menu => {
+      const session = { ...existingSession, branch: 'slack/1791936483-798759', title: 'Slack discussion' };
+      stubFactoryWithRepository([session]);
+      const slackItem = {
+        id: 'slack-item',
+        orgId: session.orgId,
+        createdBy: session.userId,
+        factoryProjectId: 'fp-1',
+        externalSource: {
+          integrationId: 'slack',
+          type: 'slack-thread',
+          workspaceId: 'T123',
+          externalId: 'slack:C123:1791936483.798759',
+        },
+        parentWorkItemId: null,
+        title: session.title,
+        stages: ['intake'],
+        stageHistory: [],
+        sessions: {
+          work: {
+            sessionId: session.sessionId,
+            branch: session.branch,
+            threadId: session.sessionId,
+            startedBy: session.userId,
+          },
+        },
+        metadata: {},
+        revision: 1,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      };
+      const pullRequest = {
+        ...slackItem,
+        id: 'pull-request',
+        parentWorkItemId: slackItem.id,
+        sessions: {},
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: '43',
+          url: 'https://github.com/acme/app/pull/43',
+        },
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+          HttpResponse.json({ workItems: [slackItem, pullRequest] }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderSection();
+
+      const row = await screen.findByRole('link', { name: session.title });
+      if (menu === 'context') await user.pointer({ target: row, keys: '[MouseRight]' });
+      else await user.click(screen.getByRole('button', { name: `Session actions for ${session.title}` }));
+
+      for (const [name, href] of [
+        ['Open in Slack', 'https://app.slack.com/client/T123/C123/thread/C123-1791936483.798759'],
+        ['Open pull request', 'https://github.com/acme/app/pull/43'],
+      ]) {
+        const link = await screen.findByRole('menuitem', { name });
+        expect(link).toHaveAttribute('href', href);
+        expect(link).toHaveAttribute('target', '_blank');
+      }
+    },
+  );
+
   it.each([
     ['user/my-feature', '/factories/fp-1/user/threads/sess-1'],
     ['slack/1791936483-798759', '/factories/fp-1/user/threads/sess-1'],
@@ -138,6 +201,7 @@ describe('Session row open', () => {
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       'Open in new tab',
       'Pin session',
+      'Rename',
       'Regenerate title',
       'Make private',
       'Delete',

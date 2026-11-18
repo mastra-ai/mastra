@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Activity,
@@ -16,8 +15,10 @@ import {
   ActivitySummary,
   ActivityTrailing,
   ActivityTrigger,
+  ActivityWorkingDirectory,
 } from './activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
 const Example = ({
@@ -85,7 +86,6 @@ describe('Activity', () => {
     expect(screen.getByTestId('icon').textContent).toBe('$');
     expect(screen.getByText('Ran command').className).toContain('truncate');
     expect(screen.getByText('pnpm test').classList).toContain('truncate');
-    expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
 
@@ -189,7 +189,7 @@ describe('ActivityHeadline', () => {
   const Presented = ({ status = 'idle', detail }: { status?: 'idle' | 'running' | 'error'; detail?: string }) => (
     <Activity status={status}>
       <ActivityTrigger>
-        <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" detail={detail} />
+        <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Searched files" detail={detail} />
       </ActivityTrigger>
       <ActivityContent>body</ActivityContent>
     </Activity>
@@ -208,7 +208,7 @@ describe('ActivityHeadline', () => {
       <Activity>
         <ActivityTrigger>
           <ActivityHeadline
-            icon={<Search aria-hidden />}
+            icon={<IconMagnifyingGlass aria-hidden />}
             label="Run"
             detail="rg -n processor"
             description="Finding the processor wiring"
@@ -232,7 +232,11 @@ describe('ActivityHeadline', () => {
     render(
       <Activity>
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+          <ActivityHeadline
+            icon={<IconMagnifyingGlass aria-hidden />}
+            label="Searched files"
+            leading={<time>3:42:05 PM</time>}
+          />
         </ActivityTrigger>
       </Activity>,
     );
@@ -246,7 +250,11 @@ describe('ActivityHeadline', () => {
     render(
       <Activity>
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Searched files" leading={<time>3:42:05 PM</time>} />
+          <ActivityHeadline
+            icon={<IconMagnifyingGlass aria-hidden />}
+            label="Searched files"
+            leading={<time>3:42:05 PM</time>}
+          />
         </ActivityTrigger>
         <ActivityContent>3 matches</ActivityContent>
       </Activity>,
@@ -289,7 +297,12 @@ describe('ActivityDetail arrival', () => {
 describe('ActivityItem', () => {
   it('folds a body behind a disclosure', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Searched files"
+        detail="src/**/*.ts"
+        aria-label="Tool: search"
+      >
         3 matches
       </ActivityItem>,
     );
@@ -303,7 +316,12 @@ describe('ActivityItem', () => {
 
   it('stays a plain line with nothing to fold', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Thinking" detail="a long detail" aria-label="Thinking" />,
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Thinking"
+        detail="a long detail"
+        aria-label="Thinking"
+      />,
     );
 
     expect(screen.queryByRole('button')).toBeNull();
@@ -311,7 +329,7 @@ describe('ActivityItem', () => {
 
   it('shows a body inline when folding is turned off', () => {
     render(
-      <ActivityItem icon={<Search aria-hidden />} label="Skill" collapsible={false} aria-label="Skill">
+      <ActivityItem icon={<IconMagnifyingGlass aria-hidden />} label="Skill" collapsible={false} aria-label="Skill">
         Instructions
       </ActivityItem>,
     );
@@ -324,7 +342,12 @@ describe('ActivityItem', () => {
 describe('a body landing on a line', () => {
   const Line = ({ body }: { body?: string }) => (
     <ArrivalScope>
-      <ActivityItem icon={<Search aria-hidden />} label="Searched files" detail="src/**/*.ts" aria-label="Tool: search">
+      <ActivityItem
+        icon={<IconMagnifyingGlass aria-hidden />}
+        label="Searched files"
+        detail="src/**/*.ts"
+        aria-label="Tool: search"
+      >
         {body}
       </ActivityItem>
     </ArrivalScope>
@@ -347,7 +370,7 @@ describe('an Activity with nothing to fold', () => {
     render(
       <Activity foldable={false} defaultOpen aria-label="Tool: view">
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+          <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Read" />
         </ActivityTrigger>
         <ActivityContent>
           <span>rail</span>
@@ -363,7 +386,7 @@ describe('an Activity with nothing to fold', () => {
     const Tool = ({ foldable }: { foldable: boolean }) => (
       <Activity foldable={foldable} defaultOpen aria-label="Tool: view">
         <ActivityTrigger>
-          <ActivityHeadline icon={<Search aria-hidden />} label="Read" />
+          <ActivityHeadline icon={<IconMagnifyingGlass aria-hidden />} label="Read" />
         </ActivityTrigger>
         <ActivityContent>
           <span>arguments</span>
@@ -376,5 +399,57 @@ describe('an Activity with nothing to fold', () => {
 
     expect(screen.getByRole('button', { name: /Read/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('arguments')).toBeTruthy();
+  });
+});
+
+describe('ActivityDetail inside a working directory', () => {
+  function renderDetail(detail: string, directory = '/sandboxes/7b45/mastra') {
+    render(
+      <ActivityWorkingDirectory path={directory}>
+        <Activity aria-label="Read">
+          <ActivityHeader>
+            <ActivityDetail>{detail}</ActivityDetail>
+          </ActivityHeader>
+        </Activity>
+      </ActivityWorkingDirectory>,
+    );
+  }
+
+  it('reads a path inside it relative to it, as the agent refers to it', () => {
+    renderDetail('/sandboxes/7b45/mastra/packages/core/package.json');
+
+    expect(screen.getByText('packages/core/package.json')).toBeTruthy();
+  });
+
+  it('names the directory itself `.` wherever a command mentions it', () => {
+    renderDetail('cd /sandboxes/7b45/mastra && git status');
+
+    expect(screen.getByText('cd . && git status')).toBeTruthy();
+  });
+
+  it('leaves a sibling directory that only shares its name prefix untouched', () => {
+    renderDetail('/sandboxes/7b45/mastra-docs/README.md');
+
+    expect(screen.getByText('/sandboxes/7b45/mastra-docs/README.md')).toBeTruthy();
+  });
+
+  it('leaves a path or URL that only contains the directory further in untouched', () => {
+    renderDetail('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b');
+
+    expect(
+      screen.getByText('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b'),
+    ).toBeTruthy();
+  });
+
+  it('reads a path after a flag or inside quotes relative to it', () => {
+    renderDetail('grep --root=/sandboxes/7b45/mastra/src "/sandboxes/7b45/mastra/docs"');
+
+    expect(screen.getByText('grep --root=src "docs"')).toBeTruthy();
+  });
+
+  it('keeps every path absolute when the agent works from the filesystem root', () => {
+    renderDetail('cat /etc/hosts', '/');
+
+    expect(screen.getByText('cat /etc/hosts')).toBeTruthy();
   });
 });

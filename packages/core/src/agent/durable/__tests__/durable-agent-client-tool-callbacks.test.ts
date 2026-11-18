@@ -57,7 +57,7 @@ function createStreamingToolInputModel(toolName: string, argChunks: string[]) {
           toolCallType: 'function',
           toolCallId: 'tc-1',
           toolName,
-          args: argChunks.join(''),
+          input: argChunks.join(''),
         });
         chunks.push({
           type: 'finish',

@@ -594,10 +594,9 @@ export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v
           if (majorVersion >= 2) {
             console.info(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
             return 'v2';
-          } else {
-            console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
-            return 'v1';
           }
+          console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
+          return 'v1';
         }
       }
     }

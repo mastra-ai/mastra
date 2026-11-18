@@ -93,10 +93,10 @@ afterEach(async () => {
   fs.rmSync(cacheDir, { recursive: true, force: true });
 });
 
-function initialize() {
+function initialize(modelCacheDir = cacheDir) {
   return SparseTextEmbedding.init({
     model: SparseEmbeddingModel.SpladePPEnV1,
-    cacheDir,
+    cacheDir: modelCacheDir,
     maxLength: 4,
     showDownloadProgress: false,
   });
@@ -143,4 +143,20 @@ it('allows concurrent cold-cache initializations without exposing partial downlo
   const modelDir = path.join(cacheDir, 'prithivida_Splade_PP_en_v1');
   for (const [file, body] of Object.entries(files)) expect(fs.readFileSync(path.join(modelDir, file))).toEqual(body);
   expect(fs.readdirSync(cacheDir)).toEqual(['prithivida_Splade_PP_en_v1']);
+});
+
+it('creates missing cache parents and reuses the downloaded model', async () => {
+  const nestedCache = path.join(cacheDir, 'parent', 'models');
+  const embedding = await initialize(nestedCache);
+  const result = await embedding.embed(['one three']).next();
+  expect(result.value![0]!.indices).toEqual([0, 1]);
+  expect(result.value![0]!.values[0]).toBeCloseTo(Math.log(4));
+  expect(result.value![0]!.values[1]).toBeCloseTo(Math.log(2));
+  const modelDir = path.join(nestedCache, 'prithivida_Splade_PP_en_v1');
+  for (const [file, body] of Object.entries(files)) expect(fs.readFileSync(path.join(modelDir, file))).toEqual(body);
+  const requestCount = requests.length;
+  expect(requestCount).toBeGreaterThan(0);
+  const cached = await initialize(nestedCache);
+  expect(await cached.embed(['one three']).next()).toEqual(result);
+  expect(requests).toHaveLength(requestCount);
 });

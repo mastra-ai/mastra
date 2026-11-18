@@ -4,13 +4,13 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
-import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -43,21 +43,15 @@ function stubSessions(
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: viewerUserId, ...viewerProfile } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -77,11 +71,6 @@ function renderSection() {
       </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
-}
-
-async function showAllOwners() {
-  await pickSessionProperty(userEvent.setup(), 'Owner', 'All owners');
-  expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 }
 
 describe('user session attribution', () => {
@@ -108,7 +97,6 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
     const mine = await screen.findByRole('link', { name: 'mine' });
@@ -144,7 +132,6 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
     const other = await screen.findByRole('link', { name: 'alpha' });

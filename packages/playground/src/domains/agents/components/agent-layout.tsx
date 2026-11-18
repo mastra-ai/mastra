@@ -101,7 +101,7 @@ export const AgentLayout = ({
             collapsedSize={0}
             expandShortcut="{"
             minSize={256}
-            maxSize={'50%'}
+            maxSize="50%"
             defaultSize={300}
             className="min-w-0"
           >
@@ -116,7 +116,7 @@ export const AgentLayout = ({
         {rightSlot && (
           <>
             <PanelSeparator />
-            <Panel id="right-slot" minSize={320} maxSize={'45%'} defaultSize={420} className="min-w-0">
+            <Panel id="right-slot" minSize={320} maxSize="45%" defaultSize={420} className="min-w-0">
               {rightSlot}
             </Panel>
           </>

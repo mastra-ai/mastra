@@ -43,3 +43,25 @@ export const versionsList: ListAgentVersionsResponse = {
   perPage: 20,
   hasMore: false,
 };
+
+export const DRAFT_VERSION_ID = 'editor-lock-version-2';
+
+const modelListDraftVersion: AgentVersionResponse = {
+  ...publishedVersion,
+  id: DRAFT_VERSION_ID,
+  versionNumber: 2,
+  changedFields: ['modelList'],
+};
+
+export const versionsWithModelListDraft: ListAgentVersionsResponse = {
+  ...versionsList,
+  versions: [modelListDraftVersion, publishedVersion],
+  total: 2,
+};
+
+export const modelOwnedStoredAgent = {
+  ...makeCodeAgent({ model: true }),
+  activeVersionId: VERSION_ID,
+  hasDraft: true,
+  status: 'draft' as const,
+};

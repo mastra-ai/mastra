@@ -1,6 +1,7 @@
 import type { AgentController, AgentControllerThread } from '@mastra/core/agent-controller';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 
 /** The Factory session row fields that say which memory resource it uses. */
 export interface FactorySessionOwnership {
@@ -16,7 +17,24 @@ export interface FactorySessionOwnership {
 /** Run bindings: the server-side record that a session runs work for its Factory. */
 export type SessionRunBindings = Pick<WorkItemsStorage, 'hasRunBindingForSession'>;
 
-type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
+/** Run bindings by thread: historical membership, for model and billing policy only. */
+export type ThreadRunBindings = Pick<WorkItemsStorage, 'findRunBindingByThread'>;
+
+export async function threadRunBinding(
+  runs: ThreadRunBindings | undefined,
+  thread: { orgId: string; resourceId: string; sessionId: string; threadId: string | null | undefined },
+) {
+  if (!runs || !thread.threadId) return null;
+  return runs.findRunBindingByThread({
+    orgId: thread.orgId,
+    resourceId: thread.resourceId,
+    sessionId: thread.sessionId,
+    threadId: thread.threadId,
+    rejectAmbiguous: true,
+  });
+}
+
+export type SessionThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
  * The one memory resource a Factory session runs under. A Slack session uses
@@ -28,7 +46,7 @@ type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
  * session's id, so the thread alone never makes a session the Factory's.
  */
 export async function sessionMemoryResourceId(
-  controller: ThreadLookup | undefined,
+  controller: SessionThreadLookup | undefined,
   session: FactorySessionOwnership,
   runs: SessionRunBindings | undefined,
 ): Promise<string> {
@@ -63,7 +81,7 @@ export function memoryResourceOf(
   runBound: boolean,
 ) {
   const factoryProjectId = session.factoryProjectId ?? undefined;
-  const slack = session.branch?.startsWith('slack/') ?? false;
+  const slack = session.branch?.startsWith(SLACK_SESSION_BRANCH_PREFIX) ?? false;
   // A private Slack DM or side session stays with its owner.
   const shared =
     slack || session.originSessionId

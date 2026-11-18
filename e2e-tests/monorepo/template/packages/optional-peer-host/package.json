@@ -1,0 +1,13 @@
+{
+  "name": "@inner/optional-peer-host",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependenciesMeta": {
+    "@inner/missing-optional-peer": {
+      "optional": true
+    }
+  }
+}

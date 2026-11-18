@@ -256,7 +256,7 @@ describe('MCPServer', () => {
             uri === 'weather://binary'
               ? { blob: Buffer.from('bytes').toString('base64') }
               : [{ text: 'sunny' }, { text: 'warm' }],
-          resourceTemplates: async () => [{ uriTemplate: 'weather://{city}', name: 'By city' }],
+          resourceTemplates: async () => [{ uriTemplate: 'weather://{city}', name: 'By city', mimeType: 'text/plain' }],
         },
         prompts: {
           listPrompts: async () => [
@@ -296,9 +296,15 @@ describe('MCPServer', () => {
             text: '<h1>hi</h1>',
           },
         ]);
-        await expect(client.readResource({ uri: 'weather://missing' })).rejects.toThrow('Resource not found');
+        // A URI expanded from an advertised template is readable with the template's mimeType (#29455).
+        const berlin = await client.readResource({ uri: 'weather://berlin' });
+        expect(berlin.contents).toEqual([
+          { uri: 'weather://berlin', mimeType: 'text/plain', text: 'sunny' },
+          { uri: 'weather://berlin', mimeType: 'text/plain', text: 'warm' },
+        ]);
+        await expect(client.readResource({ uri: 'weather://berlin/today' })).rejects.toThrow('Resource not found');
         expect((await client.listResourceTemplates()).resourceTemplates).toEqual([
-          { uriTemplate: 'weather://{city}', name: 'By city' },
+          { uriTemplate: 'weather://{city}', name: 'By city', mimeType: 'text/plain' },
         ]);
       } finally {
         await client.close();

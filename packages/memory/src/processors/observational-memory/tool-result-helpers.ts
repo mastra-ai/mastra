@@ -59,6 +59,15 @@ export function serializeToolResultForTokenCounting(value: unknown): string {
   return stringifyToolResult(value);
 }
 
+/**
+ * Returns a tool invocation's `errorText` as a string. The field is typed as a string, but
+ * persisted or imported history can hold a structured error object, so anything that is not
+ * a string is serialized. Nullish values become an empty string.
+ */
+export function toolErrorTextToString(errorText: unknown): string {
+  return errorText == null ? '' : stringifyToolResult(errorText);
+}
+
 function stringifyToolResult(value: unknown): string {
   if (typeof value === 'string') {
     return value;

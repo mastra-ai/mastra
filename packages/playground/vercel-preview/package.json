@@ -22,7 +22,7 @@
   "devDependencies": {
     "@types/node": "22.20.5",
     "mastra": "link:../../../packages/cli",
-    "turbo": "^2.9.12",
+    "turbo": "^2.11.9",
     "typescript": "^6.0.3"
   },
   "license": "Apache-2.0",

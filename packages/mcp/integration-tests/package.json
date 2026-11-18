@@ -11,7 +11,7 @@
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
     "dotenv": "^17.2.3",
-    "vite": "^8.0.0",
+    "vite": "^8.3.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {

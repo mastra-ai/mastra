@@ -44,7 +44,7 @@ describe('SidebarTrigger tooltip', () => {
     fireEvent.focus(screen.getByRole('button', { name: 'Toggle sidebar' }));
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.textContent).toContain('Toggle Sidebar');
+    expect(tooltip.textContent).toContain('Toggle sidebar');
     expect(tooltip.querySelector('kbd')?.textContent).toBe('[');
   });
 });

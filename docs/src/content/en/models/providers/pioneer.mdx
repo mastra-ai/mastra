@@ -7,7 +7,7 @@ description: "Browse Pioneer model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/pioneer.svg" alt="Pioneer logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Pioneer
 
-Access 117 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
+Access 25 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
 
 Learn more in the [Pioneer documentation](https://agent.pioneer.ai/llms.txt).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "pioneer/HuggingFaceTB/SmolLM3-3B-Base"
+  model: "pioneer/claude-fable-5"
 });
 
 // Generate a response
@@ -88,8 +88,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 8192,
+    "contextWindow": 2048,
+    "maxOutput": 2048,
     "inputCost": 0.03,
     "outputCost": null
   },
@@ -199,12 +199,14 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.fastino.ai/v1",
-    id: "pioneer/HuggingFaceTB/SmolLM3-3B-Base",
+    id: "pioneer/claude-fable-5",
     apiKey: process.env.PIONEER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -216,14 +218,16 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "pioneer/zai-org/GLM-5.2-Fast"
-      : "pioneer/HuggingFaceTB/SmolLM3-3B-Base";
+      ? "pioneer/zai-org/GLM-5.2"
+      : "pioneer/claude-fable-5";
   }
 });
 ```

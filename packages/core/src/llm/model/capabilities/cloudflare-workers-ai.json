@@ -8,6 +8,7 @@
     "@cf/moonshotai/kimi-k2.6",
     "@cf/moonshotai/kimi-k2.7-code",
     "@cf/qwen/qwen3.8-27b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-5.3-flash"
   ],
   "temperature": [
@@ -35,6 +36,7 @@
     "@cf/qwen/qwen3-30b-a3b-fp8",
     "@cf/qwen/qwen3.8-27b",
     "@cf/qwen/qwq-32b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
     "@cf/zai-org/glm-5.3",
@@ -51,24 +53,20 @@
     "@cf/openai/gpt-oss-120b",
     "@cf/openai/gpt-oss-20b",
     "@cf/qwen/qwen3.8-27b",
+    "@cf/thinkingmachines/inkling-2-small",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
     "@cf/zai-org/glm-5.3",
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/google/gemma-4-26b-a4b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "@cf/zai-org/glm-5.2": [
+    "@cf/moonshotai/kimi-k2.6": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "@cf/zai-org/glm-5.3": [
+    "@cf/zai-org/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -79,10 +77,30 @@
         "type": "toggle"
       }
     ],
-    "@cf/zai-org/glm-5.3-flash": [
+    "@cf/zai-org/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "@cf/google/gemma-4-26b-a4b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "@cf/qwen/qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "@cf/deepseek-ai/deepseek-v4-pro-0813": [
@@ -101,12 +119,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "@cf/openai/gpt-oss-120b": [
@@ -130,13 +142,10 @@
         "values": ["low", "high"]
       }
     ],
-    "@cf/qwen/qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
+    "@cf/thinkingmachines/inkling-2-small": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ]
   }

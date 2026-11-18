@@ -21,7 +21,7 @@ export const resolveToChildMessages = (messages: AISdkUIMessage[]): ChildMessage
   const childMessages: ChildMessage[] = [];
 
   for (const part of assistantParts) {
-    const toolPart = part as any;
+    const toolPart: any = part;
     if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
       const toolName = part.type.substring('tool-'.length);
       const isWorkflow = toolName.startsWith('workflow-');

@@ -324,59 +324,14 @@ export class ConvexVector extends MastraVector<VectorFilter> {
         continue;
       }
 
-      // Handle $in operator
-      if (typeof value === 'object' && value !== null && '$in' in value) {
-        if (!Array.isArray(value.$in) || !value.$in.includes(recordMetadata[key])) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $nin operator
-      if (typeof value === 'object' && value !== null && '$nin' in value) {
-        if (Array.isArray(value.$nin) && value.$nin.includes(recordMetadata[key])) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $gt operator
-      if (typeof value === 'object' && value !== null && '$gt' in value) {
-        if (!(recordMetadata[key] > value.$gt)) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $gte operator
-      if (typeof value === 'object' && value !== null && '$gte' in value) {
-        if (!(recordMetadata[key] >= value.$gte)) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $lt operator
-      if (typeof value === 'object' && value !== null && '$lt' in value) {
-        if (!(recordMetadata[key] < value.$lt)) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $lte operator
-      if (typeof value === 'object' && value !== null && '$lte' in value) {
-        if (!(recordMetadata[key] <= value.$lte)) {
-          return false;
-        }
-        continue;
-      }
-
-      // Handle $ne operator
-      if (typeof value === 'object' && value !== null && '$ne' in value) {
-        if (recordMetadata[key] === value.$ne) {
-          return false;
-        }
+      // Field conditions with operators must satisfy every operator listed, e.g. { $gte: 1, $lte: 10 }
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.keys(value).some(k => k.startsWith('$'))
+      ) {
+        if (!this.matchesFieldOperators(recordMetadata[key], value)) return false;
         continue;
       }
 
@@ -387,6 +342,32 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     }
 
     return true;
+  }
+
+  private matchesFieldOperators(fieldValue: unknown, operators: Record<string, any>): boolean {
+    return Object.entries(operators).every(([operator, operand]) => {
+      switch (operator) {
+        case '$eq':
+          return fieldValue === operand;
+        case '$ne':
+          return fieldValue !== operand;
+        case '$in':
+          return Array.isArray(operand) && operand.includes(fieldValue);
+        case '$nin':
+          return !(Array.isArray(operand) && operand.includes(fieldValue));
+        case '$gt':
+          return (fieldValue as any) > operand;
+        case '$gte':
+          return (fieldValue as any) >= operand;
+        case '$lt':
+          return (fieldValue as any) < operand;
+        case '$lte':
+          return (fieldValue as any) <= operand;
+        default:
+          // Unsupported operators match nothing rather than being skipped
+          return false;
+      }
+    });
   }
 
   private async callStorage<T = any>(request: StorageRequest): Promise<T> {

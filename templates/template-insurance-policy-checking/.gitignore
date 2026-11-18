@@ -1,0 +1,15 @@
+node_modules/
+.mastra/
+dist/
+coverage/
+.runtime/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+*.db
+*.db-shm
+*.db-wal
+package-lock.json
+pnpm-lock.yaml
+.DS_Store

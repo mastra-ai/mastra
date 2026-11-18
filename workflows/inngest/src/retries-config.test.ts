@@ -58,15 +58,18 @@ describe('Inngest function-level retries', () => {
   });
 
   it('forwards retries to the durable agentic loop function', () => {
+    // The resume claim release keeps Inngest's default retries, since a failed release holds the claim.
+    const workflowFunctions = (loop: InngestWorkflow) =>
+      loop.getFunctions().filter(fn => !(fn as { id: () => string }).id().endsWith('.resume-claim-release'));
     const loop = createInngestDurableAgenticWorkflow({ inngest, retries: 2 }) as InngestWorkflow;
     expect(optsOf(loop.getFunction()).retries).toBe(2);
-    const functions = loop.getFunctions();
+    const functions = workflowFunctions(loop);
     expect(functions.length).toBeGreaterThan(1);
     for (const fn of functions) {
       expect(optsOf(fn).retries).toBe(2);
     }
     const defaultLoop = createInngestDurableAgenticWorkflow({ inngest }) as InngestWorkflow;
-    for (const fn of defaultLoop.getFunctions()) {
+    for (const fn of workflowFunctions(defaultLoop)) {
       expect(optsOf(fn).retries).toBe(0);
     }
   });

@@ -2,12 +2,10 @@
 export * from './components/agent-chat';
 export * from './context';
 export * from './components/agent-metadata';
-export * from './components/agent-entity-header';
 export * from './components/chat-threads';
 export * from './components/agent-combobox';
 export * from './components/composer-model-switcher';
 export * from './utils/extractPrompt';
-export * from './components/agent-entity-header';
 export * from './components/memory-sidebar/agent-memory';
 export * from './components/agent-layout';
 

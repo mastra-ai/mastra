@@ -12,7 +12,7 @@ const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> 
 
 export interface NoTracesInfoProps {
   /** What the empty list holds. Defaults to `traces`. */
-  resource?: 'traces' | 'spans';
+  resource?: 'traces' | 'spans' | 'threads';
   datePreset?: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
@@ -22,7 +22,7 @@ function describeRange({ resource = 'traces', datePreset, dateFrom, dateTo }: No
   title: string;
   description: string;
 } {
-  const rangeTip = `Pick a wider time range — older ${resource} may fall outside the current window.`;
+  const rangeTip = `Pick a wider time range. Older ${resource} may fall outside the current window.`;
   if (datePreset && datePreset !== 'all' && datePreset !== 'custom') {
     return {
       title: `No ${resource} for ${PRESET_LABELS[datePreset]}`,
@@ -43,7 +43,7 @@ function describeRange({ resource = 'traces', datePreset, dateFrom, dateTo }: No
   }
   return {
     title: `No ${resource} yet`,
-    description: `${resource === 'spans' ? 'Spans' : 'Traces'} will appear here once agents, workflows, or tools are executed.`,
+    description: `${resource.charAt(0).toUpperCase()}${resource.slice(1)} will appear here once agents, workflows, or tools are executed.`,
   };
 }
 

@@ -4,4 +4,4 @@ export * from './utils';
 export * from './trace-filters';
 export * from './trace-query-filters';
 export type { UISpan, UISpanStyle, TraceDatePreset, EntityOptions, SpanTab } from './types';
-export { CONTEXT_FIELD_IDS } from './types';
+export { CONTEXT_FIELD_IDS, SPAN_TABS, isSpanTab } from './types';

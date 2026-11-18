@@ -35,7 +35,7 @@ test.describe('Dataset items list', () => {
   });
 
   test.describe('when an item checkbox is checked', () => {
-    test('shows the contextual selection menu with a Delete Items entry', async ({ page }) => {
+    test('shows the contextual selection menu with a Delete items entry', async ({ page }) => {
       const { id: datasetId } = await seedDatasetWithItems(3);
 
       await page.goto(`/datasets/${datasetId}`);
@@ -47,7 +47,7 @@ test.describe('Dataset items list', () => {
       await checkbox1.click();
 
       await page.getByRole('button', { name: /1 selected/i }).click();
-      await expect(page.getByRole('menuitem', { name: /Delete Items/i })).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: /Delete items/i })).toBeVisible();
     });
   });
 
@@ -64,7 +64,7 @@ test.describe('Dataset items list', () => {
       await page.getByRole('checkbox', { name: /Select all items/i }).click();
 
       await page.getByRole('button', { name: /3 selected/i }).click();
-      await page.getByRole('menuitem', { name: /Delete Items/i }).click();
+      await page.getByRole('menuitem', { name: /Delete items/i }).click();
 
       const confirmButton = page.getByRole('button', { name: /^Delete$/i });
       await confirmButton.click();

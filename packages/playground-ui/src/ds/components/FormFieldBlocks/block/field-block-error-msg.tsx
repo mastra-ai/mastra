@@ -1,5 +1,5 @@
-import { CircleAlertIcon } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +26,7 @@ export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErro
       className={cn('flex gap-1 text-destructive-foreground', className)}
     >
       <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
-        <CircleAlertIcon />
+        <IconExclamationCircle />
       </Icon>
       <span>{children}</span>
     </Txt>

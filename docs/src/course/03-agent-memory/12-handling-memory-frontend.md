@@ -18,8 +18,10 @@ function ChatApp() {
 
     // Only send the newest message to the agent
     const response = await memoryAgent.stream(input, {
-      resourceId: 'user_123',
-      threadId: 'conversation_456',
+      memory: {
+        thread: 'conversation_456',
+        resource: 'user_123',
+      },
     })
 
     // Add agent response to UI
@@ -54,7 +56,7 @@ This example demonstrates a common pattern for handling memory in a frontend app
 
 1. Store the conversation messages in the UI state for display purposes
 2. When sending a message to the agent, only send the newest message
-3. Include the `resourceId` and `threadId` with each agent call
+3. Pass the `resource` and `thread` IDs through the `memory` option with each agent call
 4. Let Mastra handle retrieving and injecting the conversation history
 
 This approach ensures that your agent has access to the conversation history without duplicating messages in the context window.

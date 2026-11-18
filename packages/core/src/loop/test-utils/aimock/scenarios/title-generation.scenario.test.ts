@@ -372,6 +372,31 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     expect(llm.getRequests()).toHaveLength(4);
   });
 
+  it('a run with observational memory switched off titles its thread', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: true } });
+
+    const { output } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Suggest a weekend hike',
+      memory,
+      threadId: 'title-om-disabled',
+      resourceId: 'user-1',
+      memoryOptions: { observationalMemory: { enabled: false } },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', predicate: isTitleRequest(DEFAULT_INSTRUCTIONS_MARKER) },
+          { content: 'Weekend Hike' },
+        );
+        llm.on({ endpoint: 'chat' }, { content: 'Try the ridge trail.' });
+      },
+    });
+
+    expect(await output.text).toBe('Try the ridge trail.');
+    expect(await waitForTitle(memory, 'title-om-disabled')).toBe('Weekend Hike');
+  });
+
   it('keeps existing thread metadata when saving the title', async () => {
     const llm = getMock();
     const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });

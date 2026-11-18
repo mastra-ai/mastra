@@ -13,7 +13,7 @@ Learn more in the [Gateway documentation](https://gateway.mastra.ai/docs).
 
 ## Get an API key
 
-Go to [gateway.mastra.ai](https://gateway.mastra.ai) and sign up for a Mastra account. During the onboarding you'll get your personal API key to authenticate requests.
+Sign in to the [Mastra platform dashboard](https://projects.mastra.ai) and create a Gateway API key for your organization. Credits, spend limits, and billing for the Gateway are managed in the same dashboard.
 
 ## Usage
 
@@ -62,6 +62,10 @@ for await (const chunk of result.textStream) {
   process.stdout.write(chunk);
 }
 ```
+
+A gateway with a Gateway project key (`msk_...`) stores each thread's observations when it serves the request with its own provider keys and memory is enabled for the project. A gateway with an organization key (`msk-gateway-...` or `mskv2_...`) is served without the memory API, so it doesn't. Configure [`Memory`](/docs/memory/observational-memory) with `observationalMemory: true` in that case: Observational Memory then runs against your storage adapter instead of the gateway.
+
+When a request is routed with your own provider key, or memory is disabled for the project, the gateway proxies it without storing observations while Mastra skips local Observational Memory for a `mastra/` model on a project key. Use gateway-managed provider keys with project memory enabled when the thread has to be stored.
 
 ## Configuration
 

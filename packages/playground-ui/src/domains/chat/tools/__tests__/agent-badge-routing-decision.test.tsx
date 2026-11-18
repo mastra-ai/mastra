@@ -13,10 +13,6 @@ vi.mock('@/ds/components/CodeEditor', () => ({
   CodeEditor: () => null,
 }));
 
-vi.mock('@/ds/icons/AgentIcon', () => ({
-  AgentIcon: () => null,
-}));
-
 vi.mock('@/domains/chat/components/badge-wrapper', () => ({
   BadgeWrapper: ({ extraInfo }: { extraInfo: ReactNode }) => {
     return extraInfo;

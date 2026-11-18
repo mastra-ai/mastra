@@ -64,9 +64,6 @@ async function seedProject(): Promise<void> {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/platform',
   });
   projectId = project.id;
 }
@@ -138,9 +135,6 @@ describe('buildGitLabAgentTools', () => {
       orgId: 'org-2',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-2',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/secret',
     });
     const tools = await buildGitLabAgentTools({ gitlab, requestContext: requestContextFor(projectId) });
 

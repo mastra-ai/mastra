@@ -65,8 +65,9 @@ const processor = new WorkingMemory({
                   },
                   {
                     name: 'content',
-                    type: 'string',
-                    description: 'Template content defining the structure of working memory data',
+                    type: 'string | Record<string, unknown>',
+                    description:
+                      'Template content defining the structure of working memory data. The object form is only valid when format is json',
                     isOptional: false,
                   },
                 ],

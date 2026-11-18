@@ -281,7 +281,7 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
-  it('uses the reader from getReader instead of instance defaults when provided', async () => {
+  it('uses an asynchronous reader from getReader instead of instance defaults when provided', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-agents-reader';
     messageList.push(createUserMessage('Open the instructions'));
@@ -302,10 +302,10 @@ describe('AgentsMDInjector', () => {
       readFile: instanceReadFile,
       // Simulates serving content from a trusted git ref rather than the
       // (untrusted) working tree.
-      getReader: () => ({
-        pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
-        isDirectory: () => false,
-        readFile: () => '# Trusted ref content',
+      getReader: async () => ({
+        pathExists: async path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+        isDirectory: async () => false,
+        readFile: async () => '# Trusted ref content',
       }),
     });
 
@@ -730,6 +730,35 @@ describe('AgentsMDInjector', () => {
     );
 
     expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
+  it('loads the statically loaded instruction paths once per processor request', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(
+            'move',
+            { path: '/repo/a/AGENTS.md', destination: '/repo/b/AGENTS.md' },
+            'result',
+            {},
+          ),
+        ],
+      }),
+    );
+    const getIgnoredInstructionPaths = vi.fn(() => ['/repo/a/AGENTS.md', '/repo/b/AGENTS.md']);
+    const testProcessor = new AgentsMDInjector({
+      pathExists: () => true,
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      getIgnoredInstructionPaths,
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+    expect(getIgnoredInstructionPaths).toHaveBeenCalledOnce();
   });
 
   it('falls back to configured reminder text when file cannot be read', async () => {

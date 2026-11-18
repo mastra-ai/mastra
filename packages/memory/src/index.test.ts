@@ -205,9 +205,31 @@ describe('Memory', () => {
 
       const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
 
-      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (AUTO-UPDATED)');
       expect(systemMessage).toContain('Location: Sooke');
       expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
+      // The app updates the memory, so the agent must not be told it can't (#28367)
+      expect(systemMessage).toContain('This memory is updated automatically after each response');
+      expect(systemMessage).toContain("Never say you can't save or update it");
+      expect(systemMessage).not.toContain('read-only in the current session');
+    });
+
+    it('keeps read-only wording when readOnly is set (#28367)', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+      const threadId = 'read-only-thread';
+      const resourceId = 'read-only-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId, memoryConfig: { readOnly: true } });
+
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('Location: Sooke');
+      expect(systemMessage).toContain('read-only in the current session - you cannot update it');
+      expect(systemMessage).not.toContain('updated automatically');
     });
 
     it('renders update instructions when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {
@@ -2133,6 +2155,38 @@ describe('Memory', () => {
         // The final value should be either Bob or Charlie, not corrupted
         expect(finalMemory).toBeDefined();
         expect(finalMemory?.includes('Bob') || finalMemory?.includes('Charlie')).toBe(true);
+      });
+    });
+
+    describe('__experimental_updateWorkingMemoryVNext - concurrency', () => {
+      it('keeps appends from two threads on the same resource when scope is the default', async () => {
+        const memory = new TestableMemoryWithWorkingMemory({
+          storage: new InMemoryStore(),
+          // No scope set, so it defaults to 'resource'.
+          options: { workingMemory: { enabled: true } },
+        });
+        const resourceId = 'vnext-concurrent-resource';
+        for (const id of ['vnext-concurrent-a', 'vnext-concurrent-b']) {
+          await memory.saveThread({ thread: { id, resourceId, createdAt: new Date(), updatedAt: new Date() } });
+        }
+        await memory.updateWorkingMemory({ threadId: 'vnext-concurrent-a', resourceId, workingMemory: '# Facts' });
+
+        await Promise.all([
+          memory.testExperimentalUpdateWorkingMemoryVNext({
+            threadId: 'vnext-concurrent-a',
+            resourceId,
+            workingMemory: '- likes tea',
+          }),
+          memory.testExperimentalUpdateWorkingMemoryVNext({
+            threadId: 'vnext-concurrent-b',
+            resourceId,
+            workingMemory: '- lives in Paris',
+          }),
+        ]);
+
+        const finalMemory = await memory.getWorkingMemory({ threadId: 'vnext-concurrent-a', resourceId });
+        expect(finalMemory).toContain('likes tea');
+        expect(finalMemory).toContain('lives in Paris');
       });
     });
 

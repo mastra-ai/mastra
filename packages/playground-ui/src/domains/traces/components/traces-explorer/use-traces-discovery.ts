@@ -9,3 +9,10 @@ export function useTracesDiscovery() {
   const { discoveryTimeRange, withDiscovery } = useTracesConfig();
   return useTraceMetadataFilterFields({ timeRange: discoveryTimeRange, queryOptions: { enabled: withDiscovery } });
 }
+
+/** Capabilities or filter field discovery are still loading, so the body shows its skeleton. */
+export function useTracesBodyLoading() {
+  const { isCapabilitiesLoading } = useTracesConfig();
+  const { isLoading: isDiscoveryLoading } = useTracesDiscovery();
+  return isCapabilitiesLoading || isDiscoveryLoading;
+}

@@ -39,4 +39,14 @@ describe('getIsLinkActive', () => {
       expect(getIsLinkActive(findNavItem('/traces')!, '/spans')).toBe(true);
     });
   });
+
+  describe('when on the threads page', () => {
+    it('has no Threads entry of its own', () => {
+      expect(findNavItem('/threads')).toBeUndefined();
+    });
+
+    it('activates Traces, the page the observability switch lives on', () => {
+      expect(getIsLinkActive(findNavItem('/traces')!, '/threads')).toBe(true);
+    });
+  });
 });
