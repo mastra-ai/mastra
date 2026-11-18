@@ -197,4 +197,7 @@ export const toolCallOutputSchema = toolCallInputSchema.extend({
       reason: z.string().optional(),
     })
     .optional(),
+  // Set when the result already streamed as its call finished (#21902). Kept in the suspend
+  // snapshot so a resumed run does not stream the same result again.
+  streamedEarly: z.boolean().optional(),
 });

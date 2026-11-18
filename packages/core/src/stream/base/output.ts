@@ -1419,6 +1419,33 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // chunk.payload.totalUsage = self.totalUsage;
               self.#warnings = chunk.payload.stepResult.warnings || [];
 
+              // Parallel tool results stream as each call finishes, so they can arrive out of
+              // call order. The step and run results keep the order the model called the tools in.
+              const stepToolResults = self.#bufferedByStep.toolResults;
+              if (stepToolResults.length > 1) {
+                const callIndex = new Map(
+                  self.#bufferedByStep.toolCalls.map((call, index) => [call.payload.toolCallId, index]),
+                );
+                // A result emitted at this step-finish for a call from an earlier step (a held or
+                // deferred processor part flushed here) has no index to be ordered by, so it keeps
+                // the place it holds and only the results of this step's calls are reordered.
+                const ordered = [...stepToolResults]
+                  .filter(result => callIndex.has(result.payload.toolCallId))
+                  .sort((a, b) => callIndex.get(a.payload.toolCallId)! - callIndex.get(b.payload.toolCallId)!);
+                if (ordered.length > 1) {
+                  let next = 0;
+                  const reordered = stepToolResults.map(result =>
+                    callIndex.has(result.payload.toolCallId) ? ordered[next++]! : result,
+                  );
+                  // The step's results are the tail of the run's results; reorder both in place.
+                  const runTail = self.#toolResults.length - stepToolResults.length;
+                  if (stepToolResults.every((result, index) => self.#toolResults[runTail + index] === result)) {
+                    self.#toolResults.splice(runTail, reordered.length, ...reordered);
+                  }
+                  stepToolResults.splice(0, stepToolResults.length, ...reordered);
+                }
+              }
+
               if (chunk.payload.metadata.request) {
                 self.#request = chunk.payload.metadata.request;
               }
