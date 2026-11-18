@@ -10,7 +10,8 @@ export type SettingsValueProps = ComponentProps<'span'> & {
 function plainText(children: ReactNode): string | undefined {
   if (typeof children === 'string' || typeof children === 'number') return String(children);
   if (!Array.isArray(children)) return undefined;
-  const parts = children.map(plainText);
+  // `null`, `undefined` and booleans render nothing, so an absent optional part adds no text.
+  const parts = children.map(child => (child == null || typeof child === 'boolean' ? '' : plainText(child)));
   if (parts.some(part => part === undefined)) return undefined;
   return parts.join('');
 }

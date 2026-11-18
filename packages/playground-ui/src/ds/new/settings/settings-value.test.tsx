@@ -28,6 +28,19 @@ describe('SettingsValue', () => {
     expect(screen.getByText('Build 1.32.0').getAttribute('title')).toBe('Build 1.32.0');
   });
 
+  it('leaves out an absent optional part from the hover text', () => {
+    const version = '1.32.0';
+    const suffix: string | undefined = undefined;
+    render(
+      <SettingsValue>
+        Build {version}
+        {suffix}
+      </SettingsValue>,
+    );
+
+    expect(screen.getByText('Build 1.32.0').getAttribute('title')).toBe('Build 1.32.0');
+  });
+
   it('keeps a hover text it was given', () => {
     render(<SettingsValue title="Signed in with WorkOS">WorkOS</SettingsValue>);
 
