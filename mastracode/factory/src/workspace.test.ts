@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
   vault: 'absent' as boolean | undefined | 'absent',
+  /** What the platform's sandbox record reports when a vault-capable stub re-asks for its mode. */
+  vaultOnRefresh: undefined as boolean | undefined,
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
@@ -82,7 +84,15 @@ const mocks = vi.hoisted(() => ({
       executeCommand: (...args: [string, ...unknown[]]) => sandbox.exec(...args),
       setEnv: mocks.setEnv,
       // Credential-vault mode as the platform reported it; absent for providers without vault support.
-      ...(mocks.vault === 'absent' ? {} : { vault: mocks.vault }),
+      ...(mocks.vault === 'absent'
+        ? {}
+        : {
+            vault: mocks.vault,
+            refreshVault: vi.fn(async () => {
+              if (mocks.vaultOnRefresh !== undefined) sandbox.vault = mocks.vaultOnRefresh;
+              return sandbox.vault;
+            }),
+          }),
     };
     return sandbox;
   }),
@@ -201,6 +211,7 @@ afterEach(async () => {
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
   mocks.vault = 'absent';
+  mocks.vaultOnRefresh = undefined;
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
@@ -2671,6 +2682,19 @@ describe('GitHub session workspace preparation', () => {
 
       expect(lastGhToken()).toBeUndefined();
       expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+    });
+
+    it('asks the platform again when the start left the mode unknown, and installs tokens for a non-vault sandbox', async () => {
+      mocks.vault = undefined;
+      mocks.vaultOnRefresh = false;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
     });
 
     it('installs tokens as before when the platform reports a non-vault sandbox', async () => {

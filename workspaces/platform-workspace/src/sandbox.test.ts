@@ -416,9 +416,10 @@ describe('PlatformSandbox', () => {
   });
 
   describe('vault mode', () => {
-    const create = (response: Record<string, unknown>, sandboxId?: string) => {
+    const create = (response: Record<string, unknown>, sandboxId?: string, ...later: Record<string, unknown>[]) => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json(response));
+      for (const next of later) fetchMock.mockResolvedValueOnce(json(next));
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
@@ -445,10 +446,19 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(false);
     });
 
-    it('leaves the mode unknown when the create route reattached by recovery id', async () => {
-      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null });
+    it('leaves the mode unknown when neither the recovery-id reattach nor the sandbox record reports it', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, { id: 'sbx_1' });
       await sandbox._start();
       expect(sandbox.vault).toBeUndefined();
+    });
+
+    it('reads the sandbox record when a recovery-id reattach does not report the mode', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, {
+        id: 'sbx_1',
+        vault: false,
+      });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
     });
 
     it('takes the mode from a reattach by recovery id that reports it', async () => {
@@ -461,6 +471,23 @@ describe('PlatformSandbox', () => {
       const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing');
       await sandbox._start();
       expect(sandbox.vault).toBeUndefined();
+    });
+
+    it('reports a reattach that says the sandbox is not vault', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null, vault: false }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('learns the mode later with refreshVault', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing', {
+        id: 'sbx_existing',
+        vault: false,
+      });
+      await sandbox._start();
+      expect(sandbox.vault).toBeUndefined();
+      await expect(sandbox.refreshVault()).resolves.toBe(false);
+      expect(sandbox.vault).toBe(false);
     });
 
     it('takes the mode from a reattach that reports it', async () => {

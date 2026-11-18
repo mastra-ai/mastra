@@ -60,7 +60,7 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
-import { sandboxAcceptsGithubToken, sandboxGithubAuth } from './sandbox/vault.js';
+import { learnSandboxGithubAuth, sandboxAcceptsGithubToken } from './sandbox/vault.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -960,7 +960,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         repositoryId: repository.id,
         sandboxAuth: () => {
           const registration = githubTokenInjectors.get(workspaceId);
-          return registration ? sandboxGithubAuth(registration.target) : 'token';
+          return registration ? learnSandboxGithubAuth(registration.target) : 'token';
         },
         // Bound below once the minter exists; a refresh re-mints the same set.
         ...(tokenRepositoryIds.length > 1 ? { mint: () => getRepositoryToken() } : {}),
@@ -1031,6 +1031,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
+      // Learn the credential-vault mode before setup decides whether the
+      // sandbox may hold a GitHub token.
+      await learnSandboxGithubAuth(args.sandbox);
       let setupError: SetupCommandError | undefined;
       try {
         await guardedSetup(args);

@@ -17,7 +17,7 @@
  */
 export type SandboxGithubAuth = 'token' | 'vault' | 'unknown';
 
-type VaultReportingSandbox = { vault?: boolean };
+type VaultReportingSandbox = { vault?: boolean; refreshVault?: () => Promise<unknown> };
 
 const warnedUnknown = new WeakSet<object>();
 
@@ -39,6 +39,23 @@ export function sandboxGithubAuth(sandbox: object): SandboxGithubAuth {
     );
   }
   return 'unknown';
+}
+
+/**
+ * Read the mode, first asking the platform again when it is unknown (a
+ * reattach whose response did not say). A failed or silent answer keeps it
+ * unknown, so this still fails closed.
+ */
+export async function learnSandboxGithubAuth(sandbox: object): Promise<SandboxGithubAuth> {
+  const reporting = sandbox as VaultReportingSandbox;
+  if ('vault' in sandbox && reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
+    try {
+      await reporting.refreshVault();
+    } catch {
+      // Unknown stays unknown.
+    }
+  }
+  return sandboxGithubAuth(sandbox);
 }
 
 /** True when Factory may put a real GitHub token into the sandbox. */

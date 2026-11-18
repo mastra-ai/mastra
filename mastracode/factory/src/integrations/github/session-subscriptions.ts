@@ -341,7 +341,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         // A credential-vault sandbox holds only a placeholder token and the
         // vault authenticates its GitHub traffic, so there is nothing to
         // refresh; say so instead of failing, so the agent retries or reports.
-        const auth = getGithubRefreshTarget(requestContext)?.sandboxAuth?.() ?? 'token';
+        const auth = (await getGithubRefreshTarget(requestContext)?.sandboxAuth?.()) ?? 'token';
         if (auth === 'vault') {
           return {
             refreshed: false,
