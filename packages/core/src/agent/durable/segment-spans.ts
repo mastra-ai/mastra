@@ -7,7 +7,8 @@
  * carries it on the request context, which every engine hands to every step and persists with the
  * run, so the worker that finishes a segment ends that segment's spans wherever it runs.
  */
-import type { ExportedSpan, SpanType } from '../../observability';
+import { resolveExportedSpanId } from '../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, Span, SpanType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
 import type { RunRegistryEntry } from './types';
@@ -15,10 +16,24 @@ import type { RunRegistryEntry } from './types';
 export interface SegmentSpanData {
   agentSpanData?: ExportedSpan<SpanType.AGENT_RUN>;
   modelSpanData?: ExportedSpan<SpanType.MODEL_GENERATION>;
+  /** The parent id this pair's MODEL_STEPs report: its generation, or the nearest exported ancestor. */
+  stepParentId?: string;
   /** Recovery: it finishes the MODEL_STEP the crashed execution left open. */
   adoptsOpenSteps?: boolean;
   /** Recovery: the MODEL_GENERATION a suspension ended before the crash, whose steps stay ended. */
   endedStepsOf?: string;
+}
+
+/** The wire form of the pair a resume or recovery opened. */
+export function openedSegment(
+  agentSpan: Span<SpanType.AGENT_RUN>,
+  modelSpan: AIModelGenerationSpan | undefined,
+): SegmentSpanData {
+  return {
+    agentSpanData: agentSpan.snapshot?.() ?? agentSpan.exportSpan(),
+    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
+    stepParentId: resolveExportedSpanId(modelSpan ?? agentSpan),
+  };
 }
 
 /** A plain record stands in for the context on engines that serialize it before the handoff. */
@@ -71,11 +86,7 @@ export function segmentSpanData(
   if (carried) return { ...carried, carried: true };
   // User code can clear the request context. The process that opened the pair still holds it.
   if (live?.resumeAgentSpan) {
-    return {
-      agentSpanData: live.resumeAgentSpan.snapshot?.() ?? live.resumeAgentSpan.exportSpan(),
-      modelSpanData: live.resumeModelSpan?.snapshot?.() ?? live.resumeModelSpan?.exportSpan(),
-      carried: true,
-    };
+    return { ...openedSegment(live.resumeAgentSpan, live.resumeModelSpan), carried: true };
   }
   return {
     agentSpanData: state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
@@ -94,14 +105,13 @@ export function liveSegmentSpan<S extends { id: string }>(
 
 /**
  * Whether `segment` may end the MODEL_STEP `stepSpanData`. The run's first execution opened every
- * step it sees. A resumed one ends only a step opened under its own pair (under the AGENT_RUN when
- * the generation is not exported): the step that suspended was ended by that suspension. A
- * recovered one also finishes the step its crashed execution left open.
+ * step it sees. A resumed one ends only the steps opened under its own pair: the step that
+ * suspended was ended by that suspension. A recovered one also finishes the step its crashed
+ * execution left open.
  */
 export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }, stepSpanData: unknown): boolean {
   if (!segment.carried) return true;
-  const parent = (stepSpanData as { parentSpanId?: unknown } | undefined)?.parentSpanId;
-  if (segment.adoptsOpenSteps) return parent !== segment.endedStepsOf;
-  // A step whose parents are not exported names none, so it cannot be told apart and ends as before.
-  return typeof parent !== 'string' || [segment.modelSpanData?.id, segment.agentSpanData?.id].includes(parent);
+  const parent = (stepSpanData as { parentSpanId?: string | null } | undefined)?.parentSpanId ?? undefined;
+  if (segment.adoptsOpenSteps) return segment.endedStepsOf === undefined || parent !== segment.endedStepsOf;
+  return parent === segment.stepParentId;
 }

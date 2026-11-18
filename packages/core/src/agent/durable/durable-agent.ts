@@ -125,7 +125,7 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
-import { carrySegmentSpans } from './segment-spans';
+import { carrySegmentSpans, openedSegment } from './segment-spans';
 import type { SegmentSpanData } from './segment-spans';
 import {
   createDurableAgentStream,
@@ -1882,8 +1882,7 @@ export class DurableAgent<
       runId,
       recoverAgentSpan
         ? {
-            agentSpanData: recoverAgentSpan.snapshot?.() ?? recoverAgentSpan.exportSpan(),
-            modelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
+            ...openedSegment(recoverAgentSpan, recoverModelSpan),
             adoptsOpenSteps: true,
             ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
           }
@@ -4103,10 +4102,7 @@ export class DurableAgent<
         });
         ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
         if (resumeAgentSpan) {
-          resumeSegment = {
-            agentSpanData: resumeAgentSpan.snapshot?.() ?? resumeAgentSpan.exportSpan(),
-            modelSpanData: resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan(),
-          };
+          resumeSegment = openedSegment(resumeAgentSpan, resumeModelSpan);
         }
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;

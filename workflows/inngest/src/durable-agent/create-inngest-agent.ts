@@ -80,7 +80,13 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { EntityType, getOrCreateSpan, getResumeTracingContext, SpanType } from '@mastra/core/observability';
+import {
+  EntityType,
+  getOrCreateSpan,
+  getResumeTracingContext,
+  resolveExportedSpanId,
+  SpanType,
+} from '@mastra/core/observability';
 import type { AIModelGenerationSpan, Span, SpanSnapshot } from '@mastra/core/observability';
 import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
@@ -1102,6 +1108,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         carried: {
           agentSpanData: agentSpan.snapshot?.() ?? agentSpan.exportSpan(),
           modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
+          stepParentId: resolveExportedSpanId(modelSpan ?? agentSpan),
         },
       };
     } catch (error) {
