@@ -251,6 +251,9 @@ it("authenticates with the deploy's Knowledge-only token before the general Plat
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   try {
     for (const key of keys) delete process.env[key];
+    expect(() => new PlatformKnowledge({ instanceId: 'kn_1', accessToken: '' })).toThrow(
+      'PlatformKnowledge requires a Knowledge token or Platform access token, and a Knowledge instance ID',
+    );
     const list = async (options = {}) =>
       (await new PlatformKnowledge({ instanceId: 'kn_1', ...options }).getStorage()).listPages({ read: 'all' });
     // Only the Knowledge token is set.
