@@ -157,7 +157,7 @@ export function getJobTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/jobs/#retrieve-a-job-by-job-id
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${gitlabPathSegment(input.job_id)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${encodeURIComponent(String(input.job_id))}`,
         retries: 3,
       });
 

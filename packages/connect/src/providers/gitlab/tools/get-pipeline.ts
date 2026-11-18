@@ -78,7 +78,7 @@ export function getPipelineTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/pipelines/#retrieve-a-single-pipeline
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/pipelines/${gitlabPathSegment(input.pipeline_id)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/pipelines/${encodeURIComponent(String(input.pipeline_id))}`,
         retries: 3,
       });
 

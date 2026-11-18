@@ -111,7 +111,7 @@ export function getIssueTool(proxy: PlatformProxy) {
       const projectId = String(input.project_id);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/issues/#get-a-single-project-issue
-        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/issues/${gitlabPathSegment(input.issue_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/issues/${encodeURIComponent(String(input.issue_iid))}`,
         retries: 3,
       });
 

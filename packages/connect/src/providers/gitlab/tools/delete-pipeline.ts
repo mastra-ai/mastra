@@ -40,7 +40,7 @@ export function deletePipelineTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/pipelines/#delete-a-pipeline
       await platformProxy.delete({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/pipelines/${gitlabPathSegment(input.pipeline_id)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/pipelines/${encodeURIComponent(String(input.pipeline_id))}`,
         retries: 1,
       });
 

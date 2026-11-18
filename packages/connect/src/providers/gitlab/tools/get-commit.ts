@@ -88,7 +88,7 @@ export function getCommitTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/commits/#get-a-single-commit
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/repository/commits/${gitlabPathSegment(input.sha)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/repository/commits/${encodeURIComponent(String(input.sha))}`,
         retries: 3,
       });
 

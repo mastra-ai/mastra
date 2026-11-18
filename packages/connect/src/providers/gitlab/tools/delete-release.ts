@@ -44,7 +44,7 @@ export function deleteReleaseTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const config: PlatformProxyRequest = {
         // https://docs.gitlab.com/api/releases/#delete-a-release
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${gitlabPathSegment(input.tag_name)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${encodeURIComponent(String(input.tag_name))}`,
         retries: 1,
       };
 

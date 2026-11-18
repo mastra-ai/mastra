@@ -59,7 +59,7 @@ export function updateReleaseTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/releases/#update-a-release
       const response = await platformProxy.put({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${gitlabPathSegment(input.tag_name)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${encodeURIComponent(String(input.tag_name))}`,
         data: {
           ...(input.name !== undefined && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),

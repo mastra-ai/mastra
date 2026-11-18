@@ -82,7 +82,7 @@ export function retryJobTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/jobs/#retry-a-job
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${gitlabPathSegment(input.job_id)}/retry`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${encodeURIComponent(String(input.job_id))}/retry`,
         retries: 1,
       });
 

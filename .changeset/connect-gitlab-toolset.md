@@ -4,7 +4,7 @@
 
 Added a GitLab toolset with 44 tools. Agents can manage projects, groups, issues, merge requests, branches, files, commits, and releases, and create, cancel, and retry pipelines and jobs.
 
-Connect a GitLab account to your project first (`mastra connect add gitlab`), then add the tools to an agent:
+Connect a GitLab account to your project first (`mastra connect add gitlab`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
 
 ```ts
 import { Agent } from '@mastra/core/agent';
@@ -19,4 +19,4 @@ const gitlabAgent = new Agent({
 });
 ```
 
-Project, group, and file paths work raw (`team/app`) or URL-encoded (`team%2Fapp`). Project results never include the project's runner registration token.
+Project and group paths work raw (`team/app`) or URL-encoded (`team%2Fapp`). Branch names, file paths, and tag names are sent as given, so `release%2Fnext` and `release/next` stay distinct. Project results never include the project's runner registration token.

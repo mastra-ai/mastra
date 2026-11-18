@@ -837,9 +837,10 @@ function adaptOpenAICreateImage(action: ExtractedAction): ExtractedAction {
  * into the query (`project_id: "42?"` turns delete-pipeline into
  * `DELETE /projects/42`), a raw `group/project` adds a path segment, and an
  * encoded `group%2Fproject` passed through `encodeURIComponent` becomes
- * `group%252Fproject`. Route every interpolated endpoint segment through one
- * helper that decodes once and encodes once, so numeric IDs, raw paths, and
- * already-encoded paths all reach GitLab as a single segment.
+ * `group%252Fproject`. Project and group identifiers are documented as raw or
+ * URL-encoded, so they go through a helper that decodes once and encodes once.
+ * Every other segment (branch, file path, tag, sha, numeric ids) is a literal
+ * name where `%2F` differs from `/`, so it is encoded as given.
  */
 const GITLAB_PATH_SEGMENT_HELPER = `/** Encodes one GitLab path segment exactly once, whether \`value\` arrives raw or already URL-encoded. */
 function gitlabPathSegment(value: string | number): string {
@@ -850,6 +851,16 @@ function gitlabPathSegment(value: string | number): string {
     return encodeURIComponent(text);
   }
 }`;
+
+/** Endpoint expressions that hold a GitLab project or group id or path (raw or URL-encoded). */
+const GITLAB_ID_OR_PATH_EXPRESSIONS = new Set([
+  'input.project_id',
+  'input.group_id',
+  'input.id',
+  'projectId',
+  'encodedProjectId',
+  'groupId',
+]);
 
 function stripEncodingWrappers(expression: string): string {
   let core = expression.trim();
@@ -865,7 +876,10 @@ function encodeGitLabPathSegments(action: ExtractedAction): ExtractedAction {
   const execBody = action.execBody.replace(/(endpoint:\s*`)([^`]*)`/g, (_match, prefix: string, path: string) => {
     const encoded = path.replace(/\$\{([^{}]*)\}/g, (_segment, expression: string) => {
       rewrites++;
-      return `\${gitlabPathSegment(${stripEncodingWrappers(expression)})}`;
+      const value = stripEncodingWrappers(expression);
+      return GITLAB_ID_OR_PATH_EXPRESSIONS.has(value)
+        ? `\${gitlabPathSegment(${value})}`
+        : `\${encodeURIComponent(String(${value}))}`;
     });
     return `${prefix}${encoded}\``;
   });
@@ -975,7 +989,7 @@ const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'delete-branch': 'Delete a branch in GitLab.',
   'delete-issue': 'Delete an issue in GitLab.',
   'delete-group':
-    'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
+    'Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
   'list-jobs': 'List jobs from GitLab, newest first.',
 };
 
@@ -997,6 +1011,40 @@ const GITLAB_INPUT_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> 
       replacement: '',
       count: 1,
       what: 'sort',
+    },
+  ],
+  'get-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'update-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'delete-group': [
+    {
+      pattern: /\.describe\('The full path to the subgroup\. Required when permanently_remove is true\.'\)/,
+      replacement:
+        ".describe('The subgroup full_path after it was scheduled for deletion (GitLab renames it). Read it with gitlab_get_group using the numeric id. Required when permanently_remove is true.')",
+      count: 1,
+      what: 'full_path description',
+    },
+  ],
+  'delete-project': [
+    {
+      pattern: /(\n\s*)archived: z\.boolean\(\),(\s*message)/,
+      replacement:
+        "$1archived: z.boolean().describe('true when this call archived the project, false when it requested deletion. Not the project archive state.'),$2",
+      count: 1,
+      what: 'archived output description',
     },
   ],
   'list-projects': [

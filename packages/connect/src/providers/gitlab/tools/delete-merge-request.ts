@@ -51,7 +51,7 @@ export function deleteMergeRequestTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.delete({
         // https://docs.gitlab.com/api/merge_requests/#delete-a-merge-request
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${encodeURIComponent(String(input.merge_request_iid))}`,
         retries: 1,
       });
 

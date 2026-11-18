@@ -112,7 +112,7 @@ export function updateIssueTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.put({
         // https://docs.gitlab.com/api/issues/#edit-an-issue
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${gitlabPathSegment(input.issue_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${encodeURIComponent(String(input.issue_iid))}`,
         data: {
           ...(input.title !== undefined && { title: input.title }),
           ...(input.description !== undefined && { description: input.description }),

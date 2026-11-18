@@ -45,7 +45,7 @@ export function deleteFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.delete({
         // https://docs.gitlab.com/api/repository_files/#delete-a-file-in-a-repository
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${encodeURIComponent(String(input.file_path))}`,
         data: {
           branch: input.branch,
           commit_message: input.commit_message,

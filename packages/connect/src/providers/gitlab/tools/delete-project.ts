@@ -35,7 +35,11 @@ const ArchiveProjectResponseSchema = z.object({
 export const deleteProjectOutputSchema = z.object({
   success: z.boolean(),
   project_id: z.string(),
-  archived: z.boolean(),
+  archived: z
+    .boolean()
+    .describe(
+      'true when this call archived the project, false when it requested deletion. Not the project archive state.',
+    ),
   message: z.string().optional(),
 });
 
