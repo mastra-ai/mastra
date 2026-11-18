@@ -126,6 +126,19 @@ Counts and timings are aggregated in the process and sent once per interval: a c
 
 Every record has a `service` label read from `MASTRA_WORKERS`: `api` when it's `false`, `worker` when it's set to anything else, `all` when unset. On a split deployment (API plus worker service) the database-wide and Redis-wide stats (`db_sessions`, `db_longest_ms`, slow statements, `redis_memory_bytes`, `redis_clients`, `redis_evicted_keys_total`, `redis_stream_backlog`) run only on `worker`, so they aren't reported twice. `intake_last_sweep_age_ms` only advances on the process that ran the sweep, so take the minimum across processes.
 
+### Admin heap snapshot
+
+Factory exposes an on-demand heap-snapshot download at `GET /web/admin/heap-snapshot`. It is off by default and gated twice so the surface is inert without an explicit opt-in:
+
+1. `FACTORY_HEAP_SNAPSHOT=1` must be set on the process. With the variable absent or any other value the route 404s so it is indistinguishable from a route that does not exist.
+2. In tenant mode the caller must be an organization administrator, following the same `isOrganizationAdmin` check as the automation-runs ingress. Non-admins get 403, anonymous callers 401. Local (no-auth) deployments require only the env flag.
+
+When enabled, the endpoint streams `v8.getHeapSnapshot()` as `application/octet-stream` with `Content-Disposition: attachment; filename="factory-<iso>.heapsnapshot"`. Load the downloaded file into Chrome DevTools → Memory → Load profile to walk retainers.
+
+Only one snapshot is allowed at a time per process: a second concurrent request returns 409.
+
+**Cost.** Snapshotting a multi-GB heap blocks the event loop for tens of seconds and needs roughly heap-size extra memory while the snapshot is serialized — close to the heap limit it can OOM the process. Use it to investigate the health metrics in the previous section (specifically the `process_memory_bytes{kind=heap_used}` signal); do not leave it enabled on healthy traffic.
+
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
