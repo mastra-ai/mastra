@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 import {
   KnowledgeConflictError,
+  KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
+  KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
@@ -19,6 +21,8 @@ it.each([
   { status: 409, name: 'KnowledgeConflictError', type: KnowledgeConflictError },
   { status: 409, name: 'KnowledgePageKeyConflictError', type: KnowledgePageKeyConflictError },
   { status: 409, name: 'KnowledgePageHasChildrenError', type: KnowledgePageHasChildrenError },
+  { status: 400, name: 'KnowledgePageDepthError', type: KnowledgePageDepthError },
+  { status: 400, name: 'KnowledgeMoveTooLargeError', type: KnowledgeMoveTooLargeError },
 ])('preserves $name from problem+json responses', async ({ status, name, type }) => {
   const server = createServer((_req, res) => {
     res.writeHead(status, { 'content-type': 'application/problem+json' });

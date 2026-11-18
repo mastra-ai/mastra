@@ -4,7 +4,9 @@ import {
   MastraCompositeStore,
   KnowledgeStorage,
   KnowledgeConflictError,
+  KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
+  KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
@@ -152,6 +154,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       }
       if (name === 'KnowledgePageHasChildrenError') {
         const error = new KnowledgePageHasChildrenError('');
+        error.message = message;
+        throw error;
+      }
+      if (name === 'KnowledgePageDepthError') {
+        const error = new KnowledgePageDepthError('');
+        error.message = message;
+        throw error;
+      }
+      if (name === 'KnowledgeMoveTooLargeError') {
+        const error = new KnowledgeMoveTooLargeError('', 0);
         error.message = message;
         throw error;
       }
