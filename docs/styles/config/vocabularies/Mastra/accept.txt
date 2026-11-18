@@ -46,8 +46,11 @@ GCS
 (?i)GET
 (?i)GitHub
 (?i)Google
+Google Calendar
+Google Docs
 Google Gemini
 Google Gemini Live
+Google Sheets
 GraphRAG
 gRPC
 (?i)Hono
@@ -72,6 +75,7 @@ LanceDB
 (?i)MAP
 (?i)Mastra
 (?i)MCP
+Microsoft Word
 MinIO
 MLflow
 (?i)MongoDB
@@ -108,6 +112,7 @@ Remix
 S3
 (?i)SDK
 (?i)Sentry
+SharePoint Online
 SigNoz
 (?i)SQL
 SSE

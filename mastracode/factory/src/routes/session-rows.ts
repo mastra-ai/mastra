@@ -92,6 +92,7 @@ export function buildSessionRowRoutes(deps: SessionRowRouteDependencies): ApiRou
           owner: context.req.query('owner'),
           status: context.req.query('status'),
           updated: context.req.query('updated'),
+          source: context.req.query('source'),
           children: context.req.query('children'),
           pin: context.req.queries('pin'),
           open: context.req.query('open'),

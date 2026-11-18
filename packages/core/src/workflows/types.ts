@@ -626,6 +626,15 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
   persistResumeClaim?: boolean;
 
   /**
+   * Only this process cancels runs of this workflow (`run.cancel()` or an aborted signal), so
+   * the default engine does not read a stored `canceled` status before or between steps.
+   *
+   * @internal Set by workflows the framework creates for each agent call (stream preparation
+   * and combined processors). Their runs are never stored, so a status read can only miss.
+   */
+  localCancellationOnly?: boolean;
+
+  /**
    * Identifies step errors raised because this execution lost, or could not
    * confirm, ownership of the run — for example a durable agent run taken
    * over by `recover()`. Another execution may be driving the run from its

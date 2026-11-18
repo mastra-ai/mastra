@@ -36,7 +36,8 @@ export function isSourceReference(reference: string): boolean {
   return sourceKeyFromReference(reference) !== null || URL.test(reference.trim());
 }
 
-function normalizedUrl(url: string): string {
+/** A link without its query, its anchor, its trailing slashes or its case, which name no other issue or pull request. */
+export function normalizedUrl(url: string): string {
   return url
     .trim()
     .replace(/[?#].*$/, '')

@@ -23,7 +23,7 @@ import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { SpanType, getResumeTracingContext } from '../../../observability';
+import { SpanType, getWorkflowResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import {
@@ -97,7 +97,7 @@ import {
   storageVersionOf,
   storedResults,
 } from './storage-scope';
-import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
+import { endedPaused, getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
 export type ProcessorArgs = {
   eventId?: string;
@@ -724,7 +724,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * events), so we resolve it via runId here.
    */
   private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
-    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
+    return getWorkflowResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**
@@ -1258,6 +1258,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // runs — that have no pre-existing snapshot — get attributed.
     const runStorage = this.#runStorage(workflow.id, runId);
     const resourceId = (await runStorage.loadResourceId()) ?? eventResourceId;
+    // The process that started the run saved its resume tracing context with the run record. This
+    // worker may have no live span for the run, so a suspend here can only save what it carries over.
+    const tracingContext = (await runStorage.loadHeader())?.tracingContext;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -1304,6 +1307,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
+        ...(tracingContext ? { tracingContext } : {}),
       };
       const pruneSnapshot = this.#pruneSnapshotOf(workflow);
       await runStorage.writeSnapshot(
@@ -1386,7 +1390,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
+  /**
+   * `pausesRun` is false for an end that finishes a step-by-step run (a bail), which still
+   * forwards `perStep` so a parent workflow pauses after this nested run.
+   */
+  protected async endWorkflow(
+    args: ProcessorArgs,
+    status: 'success' | 'failed' | 'canceled' | 'paused' = 'success',
+    pausesRun = !!args.perStep,
+  ) {
     const {
       workflowId,
       runId,
@@ -1402,7 +1414,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
     // Check shouldPersistSnapshot option - default to true if not specified
-    const finalStatus = perStep && status === 'success' ? 'paused' : status;
+    const finalStatus = pausesRun && status === 'success' ? 'paused' : status;
     const shouldPersist =
       workflow?.options?.shouldPersistSnapshot?.({
         stepResults: stepResults ?? {},
@@ -1420,7 +1432,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     this.endRunSpans(args, finalStatus);
 
-    if (perStep) {
+    if (finalStatus === 'paused') {
       await this.#pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
@@ -1451,6 +1463,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         ...args,
         prevResult: normalizedPrevResult,
         workflow: undefined,
+        // The run status this end stored; the run's caller reports it as is.
+        workflowStatus: finalStatus,
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });
@@ -1527,10 +1541,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       state,
       workflowId,
     } = args;
+    const paused = endedPaused(args);
 
     // workflow.end durably carries the full result, so the snapshot no longer
     // needs to retain the terminal step's unpruned continuation input.
-    if (deleteSnapshotAfterEnd !== true && !perStep) {
+    if (deleteSnapshotAfterEnd !== true && !paused) {
       let workflow: Workflow | undefined = args.workflow;
       if (!workflow) {
         try {
@@ -1552,7 +1567,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const finalState = resolveCurrentState({ stepResults, state });
 
     await this.assertCurrentRunFence(runId);
-    this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
+    this.endRunSpans(args, paused ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -1560,7 +1575,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // A per-step run publishes `workflow.end` while merely paused — it will
     // keep writing to its watch topic when the next step executes, so only
     // truly terminal runs get their topic cleared.
-    if (!perStep) {
+    if (!paused) {
       this.scheduleRunTopicCleanup(workflowId, runId);
     }
 
@@ -3754,27 +3769,32 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResult.status = 'success';
       const updatedState = (stepResult as any).__state ?? currentState;
 
-      await this.endWorkflow({
-        workflow,
-        resumeData,
-        parentWorkflow,
-        workflowId,
-        runId,
-        executionPath,
-        resumeSteps,
-        stepResults: {
-          ...stepResults,
-          [leafId]: stepResult,
-          __state: updatedState,
+      // A bail ends this run, so it doesn't pause it.
+      await this.endWorkflow(
+        {
+          workflow,
+          resumeData,
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults: {
+            ...stepResults,
+            [leafId]: stepResult,
+            __state: updatedState,
+          },
+          prevResult: stepResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          perStep,
+          state: updatedState,
+          outputOptions,
         },
-        prevResult: stepResult,
-        activeStepsPath,
-        requestContext,
-        actor,
-        perStep,
-        state: updatedState,
-        outputOptions,
-      });
+        'success',
+        false,
+      );
       return;
     }
 
@@ -3841,6 +3861,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           retryCount: retryCount + 1,
           state: currentState,
           outputOptions,
+          resumeData,
+          perStep,
         },
       });
     }
@@ -3896,6 +3918,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext,
           actor,
           retryCount,
+          perStep,
         },
         step,
         stepResult,

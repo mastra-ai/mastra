@@ -76,8 +76,11 @@ exceptions:
   - 'GET'
   - 'GitHub'
   - 'Google'
+  - 'Google Calendar'
+  - 'Google Docs'
   - 'Google Gemini'
   - 'Google Gemini Live'
+  - 'Google Sheets'
   - 'GraphRAG'
   - 'gRPC'
   - 'Hono'
@@ -188,9 +191,14 @@ exceptions:
   - 'Langfuse'
   - 'Memory'
   - 'Microsoft'
+  - 'Microsoft Word'
   - 'Neon'
   - 'Nitro'
   - 'Nova'
+  # "SharePoint Online" only passes as a word exception; a multi-word
+  # exception for it does not survive the `[A-Z][a-z]+(?:[A-Z][a-z]+)+`
+  # identifier pattern that also matches "SharePoint".
+  - 'Online'
   - 'Outlook'
   - 'Postgres'
   - 'Realtime'

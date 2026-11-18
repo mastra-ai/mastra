@@ -1146,6 +1146,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       status: { type: 'text' },
       created_at: { type: 'timestamp' },
       revoked_at: { type: 'timestamp', nullable: true },
+      stop_requested_at: { type: 'timestamp', nullable: true },
     },
     indexes: [
       // Exact-address lookups run on every processor message; status filter is
@@ -3623,6 +3624,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
       { status: 'revoked', revoked_at: input.revokedAt },
     );
+  }
+
+  /**
+   * A client asked to stop the session's run on purpose. Stored, not held in memory: the dispatcher
+   * watching that run can be on another replica. Scoped to the caller's org, since the access guard
+   * lets through a session id it has no row for.
+   */
+  async requestRunBindingStop(input: { orgId: string; sessionId: string; at: Date }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { org_id: input.orgId, session_id: input.sessionId, status: 'active' },
+      { stop_requested_at: input.at },
+    );
+  }
+
+  /** Before each kickoff: a stop requested earlier, even with nothing running, is not about the run it starts. */
+  async clearRunBindingStopRequest(input: { orgId: string; bindingId: string }): Promise<void> {
+    await this.#db.updateMany(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId },
+      { stop_requested_at: null },
+    );
+  }
+
+  async runBindingStopRequested(input: { orgId: string; bindingId: string }): Promise<boolean> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.bindingId,
+      org_id: input.orgId,
+    });
+    return row?.stop_requested_at != null;
   }
 
   /**

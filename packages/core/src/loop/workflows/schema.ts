@@ -27,7 +27,7 @@ export interface LLMIterationStepResult {
   reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
-  /** Private continuation: the physical attempt did not complete a logical step. */
+  /** Private continuation: the physical attempt did not complete a logical step (signal preemption, API-error retry). */
   signalPreempted?: boolean;
   logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;

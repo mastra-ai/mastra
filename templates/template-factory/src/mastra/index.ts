@@ -19,6 +19,7 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import { PgFactoryStorage, PgVector } from '@mastra/pg';
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
@@ -44,6 +45,41 @@ if (!encryptionKey) {
 
 const factoryConfigVersion = 'mastracode-web-v1';
 
+// Slack needs a bot token, an event transport, and OAuth credentials to link users.
+const slackCredentials = {
+  signingSecret: process.env.SLACK_APP_SIGNING_SECRET?.trim(),
+  appToken: process.env.SLACK_APP_TOKEN?.trim(),
+  botToken: process.env.SLACK_APP_BOT_TOKEN?.trim(),
+  clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+  clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+};
+const slackConfigured = Object.values(slackCredentials).some(Boolean);
+if (
+  slackConfigured &&
+  (!(slackCredentials.signingSecret || slackCredentials.appToken) ||
+    !slackCredentials.botToken ||
+    !slackCredentials.clientId ||
+    !slackCredentials.clientSecret)
+) {
+  throw new Error(
+    'Slack requires SLACK_APP_BOT_TOKEN, SLACK_APP_CLIENT_ID, SLACK_APP_CLIENT_SECRET, and either SLACK_APP_SIGNING_SECRET or SLACK_APP_TOKEN.',
+  );
+}
+
+const publicUrl = process.env.MASTRACODE_PUBLIC_URL?.trim() || undefined;
+const slackRedirectUrl = process.env.MASTRACODE_CHANNELS_PUBLIC_URL?.trim() || publicUrl;
+if (slackConfigured && !slackRedirectUrl?.startsWith('https://')) {
+  throw new Error('Slack account linking requires an HTTPS MASTRACODE_PUBLIC_URL or MASTRACODE_CHANNELS_PUBLIC_URL.');
+}
+const slack = slackConfigured
+  ? new SlackIntegration({
+      ...slackCredentials,
+      mode: slackCredentials.appToken ? 'socket' : 'webhook',
+      oidcRedirectBaseUrl: slackRedirectUrl,
+      uiOrigin: publicUrl ?? 'http://localhost:4111',
+    })
+  : undefined;
+
 export const factory = new MastraFactory({
   configVersion: factoryConfigVersion,
   sandboxStart: 'eager',
@@ -53,7 +89,10 @@ export const factory = new MastraFactory({
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
   // Sign-in callbacks and links use this origin; defaults to http://localhost:4111.
-  publicUrl: process.env.MASTRACODE_PUBLIC_URL?.trim() || undefined,
+  publicUrl,
+  // Stable across restarts/replicas so Slack account-link callbacks can verify OAuth state.
+  stateSecret: slackCredentials.signingSecret || slackCredentials.appToken,
+  integrations: slack ? [slack] : [],
   // No `sandbox`: with Platform credentials the factory uses a local sandbox
   // under `mastra dev` and a Platform sandbox in deployments.
 });

@@ -28,6 +28,8 @@ const rowClassName = 'min-w-0 gap-3';
 /** Side by side: label left, control pushed right. A control below its label fills the row instead. */
 const sideRowClassName = 'sm:justify-between sm:gap-6';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
+/** Beside its control, the label column is as tall as a label with a one-line description, so rows with and without one match. */
+const sideHeadingClassName = 'sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
 /**
  * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
  * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
@@ -46,7 +48,19 @@ export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: 
   );
 }
 
-/** One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`. */
+/**
+ * One setting the person changes: a label, an optional one-line description, and the control that changes it. The
+ * row is a form field, so its label names the control. Goes in a `SettingsContainer`.
+ *
+ * For one thing in a list (an account, a member, an API key, a package version), use `SettingsItem` instead: a row
+ * with no control, or one per record in a `.map`, is a list item. A setting someone may not change stays a
+ * `SettingsRow` with `viewOnly`.
+ *
+ * @example
+ * <SettingsRow label="Theme" description="Color scheme for the interface.">
+ *   <ThemeToggle />
+ * </SettingsRow>
+ */
 export function SettingsRow({
   label,
   description,
@@ -72,7 +86,7 @@ export function SettingsRow({
       className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
@@ -111,7 +125,15 @@ export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   controlPlacement?: 'side' | 'below';
 };
 
-/** A `SettingsRow` for a group of controls (radios, several switches), labelled by a legend. */
+/**
+ * A `SettingsRow` for one setting made of several controls (radios, several switches), labelled by a legend. Same
+ * rule as `SettingsRow`: a setting the person changes, never a list entry.
+ *
+ * @example
+ * <SettingsFieldsetRow label="Notify me about" controlPlacement="below">
+ *   <Checkbox … />
+ * </SettingsFieldsetRow>
+ */
 export function SettingsFieldsetRow({
   label,
   description,
@@ -135,7 +157,7 @@ export function SettingsFieldsetRow({
       )}
       {...props}
     >
-      <div className={headingClassName}>
+      <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
