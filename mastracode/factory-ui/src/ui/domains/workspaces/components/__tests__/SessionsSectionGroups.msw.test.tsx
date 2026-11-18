@@ -59,6 +59,11 @@ const sessions = [
   session('user-new', 'User new', 'user/new', 'new'),
 ];
 
+// A session whose sandbox is still coming up reads as Initializing only while a run waits on it.
+const startingRuns = sessions
+  .filter(entry => entry.materializedAt === null)
+  .map(entry => ({ runId: `run-${entry.sessionId}`, resourceId: entry.sessionId, threadId: entry.sessionId }));
+
 // One card per release session: the sidebar lists one row per card.
 const releaseItems = [releaseOld, releaseNew].map(release => ({
   id: `${release.sessionId}-item`,
@@ -96,6 +101,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json({ workItems: releaseItems }),
     ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () => HttpResponse.json({ runs: startingRuns })),
   );
 });
 
