@@ -146,6 +146,72 @@ it("acts with the host's org scope alone in sessions and on the Knowledge page, 
   expect(((await tree.json()) as { pages: { name: string }[] }).pages.map(page => page.name)).toEqual(['Handbook']);
 });
 
+it("keeps a Factory built without scopes off an org scope the caller's config gains later", async () => {
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  const storage = new LibSQLFactoryStorage({ id: 'knowledge-no-scopes', url: ':memory:' });
+  const knowledgeStorage = new InMemoryStore();
+  const knowledge = new Knowledge({
+    id: 'org-and-project',
+    storage: knowledgeStorage,
+    scopes: {
+      ...knowledgeMemoryScopes(),
+      'org:$orgId': { access: [{ principal: 'self', role: 'editor' }] },
+      'project:$projectId': { access: [{ principal: 'self', role: 'editor' }], belongsTo: 'org:$orgId' },
+    },
+  });
+  const config: ConstructorParameters<typeof MastraFactory>[0] = {
+    storage,
+    auth: null,
+    mcp: false,
+    knowledge,
+    secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
+  };
+  const factory = new MastraFactory(config);
+  onTestFinished(async () => {
+    await factory.shutdown();
+    await storage.close();
+  });
+  config.scopes = ['org:x'];
+  const mastra = new Mastra(await factory.prepare());
+
+  const controller = Object.values(mastra.listAgentControllers())[0]!;
+  const session = await controller.createSession({ resourceId: 'user-1', createInitialThread: false });
+  const requestContext = new RequestContext();
+  requestContext.set('controller', { state: { factoryOrgId: 'org-1', factoryProjectId: 'p1' } });
+  const runScopes = await controller.getCurrentAgent(session).getScopes({ requestContext });
+  expect(runScopes).toEqual([`org:${encodeKnowledgeScopeId('org-1')}`, 'project:p1']);
+
+  const app = new Hono();
+  app.use('*', async (context, next) => {
+    context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+    await next();
+  });
+  for (const m of [mastra.getServer()?.middleware ?? []].flat()) {
+    const entry = typeof m === 'function' ? { path: '*', handler: m } : m;
+    app.use(entry.path, entry.handler as never);
+  }
+  mountApiRoutes(app as never, mastra.getServer()?.apiRoutes ?? []);
+  const created = await app.request('/web/factory/projects', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'P' }),
+  });
+  const { project } = (await created.json()) as { project: { id: string } };
+
+  const store = (await knowledgeStorage.getStore('knowledge'))!;
+  const provenance = { author: 'host' };
+  const org = (await store.materializeScope({ address: 'org:x', declaration: 'org:$orgId', name: 'Org', provenance }))
+    .scope;
+  await store.createPage({ parentId: org.id, name: 'Handbook', provenance });
+
+  const tree = await app.request(`/web/factory/projects/${project.id}/knowledge/tree?parentId=${org.id}`);
+  expect(tree.status).toBe(200);
+  expect(await tree.json()).toEqual({ pages: [], truncated: false });
+});
+
 it.each([
   [['org:plat', 'project:p1'], "Scope project:p1 can't be held with the host's org:plat."],
   [['org:plat', 'resource:u1'], "Scope resource:u1 is a run's identity and can't be a host scope."],
