@@ -1785,6 +1785,8 @@ export class MastraFactory {
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
           onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
+          isThreadRunning: threadId =>
+            this.#prepared?.base.controller.listActiveThreadRuns().some(run => run.threadId === threadId) ?? false,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -2394,7 +2396,7 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
-                reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileToolResults: () => factoryProcessor?.reconcileBoundThreads() ?? Promise.resolve(),
                 reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 ...(githubIntegration
