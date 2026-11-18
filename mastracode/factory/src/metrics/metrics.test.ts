@@ -222,12 +222,31 @@ describe('process collector', () => {
     const gc = records.filter(r => r.name === 'mastra_factory_gc_ms');
     expect(gc.length).toBeGreaterThan(0);
     expect(gc.every(r => ['major', 'incremental'].includes(r.labels.kind!))).toBe(true);
-    expect(records.some(r => r.name === 'mastra_factory_process_memory_bytes' && r.labels.kind === 'heap_limit')).toBe(
-      true,
+    const memoryKinds = new Set(
+      records.filter(r => r.name === 'mastra_factory_process_memory_bytes').map(r => r.labels.kind),
     );
+    expect(memoryKinds).toEqual(new Set(['rss', 'heap_total', 'heap_used', 'external', 'array_buffers', 'heap_limit']));
     const heap = records.find(r => r.name === 'mastra_factory_process_heap_utilization')?.value;
     expect(heap).toBeGreaterThan(0);
     expect(heap).toBeLessThan(1);
+    // Every space seen is a known label (or `other`); every tick emits exactly one record per
+    // known label, so the number of distinct `space` values equals the per-tick space count.
+    const spaces = records.filter(r => r.name === 'mastra_factory_process_heap_space_bytes');
+    const knownSpaces = new Set([
+      'old',
+      'new',
+      'code',
+      'large_object',
+      'code_large_object',
+      'new_large_object',
+      'trusted',
+      'trusted_large_object',
+      'shared',
+      'shared_large_object',
+      'other',
+    ]);
+    for (const r of spaces) expect(knownSpaces.has(r.labels.space!)).toBe(true);
+    expect(spaces.some(r => r.labels.space === 'old' && r.value > 0)).toBe(true);
     const loopStats = records.filter(r => r.name === 'mastra_factory_event_loop_delay_ms').map(r => r.labels.stat);
     expect(new Set(loopStats)).toEqual(new Set(['avg', 'p95', 'max']));
     expect(records.some(r => r.name === 'mastra_factory_event_loop_delay_ms_count')).toBe(true);
