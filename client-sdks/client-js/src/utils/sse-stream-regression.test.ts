@@ -111,6 +111,51 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       expect(stream.locked).toBe(false);
       expect(chunks).toEqual([]);
     });
+
+    it('stops the source when onChunk throws (#30788)', async () => {
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const failure = new Error('handler failed');
+      // The source never closes, so the call can only settle through the error path.
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(cancelled).toBe(true);
+      expect(stream.locked).toBe(false);
+    });
+
+    it('keeps the onChunk error when cancelling the source also fails (#30788)', async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      });
+      const failure = new Error('handler failed');
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(stream.locked).toBe(false);
+    });
   });
 }
 
@@ -180,6 +225,22 @@ describe('MastraClient agent.stream SSE readers', () => {
     } finally {
       reader.releaseLock();
     }
+  });
+
+  it('closes the server response when onChunk throws (#30788)', async () => {
+    const disconnected = new Promise<void>(resolve => {
+      onDisconnect = resolve;
+    });
+    const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel').stream('hi');
+    if (!result.body) throw new Error('Expected a response body');
+    await expect(
+      result.processDataStream({
+        onChunk: () => {
+          throw new Error('handler failed');
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+    await disconnected;
   });
 
   it('flushes an unterminated final event on the returned stream and removes DONE', async () => {

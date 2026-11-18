@@ -46,6 +46,19 @@ async function sharedProcessMastraStream({
         }
       }
     }
+  } catch (error) {
+    // A consumer that stopped reading must tell the producer to stop too: releasing
+    // the lock leaves the response open and the server keeps generating (#30788).
+    // When the signal aborted, the abort handler already cancelled the source.
+    if (!signal?.aborted) {
+      try {
+        await reader.cancel(error);
+      } catch {
+        // An already-errored stream rejects cancel with its stored error. The caller
+        // needs the failure from the handler, not this one.
+      }
+    }
+    throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
     reader.releaseLock();
