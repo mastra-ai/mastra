@@ -13,13 +13,13 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, Traceloop, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Agnost AI, Dash0, Datadog, evalship, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, Traceloop, and more.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf providers (Agnost AI, Laminar, Latitude, MLflow, New Relic, Sentry, SigNoz, telemetry.dev)
+#### For HTTP/Protobuf providers (Agnost AI, evalship, Laminar, Latitude, MLflow, New Relic, Sentry, SigNoz, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -216,6 +216,31 @@ The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-
 For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/integrations/observability/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
 
 :::
+
+#### evalship
+
+[evalship](https://evalship.com) checks the model calls your agents make in production and flags the ones that went wrong. It ingests OTLP/HTTP protobuf traces. Use the `custom` provider with your repository's production key:
+
+```bash title=".env"
+EVALSHIP_PRODUCTION_KEY=your-production-key
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://evalship.com/api/v1/otlp/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        Authorization: `Bearer ${process.env.EVALSHIP_PRODUCTION_KEY}`,
+      },
+    },
+  },
+  signals: { logs: false },
+})
+```
+
+evalship names each model call after its agent. It reads the session and user from the memory thread and resource, or from `threadId` and `userId` in `tracingOptions.metadata`. It stores traces only, so `signals: { logs: false }` skips the log export. See [evalship's Mastra guide](https://evalship.com/docs/monitor#already-tracing-with-mastra) for the full setup.
 
 #### Laminar
 
