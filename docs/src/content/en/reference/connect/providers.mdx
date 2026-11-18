@@ -291,7 +291,7 @@ Provider ID: `gitlab` · 44 tools
 | `gitlab_create_release` | Create a release in GitLab. |
 | `gitlab_delete_branch` | Delete a branch in GitLab. |
 | `gitlab_delete_file` | Delete a GitLab repository file. |
-| `gitlab_delete_group` | Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion. |
+| `gitlab_delete_group` | Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously. |
 | `gitlab_delete_issue` | Delete an issue in GitLab. |
 | `gitlab_delete_merge_request` | Delete a merge request in GitLab. |
 | `gitlab_delete_pipeline` | Delete a pipeline in GitLab. This permanently deletes the pipeline and all immediately related objects, such as builds, logs, artifacts, and triggers. This action cannot be undone. |
@@ -311,7 +311,7 @@ Provider ID: `gitlab` · 44 tools
 | `gitlab_list_commits` | List commits from GitLab. |
 | `gitlab_list_groups` | List groups from GitLab. |
 | `gitlab_list_issues` | List issues from GitLab |
-| `gitlab_list_jobs` | List jobs from GitLab. |
+| `gitlab_list_jobs` | List jobs from GitLab, newest first. |
 | `gitlab_list_merge_requests` | List merge requests from GitLab. |
 | `gitlab_list_pipelines` | List pipelines from GitLab. |
 | `gitlab_list_projects` | List projects from GitLab. |

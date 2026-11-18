@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const retryJobInputSchema = z.object({
-  project_id: z.number().describe('Project ID. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('Project ID. Example: 82599306'),
   job_id: z.number().describe('Job ID. Example: 12345'),
 });
 
@@ -82,15 +82,15 @@ export function retryJobTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/jobs/#retry-a-job
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${gitlabPathSegment(input.job_id)}/retry`,
-        retries: 3,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${encodeURIComponent(String(input.job_id))}/retry`,
+        retries: 1,
       });
 
       if (!response.data) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Job not found or could not be retried',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           job_id: input.job_id,
         });
       }

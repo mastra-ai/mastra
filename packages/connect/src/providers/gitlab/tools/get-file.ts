@@ -16,7 +16,9 @@ function gitlabPathSegment(value: string | number): string {
 
 export const getFileInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
-  file_path: z.string().describe('URL-encoded full path to the file. Example: hello.txt'),
+  file_path: z
+    .string()
+    .describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"'),
   ref: z.string().optional().describe('Name of branch, tag, or commit. Defaults to the default branch if omitted.'),
 });
 
@@ -58,7 +60,7 @@ export function getFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/repository_files/#retrieve-a-file-from-a-repository
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${encodeURIComponent(String(input.file_path))}`,
         params: {
           ref: input.ref ?? 'HEAD',
         },

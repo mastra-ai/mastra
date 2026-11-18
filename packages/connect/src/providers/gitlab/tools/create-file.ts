@@ -47,7 +47,7 @@ export function createFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/repository_files/#create-new-file-in-repository
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${encodeURIComponent(String(input.file_path))}`,
         data: {
           branch: input.branch,
           commit_message: input.commit_message,
@@ -58,7 +58,7 @@ export function createFileTool(proxy: PlatformProxy) {
           ...(input.execute_filemode !== undefined && { execute_filemode: input.execute_filemode }),
           ...(input.start_branch !== undefined && { start_branch: input.start_branch }),
         },
-        retries: 10,
+        retries: 1,
       });
 
       const providerData = ProviderResponseSchema.parse(response.data);

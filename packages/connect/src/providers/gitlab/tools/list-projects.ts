@@ -11,7 +11,10 @@ export const listProjectsInputSchema = z.object({
   owned: z.boolean().optional().describe('Limit to projects owned by the current user.'),
   membership: z.boolean().optional().describe('Limit to projects where the current user is a member.'),
   visibility: z.enum(['private', 'internal', 'public']).optional().describe('Filter by visibility level.'),
-  archived: z.boolean().optional().describe('Include archived projects.'),
+  archived: z
+    .boolean()
+    .optional()
+    .describe('true returns only archived projects, false only active ones. Omit to return both.'),
 });
 
 const ProviderProjectSchema = z.object({

@@ -60,7 +60,7 @@ export function updateMergeRequestTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.put({
         // https://docs.gitlab.com/api/merge_requests/#update-a-merge-request
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${encodeURIComponent(String(input.merge_request_iid))}`,
         data: {
           ...(input.target_branch !== undefined && { target_branch: input.target_branch }),
           ...(input.title !== undefined && { title: input.title }),
@@ -83,7 +83,7 @@ export function updateMergeRequestTool(proxy: PlatformProxy) {
             allow_maintainer_to_push: input.allow_maintainer_to_push,
           }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const mergeRequest = updateMergeRequestOutputSchema.parse(response.data);

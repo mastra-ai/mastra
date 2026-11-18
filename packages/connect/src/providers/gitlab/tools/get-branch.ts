@@ -62,7 +62,7 @@ export function getBranchTool(proxy: PlatformProxy) {
       try {
         // https://docs.gitlab.com/api/branches/#get-a-single-repository-branch
         const response = await platformProxy.get({
-          endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/branches/${gitlabPathSegment(input.branch)}`,
+          endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/branches/${encodeURIComponent(String(input.branch))}`,
           retries: 3,
         });
 
@@ -80,7 +80,7 @@ export function getBranchTool(proxy: PlatformProxy) {
           throw new platformProxy.ActionError({
             type: 'not_found',
             message: 'Branch not found',
-            project_id: input.project_id,
+            project_id: String(input.project_id),
             branch: input.branch,
           });
         }

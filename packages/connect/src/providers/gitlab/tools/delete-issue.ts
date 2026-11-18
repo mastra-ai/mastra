@@ -37,13 +37,13 @@ export function deleteIssueTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/issues/#delete-an-issue
       await platformProxy.delete({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${gitlabPathSegment(input.issue_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${encodeURIComponent(String(input.issue_iid))}`,
         retries: 1,
       });
 
       return {
         success: true,
-        project_id: input.project_id,
+        project_id: String(input.project_id),
         issue_iid: input.issue_iid,
       };
     },

@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const updateIssueInputSchema = z.object({
-  project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
   issue_iid: z.number().describe('The internal ID of a project issue. Example: 1'),
   title: z.string().optional().describe('The title of the issue'),
   description: z.string().optional().describe('The description of the issue'),
@@ -110,7 +112,7 @@ export function updateIssueTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.put({
         // https://docs.gitlab.com/api/issues/#edit-an-issue
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${gitlabPathSegment(input.issue_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/issues/${encodeURIComponent(String(input.issue_iid))}`,
         data: {
           ...(input.title !== undefined && { title: input.title }),
           ...(input.description !== undefined && { description: input.description }),
@@ -126,7 +128,7 @@ export function updateIssueTool(proxy: PlatformProxy) {
           ...(input.issue_type !== undefined && { issue_type: input.issue_type }),
           ...(input.weight !== undefined && { weight: input.weight }),
         },
-        retries: 10,
+        retries: 1,
       });
 
       const providerIssue = ProviderIssueSchema.parse(response.data);

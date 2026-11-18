@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const deleteReleaseInputSchema = z.object({
-  project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
   tag_name: z.string().describe('The Git tag the release is associated with. Example: "v1.0.0"'),
 });
 
@@ -42,8 +44,8 @@ export function deleteReleaseTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const config: PlatformProxyRequest = {
         // https://docs.gitlab.com/api/releases/#delete-a-release
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${gitlabPathSegment(input.tag_name)}`,
-        retries: 2,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/releases/${encodeURIComponent(String(input.tag_name))}`,
+        retries: 1,
       };
 
       const response = await platformProxy.delete(config);
@@ -52,7 +54,7 @@ export function deleteReleaseTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Release not found or could not be deleted',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           tag_name: input.tag_name,
         });
       }

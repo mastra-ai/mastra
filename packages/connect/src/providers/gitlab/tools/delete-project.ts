@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const deleteProjectInputSchema = z.object({
-  project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306" or "group/project".'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID or URL-encoded path of the project. Example: "82599306" or "group/project".'),
   archive: z
     .boolean()
     .optional()
@@ -33,7 +35,11 @@ const ArchiveProjectResponseSchema = z.object({
 export const deleteProjectOutputSchema = z.object({
   success: z.boolean(),
   project_id: z.string(),
-  archived: z.boolean(),
+  archived: z
+    .boolean()
+    .describe(
+      'true when this call archived the project, false when it requested deletion. Not the project archive state.',
+    ),
   message: z.string().optional(),
 });
 
@@ -51,7 +57,7 @@ export function deleteProjectTool(proxy: PlatformProxy) {
         // https://docs.gitlab.com/api/projects/#archive-a-project
         const response = await platformProxy.post({
           endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/archive`,
-          retries: 10,
+          retries: 1,
         });
 
         const providerProject = ArchiveProjectResponseSchema.parse(response.data);
@@ -67,12 +73,12 @@ export function deleteProjectTool(proxy: PlatformProxy) {
       // https://docs.gitlab.com/api/projects/#delete-project
       await platformProxy.delete({
         endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}`,
-        retries: 10,
+        retries: 1,
       });
 
       return {
         success: true,
-        project_id: input.project_id,
+        project_id: String(input.project_id),
         archived: false,
         message:
           'GitLab accepted the deletion request. GitLab.com and instances with delayed deletion keep the project for a retention period before removing it.',

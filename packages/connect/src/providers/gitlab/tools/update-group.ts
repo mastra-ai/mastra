@@ -139,7 +139,7 @@ export function updateGroupTool(proxy: PlatformProxy) {
         // https://docs.gitlab.com/api/groups/#update-group
         endpoint: `/api/v4/groups/${gitlabPathSegment(groupId)}`,
         data,
-        retries: 3,
+        retries: 1,
       };
       const response = await platformProxy.put(config);
 

@@ -24,7 +24,9 @@ export const deleteGroupInputSchema = z
     full_path: z
       .string()
       .optional()
-      .describe('The full path to the subgroup. Required when permanently_remove is true.'),
+      .describe(
+        'The subgroup full_path after it was scheduled for deletion (GitLab renames it). Read it with gitlab_get_group using the numeric id. Required when permanently_remove is true.',
+      ),
   })
   .refine(
     data => data.permanently_remove !== true || (typeof data.full_path === 'string' && data.full_path.length > 0),
@@ -43,7 +45,7 @@ export function deleteGroupTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_delete_group',
     description:
-      'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
+      'Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
     inputSchema: deleteGroupInputSchema,
     outputSchema: deleteGroupOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGroupOutputSchema>> => {
@@ -62,7 +64,7 @@ export function deleteGroupTool(proxy: PlatformProxy) {
       await platformProxy.delete({
         endpoint: `/api/v4/groups/${gitlabPathSegment(input.group_id)}`,
         params,
-        retries: 3,
+        retries: 1,
       });
 
       return {

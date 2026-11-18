@@ -147,7 +147,7 @@ export function updateProjectTool(proxy: PlatformProxy) {
           ...(input.request_access_enabled !== undefined && { request_access_enabled: input.request_access_enabled }),
           ...(input.emails_enabled !== undefined && { emails_enabled: input.emails_enabled }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const providerProject = ProviderProjectSchema.parse(response.data);

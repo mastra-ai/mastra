@@ -130,7 +130,7 @@ export function getMergeRequestTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/merge_requests/#get-single-mr
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${encodeURIComponent(String(input.merge_request_iid))}`,
         retries: 3,
       });
 
@@ -138,7 +138,7 @@ export function getMergeRequestTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Merge request not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           merge_request_iid: input.merge_request_iid,
         });
       }

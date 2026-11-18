@@ -15,7 +15,7 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createBranchInputSchema = z.object({
-  project_id: z.number().describe('Project ID. Example: 82599306'),
+  project_id: z.union([z.number(), z.string()]).describe('Project ID. Example: 82599306'),
   branch: z.string().describe('Name of the new branch. Example: "feature/my-branch"'),
   ref: z.string().describe('Branch name or commit SHA to create the branch from. Example: "main"'),
 });
@@ -93,7 +93,7 @@ export function createBranchTool(proxy: PlatformProxy) {
           branch: input.branch,
           ref: input.ref,
         },
-        retries: 10,
+        retries: 1,
       });
 
       const providerBranch = ProviderBranchSchema.parse(response.data);

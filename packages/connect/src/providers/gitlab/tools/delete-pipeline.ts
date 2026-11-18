@@ -15,7 +15,9 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const deletePipelineInputSchema = z.object({
-  project_id: z.string().describe('The ID or URL-encoded path of the project. Example: "82599306" or "group/project".'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe('The ID or URL-encoded path of the project. Example: "82599306" or "group/project".'),
   pipeline_id: z.number().describe('The ID of the pipeline to delete. Example: 123'),
 });
 
@@ -38,8 +40,8 @@ export function deletePipelineTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/pipelines/#delete-a-pipeline
       await platformProxy.delete({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/pipelines/${gitlabPathSegment(input.pipeline_id)}`,
-        retries: 3,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(encodedProjectId)}/pipelines/${encodeURIComponent(String(input.pipeline_id))}`,
+        retries: 1,
       });
 
       return {

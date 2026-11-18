@@ -134,7 +134,7 @@ export function getReleaseTool(proxy: PlatformProxy) {
       const projectId = typeof input.project_id === 'number' ? String(input.project_id) : input.project_id;
       // https://docs.gitlab.com/api/releases/#get-a-release-by-a-tag-name
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/releases/${gitlabPathSegment(input.tag_name)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(projectId)}/releases/${encodeURIComponent(String(input.tag_name))}`,
         retries: 3,
       });
 
@@ -142,7 +142,7 @@ export function getReleaseTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: 'Release not found',
-          project_id: input.project_id,
+          project_id: String(input.project_id),
           tag_name: input.tag_name,
         });
       }

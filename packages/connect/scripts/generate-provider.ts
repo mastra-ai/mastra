@@ -837,9 +837,10 @@ function adaptOpenAICreateImage(action: ExtractedAction): ExtractedAction {
  * into the query (`project_id: "42?"` turns delete-pipeline into
  * `DELETE /projects/42`), a raw `group/project` adds a path segment, and an
  * encoded `group%2Fproject` passed through `encodeURIComponent` becomes
- * `group%252Fproject`. Route every interpolated endpoint segment through one
- * helper that decodes once and encodes once, so numeric IDs, raw paths, and
- * already-encoded paths all reach GitLab as a single segment.
+ * `group%252Fproject`. Project and group identifiers are documented as raw or
+ * URL-encoded, so they go through a helper that decodes once and encodes once.
+ * Every other segment (branch, file path, tag, sha, numeric ids) is a literal
+ * name where `%2F` differs from `/`, so it is encoded as given.
  */
 const GITLAB_PATH_SEGMENT_HELPER = `/** Encodes one GitLab path segment exactly once, whether \`value\` arrives raw or already URL-encoded. */
 function gitlabPathSegment(value: string | number): string {
@@ -850,6 +851,16 @@ function gitlabPathSegment(value: string | number): string {
     return encodeURIComponent(text);
   }
 }`;
+
+/** Endpoint expressions that hold a GitLab project or group id or path (raw or URL-encoded). */
+const GITLAB_ID_OR_PATH_EXPRESSIONS = new Set([
+  'input.project_id',
+  'input.group_id',
+  'input.id',
+  'projectId',
+  'encodedProjectId',
+  'groupId',
+]);
 
 function stripEncodingWrappers(expression: string): string {
   let core = expression.trim();
@@ -865,7 +876,10 @@ function encodeGitLabPathSegments(action: ExtractedAction): ExtractedAction {
   const execBody = action.execBody.replace(/(endpoint:\s*`)([^`]*)`/g, (_match, prefix: string, path: string) => {
     const encoded = path.replace(/\$\{([^{}]*)\}/g, (_segment, expression: string) => {
       rewrites++;
-      return `\${gitlabPathSegment(${stripEncodingWrappers(expression)})}`;
+      const value = stripEncodingWrappers(expression);
+      return GITLAB_ID_OR_PATH_EXPRESSIONS.has(value)
+        ? `\${gitlabPathSegment(${value})}`
+        : `\${encodeURIComponent(String(${value}))}`;
     });
     return `${prefix}${encoded}\``;
   });
@@ -975,14 +989,140 @@ const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'delete-branch': 'Delete a branch in GitLab.',
   'delete-issue': 'Delete an issue in GitLab.',
   'delete-group':
-    'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
+    'Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
+  'list-jobs': 'List jobs from GitLab, newest first.',
 };
+
+/**
+ * Input fixes: GitLab's jobs endpoint ignores `order_by` and `sort` (it always
+ * returns newest first), and `archived` on project lists filters rather than
+ * adding archived projects to the results.
+ */
+const GITLAB_INPUT_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> = {
+  'list-jobs': [
+    {
+      pattern: /\n\s*order_by: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'order_by',
+    },
+    {
+      pattern: /\n\s*sort: z\.string\(\)\.optional\(\)\.describe\([^\n]*\),?/,
+      replacement: '',
+      count: 1,
+      what: 'sort',
+    },
+  ],
+  'get-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'update-file': [
+    {
+      pattern: /file_path: z\.string\(\)\.describe\('URL-encoded full path to the file\. Example: hello\.txt'\)/,
+      replacement: `file_path: z.string().describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"')`,
+      count: 1,
+      what: 'file_path description',
+    },
+  ],
+  'delete-group': [
+    {
+      pattern: /\.describe\('The full path to the subgroup\. Required when permanently_remove is true\.'\)/,
+      replacement:
+        ".describe('The subgroup full_path after it was scheduled for deletion (GitLab renames it). Read it with gitlab_get_group using the numeric id. Required when permanently_remove is true.')",
+      count: 1,
+      what: 'full_path description',
+    },
+  ],
+  'delete-project': [
+    {
+      pattern: /(\n\s*)archived: z\.boolean\(\),(\s*message)/,
+      replacement:
+        "$1archived: z.boolean().describe('true when this call archived the project, false when it requested deletion. Not the project archive state.'),$2",
+      count: 1,
+      what: 'archived output description',
+    },
+  ],
+  'list-projects': [
+    {
+      pattern: /archived: z\.boolean\(\)\.optional\(\)\.describe\('Include archived projects\.'\)/,
+      replacement:
+        "archived: z.boolean().optional().describe('true returns only archived projects, false only active ones. Omit to return both.')",
+      count: 1,
+      what: 'archived description',
+    },
+  ],
+};
+
+/**
+ * Templates type `project_id` as a number in some tools and a string in others,
+ * so an id or path one tool returns can be rejected by the next. Every GitLab
+ * input accepts both; `gitlabPathSegment` turns either into one path segment.
+ */
+function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
+  const moduleStatements = action.moduleStatements.map(statement =>
+    /export const \w+InputSchema = z\b/.test(statement)
+      ? statement.replace(
+          /project_id: z(\s*)\.(?:number|string)\(\)/g,
+          'project_id: z$1.union([z.number(), z.string()])',
+        )
+      : statement,
+  );
+  // delete-project echoes the input id in a string output field.
+  const execBody = action.execBody.replace(
+    /\bproject_id: input\.project_id,/g,
+    'project_id: String(input.project_id),',
+  );
+  return { ...action, moduleStatements, execBody };
+}
+
+/**
+ * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
+ * first attempt already applied could run again: deleting a branch recreated
+ * by someone else meanwhile, committing a file change twice, or undoing a
+ * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * the template's retries.
+ */
+function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+  if (/platformProxy\.get\(/.test(action.execBody)) return action;
+  return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
+}
 
 function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   const slug = action.candidate.actionSlug;
-  let adapted = encodeGitLabPathSegments(action);
-  const schemaFixes = GITLAB_RESPONSE_SCHEMA_FIXES[slug];
-  if (schemaFixes) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
+  if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  if (slug === 'list-jobs') {
+    // GitLab reads several statuses only as `scope[]`; repeated bare `scope` keys keep just one.
+    let execBody = replaceOnce(
+      adapted.execBody,
+      /\{ scope: input\.scope \}/,
+      "{ 'scope[]': input.scope }",
+      adapted,
+      'scope array',
+    );
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.order_by !== undefined[^\n]*/, '', adapted, 'order_by param');
+    execBody = replaceOnce(execBody, /\n *\.\.\.\(input\.sort !== undefined[^\n]*/, '', adapted, 'sort param');
+    adapted = { ...adapted, execBody };
+  }
+  if (slug === 'get-group') {
+    // The tool returns group metadata only; skip the project lists GitLab embeds by default.
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /(endpoint: `\/api\/v4\/groups\/\$\{gitlabPathSegment\(input\.id\)\}`,)/,
+        '$1\n        params: { with_projects: false },',
+        adapted,
+        'with_projects',
+      ),
+    };
+  }
   if (slug === 'delete-project') {
     adapted = {
       ...adapted,

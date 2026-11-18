@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Scenario, ScenarioStep } from '../scenario.js';
 import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '../scenario.js';
 
@@ -23,6 +24,8 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  */
 
 const SYNTHETIC_GROUP_ID = 999_999_999;
+const GROUP_REREAD_ATTEMPTS = 3;
+const GROUP_REREAD_INTERVAL_MS = 5_000;
 const CI_JOB_NAME = 'mastra-smoke';
 /** Job states GitLab's retry endpoint accepts. */
 const RETRYABLE_JOB_STATES = new Set(['failed', 'canceled', 'success']);
@@ -111,6 +114,9 @@ export const gitlabScenario: Scenario = {
 
     await runGroupLifecycle(groups?.items[0]?.id);
 
+    // A marker unique to this create attempt, so recovery never claims a
+    // project that merely shares the run's path.
+    const createMarker = randomUUID();
     // An empty project, so no commit exists until shared runners are off.
     const project = await step<{ id: number; default_branch?: string | null }>(
       'create project',
@@ -118,7 +124,7 @@ export const gitlabScenario: Scenario = {
       {
         name: runId,
         path: runId,
-        description: 'Automated @mastra/connect smoke test. Safe to delete.',
+        description: `Automated @mastra/connect smoke test ${createMarker}. Safe to delete.`,
         visibility: 'private',
       },
       out => `#${out.id}`,
@@ -150,12 +156,15 @@ export const gitlabScenario: Scenario = {
     /** When create_project failed after GitLab may have created the project, finds it so it can still be deleted. */
     async function findLeakedProject(): Promise<number | undefined> {
       try {
-        const found = await call<{ items: Array<{ id: number; path: string }> }>('gitlab_list_projects', {
-          search: runId,
-          owned: true,
-          per_page: 20,
-        });
-        const leaked = found.items.find(item => item.path === runId);
+        const found = await call<{ items: Array<{ id: number; path: string; description?: string | null }> }>(
+          'gitlab_list_projects',
+          {
+            search: runId,
+            owned: true,
+            per_page: 20,
+          },
+        );
+        const leaked = found.items.find(item => item.path === runId && item.description?.includes(createMarker));
         if (leaked) log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
         return leaked?.id;
       } catch (error) {
@@ -241,28 +250,47 @@ export const gitlabScenario: Scenario = {
         return;
       }
 
-      // Instances with delayed deletion only mark the group and rename it, so
-      // read its current path back. Gone already means it was deleted outright.
-      let markedPath: string | undefined;
-      try {
-        const marked = await call<{ full_path?: string }>('gitlab_get_group', { id: group.id });
-        markedPath = marked.full_path ?? group.full_path;
-      } catch (error) {
-        if (/status=404/.test(errorMessage(error))) {
-          steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'deleted'));
-          return;
-        }
-        markedPath = group.full_path;
-      }
       if (parentId === undefined) {
         // Only subgroups can be removed permanently; a top-level group stays
         // scheduled for the instance's retention period.
-        steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', `${markedPath} scheduled for deletion`));
+        steps.push(
+          makeStep('delete group', 'gitlab_delete_group', 'pass', `${group.full_path} scheduled for deletion`),
+        );
+        return;
+      }
+
+      // Instances with delayed deletion mark the group and rename it, and
+      // permanent removal needs the new path, so read it back. Gone already
+      // means it was deleted outright.
+      let markedPath: string | undefined;
+      let lastError: unknown;
+      for (let attempt = 0; attempt < GROUP_REREAD_ATTEMPTS && markedPath === undefined; attempt++) {
+        if (attempt > 0) await new Promise(resolve => setTimeout(resolve, GROUP_REREAD_INTERVAL_MS));
+        try {
+          const marked = await call<{ full_path?: string }>('gitlab_get_group', { id: group.id });
+          markedPath = marked.full_path ?? group.full_path;
+        } catch (error) {
+          if (/status=404/.test(errorMessage(error))) {
+            steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'deleted'));
+            return;
+          }
+          lastError = error;
+        }
+      }
+      if (markedPath === undefined) {
+        // The pre-delete path would be rejected, leaving the subgroup in retention.
+        log.error(
+          `gitlab: subgroup ${group.id} is scheduled for deletion but its new path could not be read; remove it manually`,
+          errorMessage(lastError),
+        );
+        steps.push(makeStep('delete group', 'gitlab_delete_group', 'fail', errorMessage(lastError)));
         return;
       }
       try {
         await call('gitlab_delete_group', { group_id: group.id, permanently_remove: true, full_path: markedPath });
-        steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'scheduled, then permanently removed'));
+        steps.push(
+          makeStep('delete group', 'gitlab_delete_group', 'pass', 'scheduled, then permanent removal requested'),
+        );
       } catch (error) {
         log.error(
           `gitlab: subgroup ${markedPath} is scheduled for deletion but was not removed; remove it manually`,
@@ -519,7 +547,17 @@ export const gitlabScenario: Scenario = {
           );
         }
       }
-      await step('delete pipeline', 'gitlab_delete_pipeline', { project_id: pid, pipeline_id: pipeline.id });
+      try {
+        await call('gitlab_delete_pipeline', { project_id: pid, pipeline_id: pipeline.id });
+        steps.push(makeStep('delete pipeline', 'gitlab_delete_pipeline', 'pass'));
+      } catch (error) {
+        // Deleting the project only schedules it, so the pipeline can outlive this run.
+        log.error(
+          `gitlab: leaked pipeline ${pipeline.id} in project ${projectId}; delete it manually`,
+          errorMessage(error),
+        );
+        steps.push(makeStep('delete pipeline', 'gitlab_delete_pipeline', 'fail', errorMessage(error)));
+      }
     }
   },
 };

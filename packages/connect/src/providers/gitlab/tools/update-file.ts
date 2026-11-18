@@ -16,7 +16,9 @@ function gitlabPathSegment(value: string | number): string {
 
 export const updateFileInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
-  file_path: z.string().describe('URL-encoded full path to the file. Example: hello.txt'),
+  file_path: z
+    .string()
+    .describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"'),
   branch: z.string().describe('Name of the branch to update the file in. Example: feature/test'),
   content: z.string().describe('The file content.'),
   commit_message: z.string().describe('Commit message.'),
@@ -51,7 +53,7 @@ export function updateFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.put({
         // https://docs.gitlab.com/api/repository_files/#update-existing-file-in-repository
-        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${encodeURIComponent(String(input.file_path))}`,
         data: {
           branch: input.branch,
           content: input.content,
@@ -63,7 +65,7 @@ export function updateFileTool(proxy: PlatformProxy) {
           ...(input.last_commit_id !== undefined && { last_commit_id: input.last_commit_id }),
           ...(input.start_branch !== undefined && { start_branch: input.start_branch }),
         },
-        retries: 3,
+        retries: 1,
       });
 
       const providerResponse = ProviderResponseSchema.parse(response.data);

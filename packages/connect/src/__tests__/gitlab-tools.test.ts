@@ -87,7 +87,7 @@ describe('generated GitLab tools', () => {
 
   async function run(toolId: string, input: Record<string, unknown>) {
     const resolved = await tools({
-      providers: ['gitlab'],
+      providers: { gitlab: { connectionId: connection.id } },
       allowTools: [toolId],
       projectId: 'proj_test',
       client: { accessToken: 'test-platform-token', baseUrl },
@@ -126,9 +126,66 @@ describe('generated GitLab tools', () => {
       await run('gitlab_get_release', { project_id: projectId, tag_name: 'v1.0.0' });
       await run('gitlab_delete_release', { project_id: projectId, tag_name: 'v1.0.0' });
 
+      expect(requests).toEqual([
+        { method: 'GET', target: '/api/v4/projects/team%2Fapp/releases/v1.0.0' },
+        { method: 'DELETE', target: '/api/v4/projects/team%2Fapp/releases/v1.0.0' },
+      ]);
+    });
+
+    it('keeps a literal percent sequence in a branch name distinct from a slash', async () => {
+      answer = () => ({ status: 404, body: { message: '404 Branch Not Found' } });
+
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'release%2Fnext' })).rejects.toThrow();
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'release/next' })).rejects.toThrow();
+
       expect(requests.map(request => request.target)).toEqual([
-        '/api/v4/projects/team%2Fapp/releases/v1.0.0',
-        '/api/v4/projects/team%2Fapp/releases/v1.0.0',
+        '/api/v4/projects/42/repository/branches/release%252Fnext',
+        '/api/v4/projects/42/repository/branches/release%2Fnext',
+      ]);
+    });
+
+    it('deletes the release for a tag with a literal percent sequence, not the decoded tag', async () => {
+      answer = () => ({ status: 200, body: { tag_name: 'v1%41', description: 'notes' } });
+
+      const result = await run('gitlab_delete_release', { project_id: 42, tag_name: 'v1%41' });
+
+      expect(result).toMatchObject({ tag_name: 'v1%41', deleted: true });
+      // Decoded first, `v1%41` would have deleted the release for tag `v1A`.
+      expect(requests).toEqual([{ method: 'DELETE', target: '/api/v4/projects/42/releases/v1%2541' }]);
+    });
+
+    it('creates and reads back a file whose name contains a literal percent sequence', async () => {
+      answer = () => ({ status: 201, body: { file_path: 'docs/a%20b.txt', branch: 'main' } });
+
+      const created = await run('gitlab_create_file', {
+        project_id: 42,
+        file_path: 'docs/a%20b.txt',
+        branch: 'main',
+        content: 'x',
+        commit_message: 'add',
+      });
+      answer = () => ({
+        status: 200,
+        body: {
+          file_name: 'a%20b.txt',
+          file_path: 'docs/a%20b.txt',
+          size: 1,
+          encoding: 'base64',
+          content: 'eA==',
+          content_sha256: 'sha',
+          ref: 'main',
+          blob_id: 'blob',
+          commit_id: 'c1',
+          last_commit_id: 'c1',
+          execute_filemode: false,
+        },
+      });
+      await run('gitlab_get_file', { project_id: 42, file_path: created.file_path, ref: 'main' });
+
+      // `docs/a b.txt` would be `docs%2Fa%20b.txt`; the literal `%20` must stay distinct.
+      expect(requests).toEqual([
+        { method: 'POST', target: '/api/v4/projects/42/repository/files/docs%2Fa%2520b.txt' },
+        { method: 'GET', target: '/api/v4/projects/42/repository/files/docs%2Fa%2520b.txt?ref=main' },
       ]);
     });
 
@@ -157,6 +214,78 @@ describe('generated GitLab tools', () => {
     });
   });
 
+  describe('project ids', () => {
+    it('accepts the numeric project id other tools return when deleting a pipeline', async () => {
+      const result = await run('gitlab_delete_pipeline', { project_id: 42, pipeline_id: 7 });
+
+      expect(result).toMatchObject({ project_id: '42' });
+      expect(requests[0]?.target).toBe('/api/v4/projects/42/pipelines/7');
+    });
+
+    it('accepts the project path list_jobs takes when reading a job', async () => {
+      answer = () => ({
+        status: 200,
+        body: { id: 9, name: 'rspec', status: 'pending', stage: 'test', ref: 'main', tag: false, allow_failure: false },
+      });
+
+      await run('gitlab_get_job', { project_id: 'team/app', job_id: 9 });
+
+      expect(requests[0]?.target).toBe('/api/v4/projects/team%2Fapp/jobs/9');
+    });
+  });
+
+  describe('request shape', () => {
+    it('sends several job statuses as a GitLab array', async () => {
+      answer = () => ({ status: 200, body: [] });
+
+      await run('gitlab_list_jobs', { project_id: 42, scope: ['pending', 'running'] });
+
+      expect(requests[0]?.target).toBe('/api/v4/projects/42/jobs?scope%5B%5D=pending&scope%5B%5D=running');
+    });
+
+    it('reads group metadata without the embedded project lists', async () => {
+      answer = () => ({ status: 200, body: { id: 5, name: 'team', path: 'team' } });
+
+      await run('gitlab_get_group', { id: 5 });
+
+      expect(requests[0]?.target).toBe('/api/v4/groups/5?with_projects=false');
+    });
+  });
+
+  describe('retries', () => {
+    it('does not replay a branch delete after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(run('gitlab_delete_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
+
+      expect(requests).toHaveLength(1);
+    });
+
+    it('does not replay a file update after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(
+        run('gitlab_update_file', {
+          project_id: 42,
+          file_path: 'a.txt',
+          branch: 'main',
+          content: 'x',
+          commit_message: 'update',
+        }),
+      ).rejects.toThrow();
+
+      expect(requests).toHaveLength(1);
+    });
+
+    it('still retries reads after a transient 5xx', async () => {
+      answer = () => ({ status: 502, body: { message: 'bad gateway' } });
+
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
+
+      expect(requests.length).toBeGreaterThan(1);
+    });
+  });
+
   describe('runner registration token', () => {
     const project = {
       id: 42,
@@ -182,6 +311,7 @@ describe('generated GitLab tools', () => {
       const result = await run('gitlab_create_project', { name: 'app' });
 
       expect(result).toMatchObject({ id: 42, name: 'app' });
+      expect(result).not.toHaveProperty('runners_token');
       expect(JSON.stringify(result)).not.toContain('GR1348941secret');
     });
   });
@@ -227,7 +357,11 @@ describe('generated GitLab tools', () => {
 
       const release = await run('gitlab_get_release', { project_id: 42, tag_name: 'v1.0.0' });
 
-      expect(release).toMatchObject({ tag_name: 'v1.0.0', description: null });
+      expect(release).toMatchObject({
+        tag_name: 'v1.0.0',
+        description: null,
+        milestones: [{ id: 1, description: null, due_date: null, start_date: null }],
+      });
     });
 
     it('reads a merge request GitLab has not prepared yet', async () => {
