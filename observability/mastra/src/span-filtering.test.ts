@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/di';
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
+import { EntityType, SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
 import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -365,6 +365,101 @@ describe('Span Filtering', () => {
       const spanNames = testExporter.events.map(e => e.exportedSpan.name);
       expect(spanNames).toContain('prod-agent');
       expect(spanNames).not.toContain('dev-agent');
+    });
+
+    it('should reparent descendants of a span the filter drops so exporters see no orphans', () => {
+      // Same tree as the excludeSpanTypes case above, dropped through spanFilter.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.type !== SpanType.MODEL_STEP,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      const stepSpan = modelSpan.createChildSpan({ type: SpanType.MODEL_STEP, name: 'test-step' });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      toolSpan.end();
+      stepSpan.end();
+      modelSpan.end();
+      agentSpan.end();
+
+      const exported = testExporter.events.map(e => e.exportedSpan);
+      const exportedIds = new Set(exported.map(s => s.id));
+      expect(exported.map(s => s.type)).not.toContain(SpanType.MODEL_STEP);
+      expect(exported.find(s => s.type === SpanType.TOOL_CALL)?.parentSpanId).toBe(modelSpan.id);
+      expect(exported.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId))).toEqual([]);
+    });
+
+    it('should reparent children created under a rebuilt span the filter drops', () => {
+      // Durable engines rebuild a span in a later step. A rebuilt span sends no start event.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.type !== SpanType.WORKFLOW_STEP,
+      });
+
+      const runSpan = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
+      const stepSpan = runSpan.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+
+      const rebuiltStep = tracing.rebuildSpan(stepSpan.exportSpan()!);
+      const toolSpan = rebuiltStep.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      toolSpan.end();
+
+      const toolExported = testExporter.events.map(e => e.exportedSpan).find(s => s.type === SpanType.TOOL_CALL);
+      expect(toolExported?.parentSpanId).toBe(runSpan.id);
+    });
+
+    it('should still drop every span of an entity when the filter drops that entity', () => {
+      // Documented filter. The children carry the agent's entity only because they inherit it.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.entityId !== 'noisy-agent',
+      });
+
+      const runSpan = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'my-workflow',
+      });
+      const agentSpan = runSpan.createChildSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'noisy agent run',
+        entityType: EntityType.AGENT,
+        entityId: 'noisy-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+
+      modelSpan.end();
+      agentSpan.end();
+      runSpan.end();
+
+      expect([...new Set(testExporter.events.map(e => e.exportedSpan.type))]).toEqual([SpanType.WORKFLOW_RUN]);
     });
   });
 
