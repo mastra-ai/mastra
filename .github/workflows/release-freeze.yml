@@ -69,6 +69,7 @@ jobs:
     concurrency:
       group: release-merge-freeze
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

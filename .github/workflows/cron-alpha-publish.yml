@@ -93,6 +93,7 @@ jobs:
     concurrency:
       group: release-merge-freeze
       cancel-in-progress: false
+      queue: max
     runs-on: starsling-ubuntu-26.04
     steps:
       - name: Initial checkout

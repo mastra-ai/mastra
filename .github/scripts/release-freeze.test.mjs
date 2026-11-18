@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -303,6 +303,7 @@ for (const [label, overrides] of [
     assert.equal(result.status, 1);
     assert.match(result.stderr, /is not a main-only "Release freeze" required-check ruleset/);
     assert.equal(puts(api).length, 0);
+    assert.equal(statusPosts(api).length, 0);
   });
 }
 
@@ -336,6 +337,33 @@ test('fails when the ruleset does not read back as requested after the PUT', asy
   const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /expected enforcement active, read back disabled/);
+});
+
+for (const action of ['freeze', 'unfreeze']) {
+  test(`${action}: a PUT that succeeds but can't be read back says it wrote, not that it changed`, async t => {
+    const { routes } = standardRoutes({ enforcement: action === 'freeze' ? 'disabled' : 'active' });
+    const detail = routes['GET /repos/mastra-ai/mastra/rulesets/9100001'];
+    let reads = 0;
+    routes['GET /repos/mastra-ai/mastra/rulesets/9100001'] = arg =>
+      ++reads === 1 ? detail(arg) : { status: 502, body: {} };
+    const api = await startApi(t, routes);
+    const result = await run(t, api, ['--action', action, '--actor', 'tyler']);
+    assert.equal(result.status, 1);
+    assert.equal(puts(api).length, 1);
+    assert.match(result.output, /^written=true$/m);
+    assert.doesNotMatch(result.output, /^changed=/m);
+    assert.doesNotMatch(result.output, /^frozen=/m);
+  });
+}
+
+test('freeze: a PUT refused after the versioning status was posted leaves only that status', async t => {
+  const { routes } = standardRoutes();
+  routes['PUT /repos/mastra-ai/mastra/rulesets/9100001'] = () => ({ status: 403, body: { message: 'nope' } });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 1);
+  assert.equal(statusPosts(api).length, 1);
+  assert.doesNotMatch(result.output, /^written=/m);
 });
 
 test('a failed PUT fails the run', async t => {
@@ -555,7 +583,10 @@ function workflowJobs(file) {
   return jobs;
 }
 
-const freezeLock = /\n {4}concurrency:\n {6}group: release-merge-freeze\n {6}cancel-in-progress: false\n/;
+// queue: max keeps every waiting writer: with the default queue a newly queued
+// job replaces the pending one, e.g. a manual freeze would drop a waiting unfreeze.
+const freezeLock =
+  /\n {4}concurrency:\n {6}group: release-merge-freeze\n {6}cancel-in-progress: false\n {6}queue: max\n/;
 
 // Every job that changes the freeze ruleset, plus the scheduled alpha push whose
 // late freeze check is only sound while it holds the same lock.
@@ -573,8 +604,10 @@ for (const [file, job] of freezeWriters) {
   });
 }
 
-test('no job outside the locked writers can freeze or unfreeze main', () => {
-  for (const file of ['release-freeze.yml', 'npm-publish.yml', 'cron-alpha-publish.yml']) {
+test('no job in any workflow outside the locked writers can freeze or unfreeze main', () => {
+  const files = readdirSync(new URL('../workflows/', import.meta.url)).filter(f => /\.ya?ml$/.test(f));
+  assert.ok(files.includes('npm-publish.yml'));
+  for (const file of files) {
     for (const [job, block] of Object.entries(workflowJobs(file))) {
       const calls = block.match(/release-freeze\.mjs[^\n]*/g) ?? [];
       const mutates = calls.some(call => !/--action (check|mark)\b/.test(call));
@@ -586,4 +619,16 @@ test('no job outside the locked writers can freeze or unfreeze main', () => {
       }
     }
   }
+});
+
+test('the stable publish unfreezes only once main is confirmed back in alpha mode', () => {
+  const jobs = workflowJobs('npm-publish.yml');
+  // enter_prerelease works on main itself, not whatever branch the dispatch picked,
+  // so an old pre.json on that branch can't make it skip restoring alpha mode on main.
+  assert.match(jobs.enter_prerelease, /- name: Re-checkout with app token\n(?: {8}.*\n)*? {10}ref: main\n/);
+  const unfreeze = jobs.after_stable.match(/- name: Unfreeze main\n(?: {8}.*\n)+/)[0];
+  assert.match(unfreeze, /steps\.alpha\.outcome == 'success'/);
+  const alpha = jobs.after_stable.match(/- name: Is main back in alpha mode\?\n(?: {8}.*\n)+/)?.[0];
+  assert.ok(alpha, 'after_stable has no alpha-mode check');
+  assert.match(alpha, /contents\/\.changeset\/pre\.json\?ref=main/);
 });

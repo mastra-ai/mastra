@@ -25,11 +25,16 @@
 // check), GITHUB_REPOSITORY, GITHUB_API_URL (default https://api.github.com),
 // APP_SLUG (freeze, unfreeze: the token's GitHub App, whose id the ruleset's
 // check must be pinned to), GITHUB_STEP_SUMMARY and GITHUB_OUTPUT (optional). Outputs: frozen=true|false
-// (all but mark) and changed=true|false (freeze, unfreeze).
+// (all but mark) and changed=true|false (freeze, unfreeze), both only once the
+// ruleset reads back; written=true (freeze, unfreeze) as soon as the PUT succeeds.
 //
 // Exit codes: 0 = done (or would be, on a dry run)
-//             1 = refused or failed; nothing was changed unless the PUT itself
-//                 succeeded and read back wrong
+//             1 = refused or failed. This can follow a write: freeze may have
+//                 already passed the versioning PR head (harmless, it only
+//                 ever passes that branch) and then had the PUT refused; and
+//                 with written=true the PUT went through but did not read back
+//                 as requested, so enforcement may have changed. Check the
+//                 ruleset's enforcement before retrying.
 //             2 = usage error
 
 import { appendFileSync } from 'node:fs';
@@ -270,6 +275,7 @@ async function main() {
       }
       throw error;
     }
+    output({ written: true });
     final = await api.get(path);
     if (final.enforcement !== target) {
       throw new Error(`Ruleset ${id}: expected enforcement ${target}, read back ${final.enforcement}.`);

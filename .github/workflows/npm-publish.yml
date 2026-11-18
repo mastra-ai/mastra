@@ -380,6 +380,9 @@ jobs:
         timeout-minutes: 20
         with:
           token: ${{ steps.app-auth.outputs.token }}
+          # main, like stable: the dispatch branch may still hold an old pre.json
+          # and skip re-entering alpha mode on main.
+          ref: main
           fetch-depth: 0
           # Partial clone: full history without every historical file version.
           filter: blob:none
@@ -441,6 +444,7 @@ jobs:
     concurrency:
       group: release-merge-freeze
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -459,9 +463,23 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .github/scripts/release-freeze.mjs --action check
 
+      # enter_prerelease can succeed without restoring alpha mode on main, so read
+      # main itself: merges reopen only once it is mode pre, tag alpha.
+      - name: Is main back in alpha mode?
+        id: alpha
+        if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=$(gh api -H 'Accept: application/vnd.github.raw+json' "repos/${GITHUB_REPOSITORY}/contents/.changeset/pre.json?ref=main")
+          echo "$pre" | jq -e '.mode == "pre" and .tag == "alpha"' > /dev/null || {
+            echo "::error::main's .changeset/pre.json is not mode pre, tag alpha"
+            exit 1
+          }
+
       - name: Dane App Auth
         id: app-auth
-        if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
+        if: steps.alpha.outcome == 'success'
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
@@ -471,7 +489,7 @@ jobs:
 
       - name: Unfreeze main
         id: unfreeze
-        if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
+        if: steps.alpha.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           APP_SLUG: ${{ steps.app-auth.outputs.app-slug }}
@@ -489,6 +507,8 @@ jobs:
           PRERELEASE: ${{ needs.enter_prerelease.result }}
           UNFREEZE: ${{ steps.unfreeze.outcome }}
           UNFROZE: ${{ steps.unfreeze.outputs.changed }}
+          WRITTEN: ${{ steps.unfreeze.outputs.written }}
+          ALPHA: ${{ steps.alpha.outcome }}
         run: |
           text=":package: Stable release published: mastra@${VERSION}. <${RUN_URL}|Run>"
           if [ "$UNFROZE" = "true" ]; then
@@ -497,6 +517,10 @@ jobs:
             text+=$'\n:warning: Could not tell whether main is frozen, so it was not unfrozen. If it is, unfreeze with the Release merge freeze workflow.'
           elif [ "$FROZEN" = "true" ] && [ "$PRERELEASE" != "success" ]; then
             text+=$'\n:warning: Entering prerelease mode failed, so main stays frozen. Fix it, then unfreeze with the Release merge freeze workflow.'
+          elif [ "$FROZEN" = "true" ] && [ "$ALPHA" != "success" ]; then
+            text+=$'\n:warning: main is not back in alpha prerelease mode (.changeset/pre.json), so it stays frozen. Restore it, then unfreeze with the Release merge freeze workflow.'
+          elif [ "$WRITTEN" = "true" ]; then
+            text+=$'\n:warning: Unfreezing main was sent but could not be confirmed, so main may or may not be frozen. Check the Release merge freeze ruleset and unfreeze with the workflow if it is still active.'
           elif [ "$FROZEN" = "true" ]; then
             text+=$'\n:warning: Unfreezing main failed, so it stays frozen. Unfreeze with the Release merge freeze workflow.'
           fi
