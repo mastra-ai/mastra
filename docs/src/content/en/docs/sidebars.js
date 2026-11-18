@@ -837,6 +837,7 @@ const sidebars = {
                 { type: 'doc', id: 'mastra-platform/gateway/api/decisions', label: 'Decisions' },
                 { type: 'doc', id: 'mastra-platform/gateway/api/rerank', label: 'Rerank' },
                 { type: 'doc', id: 'mastra-platform/gateway/api/images', label: 'Images' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/videos', label: 'Videos' },
                 { type: 'doc', id: 'mastra-platform/gateway/api/audio', label: 'Audio' },
                 { type: 'doc', id: 'mastra-platform/gateway/api/models', label: 'Models list' },
               ],

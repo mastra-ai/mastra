@@ -42,7 +42,7 @@ A rate-limited request returns `429` with these headers:
 | - | - |
 | `retry-after` | Seconds to wait before retrying. |
 | `x-gateway-rate-limit-scope` | `key`, `organization`, or `upstream_provider`. |
-| `x-gateway-rate-limit-dimension` | The limit that was hit. |
+| `x-gateway-rate-limit-dimension` | The limit that was hit: `per_minute`, `burst`, or `global_per_minute`. |
 
 `upstream_provider` means every eligible provider route is rate limiting. See [cooldowns](/docs/mastra-platform/gateway/models-and-routing#failover).
 
