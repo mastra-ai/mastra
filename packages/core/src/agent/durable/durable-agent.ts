@@ -5562,7 +5562,10 @@ export class DurableAgent<
         const superseded = createSupersededEventFilter(entries);
         if (!closeOnSuspend) return superseded;
         const currentSuspension = createCurrentSuspensionFilter(entries);
-        return event => superseded(event) && currentSuspension(event);
+        return event => {
+          const keep = currentSuspension(event);
+          return superseded(event) && keep;
+        };
       };
       const initialFilter = buildFilter(history);
       let refreshedFilter: Promise<typeof initialFilter> | undefined;

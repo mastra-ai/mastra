@@ -28,8 +28,11 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { AgentStreamEventTypes } from '../../streams/constants';
+import type { AgentStreamEvent } from '../../streams/types';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { createCurrentSuspensionFilter } from '../stream-adapter';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -243,4 +246,40 @@ describe('DurableAgent.observe() closeOnSuspend (#29692)', () => {
     ).toBe(true);
     resumed.cleanup();
   }, 30_000);
+});
+
+describe('createCurrentSuspensionFilter', () => {
+  const event = (type: AgentStreamEvent['type'], index: number): AgentStreamEvent => ({
+    type,
+    runId: 'run',
+    data: {},
+    index,
+  });
+
+  it('drops a suspension the run has moved past', () => {
+    const history = [
+      event(AgentStreamEventTypes.SUSPENDED, 0),
+      event(AgentStreamEventTypes.CHUNK, 1),
+      event(AgentStreamEventTypes.CHUNK, 2),
+    ];
+    const keep = createCurrentSuspensionFilter(history);
+    expect(history.map(keep)).toEqual([false, true, true]);
+    expect(keep(event(AgentStreamEventTypes.SUSPENDED, 3))).toBe(true);
+  });
+
+  it('keeps a suspension from a log that restarted numbering at 0', () => {
+    const keep = createCurrentSuspensionFilter([
+      event(AgentStreamEventTypes.CHUNK, 0),
+      event(AgentStreamEventTypes.CHUNK, 1),
+      event(AgentStreamEventTypes.CHUNK, 2),
+    ]);
+    const delivered = [
+      event(AgentStreamEventTypes.CHUNK, 0),
+      event(AgentStreamEventTypes.CHUNK, 1),
+      event(AgentStreamEventTypes.CHUNK, 2),
+      event(AgentStreamEventTypes.CHUNK, 0),
+      event(AgentStreamEventTypes.SUSPENDED, 1),
+    ];
+    expect(delivered.map(keep)).toEqual([true, true, true, true, true]);
+  });
 });

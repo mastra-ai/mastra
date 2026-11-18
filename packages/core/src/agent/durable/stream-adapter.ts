@@ -133,8 +133,16 @@ export function createCurrentSuspensionFilter(history: AgentStreamEvent[]): (eve
   // `>=` keeps a suspension published after this snapshot, which is live and
   // therefore the run's current position.
   const currentIndex = newestIndex;
+  // An expired log restarts numbering at 0 while a reader stays attached, so
+  // indexes after that no longer compare against the snapshot.
+  let previousIndex: number | undefined;
+  let restarted = false;
   return event => {
-    if (event.type !== AgentStreamEventTypes.SUSPENDED || typeof event.index !== 'number') return true;
+    if (typeof event.index === 'number' && event.type !== AgentStreamEventTypes.OWNERSHIP_CLAIMED) {
+      if (previousIndex !== undefined && event.index < previousIndex) restarted = true;
+      previousIndex = event.index;
+    }
+    if (restarted || event.type !== AgentStreamEventTypes.SUSPENDED || typeof event.index !== 'number') return true;
     return event.index >= currentIndex;
   };
 }
