@@ -5173,8 +5173,8 @@
     },
     "mastracode/sdk/src/agent-connections/__tests__/cross-process-agent-signals.integration.test.ts": {
       "tier": "in",
-      "since": "2026-10-19",
-      "last_failure": "2026-10-19",
+      "since": "2026-11-18",
+      "last_failure": "2026-11-18",
       "reason": "versioning-fail"
     },
     "mastracode/sdk/src/agent-connections/__tests__/messaging-processor.test.ts": {
@@ -35477,9 +35477,9 @@
     },
     "job:workspace-unit/modal": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-10-05",
-      "reason": "failed-last-30d"
+      "since": "2026-11-18",
+      "last_failure": "2026-11-18",
+      "reason": "versioning-fail"
     },
     "job:workspace-unit/platform-workspace": {
       "tier": "in",
