@@ -40,10 +40,24 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          AWS_REGION: auto
           STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
           STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
           VERSION: ${{ inputs.version }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${VERSION}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload factory assets to R2 (production)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          AWS_REGION: auto
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          aws s3 sync packages/cli/dist/factory "s3://${STUDIO_BUCKET_NAME}/${VERSION}/factory/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
