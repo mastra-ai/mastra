@@ -158,6 +158,8 @@ interface ExecLeaseResponse {
 interface CachedExecLease extends ExecLease {
   provider: string;
   sandboxId: string;
+  /** The `_sandboxId` this lease was minted for; a lease never serves another VM. */
+  boundTo: string;
   providerResourceId: string;
   expiresAtMs: number | null;
 }
@@ -741,7 +743,7 @@ export class PlatformSandbox extends MastraSandbox {
    * `POST /exec-lease` round-trips when the sandbox is doing N parallel execs.
    * Cleared (regardless of success or failure) when the request settles.
    */
-  private _leaseInFlight: Promise<CachedExecLease> | null = null;
+  private _leaseInFlight: { sandboxId: string; promise: Promise<CachedExecLease> } | null = null;
   /**
    * True when this sandbox was constructed with a caller-supplied `id` (the
    * recovery key the proxy hashes into an on-provider checkpoint name).
@@ -1476,6 +1478,8 @@ export class PlatformSandbox extends MastraSandbox {
    * the cached `'running'` state (see `MastraSandbox._start`).
    */
   private _clearDestroyedState(destroyedSandboxId: string): void {
+    // A late answer about a VM that has since been replaced says nothing about the current one.
+    if (this._sandboxId !== undefined && this._sandboxId !== destroyedSandboxId) return;
     this._probeGeneration++;
     this._probeTarget = null;
     this._transportReadyPromise = null;
@@ -1642,9 +1646,13 @@ export class PlatformSandbox extends MastraSandbox {
    * right before each dispatch, after the VM is acquired, because the caller
    * built its env before then.
    */
-  private _execEnv(options: ExecuteCommandOptions | undefined, sandboxId: string): Record<string, string> | undefined {
+  private _execEnv(
+    options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
+    lease?: CachedExecLease,
+  ): Record<string, string> | undefined {
     if (!options?.env) return undefined;
-    const env = this._acceptsGithubCredentials(sandboxId) ? options.env : withoutGithubCredentials(options.env);
+    const env = this._acceptsGithubCredentials(sandboxId, lease) ? options.env : withoutGithubCredentials(options.env);
     const filtered = Object.fromEntries(
       Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
@@ -1701,7 +1709,7 @@ export class PlatformSandbox extends MastraSandbox {
       lastLease = lease;
       attemptsMade = attempt + 1;
       const leaseCwd = options?.cwd ?? this.workingDirectory;
-      const filteredEnv = this._execEnv(options, sandboxId);
+      const filteredEnv = this._execEnv(options, sandboxId, lease);
       const execOptions = {
         command: fullCommand,
         ...(leaseCwd !== undefined && { cwd: leaseCwd }),
@@ -1845,13 +1853,18 @@ export class PlatformSandbox extends MastraSandbox {
     // A null `expiresAtMs` means the provider didn't disclose a TTL — treat
     // that as "refresh every call" rather than "cache forever", so a token
     // that turns out to be short-lived can't wedge the sandbox until restart.
-    if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
-      return this._lease;
-    }
-    // Coalesce concurrent mints on a cold/expired cache.
-    if (this._leaseInFlight) return this._leaseInFlight;
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
     const sandboxId = this._sandboxId;
+    if (
+      this._lease &&
+      this._lease.boundTo === sandboxId &&
+      this._lease.expiresAtMs !== null &&
+      this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now
+    ) {
+      return this._lease;
+    }
+    // Coalesce concurrent mints on a cold/expired cache, but only for the same VM.
+    if (this._leaseInFlight?.sandboxId === sandboxId) return this._leaseInFlight.promise;
     const inFlight = (async () => {
       const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
         method: 'POST',
@@ -1861,6 +1874,7 @@ export class PlatformSandbox extends MastraSandbox {
       const lease: CachedExecLease = {
         provider: json.provider,
         sandboxId: json.sandboxId,
+        boundTo: sandboxId,
         providerResourceId: json.providerResourceId,
         jwt: json.jwt,
         wsEndpoint: json.wsEndpoint,
@@ -1871,16 +1885,18 @@ export class PlatformSandbox extends MastraSandbox {
         // rather than silently caching a broken lease forever.
         expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
       };
-      this._lease = lease;
+      // A mint that lands after its VM was replaced must not become the cache.
+      if (this._sandboxId === sandboxId) this._lease = lease;
       return lease;
     })();
-    this._leaseInFlight = inFlight;
+    const entry = { sandboxId, promise: inFlight };
+    this._leaseInFlight = entry;
     try {
       return await inFlight;
     } finally {
       // Clear on both success and failure so a failed mint doesn't wedge
       // future callers into awaiting the same rejected promise forever.
-      if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+      if (this._leaseInFlight === entry) this._leaseInFlight = null;
     }
   }
 
@@ -2002,7 +2018,7 @@ export class PlatformSandbox extends MastraSandbox {
         call(commands =>
           commands.run(
             command,
-            opts.envs && !this._acceptsGithubCredentials(sandboxId)
+            opts.envs && !this._acceptsGithubCredentials(sandboxId, current.lease)
               ? { ...opts, envs: withoutGithubCredentials(opts.envs) }
               : opts,
           ),
@@ -2019,8 +2035,8 @@ export class PlatformSandbox extends MastraSandbox {
    * only when that VM is still the current one and is known not to be vault.
    * Unknown mode fails closed.
    */
-  private _acceptsGithubCredentials(sandboxId: string): boolean {
-    return this.vault === false && this._sandboxId === sandboxId;
+  private _acceptsGithubCredentials(sandboxId: string, lease?: CachedExecLease): boolean {
+    return this.vault === false && this._sandboxId === sandboxId && (!lease || lease.boundTo === sandboxId);
   }
 
   /** The commands handle for the current lease, rebuilt only when the lease changes. */
