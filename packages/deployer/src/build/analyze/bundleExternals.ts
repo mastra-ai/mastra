@@ -383,7 +383,10 @@ async function buildExternalDependencies(
           const normalized = slash(moduleId);
           for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
             const location = slash(pkgInfo.location);
-            if (normalized.startsWith(location)) {
+            // Match on a path boundary. A raw `startsWith` would let a package whose path
+            // is a prefix of another (e.g. `packages/shared` for `packages/shared-db`)
+            // claim the other package's modules, writing its chunk into the wrong cache.
+            if (normalized === location || normalized.startsWith(location + '/')) {
               importedFromPackages.add(pkgName);
               break;
             }
