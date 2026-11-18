@@ -1229,37 +1229,38 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
+            // The state carries the facts across workers; the registry is the fallback for
+            // runs whose snapshots predate those fields.
+            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+            const finishReason = finalOutput.stepResult?.reason;
+            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+            const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
+            if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+              logger?.warn?.(
+                `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+              );
+            }
+            const termination =
+              ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+                ? recordedTermination
+                : agentLoopTermination({
+                    stopCause,
+                    delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
+                    finishReason,
+                    tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                    maxSteps: initData.options?.maxSteps,
+                  });
+
             // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
             // originals were ended as `suspended`, so end the pair the resume carried.
             try {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const { agentSpanData, modelSpanData } = segmentSpanData(requestContext, initData.runId, initData);
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
               const clocks = carriedSpanClocks(reg, state);
-              // The state carries the facts across workers; the registry is the fallback for
-              // runs whose snapshots predate those fields.
-              const finishReason = finalOutput.stepResult?.reason;
-              const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
-              const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
-              if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
-                logger?.warn?.(
-                  `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
-                );
-              }
-              const termination =
-                ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
-                  ? recordedTermination
-                  : agentLoopTermination({
-                      stopCause,
-                      delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
-                      finishReason,
-                      tripwire: tripwire ?? state.lastStepResult?.tripwire,
-                      maxSteps: initData.options?.maxSteps,
-                    });
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan =
@@ -1303,7 +1304,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            return finalOutput;
+            // A recovery that finds this step saved ends its own spans with the same outcome.
+            return { ...finalOutput, tracingTermination: termination };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )

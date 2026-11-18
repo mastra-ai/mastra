@@ -644,6 +644,8 @@ export interface DurableAgenticLoopOutput {
   };
   /** Final state */
   state: SerializableDurableState;
+  /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
+  tracingTermination?: SpanTermination;
 }
 
 export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';

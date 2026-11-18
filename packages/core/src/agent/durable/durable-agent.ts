@@ -4645,12 +4645,11 @@ export class DurableAgent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult } = result.result;
-            // map-final-output, which ends the recovered spans, did not re-run.
-            // Workflow success alone cannot distinguish an agent success from a limit/block.
-            // Keep unknown until the authoritative termination is recovered (OBS-754).
-            recoverModelSpan?.end();
-            recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
+            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
+            // it ended the run's spans with, so the recovered pair ends the same way.
+            recoverModelSpan?.end({ ...tracingTermination });
+            recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
