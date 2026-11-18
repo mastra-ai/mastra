@@ -13,8 +13,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { ChatSessionTestProvider } from '../../../chat/context/ChatSessionTestProvider';
-import { FactorySessionPage } from '../../../factory/components/RelatedFactorySessions';
-import { WorkspaceFilesProvider } from '../../../workspace-viewer/context/WorkspaceFilesProvider';
+import { SessionRouteFrame } from '../../../factory/components/SessionRouteFrame';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
 
@@ -79,9 +78,7 @@ function renderOpenSession() {
             element={
               <ChatSessionTestProvider threadId={sessionId} deferUntilMessagesReady={false}>
                 <SessionsSection />
-                <WorkspaceFilesProvider>
-                  <FactorySessionPage>{null}</FactorySessionPage>
-                </WorkspaceFilesProvider>
+                <SessionRouteFrame>{null}</SessionRouteFrame>
               </ChatSessionTestProvider>
             }
           />

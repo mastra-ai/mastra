@@ -540,8 +540,11 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     await settle(testExporter);
 
     const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
-    expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['retry', 'stop']);
+    expect(inferences).toHaveLength(2);
     const [failed, streamed] = inferences;
+    // The retry re-attempts the request within the same step, so the failed request ends with its error.
+    expect(failed.errorInfo?.message).toBe('provider unavailable');
+    expect(streamed.attributes?.finishReason).toBe('stop');
     expect(failed.timeToFirstTokenMs).toBeUndefined();
     expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
     const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;

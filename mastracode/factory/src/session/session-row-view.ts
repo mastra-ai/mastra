@@ -46,13 +46,14 @@ const UPDATED_WINDOW_HOURS: Record<NonNullable<SessionRowsView['updated']>, numb
   '30d': 24 * 30,
 };
 
+/** Where a row's sessions start: the board grouping's group, and what the `source` filter compares. */
+function sourceOf(row: SessionRowFields): string {
+  if (row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return sessionRowGroupKeys.slack;
+  return row.board === undefined ? sessionRowGroupKeys.user : sessionRowGroupKeys.board(row.board);
+}
+
 const GROUP_KEY_OF_ROW: Record<SessionRowsView['groupBy'], (row: SessionRow) => string> = {
-  board: row =>
-    row.session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
-      ? sessionRowGroupKeys.slack
-      : row.board === undefined
-        ? sessionRowGroupKeys.user
-        : sessionRowGroupKeys.board(row.board),
+  board: sourceOf,
   status: row => sessionRowGroupKeys.status(row.cardStatus ?? row.status),
   owner: row => sessionRowGroupKeys.owner(row.session.userId),
   none: () => sessionRowGroupKeys.all,
@@ -80,6 +81,7 @@ function filterSessionRows(
   const cutoff = view.updated === undefined ? undefined : now - UPDATED_WINDOW_HOURS[view.updated] * HOUR_MS;
   const matches = (row: SessionRowFields) =>
     matchesOwner(row, view.owner, viewerUserId) &&
+    (view.source === undefined || sourceOf(row) === view.source) &&
     (view.status === undefined || row.status === view.status) &&
     (cutoff === undefined || Date.parse(row.updatedAt) >= cutoff);
   return rows.flatMap(row => {

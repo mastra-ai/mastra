@@ -7,7 +7,7 @@ description: "Browse LowRouter model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/lowrouter.svg" alt="LowRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LowRouter
 
-Access 32 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
+Access 45 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
 
 Learn more in the [LowRouter documentation](https://lowrouter.ai/docs/models/available).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "lowrouter/auto/mistralai/codestral-2508"
+  model: "lowrouter/auto/anthropic/claude-fable-5"
 });
 
 // Generate a response
@@ -45,6 +45,162 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "lowrouter/auto/anthropic/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 11,
+    "outputCost": 55
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-fable-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 11,
+    "outputCost": 55
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-haiku-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1.1,
+    "outputCost": 5.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-haiku-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.11,
+    "outputCost": 0.55
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-4.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5.5,
+    "outputCost": 27.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-4.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5.5,
+    "outputCost": 27.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-4.7",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5.5,
+    "outputCost": 27.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-4.8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5.5,
+    "outputCost": 27.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5.5,
+    "outputCost": 27.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-opus-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4.4,
+    "outputCost": 22
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-sonnet-4.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 3.3,
+    "outputCost": 16.5
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-sonnet-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2.2,
+    "outputCost": 11
+  },
+  {
+    "model": "lowrouter/auto/anthropic/claude-sonnet-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2.2,
+    "outputCost": 11
+  },
   {
     "model": "lowrouter/auto/mistralai/codestral-2508",
     "imageInput": false,
@@ -377,7 +533,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.1695,
     "outputCost": 0.6779
   },
@@ -389,7 +545,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.113,
     "outputCost": 0.4745
   },
@@ -401,7 +557,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.18,
     "outputCost": 0.73
   },
@@ -446,7 +602,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.lowrouter.ai/v1",
-    id: "lowrouter/auto/mistralai/codestral-2508",
+    id: "lowrouter/auto/anthropic/claude-fable-5",
     apiKey: process.env.LOWROUTER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -467,7 +623,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "lowrouter/auto/openai/o3"
-      : "lowrouter/auto/mistralai/codestral-2508";
+      : "lowrouter/auto/anthropic/claude-fable-5";
   }
 });
 ```

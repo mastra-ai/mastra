@@ -589,7 +589,12 @@
                       "runId": "<runId-1>",
                       "environment": "test",
                       "toolCallId": "call-workflow-1",
-                      "toolName": "workflow-simpleWorkflow"
+                      "toolName": "workflow-simpleWorkflow",
+                      "providerMetadata": {
+                        "mastra": {
+                          "workflowTool": true
+                        }
+                      }
                     }
                   }
                 }
@@ -652,7 +657,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: workflow-simpleWorkflow]"
+                    "content": "{\"type\":\"json\",\"value\":{\"result\":{\"output\":\"test input processed\"},\"runId\":\"<uuid-1>\"}}"
                   }
                 ],
                 "output": {
@@ -708,6 +713,11 @@
                                 "inputData": {
                                   "input": "test input"
                                 }
+                              },
+                              "providerOptions": {
+                                "mastra": {
+                                  "workflowTool": true
+                                }
                               }
                             }
                           ]
@@ -726,6 +736,11 @@
                                     "output": "test input processed"
                                   },
                                   "runId": "<runId-2>"
+                                }
+                              },
+                              "providerOptions": {
+                                "mastra": {
+                                  "workflowTool": true
                                 }
                               },
                               "input": {
@@ -792,6 +807,11 @@
                                 "inputData": {
                                   "input": "test input"
                                 }
+                              },
+                              "providerOptions": {
+                                "mastra": {
+                                  "workflowTool": true
+                                }
                               }
                             }
                           ]
@@ -810,6 +830,11 @@
                                     "output": "test input processed"
                                   },
                                   "runId": "<runId-2>"
+                                }
+                              },
+                              "providerOptions": {
+                                "mastra": {
+                                  "workflowTool": true
                                 }
                               },
                               "input": {
@@ -923,7 +948,7 @@
                       },
                       {
                         "role": "tool",
-                        "content": "[tool-result: workflow-simpleWorkflow]"
+                        "content": "{\"type\":\"json\",\"value\":{\"result\":{\"output\":\"test input processed\"},\"runId\":\"<uuid-1>\"}}"
                       }
                     ],
                     "output": {

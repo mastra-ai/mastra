@@ -1,13 +1,13 @@
 ---
 title: "Reference: Completeness scorer | Evals"
-description: "The createCompletenessScorer() function evaluates how thoroughly an LLM's output covers the key elements present in the input."
+description: "The createCompletenessScorer() function evaluates how well an LLM's output covers the key elements present in the input."
 packages:
   - "@mastra/evals"
 ---
 
 # Completeness scorer
 
-The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
+The `createCompletenessScorer()` function evaluates how well an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
 ## Parameters
 
@@ -82,7 +82,7 @@ From the `.run()` method, you can get the `preprocessStepResult` object with the
 
 The scorer evaluates completeness through linguistic element coverage analysis.
 
-### Scoring Process
+### Scoring process
 
 1. Extracts key elements:
    - Nouns and entities such as names
@@ -104,8 +104,8 @@ The completeness scorer has no `scale` option. The score is always between 0 and
 A completeness score between 0 and 1:
 
 - **1.0**: Addresses all aspects of the query in detail.
-- **0.7 to 0.9**: Covers most important aspects with good detail, minor gaps.
-- **0.4 to 0.6**: Addresses some key points but missing important aspects or lacking detail.
+- **0.7 to 0.9**: Covers most of the important points with good detail, minor gaps.
+- **0.4 to 0.6**: Addresses some key points but misses important points or lacks detail.
 - **0.1 to 0.3**: Only partially addresses the query with substantial gaps.
 - **0.0**: Fails to address the query or provides irrelevant information.
 

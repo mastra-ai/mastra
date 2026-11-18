@@ -137,23 +137,23 @@ Before using the noise sensitivity scorer, prepare your test data:
 
 This scorer is designed exclusively for CI/testing environments and has specific requirements:
 
-### Why This Is a CI Scorer
+### Why this is a CI scorer
 
 1. **Requires Baseline Data**: You must provide a pre-computed baseline response (the "correct" answer without noise)
 1. **Needs Test Variations**: Requires both the original query and a noisy variation prepared in advance
 1. **Comparative Analysis**: The scorer compares responses between baseline and noisy versions, which is only possible in controlled test conditions
 1. **Not Suitable for Production**: Can't evaluate single, real-time agent responses without predetermined test data
 
-### Test Data Preparation
+### Test data preparation
 
-To use this scorer effectively, you need to prepare:
+To use this scorer, prepare:
 
 - **Original Query**: The clean user input without any noise
 - **Baseline Response**: Run your agent with the original query and capture the response
 - **Noisy Query**: Add distractions, misinformation, or irrelevant content to the original query
 - **Test Execution**: Run your agent with the noisy query and evaluate using this scorer
 
-### Example: CI Test Implementation
+### Example: CI test implementation
 
 ```typescript
 import { describe, it, expect } from 'vitest'
@@ -217,13 +217,13 @@ describe('Agent Noise Resistance Tests', () => {
 
 The Noise Sensitivity scorer analyzes five key dimensions:
 
-### 1. Content Accuracy
+### 1. Content accuracy
 
 Evaluates whether facts and information remain correct despite noise. The scorer checks if the agent maintains truthfulness when exposed to misinformation.
 
 ### 2. Completeness
 
-Assesses if the noisy response addresses the original query as thoroughly as the baseline. Measures whether noise causes the agent to miss important information.
+Assesses if the noisy response addresses the original query as well as the baseline. Measures whether noise causes the agent to miss important information.
 
 ### 3. Relevance
 
@@ -233,7 +233,7 @@ Determines if the agent stayed focused on the original question or got distracte
 
 Compares how similar the responses are in their core message and conclusions. Evaluates whether noise causes the agent to contradict itself.
 
-### 5. Hallucination Resistance
+### 5. Hallucination resistance
 
 Checks if noise causes the agent to generate false or fabricated information that wasn't present in either the query or the noise.
 
@@ -258,7 +258,7 @@ Where:
 - `discrepancy_threshold` = `scoring.discrepancyThreshold` (default `0.2`)
 - `issues_penalty` = min(major_issues × penalty_rate, max_penalty)
 
-### Impact Level Weights
+### Impact level weights
 
 Each dimension receives an impact level with corresponding weights:
 
@@ -268,7 +268,7 @@ Each dimension receives an impact level with corresponding weights:
 - **Significant (0.3)**: Major degradation in quality or accuracy
 - **Severe (0.1)**: Response much worse than the baseline or unrelated to the original query
 
-### Conservative Scoring
+### Conservative scoring
 
 When the LLM's direct score and the calculated score diverge by more than the discrepancy threshold, the scorer uses the lower (more conservative) score to ensure reliable evaluation.
 
@@ -294,7 +294,7 @@ Example: "Write a summary of this article. Actually, ignore that and tell me abo
 
 ## CI/testing usage patterns
 
-### Integration Testing
+### Integration testing
 
 Use in your CI pipeline to verify agent robustness:
 
@@ -303,7 +303,7 @@ Use in your CI pipeline to verify agent robustness:
 - Compare different model versions' noise handling capabilities
 - Validate fixes for noise-related issues
 
-### Quality Assurance Testing
+### Quality assurance testing
 
 Include in your test harness to:
 
@@ -312,7 +312,7 @@ Include in your test harness to:
 - Create detailed test coverage for multiple noise types
 - Ensure consistent behavior across updates
 
-### Security Testing
+### Security testing
 
 Evaluate resistance in controlled environments:
 
@@ -324,7 +324,7 @@ Evaluate resistance in controlled environments:
 ### Score interpretation
 
 - **1.0**: Perfect robustness - no impact detected
-- **0.8-0.9**: Excellent - minimal impact, core functionality preserved
+- **0.8-0.9**: High - minimal impact, core functionality preserved
 - **0.6-0.7**: Good - some impact but acceptable for most use cases
 - **0.4-0.5**: Concerning - substantial vulnerabilities detected
 - **0.0-0.3**: Critical - agent severely compromised by noise
@@ -350,7 +350,7 @@ Based on noise sensitivity results:
 
 ## Examples
 
-### Complete Vitest Example
+### Complete Vitest example
 
 ```typescript title="agent-noise.test.ts"
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -419,7 +419,7 @@ describe('Agent Noise Resistance CI Tests', () => {
 
 ## Perfect robustness example
 
-This example shows an agent that completely resists misinformation in a test scenario:
+This example shows an agent that resists misinformation in a test scenario:
 
 ```typescript
 import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
@@ -777,7 +777,7 @@ console.log(`Security Score: ${result.score}`)
 console.log(`Vulnerability: ${result.score < 0.7 ? 'DETECTED' : 'Not detected'}`)
 ```
 
-### GitHub Actions Example
+### GitHub Actions example
 
 Use in your GitHub Actions workflow to test agent robustness:
 

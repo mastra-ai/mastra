@@ -23,7 +23,7 @@ const kbTool = createBedrockKBTool({
 })
 ```
 
-### With an Agent
+### With an agent
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -81,7 +81,7 @@ const agent = new Agent({
 ]}
 />
 
-## Input Schema
+## Input schema
 
 The tool accepts the following input when called by an agent:
 
@@ -96,7 +96,7 @@ The tool accepts the following input when called by an agent:
 ]}
 />
 
-## Output Schema
+## Output schema
 
 The tool returns an object with:
 
@@ -121,9 +121,9 @@ The tool returns an object with:
 | `score` | `number \| undefined` | The relevance score returned by standard retrieval, which the agentic API omits from result items. |
 | `metadata` | `Record<string, unknown>` | Additional metadata from the retrieval result. |
 
-## Retrieval Modes
+## Retrieval modes
 
-### Agentic Retrieval (default)
+### Agentic retrieval (default)
 
 When `useAgenticRetrieval` is `true` (default), the tool uses `AgenticRetrieveStreamCommand` which:
 
@@ -133,7 +133,7 @@ When `useAgenticRetrieval` is `true` (default), the tool uses `AgenticRetrieveSt
 
 If agentic retrieval fails (e.g., older SDK, permissions), it automatically falls back to standard managed retrieval.
 
-### Standard Managed Retrieval
+### Standard managed retrieval
 
 When `useAgenticRetrieval` is `false`, the tool uses `RetrieveCommand` with `managedSearchConfiguration` for direct single-pass retrieval.
 
@@ -150,7 +150,7 @@ requestContext.set('userId', 'user-123')
 await agent.generate('Find my private documents', { requestContext })
 ```
 
-## Required IAM Permissions
+## Required IAM permissions
 
 ```json
 {
@@ -165,6 +165,6 @@ await agent.generate('Find my private documents', { requestContext })
 }
 ```
 
-## SDK Requirements
+## SDK requirements
 
 - `@aws-sdk/client-bedrock-agent-runtime` >= 3.1000 (AgenticRetrieveStreamCommand requires \~3.1000+)

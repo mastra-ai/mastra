@@ -201,12 +201,24 @@ const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
+    // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is a Knowledge-only credential, narrower than the general
+    // Platform token, so it's preferred when set.
     const token =
-      options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
+      options.accessToken ??
+      (process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN?.trim() || undefined) ??
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN ??
+      process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
     const apiUrl = options.apiUrl ?? (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ?? DEFAULT_API_URL;
-    if (!token || !instanceId) {
-      throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');
+    if (!token) {
+      throw new Error(
+        'PlatformKnowledge requires a Knowledge token or Platform access token, and a Knowledge instance ID',
+      );
+    }
+    if (!instanceId) {
+      throw new Error(
+        'PlatformKnowledge requires a Knowledge instance ID: set MASTRA_KNOWLEDGE_INSTANCE_ID or pass instanceId',
+      );
     }
     const {
       accessToken: _accessToken,
@@ -222,6 +234,8 @@ export class PlatformKnowledge extends Knowledge {
     });
     super({
       ...config,
+      // Hosts register Knowledge under its id, so it must be the same on every boot.
+      id: config.id ?? `platform-knowledge-${instanceId}`,
       tools: config.tools ?? { read: true },
       // Platform owns every scope declaration and access grant: the instance serves them all through
       // `getScopeDeclarations`, so there is one place to change who reads what. Declaring scopes here

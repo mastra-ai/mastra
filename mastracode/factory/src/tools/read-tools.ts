@@ -25,8 +25,10 @@ import type {
   Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { cardFacts } from '../work-items/card-facts.js';
 import { workItemNumber } from '../work-items/card-number.js';
-import { cardCarries, isCardFor, isSourceReference, sourceKeyFromReference } from '../work-items/card-reference.js';
+import { cardCarries, isCardFor, isSourceReference } from '../work-items/card-reference.js';
+import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
@@ -232,7 +234,7 @@ const listInputSchema = z
       .max(200)
       .optional()
       .describe(
-        'Case-insensitive text in the title, an exact card number like "#123", or the link, owner/repo#123 or key (ENG-42) of an issue or pull request, which finds the cards tracking it.',
+        'What the board\'s search box takes: case-insensitive words of the title, a whole card number like "#123", a key (ENG-42, owner/repo#123), a branch or card id, or the link of an issue or pull request, which finds the cards tracking it, a pull request attached to its issue\'s card included.',
       ),
     stage: z
       .string()
@@ -276,20 +278,11 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           const stage = workItemStage(item);
           byStage[stage] = (byStage[stage] ?? 0) + 1;
         }
-        const numberQuery = input.query ? /^#(\d+)$/.exec(input.query)?.[1] : undefined;
-        // A pasted link or owner/repo#123 finds the cards tracking that issue or pull request, not titles.
-        const sourceQuery =
-          input.query && numberQuery === undefined && sourceKeyFromReference(input.query) !== null
-            ? input.query
-            : undefined;
-        const text = input.query?.toLowerCase();
+        // The board's search, with what it computed of each card.
+        const terms = searchTerms(input.query ?? '');
         const matches = items
           .filter(item => {
-            if (numberQuery !== undefined) {
-              if (workItemNumber(item) !== Number(numberQuery)) return false;
-            } else if (sourceQuery !== undefined) {
-              if (!cardCarries(item, sourceQuery)) return false;
-            } else if (text && !item.title.toLowerCase().includes(text)) return false;
+            if (!matchesSearch(cardFacts(item).search, terms)) return false;
             if (input.stage && !item.stages.includes(input.stage)) return false;
             if (input.board && boardForWorkItem(item) !== input.board) return false;
             if (input.role && !item.sessions[input.role]) return false;
