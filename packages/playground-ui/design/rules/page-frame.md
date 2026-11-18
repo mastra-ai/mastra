@@ -203,6 +203,7 @@ Nothing to show, or a failure?        -> EmptyState variant="fill"
   - A failed state keeps the same `name` with `state="failed"` and `tone="error"`, and carries the error parts from `copy.md` section 5. A failure the user can fix gets the fixing action plus a link to the docs page for it; one only Mastra can fix gets `Try again` plus `Contact support`.
   - An upgrade state uses the feature's own drawing with the upgrade button and a docs link. Never a lock, a gated case, or a sealed envelope: the feature itself is the reason to upgrade.
   - The action lives in the state only when the page header has none. When the header holds the create button, the description points to it, as for any empty state.
+  - A feature with no fitting drawing gets a new one, built with the kit in `scripts/empty-state-art` (its README covers the rules and `pnpm art:build`). The `art/` files and `empty-state-art.css` are generated; never edit them by hand.
 - Spacing around the app card belongs to `AppShell`, and the card surface is `MainCard`.
 
 ## Page character
