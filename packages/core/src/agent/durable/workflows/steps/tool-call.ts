@@ -23,12 +23,18 @@ import {
   hasToolResultProcessor,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
-import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import {
+  ownToolCallSuspendData,
+  resolveFrameworkSuspendedToolIdentity,
+} from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { isMastraTimeoutError } from '../../../../loop/timeout';
-import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
+import {
+  INTERNAL_APPROVAL_KEYS,
+  runBeforeApprovalChecks,
+} from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -428,7 +434,6 @@ export function createDurableToolCallStep() {
         mastra,
         suspend,
         resumeData: workflowResumeData,
-        suspendData,
         requestContext,
         actor,
         getInitData,
@@ -442,6 +447,7 @@ export function createDurableToolCallStep() {
 
       const typedInput = inputData as DurableToolCallInput;
       const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;
+      const suspendData = ownToolCallSuspendData(params.suspendData, toolCallId);
 
       // Extract resumeData from tool call arguments (autoResumeSuspendedTools path)
       // When the LLM auto-resumes a suspended tool, it injects `resumeData` into the
@@ -982,7 +988,7 @@ export function createDurableToolCallStep() {
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+          [...approvalRequestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
