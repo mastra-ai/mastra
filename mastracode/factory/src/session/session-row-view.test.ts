@@ -243,6 +243,30 @@ describe('a card with its sessions revealed', () => {
     expect(listed(rows, { open: 'triage' }).groups[0]?.rows.at(-1)?.session.sessionId).toBe('work');
   });
 
+  it('filters a row by where it starts, never by the card sessions listed under it', () => {
+    const slackFollower: RowSession = { ...session('follower'), branch: 'slack/123.456', followedWorkItemIds: ['c1'] };
+    const rows = new SessionRowIndex(
+      [session('triage'), session('work'), slackFollower],
+      [testCard('c1', { stages: ['execute'], sessions: { triage: ref('triage'), work: ref('work') } })],
+      createTriageWorkRegistry(),
+    ).rows({
+      awaitingPerson: new Set(),
+      runningSessionIds: new Set(),
+      parkedSessionIds: new Set(),
+      viewerUserId: VIEWER,
+      pinnedSessionIds: new Set(),
+      revealChildSessions: true,
+    });
+
+    expect(groupSummary(rows, { groupBy: 'board', source: 'board:work' })).toEqual([['board:work', ['work']]]);
+    expect(groupSummary(rows, { groupBy: 'board', source: 'slack' })).toEqual([['slack', ['follower']]]);
+    expect(
+      listed(rows, { source: 'slack' })
+        .groups[0]?.rows[0]?.childRows?.map(child => child.session.sessionId)
+        .toSorted(),
+    ).toEqual(['triage', 'work']);
+  });
+
   it('sorts a card by what its sessions carry, so newer idle rows do not push it out of the window', () => {
     const newerIdle = Array.from({ length: 5 }, (_, index) =>
       row(`idle-${index}`, { updatedAt: '2026-09-04T11:00:00.000Z' }),

@@ -72,6 +72,7 @@ function matchesOwner(row: SessionRowFields, owner: string, viewerUserId: string
 }
 
 // A card with revealed sessions matches when any of its sessions does, and lists only the ones that match.
+// Source is the listed row's alone, as for the board grouping: sessions listed under a row never carry it in.
 function filterSessionRows(
   rows: readonly SessionRow[],
   view: SessionRowsView,
@@ -81,10 +82,10 @@ function filterSessionRows(
   const cutoff = view.updated === undefined ? undefined : now - UPDATED_WINDOW_HOURS[view.updated] * HOUR_MS;
   const matches = (row: SessionRowFields) =>
     matchesOwner(row, view.owner, viewerUserId) &&
-    (view.source === undefined || sourceOf(row) === view.source) &&
     (view.status === undefined || row.status === view.status) &&
     (cutoff === undefined || Date.parse(row.updatedAt) >= cutoff);
   return rows.flatMap(row => {
+    if (view.source !== undefined && sourceOf(row) !== view.source) return [];
     if (!row.childRows) return matches(row) ? [row] : [];
     const childRows = row.childRows.filter(matches);
     return matches(row) || childRows.length > 0 ? [{ ...row, childRows }] : [];
