@@ -909,10 +909,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */
-    tracingIds?: {
-      traceId: string;
-      workflowSpanId: string;
-    };
+    tracingIds?: ExecutionContext['tracingIds'];
   }): Promise<TOutput> {
     const {
       workflowId,
