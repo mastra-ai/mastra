@@ -212,9 +212,15 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   }
 
   const parent = options.parent as AnyBaseSpan;
-  if (parent.isInternal || parent.isExcluded || parent.isStartFiltered) {
+  // When `spanFilter` dropped the start of every ancestor, the walk past those
+  // ancestors finds nothing. Stay under the nearest one then: its bridge span
+  // exists, and the bridge needs a parent to keep the span in the trace.
+  if (parent.isInternal || parent.isExcluded) {
     // Parent won't reach exporters — walk to the closest exported ancestor
-    return parent.getParentSpanId(false, true);
+    return parent.getParentSpanId(false, true) ?? parent.getParentSpanId(false);
+  }
+  if (parent.isStartFiltered) {
+    return parent.getParentSpanId(false, true) ?? parent.id;
   }
   return parent.id;
 }

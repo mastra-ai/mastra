@@ -128,6 +128,10 @@ A filter that reads end-time data keeps the start event and drops the end event.
 - Exporters that write a span when it ends never write this span. Langfuse, the OpenTelemetry exporters, and `MastraStorageExporter` with the `insert-only` strategy work this way. Children of the span were already exported with the span as their parent. In that tool they have no parent.
 - Exporters that write a span when it starts keep the span and close it at its end time, without its end-time data. `MastraStorageExporter` with the `realtime` or `batch-with-updates` strategy, Braintrust, LangSmith, and Sentry work this way.
 
+### Drop a span's start and keep its end
+
+A filter can also reject a span when it starts and accept it when it ends. A filter on duration does this, because a span has no end time when it starts. Mastra attaches the children of that span to the nearest ancestor whose start was exported. Exporters that write a span when it ends still receive the span, but its children aren't nested under it.
+
 To drop a span and keep a connected tree in every exporter, filter on data the span has when it starts.
 
 A custom exporter that opens a span on its start event can implement [`onSpanFilteredEvent`](/reference/observability/tracing/interfaces#observabilityexporter) to close a span whose end was dropped.

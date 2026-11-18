@@ -1061,6 +1061,39 @@ describe('Span Filtering', () => {
       await tracing.shutdown();
     });
 
+    it('should still emit token metrics for an internal model call when the filter drops its only ancestor', async () => {
+      // A processor's own model call is internal. Its usage is reported through the nearest ancestor.
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanFilter: span => span.type !== SpanType.AGENT_RUN,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const hiddenModel = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      });
+      hiddenModel.end({
+        attributes: {
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          usage: { inputTokens: 50, outputTokens: 10 },
+        },
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+      expect(inputTokenMetrics.map(e => e.metric.value)).toEqual([50]);
+
+      await tracing.shutdown();
+    });
+
     it('should still emit metrics for exported spans (no regression)', async () => {
       const collector = new MetricCollectingExporter();
       const tracing = new DefaultObservabilityInstance({

@@ -1121,29 +1121,36 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Walk up the parent chain to find the closest ancestor that will actually
-   * reach exporters. Skips internal-filtered ancestors, ancestors whose type
-   * matches `excludeSpanTypes`, and ancestors whose start `spanFilter` dropped,
-   * so the rollup target is one whose mutated `internalUsage` attribute is
-   * visible in exported traces.
+   * reach exporters. Skips internal-filtered ancestors and ancestors whose
+   * type matches `excludeSpanTypes`, and prefers one whose start `spanFilter`
+   * kept, so the rollup target is one whose mutated `internalUsage` attribute
+   * is visible in exported traces.
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
+    // An ancestor whose start `spanFilter` dropped still emits metrics, and the
+    // filter can keep its end. It stays the target when no ancestor is better.
+    let nearestStartFiltered: AnySpan | undefined;
     let ancestor: AnySpan | undefined = span.parent;
-    while (ancestor && this.isFilteredFromExport(ancestor)) {
+    while (ancestor) {
+      if (!this.isFilteredFromExport(ancestor)) {
+        if (!(ancestor instanceof BaseSpan && ancestor.isStartFiltered)) return ancestor;
+        nearestStartFiltered ??= ancestor;
+      }
       ancestor = ancestor.parent;
     }
-    return ancestor;
+    return nearestStartFiltered;
   }
 
   /**
    * Returns true when a span would be dropped by `getSpanForExport` for a
-   * reason already known (internal-span filtering, `excludeSpanTypes`, or a
-   * start event `spanFilter` dropped). Used by `findExportedAncestor` to skip
-   * rollup targets that would silently lose their `internalUsage` attribute.
+   * reason cheap to check up-front (internal-span filtering or
+   * `excludeSpanTypes`). Used by `findExportedAncestor` to skip rollup
+   * targets that would silently lose their `internalUsage` attribute.
    */
   private isFilteredFromExport(span: AnySpan): boolean {
     if (span.isInternal && !this.config.includeInternalSpans) return true;
     if (this.config.excludeSpanTypes?.includes(span.type)) return true;
-    return span instanceof BaseSpan && span.isStartFiltered;
+    return false;
   }
 
   /**
