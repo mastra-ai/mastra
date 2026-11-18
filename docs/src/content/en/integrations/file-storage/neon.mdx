@@ -5,7 +5,7 @@ packages:
   - "@mastra/s3"
 ---
 
-# Neon object storage
+# Neon Object Storage
 
 [Neon Object Storage](https://neon.com/docs/storage/overview) is S3-compatible storage built into a Neon project. Buckets belong to a branch, and a child branch starts with a copy-on-write copy of its parent's files. Mastra connects to it through [`S3Filesystem`](/integrations/file-storage/amazon-s3), so agents get workspace files that branch together with the rows in your [Neon Postgres](/integrations/databases/neon) database. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 

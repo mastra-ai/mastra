@@ -123,7 +123,7 @@ If runs can be resumed by a different Worker or process than the one that suspen
 Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).
 For Workers deployments, `keyPrefix` is used to isolate data within a namespace; for REST API deployments, `namespacePrefix` is used to isolate entire namespaces between environments or applications.
 
-## Cloudflare durable objects storage
+## Cloudflare Durable Objects Storage
 
 The Durable Objects storage implementation provides strongly consistent, SQLite-based storage using Cloudflare Durable Objects. This is ideal for applications that require transactional consistency and SQL query capabilities.
 

@@ -140,7 +140,7 @@ The Redis storage implementation uses the following key patterns:
 - Scores: `mastra_scorers:id:{scoreId}`
 - Resources: `mastra_resources:{resourceId}`
 
-### Redis sentinel
+### Redis Sentinel
 
 For high-availability deployments using Redis Sentinel, create a custom client:
 
@@ -161,7 +161,7 @@ const storage = new RedisStore({
 })
 ```
 
-### Redis cluster
+### Redis Cluster
 
 Redis Cluster isn't supported. `RedisStore` accepts only a standalone client from `createClient()`, and several operations read or write keys that hash to different slots, which Redis Cluster rejects with a `CROSSSLOT` error.
 

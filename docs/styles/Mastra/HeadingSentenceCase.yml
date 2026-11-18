@@ -12,8 +12,10 @@ indicators:
 # project Vocab, so `vocab` is off and the words it supplied are listed
 # below. The `(?i)` prefixes stay off on purpose: case-insensitive entries
 # leak to the rest of the expression, where a short one like "ID" then
-# excuses every word that contains it. Keep this list in sync with
-# styles/config/vocabularies/Mastra/accept.txt.
+# excuses every word that contains it. The list starts from
+# styles/config/vocabularies/Mastra/accept.txt and then adds product and
+# standard names that only appear capitalized in headings, so those do not
+# have to be enforced in prose.
 vocab: false
 exceptions:
   # Identifiers and punctuation that keep their spelling.
@@ -104,6 +106,9 @@ exceptions:
   - 'LLM'
   - 'MAP'
   - 'Mastra'
+  - 'Mastra Cloud Store'
+  - 'Mastra Enterprise'
+  - 'Mastra Gateway'
   - 'MCP'
   - 'MinIO'
   - 'MLflow'
@@ -201,13 +206,50 @@ exceptions:
   # identifier pattern that also matches "SharePoint".
   - 'Online'
   - 'Outlook'
+  - 'Actions'
   - 'Postgres'
   - 'Realtime'
   - 'Render'
   - 'Slack'
+  - 'Sprites'
   - 'Spanner'
   - 'Stagehand'
   - 'Studio'
+  - 'Start'
   - 'Teams'
   - 'Weaviate'
+  # Product, feature, and standard names that keep their capitalization.
+  - 'Agent Client Protocol'
+  - 'Application Default Credentials'
+  - 'Azure Blob'
+  - 'Azure Speech Services'
+  - 'Better Auth'
+  - 'Bright Data'
+  - 'Browser Use Cloud'
+  - 'ClickHouse Managed Postgres'
+  - 'Claude Agent SDK'
+  - 'Cloudflare Durable Objects Storage'
+  - 'Composite Auth'
+  - 'Cursor Agent SDK'
+  - 'DynamoDB Local'
+  - 'Docker Cloud Sandboxes'
+  - 'E2B Desktop'
+  - 'Gemini Live'
+  - 'GitHub Actions'
+  - 'Google Cloud Spanner'
+  - 'Google Cloud Storage'
+  - 'JSON Web Token'
+  - 'Neon Object Storage'
+  - 'Nova Sonic'
+  - 'OpenAI Responses API Conversations'
+  - 'OpenAI Responses API'
+  - 'OpenAI Responses'
+  - 'Redis Cluster'
+  - 'Redis Sentinel'
+  - 'Simple Auth'
+  # "TanStack Start" and "GitHub Actions" only pass as word exceptions:
+  # the `[A-Z][a-z]+(?:[A-Z][a-z]+)+` identifier pattern matches "TanStack"
+  # and "GitHub", so multi-word exceptions for them never apply.
+  - 'Vercel Files'
+  - 'Weaviate Cloud'
   - 'Connect'

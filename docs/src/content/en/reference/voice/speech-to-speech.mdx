@@ -190,7 +190,7 @@ Note:
 - Live API requires `GOOGLE_API_KEY`. Vertex AI requires project/location and service account credentials.
 - Events: `speaker` (audio stream), `writing` (text), `turnComplete`, `usage`, and `error`.
 
-## AWS Nova sonic (realtime)
+## AWS Nova Sonic (realtime)
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -234,7 +234,7 @@ Note:
 - Authenticates through the standard AWS credential provider chain. Pass `credentials` to override.
 - Events: `speaking` (Int16Array audio), `writing` (text with `generationStage`), `toolCall`, `interrupt`, `turnComplete`, `usage`, `session`, and `error`.
 
-## Inworld realtime
+## Inworld Realtime
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

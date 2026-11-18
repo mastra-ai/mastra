@@ -74,6 +74,9 @@ LanceDB
 (?i)LLM
 (?i)MAP
 (?i)Mastra
+Mastra Cloud Store
+Mastra Enterprise
+Mastra Gateway
 (?i)MCP
 Microsoft Word
 MinIO

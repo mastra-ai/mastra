@@ -27,7 +27,7 @@ npx create-mastra@latest my-mastra-project --llm anthropic
 
 Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow and creates a platform project with the same name as the local project. It then writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
 
-### Mastra gateway
+### Mastra Gateway
 
 Select **Mastra Gateway** to call every model with one key. The command opens the browser to sign in to Mastra, creates a Gateway API key, and writes it to `.env` as `MASTRA_GATEWAY_API_KEY`. The agent's models use the `mastra/` prefix, for example `mastra/openai/gpt-6.1-sol`.
 
