@@ -3225,8 +3225,7 @@ export class DurableAgent<
   /**
    * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
    * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
-   * A registered run owns the thread from then on. `generate()` never registers, so it gives the
-   * thread back once it settles.
+   * A registered run owns the thread from then on, and releasing after that does nothing.
    */
   async #onReservedThread<T>(
     runId: string,
@@ -5072,6 +5071,20 @@ export class DurableAgent<
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
+
+    // 4b. Register with the thread runtime, as stream() does. A run that only reserves its thread
+    // is invisible to signals and leaves nothing to start the thread's queued work when it ends.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+      {
+        generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+      },
+    );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = runCleanup.run;
