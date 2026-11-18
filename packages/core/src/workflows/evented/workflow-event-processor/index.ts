@@ -33,6 +33,7 @@ import {
   resolveRunFence,
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
+import type { RunFence } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -758,6 +759,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId,
     terminalHandoff = false,
     finished = false,
+    fence,
   }: {
     workflow: Workflow | undefined;
     workflowId: string;
@@ -765,6 +767,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     terminalHandoff?: boolean;
     /** Set when the run finished (see `#pruneSnapshotOf`). */
     finished?: boolean;
+    /** The ownership claim the write must still hold, so a stale delivery can't rewrite the run. */
+    fence?: RunFence;
   }): Promise<void> {
     const pruneSnapshot = this.#pruneSnapshotOf(workflow, finished);
     if (!pruneSnapshot && !terminalHandoff) return;
@@ -790,7 +794,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           }
         }
       }
-      await runStorage.writeSnapshot(pruned, guarded ? undefined : await runStorage.loadResourceId());
+      await runStorage.writeSnapshot(pruned, guarded ? undefined : await runStorage.loadResourceId(), { fence });
     } catch (error) {
       // Guarded terminal writes retire occurrences before notifying the finish topic.
       if (terminalHandoff && guarded) throw error;
@@ -1516,13 +1520,20 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  private async assertCurrentRunFence(runId: string): Promise<void> {
+  /** Throws unless this execution still owns `runId`; returns the fence the run's writes should carry. */
+  private async assertCurrentRunFence(runId: string): Promise<RunFence | undefined> {
+    const fence = await this.currentRunFence(runId);
     const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store) return;
-    const fence = resolveRunFence(store, undefined, runId);
-    if (fence && !matchesRunFence(await store.getRunOwnership({ runId: fence.runId }), fence)) {
+    if (fence && store && !matchesRunFence(await store.getRunOwnership({ runId: fence.runId }), fence)) {
       throw new RunFenceConflictError(fence, 'finalize workflow');
     }
+    return fence;
+  }
+
+  /** The claim this execution holds on `runId`, if the store fences runs at all. */
+  private async currentRunFence(runId: string): Promise<RunFence | undefined> {
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    return store ? resolveRunFence(store, undefined, runId) : undefined;
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
@@ -1547,6 +1558,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId,
     } = args;
     const paused = endedPaused(args);
+    // Check ownership before pruning: a redelivered `workflow.end` that lost the run to a newer
+    // execution must not rewrite that execution's checkpoint.
+    const fence = await this.assertCurrentRunFence(runId);
 
     // workflow.end durably carries the full result, so the snapshot no longer
     // needs to retain the terminal step's unpruned continuation input.
@@ -1566,13 +1580,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         // Nested completion still has to transfer ownership to its parent loop.
         terminalHandoff: !parentWorkflow,
         finished: true,
+        fence,
       });
     }
 
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
-    await this.assertCurrentRunFence(runId);
     this.endRunSpans(args, paused ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
@@ -1918,7 +1932,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
       // Storage v1 runs pruned each step result as it was written.
       if (currentStorageVersion() === 2) {
-        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId, finished: true });
+        await this.pruneAndRepersistSnapshot({
+          workflow,
+          workflowId,
+          runId,
+          finished: true,
+          fence: await this.currentRunFence(runId),
+        });
       }
     }
 

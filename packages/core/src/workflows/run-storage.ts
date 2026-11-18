@@ -3,6 +3,7 @@ import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/
 import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
+import type { RunFence } from '../storage/run-fencing';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import type { WorkflowStepCompletionGuard, WorkflowStepStartGuard } from '../storage/workflow-step-guard';
 import { stubStepResult } from './run-journal';
@@ -26,9 +27,14 @@ export interface RunStorage {
   /**
    * Replaces the stored run: the pending/waiting snapshot written before the engine runs, or a
    * pruned one. With `stateBase` (a storage v2 nested run starting from a stored version of its
-   * parent's state), the state is stored as that version instead of a copy.
+   * parent's state), the state is stored as that version instead of a copy. `fence` makes the store
+   * reject the write when this execution no longer owns the run.
    */
-  writeSnapshot(snapshot: WorkflowRunState, resourceId?: string, opts?: { stateBase?: StateRef }): Promise<void>;
+  writeSnapshot(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    opts?: { stateBase?: StateRef; fence?: RunFence },
+  ): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
   /**
@@ -95,6 +101,9 @@ type RunStorageArgs = {
   getStore(): Promise<WorkflowsStorage | undefined>;
 };
 
+/** Reads of one step before a run that keeps being written to fails the read instead of retrying. */
+const STEP_READ_ATTEMPTS = 5;
+
 /** @internal */
 export function createRunStorage({ storageVersion, ...args }: RunStorageArgs & { storageVersion: 1 | 2 }): RunStorage {
   return storageVersion === 2 ? new RunStorageV2(args) : new RunStorageV1(args);
@@ -150,13 +159,18 @@ class RunStorageV1 implements RunStorage {
     return this.#load(await this.#getStore());
   }
 
-  async writeSnapshot(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
+  async writeSnapshot(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    { fence }: { fence?: RunFence } = {},
+  ): Promise<void> {
     const store = await this.#getStore();
     await store?.persistWorkflowSnapshot({
       workflowName: this.#workflowName,
       runId: this.#runId,
       resourceId,
       snapshot,
+      fence,
     });
   }
 
@@ -351,7 +365,7 @@ class RunStorageV2 implements RunStorage {
   async writeSnapshot(
     snapshot: WorkflowRunState,
     resourceId?: string,
-    { stateBase }: { stateBase?: StateRef } = {},
+    { stateBase, fence }: { stateBase?: StateRef; fence?: RunFence } = {},
   ): Promise<void> {
     const store = await this.#getStore();
     // The evented engine keeps its state in `context.__state`; on v2 that's the run's state, not a step.
@@ -364,6 +378,7 @@ class RunStorageV2 implements RunStorage {
       threadId: getSnapshotMemoryInfo(snapshot)?.threadId,
       header,
       steps: steps as WorkflowRunState['context'],
+      fence,
       ...(stateBase ? { stateBase } : { state: value }),
     });
   }
@@ -418,7 +433,7 @@ class RunStorageV2 implements RunStorage {
     // two reads makes the step read null (the run's `lastSeq` moved), so read both again. Reading
     // the step as of the header's `lastSeq` instead would miss a step whose older entries that
     // write replaced.
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const stored = await store?.loadWorkflowRunHeader(args);
       if (!stored) return null;
       const context = await store!.loadWorkflowRunSteps({
@@ -428,6 +443,12 @@ class RunStorageV2 implements RunStorage {
         expectedRunToken: stored.runToken,
       });
       if (context) return { ...stored.header, context } as StepSnapshot;
+      // Unrelated writes to the run must not spin the reader here forever.
+      if (attempt === STEP_READ_ATTEMPTS) {
+        throw new Error(
+          `The steps of run ${this.#runId} kept changing while they were read: ${STEP_READ_ATTEMPTS} reads were invalidated by writes. Read the run again.`,
+        );
+      }
     }
   }
 

@@ -1378,7 +1378,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(-1), b: ok(-1) }, state: {} });
         const ids = Array.from({ length: 20 }, (_, i) => i);
         // Both append paths (with and without a header) replace a, and every third write b too.
-        await Promise.all(
+        const written = await Promise.all(
           ids.map(i =>
             store.appendWorkflowRunEntries({
               ...run,
@@ -1388,10 +1388,15 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           ),
         );
 
+        // The append with the highest `lastSeq` that wrote a step is the one whose result the run keeps.
+        const winner = (step: 'a' | 'b') =>
+          ids
+            .filter(i => step === 'a' || i % 3 === 0)
+            .reduce((best, i) => (written[i]!.lastSeq > written[best]!.lastSeq ? i : best));
         const steps = (await loadRun(id))!.steps as Record<string, { output: number }>;
         expect(Object.keys(steps)).toEqual(['a', 'b']);
-        expect(ids).toContain(steps.a!.output);
-        expect(ids.filter(i => i % 3 === 0)).toContain(steps.b!.output);
+        expect(steps.a!.output).toBe(winner('a'));
+        expect(steps.b!.output).toBe(winner('b'));
         expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['a', 'b'] })).toEqual(steps);
       });
 

@@ -8,8 +8,8 @@ Reading `state` in a run stored with the experimental `storageVersion: 2` option
 
 ```ts
 // Before
-execute: async ({ state }) => state.count;
+execute: async ({ state }) => state.count,
 
 // After
-execute: async ({ getState }) => (await getState(['count'])).count;
+execute: async ({ getState }) => (await getState(['count'])).count,
 ```

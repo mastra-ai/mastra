@@ -537,14 +537,24 @@ describe('evented step messages on storage v2', () => {
 
   it('join parallel branches once per loop iteration when both write before either loads the other', async () => {
     let joins = 0;
-    const arm = (id: string) =>
-      createStep({ id, inputSchema: looseObject, outputSchema: looseObject, execute: async () => ({ [id]: true }) });
+    // Each arm returns its own execution count, so a sibling's result from an earlier iteration
+    // is visibly different from this one's.
+    const runs = { left: 0, right: 0 };
+    const arm = (id: 'left' | 'right') =>
+      createStep({
+        id,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        execute: async () => ({ [id]: runs[id]++ }),
+      });
+    const joined: Record<string, any>[] = [];
     const after = createStep({
       id: 'after',
       inputSchema: looseObject,
       outputSchema: looseObject,
       execute: async ({ inputData }) => {
         joins++;
+        joined.push(inputData);
         return inputData;
       },
     });
@@ -591,6 +601,13 @@ describe('evented step messages on storage v2', () => {
     expect(result.status).toBe('success');
     expect(successes).toEqual({ left: 3, right: 3 });
     expect(joins).toBe(3);
+    // Iterations run one after another, so the nth call of each arm belongs to iteration n.
+    // A branch reused from the previous iteration would show up as a mismatch here.
+    expect(joined).toEqual([
+      { left: { left: 0 }, right: { right: 0 } },
+      { left: { left: 1 }, right: { right: 1 } },
+      { left: { left: 2 }, right: { right: 2 } },
+    ]);
   });
 });
 

@@ -221,6 +221,11 @@ describe('storage v2 pruneSnapshot', () => {
           workflowStatus: 'success',
           snapshot: { context: { big: { output: { text: BIG } }, between: { output: { text: BIG } } } },
         });
+        // The gate step finished in this drive, so the hook sees its result too.
+        expect(prune.mock.calls[0]![0].snapshot.context.gate).toMatchObject({
+          status: 'success',
+          output: { approved: true },
+        });
         expect(await storedBig(storage, run.runId)).toMatchObject({ status: 'success', output: { text: 'pruned' } });
         const steps = await loadStepResults(resumed.steps);
         expect(steps.big).toMatchObject({ status: 'success', output: { text: BIG } });
