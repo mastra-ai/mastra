@@ -1,5 +1,14 @@
 # @mastra/libsql
 
+## 1.31.1-alpha.0
+
+### Patch Changes
+
+- Fixed LibSQL storage write failures printing raw database errors after Mastra was created with `logger: false` or a custom logger. Storage write retry and failure logs now go through the configured logger and include only the error type and code, not the error message, cause or stack. The original error is still thrown to the caller. Fixes [#29885](https://github.com/mastra-ai/mastra/issues/29885). ([#30314](https://github.com/mastra-ai/mastra/pull/30314))
+
+- Updated dependencies [[`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0-alpha.4
+
 ## 1.31.0
 
 ### Minor Changes

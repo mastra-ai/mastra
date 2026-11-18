@@ -1,5 +1,13 @@
 # @mastra/koa
 
+## 1.7.29-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0-alpha.4
+  - @mastra/server@1.85.0-alpha.4
+
 ## 1.7.29-alpha.3
 
 ### Patch Changes
