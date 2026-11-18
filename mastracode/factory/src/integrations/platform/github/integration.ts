@@ -84,6 +84,12 @@ import {
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
+import {
+  addReconcileSummary,
+  emptyIntakeRefreshSummary,
+  scopeIntegrationContextToProject,
+} from '../../intake-refresh.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from '../../intake-refresh.js';
 import { PlatformConnectIntegration } from '../foundation/index.js';
 import type { PlatformConnectEventDelivery, PlatformConnectEventRoute } from '../foundation/index.js';
 import { logPlatformBootInfo, logPlatformError, logPlatformInfo, logPlatformWarn } from '../logging.js';
@@ -1178,6 +1184,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
    * deployment's Connect event poller ({@link handleConnectEvent}).
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     const reconcile = this.#pullRequestReconcileEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
@@ -1233,6 +1240,107 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
 
   override requestReconcile(): void {
     this.#reconcileWorker?.requestRun();
+  }
+
+  /**
+   * Runs the pull request, issue, discovery and Dependabot sweeps on one
+   * Factory project's linked repositories, now. The sweeps write only to the
+   * project's org: a repository other projects of the org share has its cards
+   * refreshed there too, as a missed webhook would have reached them, and
+   * Dependabot alerts reach this project alone.
+   */
+  override async refreshIntake(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null> {
+    if (!this.workerContext) return null;
+    const scoped = await scopeIntegrationContextToProject(this.workerContext, scope);
+    if (!scoped) return null;
+    const ctx = scoped.context;
+    const summary = emptyIntakeRefreshSummary();
+    const targets = await this.#projectTargets(scope);
+    if (targets.length === 0) return summary;
+    await this.#refreshRepositoryNames(targets);
+    const errors = (sweep: { errors: ReadonlyArray<{ repository: string; error: string }> }) =>
+      sweep.errors.map(error => ({ error: `${error.repository}: ${error.error}` }));
+
+    if (this.#pullRequestReconcileEnabled) {
+      const reconcile = attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input));
+      if (reconcile) {
+        const sweep = await reconcile(targets);
+        addReconcileSummary(summary, {
+          checked: sweep.checked,
+          closed: sweep.merged + sweep.closed,
+          failed: sweep.failed,
+          errors: errors(sweep),
+        });
+      }
+      const discover = attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl));
+      if (discover) {
+        const sweep = await discover(targets);
+        addReconcileSummary(summary, {
+          updated: sweep.repaired,
+          observed: sweep.created,
+          failed: sweep.failed,
+          errors: errors(sweep),
+        });
+      }
+    }
+    if (this.#issueReconcileEnabled) {
+      const reconcileIssues = attachGithubIssueReconciler(
+        this,
+        ctx,
+        input => this.fetchIssueState(input),
+        input => this.listOpenIssueStates(input),
+      );
+      if (reconcileIssues) {
+        const sweep = await reconcileIssues(targets);
+        addReconcileSummary(summary, {
+          checked: sweep.checked,
+          updated: sweep.updated + sweep.relabeled,
+          closed: sweep.closed,
+          observed: sweep.created,
+          failed: sweep.failed,
+          errors: errors(sweep),
+        });
+      }
+      const syncDependabot = this.#dependabotSync(ctx);
+      if (syncDependabot) {
+        const sweep = await syncDependabot(
+          targets.map(target => ({
+            ...target,
+            projects: target.projects?.filter(project => project.factoryProjectId === scope.factoryProjectId),
+          })),
+        );
+        addReconcileSummary(summary, { observed: sweep.alerts, failed: sweep.failed, errors: errors(sweep) });
+      }
+    }
+    return summary;
+  }
+
+  /**
+   * The project's linked repositories, as the reconcile sweeps address them,
+   * each naming the projects of the org it is linked to: the sweeps touch no
+   * other org's cards.
+   */
+  async #projectTargets(scope: IntakeRefreshScope): Promise<ReconcileRepository[]> {
+    const { orgId } = scope;
+    const targets: ReconcileRepository[] = [];
+    for (const link of await this.storage.projectRepositories.listByProject(scope)) {
+      const connection = await this.storage.connections.get({ orgId, id: link.connectionId });
+      const repository = await this.storage.repositories.get({ orgId, id: link.repositoryId });
+      const installation = connection
+        ? await this.storage.installations.get({ orgId, id: connection.installationId })
+        : null;
+      const id = Number(repository?.externalId);
+      const installationId = Number(installation?.externalId);
+      if (!repository?.slug || !Number.isSafeInteger(id) || !Number.isSafeInteger(installationId)) continue;
+      if (targets.some(target => target.id === id)) continue;
+      const linked = await this.storage.projectRepositories.listByExternalRepository({
+        installationExternalId: String(installationId),
+        repositoryExternalId: String(id),
+      });
+      const projects = linked.filter(project => project.orgId === orgId);
+      targets.push({ id, fullName: repository.slug, installationId, projects });
+    }
+    return targets;
   }
 
   /** Reads the legacy GitHub App's webhooks from each linked repository's platform event log. */

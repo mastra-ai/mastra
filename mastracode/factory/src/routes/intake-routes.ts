@@ -28,6 +28,7 @@ import {
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from '../integrations/intake-refresh.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
@@ -68,7 +69,25 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   intakeEvaluator?: IntakeEvaluator;
   /** Providers the tester can read an unseen item from by URL. */
   intakeLookups?: readonly IntakeItemLookup[];
+  /** Integrations a board's Refresh asks to reconcile the project's intake sources now. */
+  intakeRefreshers?: readonly IntakeRefresher[];
 }
+
+export interface IntakeRefresher {
+  id: string;
+  refreshIntake(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null>;
+}
+
+type IntakeRefreshResult =
+  | { integrationId: string; status: 'refreshed'; summary: Omit<IntakeRefreshSummary, 'errors'> }
+  | { integrationId: string; status: 'failed' };
+
+/**
+ * How long after a project's refresh finishes before this replica runs another
+ * for it. A refresh re-reads every card and lists every source, on rate limits
+ * other projects share; the hourly reconcile repairs the rest.
+ */
+export const INTAKE_REFRESH_MIN_GAP_MS = 60_000;
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
 
@@ -103,6 +122,11 @@ function present(route: StoredIntakeRouteRecord, registry: BoardRegistry) {
 }
 
 export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
+  /** Refreshes running now, by project: a second Refresh while one runs waits for it instead of sweeping again. */
+  readonly #refreshing = new Map<string, Promise<IntakeRefreshResult[]>>();
+  /** When each project's last refresh on this replica finished. */
+  readonly #refreshedAt = new Map<string, number>();
+
   async #resolve(c: Context): Promise<Resolved> {
     const { auth, projects } = this.deps;
     await auth.ensureUser(c);
@@ -376,6 +400,43 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     return { scope, body, check, registry: await this.#registry(scope) };
   }
 
+  /** The running refresh for the project, a new one, or how many seconds until one may start. */
+  #refresh(scope: Resolved): Promise<IntakeRefreshResult[]> | { retryAfterSeconds: number } {
+    const key = `${scope.orgId}:${scope.factoryProjectId}`;
+    const running = this.#refreshing.get(key);
+    if (running) return running;
+    const wait = (this.#refreshedAt.get(key) ?? -Infinity) + INTAKE_REFRESH_MIN_GAP_MS - Date.now();
+    if (wait > 0) return { retryAfterSeconds: Math.ceil(wait / 1000) };
+    this.#refreshedAt.delete(key);
+    const target = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+    const refresh = Promise.all(
+      (this.deps.intakeRefreshers ?? []).map(async (refresher): Promise<IntakeRefreshResult | null> => {
+        try {
+          const result = await refresher.refreshIntake(target);
+          if (!result) return null;
+          const { errors, ...summary } = result;
+          // Provider and storage messages stay in the log: the response is for any member of the org.
+          if (errors.length > 0)
+            console.warn(`[factory] intake refresh of ${key} by ${refresher.id} skipped items:`, errors);
+          return { integrationId: refresher.id, status: 'refreshed', summary };
+        } catch (error) {
+          // One integration failing leaves the others' refreshes standing.
+          console.error(`[factory] intake refresh of ${key} by ${refresher.id} failed:`, error);
+          return { integrationId: refresher.id, status: 'failed' };
+        }
+      }),
+    )
+      .then(results => {
+        const ran = results.filter(result => result !== null);
+        // Only a refresh that read something holds the next one off: when every integration failed, retrying is the point.
+        if (ran.some(result => result.status === 'refreshed')) this.#refreshedAt.set(key, Date.now());
+        return ran;
+      })
+      .finally(() => this.#refreshing.delete(key));
+    this.#refreshing.set(key, refresh);
+    return refresh;
+  }
+
   routes(): ApiRoute[] {
     const { storage } = this.deps;
     const contracts = FACTORY_ROUTE_CONTRACTS;
@@ -461,6 +522,24 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           nextCursor: page.nextCursor,
           canEdit: await this.#canEdit(c, scope),
         });
+      }),
+
+      // Members can ask: a refresh files only what the project's sources and rules already say.
+      this.#route(contracts.intakeRefresh, async c => {
+        const scope = await this.#resolve(c);
+        const refresh = this.#refresh(scope);
+        if ('retryAfterSeconds' in refresh) {
+          return c.json(
+            {
+              error: 'intake_refresh_too_soon',
+              message: 'This project was just refreshed. Try again in a minute.',
+              retryAfterSeconds: refresh.retryAfterSeconds,
+            },
+            429,
+            { 'Retry-After': String(refresh.retryAfterSeconds) },
+          );
+        }
+        return c.json({ integrations: await refresh });
       }),
 
       this.#route(contracts.intakeSkippedList, async c => {

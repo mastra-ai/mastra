@@ -191,6 +191,7 @@ export class PlatformGitLabIntegration
    * mode requires one.
    */
   override workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     void this.binding.ensureBootLinked(ctx.storage.generic);
     const reconcile = attachGitLabReconciler(this, ctx);
     if (!reconcile) return [];

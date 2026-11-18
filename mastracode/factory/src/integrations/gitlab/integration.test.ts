@@ -502,6 +502,31 @@ describe('PlatformGitLabIntegration', () => {
     await vi.advanceTimersByTimeAsync(60 * 60_000);
     expect(acquireLease).toHaveBeenCalledTimes(3);
   });
+
+  it("refreshes one Factory project's GitLab intake once its workers have the Factory runtime", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const context = {
+      storage: { projects: seeded.projects, sourceControl: new SourceControlStorageInMemory(), intake: seeded.intake },
+      runtime: { configVersion: 'gitlab-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const gitlab = platform();
+    vi.spyOn(gitlab, 'listConnections').mockResolvedValue([]);
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await expect(gitlab.refreshIntake(scope)).resolves.toBeNull();
+
+    gitlab.workers(context);
+
+    await expect(gitlab.refreshIntake(scope)).resolves.toEqual({
+      checked: 0,
+      updated: 0,
+      closed: 0,
+      observed: 0,
+      failed: 0,
+      errors: [],
+    });
+    await expect(gitlab.refreshIntake({ orgId: 'org-2', factoryProjectId: project.id })).resolves.toBeNull();
+  });
   it.each([
     {
       name: 'OAuth',

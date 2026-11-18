@@ -47,6 +47,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from './intake-refresh.js';
 import type { CardSource } from './kept-cards.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
@@ -293,6 +294,14 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
+  /**
+   * Reconciles one Factory project's intake sources now: refreshes the cards
+   * the integration already filed there, then files what the project's sources
+   * show that has no card yet. Behind the board's Refresh action, for anything
+   * an event lost. Runs with the context `workers()` was given, so it resolves
+   * to null until then, and when the project isn't the org's.
+   */
+  refreshIntake?(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null>;
   /**
    * Chat-platform channels this integration contributes (Slack, Discord, …).
    * Called once at boot for READY integrations only; the factory constructs an

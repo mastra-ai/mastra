@@ -3,6 +3,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryIntegration, IntegrationContext } from '../../base.js';
+import {
+  addReconcileSummary,
+  emptyIntakeRefreshSummary,
+  scopeIntegrationContextToProject,
+} from '../../intake-refresh.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from '../../intake-refresh.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
@@ -74,6 +80,8 @@ export abstract class PlatformConnectIntegration
   #reconcileWorker: IssueReconcileWorker | undefined;
   #discoveryRequestedAt = Number.NEGATIVE_INFINITY;
   #discoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The context `workers()` was given, which a board refresh runs with. */
+  protected workerContext: IntegrationContext | undefined;
 
   constructor(options: PlatformConnectIntegrationOptions) {
     this.id = options.id;
@@ -159,6 +167,7 @@ export abstract class PlatformConnectIntegration
    * extra reconcile. The integration's storage remembers what was linked.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     void this.binding.ensureBootLinked(ctx.storage.generic);
     const reconcile = this.reconcile(ctx);
     if (!reconcile) return [];
@@ -175,6 +184,31 @@ export abstract class PlatformConnectIntegration
   /** Runs the reconcile now, if the integration has one running. */
   requestReconcile(): void {
     this.#reconcileWorker?.requestRun();
+  }
+
+  /**
+   * Runs the integration's reconcile now for one Factory project, outside the
+   * worker's lease: a refresh is idempotent like any reconcile, and waits for
+   * nothing but its own project.
+   */
+  async refreshIntake(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null> {
+    if (!this.workerContext) return null;
+    const scoped = await scopeIntegrationContextToProject(this.workerContext, scope);
+    return scoped ? this.refreshProject(scoped.context, this.workerContext) : null;
+  }
+
+  /**
+   * One project's refresh. `scoped` lists only that project; `full` is the
+   * unscoped context, for integrations whose reconcile reads every project
+   * for more than walking them.
+   */
+  protected async refreshProject(
+    scoped: IntegrationContext,
+    _full: IntegrationContext,
+  ): Promise<IntakeRefreshSummary | null> {
+    const reconcile = this.reconcile(scoped);
+    if (!reconcile) return null;
+    return addReconcileSummary(emptyIntakeRefreshSummary(), await reconcile());
   }
 
   /**
