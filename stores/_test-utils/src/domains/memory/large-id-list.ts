@@ -119,6 +119,48 @@ export function createLargeIdListTests({ storage }: { storage: MastraStorage }) 
       expect(result.hasMore).toBe(false);
     });
 
+    it(`does not count an out-of-range include as coverage for unread messages`, async () => {
+      // A pinned include is fetched by id and ignores `filter.dateRange`, so it can sit outside the
+      // range the count query applies. Counting it as coverage would turn `hasMore` false while a
+      // message inside the range had still not been read.
+      const rangeThreadA = createSampleThread({ id: 'large-list-range-a' });
+      const rangeThreadB = createSampleThread({ id: 'large-list-range-b' });
+      await memoryStorage.saveThread({ thread: rangeThreadA });
+      await memoryStorage.saveThread({ thread: rangeThreadB });
+
+      const base = Date.now() - 60_000;
+      const makeMessage = (threadId: string, id: string, content: string, offsetMs: number) => {
+        const message = createSampleMessageV2({
+          threadId,
+          content: { content },
+          createdAt: new Date(base + offsetMs),
+        });
+        message.id = id;
+        return message;
+      };
+
+      await memoryStorage.saveMessages({
+        messages: [
+          makeMessage(rangeThreadA.id, 'large-list-range-old', 'before the range', 0),
+          makeMessage(rangeThreadA.id, 'large-list-range-a-current', 'inside the range', 20_000),
+          makeMessage(rangeThreadB.id, 'large-list-range-b-current', 'inside the range', 30_000),
+        ],
+      });
+
+      const result = await memoryStorage.listMessages({
+        threadId: [rangeThreadA.id, rangeThreadB.id],
+        perPage: 1,
+        page: 0,
+        filter: { dateRange: { start: new Date(base + 10_000) } },
+        include: [{ id: 'large-list-range-old' }],
+      });
+
+      // The page holds `a-current`; `b-current` also matches the range and has not been read.
+      expect(result.messages.map(m => m.id)).toContain('large-list-range-old');
+      expect(result.messages.map(m => m.id)).not.toContain('large-list-range-b-current');
+      expect(result.hasMore).toBe(true);
+    });
+
     it(`deletes more messages than the database allows bound parameters in one call`, async () => {
       // Its own thread and its own ids, so this case does not depend on the ones above it.
       const thread = createSampleThread({ id: 'large-list-delete-thread' });

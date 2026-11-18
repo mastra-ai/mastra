@@ -1161,9 +1161,12 @@ export class MemoryStorageDO extends MemoryStorage {
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
+      // Includes are fetched by id and ignore `filter.dateRange`, so a pinned message from outside
+      // the range must not count as coverage for messages the count query still reports as unread.
+      // A date range is therefore treated like a metadata filter: rely on the pagination window.
       const hasMore =
         perPageInput !== false &&
-        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        (metadataFilter || dateRange?.start || dateRange?.end || returnedThreadMessageIds.size < total) &&
         offset + paginatedCount < total;
 
       return {

@@ -1154,9 +1154,13 @@ export class MemoryStorageD1 extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = metadataFilter
-        ? perPageInput !== false && offset + paginatedCount < total
-        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      // Includes are fetched by id and ignore `filter.dateRange`, so a pinned message from outside
+      // the range must not count as coverage for messages the count query still reports as unread.
+      // A date range is therefore treated like a metadata filter: rely on the pagination window.
+      const hasMore =
+        metadataFilter || dateRange?.start || dateRange?.end
+          ? perPageInput !== false && offset + paginatedCount < total
+          : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
