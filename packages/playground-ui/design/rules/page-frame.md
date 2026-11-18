@@ -177,6 +177,7 @@ A list that needs list navigation?    -> DataList: gliding row hover, keyboard r
 A labelled value to read at a glance (balance, plan, total, count)? -> MetricsKpiCard, side by side in flex flex-wrap gap-4
 One bounded object with its own actions or tabs (Connect card)? -> Card > CardHeader (CardTitle) + CardContent
 A labelled region of a dashboard or feed (Pipeline, Today)? -> <section> with an in-page section label, no surface
+Nothing yet, and the user can create, set up, or upgrade it? -> EmptyState layout="split" + EmptyStateArt
 Nothing to show, or a failure?        -> EmptyState variant="fill"
 ```
 
@@ -197,6 +198,11 @@ Nothing to show, or a failure?        -> EmptyState variant="fill"
 - **Static structure renders while data loads.** Section titles, row and field labels, card headers, tab lists, KPI labels, and column headers are known before the request returns, so they render immediately. Only data-driven parts load: a `Skeleton` sized to the control it replaces, `MetricsKpiCard.Loading` for a value, the table's header row with `Skeleton` rows for the expected count (`DataListSkeleton` with the same `columns` for a `DataList`), and a disabled picker that reads "Loading models". Never replace a whole section with one generic block; the ready content will not match its height.
 - **An empty state does not repeat the header's primary action.** Its description points to that action instead.
 - Empty and error states are `EmptyState variant="fill"` (`tone="error"` for failures), and loading is `Spinner fill`. The `narrow` body fills the page height, so they center below the header. Never pass an icon size or color; `EmptyState` fixes the icon at 32px.
+- **A create, set-up, or upgrade state uses `EmptyStateArt`.** When the user can make the empty thing exist (turn on a feature, create the first item, connect a source, upgrade a plan), render `EmptyState layout="split"` with `iconSlot={<EmptyStateArt name="…" state={…} />}`. Map `state` from the action: `idle` before it, `working` while it runs or imports, `failed` when it fails. The same drawing carries the page from empty to working to failed, so the body does not change shape between them; swapping in a different illustration per state moves the layout and loses what the user was making. Pick the drawing for the thing being made, never a generic one. Everything else keeps `EmptyStateIllustration`: errors with no create action (`LoadErrorState`, not found, no access, rate limited), and empty lists the user cannot fill from here ([#30734](https://github.com/mastra-ai/mastra/pull/30734)).
+  - `statusSlot` holds one short line under the actions: what the action creates ("Creates a dedicated Postgres database."), live progress with a `progress` `StatusDot` ("Importing from Notion, 1,284 pages so far", digits that update use `tabular-nums`), or a failure's reference ID in `font="mono"` with a `CopyButton`. It is not a second description.
+  - A failed state keeps the same `name` with `state="failed"` and `tone="error"`, and carries the error parts from `copy.md` section 5. A failure the user can fix gets the fixing action plus a link to the docs page for it; one only Mastra can fix gets `Try again` plus `Contact support`.
+  - An upgrade state uses the feature's own drawing with the upgrade button and a docs link. Never a lock, a gated case, or a sealed envelope: the feature itself is the reason to upgrade.
+  - The action lives in the state only when the page header has none. When the header holds the create button, the description points to it, as for any empty state.
 - Spacing around the app card belongs to `AppShell`, and the card surface is `MainCard`.
 
 ## Page character
@@ -236,5 +242,6 @@ Nothing to show, or a failure?        -> EmptyState variant="fill"
 - [ ] The breadcrumb bar holds only breadcrumbs and reference links (Docs, API endpoints); actions live in `ActionRow.End`, the tab row, or `PageHeader.Action`
 - [ ] Switching between loading, empty, error, and ready does not move the header, toolbar, tabs, or section titles
 - [ ] Empty, error, and loading states use `EmptyState variant="fill"` / `Spinner fill`
+- [ ] Create, set-up, and upgrade states use `EmptyState layout="split"` with `EmptyStateArt`, keep one drawing across idle, working, and failed, and errors with no create action keep `EmptyStateIllustration`
 - [ ] Loading, empty, error, permission, and destructive states follow existing patterns
 </quality-checklist>
