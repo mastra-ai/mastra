@@ -11,7 +11,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 31 providers (1202 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 31 providers (1204 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -21,7 +21,7 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 | - | - | - |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
-| <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 29 |
+| <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 31 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
 | <ProviderLogo slug="gitlab" /> [GitLab](#gitlab) | `gitlab` | 44 |
@@ -143,7 +143,7 @@ Provider ID: `discord` · 34 tools
 
 ## ElevenLabs
 
-Provider ID: `elevenlabs` · 29 tools
+Provider ID: `elevenlabs` · 31 tools
 
 | Tool | Description |
 | - | - |
@@ -175,6 +175,8 @@ Provider ID: `elevenlabs` · 29 tools
 | `elevenlabs_list_pronunciation_dictionaries` | List pronunciation dictionaries. |
 | `elevenlabs_list_voices` | List voices |
 | `elevenlabs_remove_pronunciation_dictionary_rules` | Remove rules from a pronunciation dictionary. |
+| `elevenlabs_speech_to_text` | Transcribe audio or video with ElevenLabs Scribe, from base64 audio or a URL. Can tag sound events and label speakers. Uses transcription credits. |
+| `elevenlabs_text_to_speech` | Convert text to speech with an ElevenLabs voice. Returns the audio base64-encoded; the model only sees a summary of it. Uses character credits. |
 | `elevenlabs_update_agent` | Update a Conversational AI agent |
 
 ## Fireflies.ai

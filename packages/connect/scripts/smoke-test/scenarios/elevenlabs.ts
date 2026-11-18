@@ -2,9 +2,14 @@ import type { Scenario, ScenarioStep } from '../scenario.js';
 import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '../scenario.js';
 
 /**
- * ElevenLabs scenario. Nothing here generates audio or spends credits: the
- * toolset has no text-to-speech, dubbing-create, or call tools.
+ * ElevenLabs scenario. Nothing here spends credits unless
+ * `MASTRA_SMOKE_ELEVENLABS_ALLOW_SPEAK=1`.
  *
+ * - Text-to-speech and speech-to-text bill per character and per minute. With
+ *   the flag set, the scenario speaks one short sentence, transcribes the audio
+ *   back, checks the words survived, and deletes the history item the speech
+ *   created. Without it, both tools are probed with a synthetic voice and an
+ *   unknown model, which ElevenLabs rejects before doing any work.
  * - Conversational AI agents get a real create → get → update → delete
  *   lifecycle (an agent costs nothing until it takes a call).
  * - History items, dubbing projects, conversations, and knowledge-base
@@ -77,6 +82,7 @@ export const elevenlabsScenario: Scenario = {
     const firstVoice = voices?.voices[0]?.voice_id;
     await getFirstOrProbe('get voice', 'elevenlabs_get_voice', 'voice_id', firstVoice);
     await getFirstOrProbe('get voice settings', 'elevenlabs_get_voice_settings', 'voice_id', firstVoice);
+    const spokenHistoryItem = await runAudio(firstVoice);
     const ownedVoice = voices?.voices.find(v => v.is_owner)?.voice_id;
     if (ownedVoice && tools['elevenlabs_get_voice_settings']) {
       try {
@@ -111,11 +117,23 @@ export const elevenlabsScenario: Scenario = {
       'history_item_id',
       history?.items[0]?.history_item_id,
     );
-    steps.push(
-      await probeTool(call, tools, 'delete history item (probe)', 'elevenlabs_delete_history_item', {
-        history_item_id: SYNTHETIC_ID,
-      }),
-    );
+    if (spokenHistoryItem) {
+      try {
+        await call('elevenlabs_delete_history_item', { history_item_id: spokenHistoryItem });
+        steps.push(makeStep('delete spoken history item', 'elevenlabs_delete_history_item', 'pass'));
+      } catch (error) {
+        log.error(`elevenlabs: leaked history item ${spokenHistoryItem} (${runId})`, errorMessage(error));
+        steps.push(
+          makeStep('delete spoken history item', 'elevenlabs_delete_history_item', 'fail', errorMessage(error)),
+        );
+      }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'delete history item (probe)', 'elevenlabs_delete_history_item', {
+          history_item_id: SYNTHETIC_ID,
+        }),
+      );
+    }
 
     const dubs = await step<{ dubs: Array<{ dubbing_id?: string }> }>(
       'list dubbing projects',
@@ -206,6 +224,55 @@ export const elevenlabsScenario: Scenario = {
       }
     }
     return steps;
+
+    /** Speaks a sentence and transcribes it back; returns the history item the speech created. */
+    async function runAudio(voiceId: string | undefined): Promise<string | undefined> {
+      if (process.env.MASTRA_SMOKE_ELEVENLABS_ALLOW_SPEAK !== '1' || !voiceId) {
+        steps.push(
+          await probeTool(call, tools, 'text to speech (probe)', 'elevenlabs_text_to_speech', {
+            voice_id: SYNTHETIC_ID,
+            text: 'Mastra smoke test.',
+          }),
+        );
+        steps.push(
+          await probeTool(call, tools, 'speech to text (probe)', 'elevenlabs_speech_to_text', {
+            audio: Buffer.from('ID3').toString('base64'),
+            model_id: 'mastra_smoke_nonexistent',
+          }),
+        );
+        return undefined;
+      }
+
+      const speech = await step<{ audio: string; size_bytes: number; history_item_id?: string }>(
+        'text to speech',
+        'elevenlabs_text_to_speech',
+        { voice_id: voiceId, text: 'Mastra smoke test.', output_format: 'mp3_22050_32' },
+        out => `${out.size_bytes} bytes${out.history_item_id ? '' : ', no history item id'}`,
+      );
+      if (!speech) {
+        steps.push(makeStep('speech to text', 'elevenlabs_speech_to_text', 'skip', 'no audio was generated'));
+        return undefined;
+      }
+      try {
+        const transcript = await call<{ text: string }>('elevenlabs_speech_to_text', {
+          audio: speech.audio,
+          language_code: 'en',
+          tag_audio_events: false,
+        });
+        const heard = /smoke/i.test(transcript.text);
+        steps.push(
+          makeStep(
+            'speech to text (round trip)',
+            'elevenlabs_speech_to_text',
+            heard ? 'pass' : 'fail',
+            `heard "${transcript.text}"`,
+          ),
+        );
+      } catch (error) {
+        steps.push(makeStep('speech to text (round trip)', 'elevenlabs_speech_to_text', 'fail', errorMessage(error)));
+      }
+      return speech.history_item_id;
+    }
 
     async function runDictionary() {
       const listed = await step<{ pronunciation_dictionaries: Array<{ id: string }> }>(

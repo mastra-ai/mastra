@@ -30,6 +30,8 @@ import { listModelsTool } from './tools/list-models.js';
 import { listPronunciationDictionariesTool } from './tools/list-pronunciation-dictionaries.js';
 import { listVoicesTool } from './tools/list-voices.js';
 import { removePronunciationDictionaryRulesTool } from './tools/remove-pronunciation-dictionary-rules.js';
+import { speechToTextTool } from './tools/speech-to-text.js';
+import { textToSpeechTool } from './tools/text-to-speech.js';
 import { updateAgentTool } from './tools/update-agent.js';
 
 export function createElevenlabsTools(options?: ProviderToolsOptions) {
@@ -63,6 +65,8 @@ export function createElevenlabsTools(options?: ProviderToolsOptions) {
     elevenlabs_list_pronunciation_dictionaries: listPronunciationDictionariesTool(platformProxy),
     elevenlabs_list_voices: listVoicesTool(platformProxy),
     elevenlabs_remove_pronunciation_dictionary_rules: removePronunciationDictionaryRulesTool(platformProxy),
+    elevenlabs_speech_to_text: speechToTextTool(platformProxy),
+    elevenlabs_text_to_speech: textToSpeechTool(platformProxy),
     elevenlabs_update_agent: updateAgentTool(platformProxy),
   };
   return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
