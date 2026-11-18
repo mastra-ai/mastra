@@ -582,7 +582,13 @@ describe('legacy ownership', () => {
     it('T14h: concurrent deletes of the T14 pair always end clean (20 runs)', async () => {
       for (let i = 0; i < 20; i++) {
         const { coll, X, Y } = await t14();
-        await Promise.all([a.deleteIndex({ indexName: X }), b.deleteIndex({ indexName: Y })]);
+        // The fixture has no generation; one delete's handover backfills it on the sibling, so the
+        // other may refuse with the documented retryable CONFLICT. Retry as the error says.
+        const del = (s: MongoDBVector, indexName: string) =>
+          s
+            .deleteIndex({ indexName })
+            .catch(e => (e?.id === errId('CONFLICT') ? s.deleteIndex({ indexName }) : Promise.reject(e)));
+        await Promise.all([del(a, X), del(b, Y)]);
         expect(await searchIndexNames(db, coll)).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
       }

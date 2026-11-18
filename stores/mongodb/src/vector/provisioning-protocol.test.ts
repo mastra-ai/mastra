@@ -1838,6 +1838,26 @@ describe('provisioning protocol', () => {
         expect(await searchIndexNames(db, coll)).toEqual([]);
       });
 
+      // PR #30067 review: a refresh used to replace the claim token, so the creator's ownership write matched nothing.
+      it('P-REFRESH-own: an identical refresh while the creator is about to record ownership leaves the index owned, and deleteIndex removes it', async () => {
+        const name = uniqueName('prown');
+        colls.push(name);
+        const vec = `${name}_vector_index`;
+        const err = await parkedAt(
+          'beforeRecordOwnership',
+          () => a.createIndex({ indexName: name, dimension: 4 }),
+          () => b.createIndex({ indexName: name, dimension: 4 }),
+        );
+        expect(err).toBeUndefined();
+        const e = await entry(name);
+        expect(e?.ownsCollection).toBe(true);
+        expect(e?.ownsVectorIndex).toBe(true);
+        expect(idOf(e, vec)).toBe(await listedId(db, name, vec));
+        await b.deleteIndex({ indexName: name });
+        expect(await entry(name)).toBeNull();
+        expect(await db.listCollections({ name }).hasNext()).toBe(false);
+      });
+
       it('P-R2b: a refresh whose registration was recreated on another collection drops what it created', async () => {
         const x = await byoColl('pr2bx');
         const y = await byoColl('pr2by');
