@@ -64,15 +64,17 @@ export function useSpansListSource({
   const list = useQuerySpans({ query: listQuery, limit, enabled, queryOptions: observabilityListQueryOptions });
   const listWindow = listQuery.timeRange;
   const listEnd = Date.parse(listWindow.to);
+  const windowLength = listEnd - Date.parse(listWindow.from);
 
   const { headRows, error: liveUpdatesError } = useListHeadPoll<SpanRow>({
     queryKey: ['spans', query],
     fetchHead: async to => {
-      // The server filters spans on startedAt in [from, to), whatever their endedAt,
-      // so a long-running span started inside the window is caught once it ends.
+      // The server filters spans on startedAt in [from, to), whatever their endedAt, so a
+      // long-running span started inside the window is caught once it ends. `from` moves with `to`
+      // so the window keeps the preset's length: a server cap (word search's 7 days) never refuses it.
       const result = await client.querySpans({
         ...query,
-        timeRange: { from: listWindow.from, to },
+        timeRange: { from: new Date(Date.parse(to) - windowLength).toISOString(), to },
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });
@@ -85,14 +87,6 @@ export function useSpansListSource({
     // Moving the whole window keeps a rolling preset at its length (a server cap, such as word
     // search's 7 days, may refuse a longer one).
     onOverflow: () => slide(listWindow),
-    // Polls keep `from` while `to` moves to now, so the window grows until the server may refuse
-    // it. Once it has grown by more than a couple of polls, reload the list as the preset ends now;
-    // a refusal right after that is not about the window, and is surfaced instead.
-    onRejected: () => {
-      if (Date.now() - listEnd <= 2 * OBSERVABILITY_LIST_POLL_INTERVAL_MS) return false;
-      slide(listWindow);
-      return true;
-    },
   });
 
   const { orderBy } = query;

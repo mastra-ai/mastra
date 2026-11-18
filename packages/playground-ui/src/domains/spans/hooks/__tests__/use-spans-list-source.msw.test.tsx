@@ -124,8 +124,8 @@ describe('useSpansListSource', () => {
       expect(headBodies).toHaveLength(1);
       expect(headBodies[0].orderBy).toEqual([{ field: 'endedAt', direction: 'desc' }]);
       expect(headBodies[0].page).toEqual({ limit: OBSERVABILITY_LIST_HEAD_LIMIT });
-      expect(headBodies[0].timeRange.from).toBe(spanTimeRange.from);
       expect(Date.parse(headBodies[0].timeRange.to)).toBeGreaterThanOrEqual(polledAfter);
+      expect(windowLength(headBodies[0])).toBe(Date.parse(spanTimeRange.to) - Date.parse(spanTimeRange.from));
       expect(listBodies).toHaveLength(1);
     });
 
@@ -185,31 +185,37 @@ describe('useSpansListSource', () => {
     });
   });
 
-  describe('when the server caps the window and the poll has outgrown it', () => {
-    it('reloads the list as the preset ending now and keeps polling', async () => {
+  describe('when the server caps the window and the list was loaded hours ago', () => {
+    it('polls a window of the same length ending now, so polls still succeed and keep updating', async () => {
       const { listBodies, headBodies } = setCappedHandlers();
-      // The fixture window is 7 days that ended weeks ago, as on a page left open: the first poll's
-      // window (fixed `from`, `to` now) is far longer than the cap.
-      const { result } = renderSource({ query: rollingQuery, rolling: true });
+      // Last 7 days resolved two hours ago, as on a tab left open: keeping `from` would ask for
+      // 7 days and 2 hours, past the server's cap and margin.
+      const loadedAt = Date.now() - 2 * 60 * 60 * 1000;
+      const query: SpanQueryArgs = {
+        ...rollingQuery,
+        timeRange: { from: new Date(loadedAt - SEVEN_DAYS_MS).toISOString(), to: new Date(loadedAt).toISOString() },
+      };
+      const { result } = renderSource({ query, rolling: true });
       await waitFor(() => expect(result.current.spans).toHaveLength(2));
-      const reloadedAfter = Date.now();
+      const polledAfter = Date.now();
 
       await nextTick();
-
-      await waitFor(() => expect(listBodies).toHaveLength(2));
-      expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThanOrEqual(reloadedAfter);
-      expect(windowLength(listBodies[1])).toBe(windowLength(listBodies[0]));
-
-      await nextTick();
-
       await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-9', 'span-1', 'span-2']));
-      expect(headBodies.at(-1)?.timeRange.from).toBe(listBodies[1].timeRange.from);
+      await nextTick();
+      await waitFor(() => expect(headBodies).toHaveLength(2));
+
+      for (const body of headBodies) {
+        expect(windowLength(body)).toBe(SEVEN_DAYS_MS);
+        expect(Date.parse(body.timeRange.to)).toBeGreaterThanOrEqual(polledAfter);
+      }
+      expect(Date.parse(headBodies[1].timeRange.from)).toBeGreaterThan(Date.parse(headBodies[0].timeRange.from));
+      expect(listBodies).toHaveLength(1);
       expect(result.current.liveUpdatesError).toBeNull();
     });
   });
 
-  describe('when the server refuses a poll whose window has not grown', () => {
-    it('stops polling and reports the refusal', async () => {
+  describe('when the server refuses a poll', () => {
+    it('stops polling and reports the refusal instead of failing silently', async () => {
       const { listBodies, headBodies } = setHandlers([{ status: 422 }]);
       const to = new Date();
       const query: SpanQueryArgs = {

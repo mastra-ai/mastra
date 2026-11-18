@@ -26,12 +26,6 @@ export type UseListHeadPollArgs<Row> = {
   interval?: number;
   /** Called when head polls can no longer keep the list complete; the list should reload its first page. */
   onOverflow?: () => void;
-  /**
-   * Called when the server refuses a head poll. Return true once the list has moved its window
-   * (e.g. a rolling window outgrew a server cap) so polling carries on; otherwise polling stops and
-   * the refusal is returned as `error`.
-   */
-  onRejected?: (error: unknown) => boolean;
 };
 
 export function listHeadQueryKey(queryKey: readonly unknown[]) {
@@ -62,8 +56,8 @@ const emptyStore = <Row>(): ListHeadStore<Row> => ({ rows: [], watermark: undefi
  * Polls the newest rows of a list that has no server-side delta mode. Rows accumulate by id across
  * polls (the latest version wins) in their own cache entry, so the list's pages and cursors are never
  * touched: callers merge `headRows` into the rendered rows. Nothing is fetched on mount; the first
- * poll runs after one interval. Polling stops once the server rejects the request, unless `onRejected`
- * recovers the list.
+ * poll runs after one interval. Polling stops once the server rejects the request, and the refusal is
+ * returned as `error` for the caller to show.
  */
 export function useListHeadPoll<Row>({
   queryKey,
@@ -76,7 +70,6 @@ export function useListHeadPoll<Row>({
   maxRows = OBSERVABILITY_LIST_HEAD_MAX_ROWS,
   interval = OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   onOverflow,
-  onRejected,
 }: UseListHeadPollArgs<Row>) {
   const queryClient = useQueryClient();
   const key = listHeadQueryKey(queryKey);
@@ -85,13 +78,7 @@ export function useListHeadPoll<Row>({
     queryKey: key,
     queryFn: async (): Promise<ListHeadStore<Row>> => {
       const previous = queryClient.getQueryData<ListHeadStore<Row>>(key) ?? emptyStore<Row>();
-      let fetched: Row[];
-      try {
-        fetched = await fetchHead(new Date().toISOString());
-      } catch (error) {
-        if (isRejectedListRequest(error) && onRejected?.(error)) return emptyStore<Row>();
-        throw error;
-      }
+      const fetched = await fetchHead(new Date().toISOString());
 
       const endedAts = fetched.map(row => Date.parse(getEndedAt(row) ?? '')).filter(Number.isFinite);
       const rows = new Map(previous.rows.map(row => [getId(row), row]));
