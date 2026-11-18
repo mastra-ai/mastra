@@ -22,9 +22,10 @@ import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { CustomProviderRow } from './CustomProviderRow';
-import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
+import { ProviderRows } from './ProviderRows';
+import { ProviderRowsSkeleton } from './ProviderRowsSkeleton';
 
-const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
+export const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 
 const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
   label: SIGN_IN_EXPIRED_LABEL,

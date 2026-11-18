@@ -5,7 +5,8 @@ import { changeRequestsHeading, changeRequestsNoun } from '../changeRequestState
 import { useSessionCard } from '../hooks/useSessionCard';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import { sessionChangeRequests } from '../sessionChangeRequests';
-import { CardOverview, OverviewSkeleton, overviewSectionClass } from './CardOverview';
+import { CardOverview, overviewSectionClass } from './CardOverview';
+import { CardOverviewSkeleton } from './CardOverviewSkeleton';
 import { ChangeRequestList } from './ChangeRequestList';
 import { SectionLoadError } from './SectionLoadError';
 
@@ -19,7 +20,12 @@ export function SessionPanelOverview({ workspace }: { workspace: WorkspaceSlot |
 
   // All at once: a section arriving late would push down the ones under it.
   if (card.loading || session.loading || links.pending || (card.item && card.boardsLoading)) {
-    return <OverviewSkeleton />;
+    return (
+      <>
+        <CardOverviewSkeleton />
+        {workspace?.()}
+      </>
+    );
   }
 
   if (card.failed || !card.item || !factoryId) {

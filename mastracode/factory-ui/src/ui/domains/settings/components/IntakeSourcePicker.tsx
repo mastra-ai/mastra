@@ -13,7 +13,7 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
@@ -25,8 +25,8 @@ import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCh
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
-/** A source row in the picker drawer, which has no settings card around it to space its rows. */
-const drawerRowLayout = 'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 px-4 py-2 text-left';
+import { DrawerSourcesSkeleton, SelectedSourcesSkeleton } from './IntakeSourcePickerSkeleton';
+import { DRAWER_SOURCE_ROW, SELECTED_SOURCE_ROW, SOURCE_SUMMARY, SOURCE_SUMMARY_TEXT } from './sourcePickerLayout';
 
 export interface SourcePickerItem {
   id: string;
@@ -96,13 +96,13 @@ function SourceItemSummary({
   description?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+    <div className={SOURCE_SUMMARY}>
       {icon && (
         <span className="shrink-0" aria-hidden>
           {icon}
         </span>
       )}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={SOURCE_SUMMARY_TEXT}>
         <Txt as="span" variant="caption" className="wrap-anywhere">
           <Metadata>
             {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
@@ -167,7 +167,7 @@ export function SourcePicker(props: SourcePickerProps) {
             {selected.map(({ item, groupLabel }) => {
               const details = itemDetails?.(item);
               return (
-                <li key={item.id} className="flex min-w-0 flex-wrap items-center gap-2 py-1 first:pt-0">
+                <li key={item.id} className={SELECTED_SOURCE_ROW}>
                   <SourceItemSummary
                     item={item}
                     icon={itemIcon}
@@ -195,8 +195,8 @@ export function SourcePicker(props: SourcePickerProps) {
             })}
           </ul>
         )}
-        {loading && <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={1} />}
-        <div className={cn('flex items-center gap-2', selected.length > 0 && 'pt-1')}>
+        {loading && <SelectedSourcesSkeleton label={label} icon={itemIcon} />}
+        <div className={cn('flex items-center gap-2', (selected.length > 0 || loading) && 'pt-1')}>
           <DrawerTrigger
             render={
               <Button
@@ -285,7 +285,7 @@ function SourcePickerDrawer({
             )}
           </SettingsRow>
         ) : loading ? (
-          <SettingsSkeleton label={`Loading ${label}`} variant="item" rows={3} />
+          <DrawerSourcesSkeleton label={label} />
         ) : (
           <>
             {added.length > 0 && (
@@ -293,7 +293,7 @@ function SourcePickerDrawer({
                 <SectionHeading id={addedHeading}>Added</SectionHeading>
                 <ul>
                   {added.map(({ item, groupLabel }) => (
-                    <li key={item.id} className={drawerRowLayout}>
+                    <li key={item.id} className={DRAWER_SOURCE_ROW}>
                       <SourceItemSummary
                         item={item}
                         context={[groupLabel, item.hint]}
@@ -340,7 +340,7 @@ function SourcePickerDrawer({
                       )}
                       <ul>
                         {group.items.map(item => (
-                          <li key={`${group.id}:${item.id}`} className={drawerRowLayout}>
+                          <li key={`${group.id}:${item.id}`} className={DRAWER_SOURCE_ROW}>
                             <SourceItemSummary item={item} context={[item.hint]} />
                             <div className="ml-auto flex max-w-full min-w-0 items-center justify-end gap-2">
                               {pickControl ? (

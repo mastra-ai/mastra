@@ -8,6 +8,7 @@ import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/typ
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useCardSessions } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
+import { ButtonSkeleton } from '../../../ui/ButtonSkeleton';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
 import { phaseName } from '../boardStages';
@@ -21,6 +22,9 @@ import { BoardStageIcon, phaseIconKind } from './BoardIcons';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
+
+const neighbourLabelClass = 'hidden @2xl:inline';
+const PLACEHOLDER_STAGES = { previous: 'Intake', current: 'Triage', next: 'Planning' };
 
 export function CardStageBar({
   item,
@@ -143,6 +147,26 @@ export function CardStageBar({
   );
 }
 
+export function CardStageBarSkeleton() {
+  return (
+    <div role="status" aria-label="Loading card stage" className={headerCapsuleClass}>
+      <ButtonSkeleton variant="ghost" size="sm">
+        <IconChevronLeftMedium />
+        <span className={neighbourLabelClass}>{PLACEHOLDER_STAGES.previous}</span>
+      </ButtonSkeleton>
+      <ButtonSkeleton variant="subtle" size="sm">
+        <BoardStageIcon stage="triage" decorative />
+        <span>{PLACEHOLDER_STAGES.current}</span>
+        <IconChevronDownMedium />
+      </ButtonSkeleton>
+      <ButtonSkeleton variant="ghost" size="sm">
+        <span className={neighbourLabelClass}>{PLACEHOLDER_STAGES.next}</span>
+        <IconChevronRightMedium />
+      </ButtonSkeleton>
+    </div>
+  );
+}
+
 function NeighbourButton({
   direction,
   step,
@@ -169,7 +193,7 @@ function NeighbourButton({
       onClick={() => onMove(step.phase.id)}
     >
       {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
-      <span className="hidden @2xl:inline">{name}</span>
+      <span className={neighbourLabelClass}>{name}</span>
       {direction === 'next' ? <IconChevronRightMedium aria-hidden /> : null}
     </Button>
   );

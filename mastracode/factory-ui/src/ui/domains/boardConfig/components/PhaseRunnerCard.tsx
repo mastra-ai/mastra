@@ -14,6 +14,8 @@ import { boardConfigPath, boardSkillPath } from '../boardConfigPaths';
 import { Muted } from './PhaseTimeline';
 import { SkillBadges } from './skills/SkillBadges';
 
+export const RUNNER_CHIP = 'flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5';
+
 /**
  * The agent working a phase, as a chip naming its skill. Hovering or focusing it shows what the agent is told: the
  * skill's instructions, what this phase adds, its goal and session. The chip opens the skill, or the phase when the
@@ -51,7 +53,8 @@ export function PhaseRunnerCard({
         render={<Link to={to} />}
         className={cn(
           focusRing,
-          'border-border bg-fill-subtle hover:bg-fill flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5 transition-colors',
+          RUNNER_CHIP,
+          'border-border bg-fill-subtle hover:bg-fill transition-colors',
           broken && 'border-destructive-foreground text-destructive-foreground',
         )}
       >

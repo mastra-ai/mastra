@@ -19,8 +19,8 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '../domains/auth/services/auth';
-import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
-import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
+import { SignInLayout } from '../domains/auth/components/SignInLayout';
+import { SignInSkeleton } from '../domains/auth/components/SignInSkeleton';
 import '../domains/auth/components/sign-in-page.css';
 
 // Browsers can normalize backslashes into cross-origin redirects.
@@ -183,7 +183,7 @@ export function SignInPage() {
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
-  if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
+  if (auth.isPending || !auth.isFetchedAfterMount) return <SignInSkeleton label="Checking sign-in" />;
 
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
   if (!auth.isFetching && !auth.isError && canReturnToApp) {
@@ -191,78 +191,58 @@ export function SignInPage() {
   }
 
   return (
-    <main className="bg-background text-foreground min-h-dvh">
-      <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
-        <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
-          <Txt as="h1" variant="hero" className="max-w-xl text-balance">
-            Build with an agent factory
+    <SignInLayout>
+      {authError && !customDomainBlocked ? (
+        <Notice
+          variant="destructive"
+          role="alert"
+          title={accessDenied ? 'Access denied' : 'Sign-in failed'}
+          className="mb-6"
+        >
+          {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
+          {accessDenied ? (
+            <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
+          ) : null}
+        </Notice>
+      ) : null}
+      {auth.isError ? (
+        <div role="alert" className="space-y-3">
+          <Txt as="p" variant="body" tone="muted">
+            Unable to check your sign-in status. Check your connection and try again.
           </Txt>
-          <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
-            Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
-            review.
-          </Txt>
-
-          <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
-            {authError && !customDomainBlocked ? (
-              <Notice
-                variant="destructive"
-                role="alert"
-                title={accessDenied ? 'Access denied' : 'Sign-in failed'}
-                className="mb-6"
-              >
-                {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
-                {accessDenied ? (
-                  <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
-                ) : null}
-              </Notice>
-            ) : null}
-            {auth.isError ? (
-              <div role="alert" className="space-y-3">
-                <Txt as="p" variant="body" tone="muted">
-                  Unable to check your sign-in status. Check your connection and try again.
-                </Txt>
-                <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
-                  Try again
-                </Button>
-              </div>
-            ) : customDomainBlocked ? (
-              <CustomDomainAuthError hostname={window.location.hostname} />
-            ) : credentialForm ? (
-              <>
-                <div className="mb-6">
-                  <Txt font="display" as="h2" variant="title">
-                    Welcome back
-                  </Txt>
-                  <Txt as="p" variant="body" tone="muted" className="mt-2">
-                    Sign in to continue building with your team.
-                  </Txt>
-                </div>
-                <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
-              </>
-            ) : (
-              <Button
-                variant="primary"
-                size="lg"
-                className="w-80 max-w-full"
-                disabled={redirecting || auth.isPending}
-                onClick={() => {
-                  setRedirecting(true);
-                  redirectToLogin(baseUrl, returnTo);
-                }}
-              >
-                {studioAuth ? (
-                  <LogoWithoutText className="w-4" aria-hidden="true" />
-                ) : (
-                  <GithubIcon aria-hidden="true" />
-                )}
-                {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
-              </Button>
-            )}
-          </section>
-        </section>
-
-        <FactoryHalftoneField />
-      </div>
-    </main>
+          <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+            Try again
+          </Button>
+        </div>
+      ) : customDomainBlocked ? (
+        <CustomDomainAuthError hostname={window.location.hostname} />
+      ) : credentialForm ? (
+        <>
+          <div className="mb-6">
+            <Txt font="display" as="h2" variant="title">
+              Welcome back
+            </Txt>
+            <Txt as="p" variant="body" tone="muted" className="mt-2">
+              Sign in to continue building with your team.
+            </Txt>
+          </div>
+          <CredentialSignInForm returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
+        </>
+      ) : (
+        <Button
+          variant="primary"
+          size="lg"
+          className="w-80 max-w-full"
+          disabled={redirecting || auth.isPending}
+          onClick={() => {
+            setRedirecting(true);
+            redirectToLogin(baseUrl, returnTo);
+          }}
+        >
+          {studioAuth ? <LogoWithoutText className="w-4" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
+          {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+        </Button>
+      )}
+    </SignInLayout>
   );
 }

@@ -1,3 +1,4 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -16,6 +17,13 @@ import type { ModelDefaults, ModelLane } from './models/routing/model-routes';
 export function MemoryUsedBy({ factoryId, defaults }: { factoryId: string; defaults: ModelDefaults }) {
   const authQuery = useFactoryAuth();
   const projectQuery = useFactoryProjectQuery(factoryId);
+  if (authQuery.isPending || projectQuery.isPending) {
+    return (
+      <span role="status" aria-label="Loading where this memory is used">
+        <Skeleton aria-hidden className="h-6 w-32 motion-reduce:before:animate-none" />
+      </span>
+    );
+  }
   if (!authQuery.data || !projectQuery.data) return null;
 
   // Sign-in off: one process-wide credential set pays for every thread, so all read the Factory's row.

@@ -18,7 +18,11 @@ import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-ro
 import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
-import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
+import { RootGuards } from './domains/auth/components/RootGuards';
+import { SignInSkeleton } from './domains/auth/components/SignInSkeleton';
+import { FactoryOnboardingSkeleton } from './domains/workspaces/components/FactoryOnboardingSkeleton';
+import { CreateFactoryPageFrame } from './domains/workspaces/components/create-factory/CreateFactoryPageFrame';
+import { CreateFactoryWizardSkeleton } from './domains/workspaces/components/create-factory/CreateFactoryWizardSkeleton';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
 import { useBoardCatalog } from '../hooks/useBoardCatalog';
@@ -29,6 +33,7 @@ import { AppLayout } from './layouts/AppLayout';
 import { AppPageLoader } from './layouts/AppPageLoader';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
+import { RouteFrameSkeleton } from './layouts/RouteFrameSkeleton';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
@@ -115,16 +120,18 @@ const SlackConnectionPage = lazyPage(
 );
 const CreateFactoryPage = lazyPage(
   () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
-  <AppPageLoader />,
+  <CreateFactoryPageFrame>
+    <CreateFactoryWizardSkeleton label="Loading page" />
+  </CreateFactoryPageFrame>,
 );
 const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage), <AppPageLoader />);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
-  <AuthPendingSkeleton label="Loading page" />,
+  <FactoryOnboardingSkeleton label="Loading page" />,
 );
 const SignInPage = lazyPage(
   () => import('./pages/SignInPage').then(module => module.SignInPage),
-  <AuthPendingSkeleton label="Loading page" />,
+  <SignInSkeleton label="Loading page" />,
 );
 
 function RootLanding() {
@@ -160,7 +167,7 @@ function RetiredReviewBoardRedirect() {
   const { search } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
   const catalog = useBoardCatalog(factoryId);
-  if (catalog.isPending) return null;
+  if (catalog.isPending) return <AppPageLoader />;
   if (catalog.data?.some(board => board.id === 'review'))
     return <Navigate to={`../boards/review${search}`} relative="path" replace />;
   return <Navigate to={`../work?${retiredReviewBoardSearch(search)}`} relative="path" replace />;
@@ -270,7 +277,7 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
       children: [
         {
           // Pathless, so `RootGuards` renders and sends the sign-in check before these loaders settle.
-          hydrateFallbackElement: <AuthPendingSkeleton />,
+          hydrateFallbackElement: <RouteFrameSkeleton label="Checking sign-in" />,
           ...loadOnEntry(prefetchFactories),
           children: [
             { index: true, element: <RootLanding /> },

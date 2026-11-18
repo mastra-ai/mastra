@@ -35,8 +35,8 @@ import {
 import type { RuleEvent } from '../ruleLanes';
 import { boardName, phaseName } from '../ruleTargets';
 import { ConditionChips } from './ConditionChips';
-import { GithubOnlyBadge } from './GithubOnlyBadge';
 import { RuleTarget } from './RuleTarget';
+import { LANE_CARD, LANE_FOOTER, LaneHeading } from './RuleLaneFrame';
 
 /** The part of a rule the builder opens at: its conditions or its destination. */
 export type RuleFocus = 'conditions' | 'action';
@@ -91,7 +91,6 @@ export function RuleLane({
   onUngate: (rule: IntakeRouteInfo) => void;
 }) {
   const text = laneText(event);
-  const Icon = text.icon;
   const catchAll = catchAllIndex(rules, event);
   const opened = isOpenedLane(event);
   const everything = everythingOn(event);
@@ -108,25 +107,9 @@ export function RuleLane({
   return (
     <section
       aria-label={text.label}
-      className={cn(
-        'flex flex-col gap-3 rounded-xl border border-border bg-card p-4',
-        !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100',
-      )}
+      className={cn(LANE_CARD, !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100')}
     >
-      <div className="flex flex-col gap-1">
-        <span className="flex items-center gap-1.5">
-          <Icon className="text-badge-amber-indicator size-3.5 shrink-0" aria-hidden />
-          <Txt as="h3" variant="label" tone="ink">
-            {text.label}
-          </Txt>
-          {text.githubOnly && <GithubOnlyBadge />}
-        </span>
-        {text.description && (
-          <Txt as="p" variant="caption" tone="muted">
-            {text.description}
-          </Txt>
-        )}
-      </div>
+      <LaneHeading event={event} />
 
       <div className="flex min-w-0 flex-col">
         <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
@@ -343,7 +326,7 @@ export function RuleLane({
           {!only && (
             <li className="flex flex-wrap items-center gap-3">
               {catchAll < 0 && (
-                <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+                <Txt as="span" variant="caption" tone="muted" className={LANE_FOOTER}>
                   <CircleDashed className="size-icon-md shrink-0" aria-hidden />
                   {fallback}
                 </Txt>

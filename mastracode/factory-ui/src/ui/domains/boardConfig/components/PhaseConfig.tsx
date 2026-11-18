@@ -49,7 +49,7 @@ import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
-const FIELD_WIDTH = 'sm:max-w-xs';
+export const FIELD_WIDTH = 'sm:max-w-xs';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
 

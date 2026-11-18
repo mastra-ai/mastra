@@ -68,8 +68,9 @@ export function useBoardRulesQuery(factoryProjectId: string | undefined, boardKe
  * Read off the intake routes, which answer for the project whatever boards it has: a project
  * need not have a Work board. The server enforces it on every write.
  */
-export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
-  return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
+export function useCanEditBoards(factoryProjectId: string | undefined): boolean | undefined {
+  const query = useIntakeRoutesQuery(factoryProjectId);
+  return query.isPending ? undefined : (query.data?.canEdit ?? false);
 }
 
 export type RouteWrite =

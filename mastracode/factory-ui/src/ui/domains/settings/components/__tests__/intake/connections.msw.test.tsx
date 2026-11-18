@@ -126,7 +126,7 @@ describe('IntakeSection connections', () => {
     renderIntakeSection();
 
     await userEvent.click(
-      within(await screen.findByRole('region', { name: 'Sources' })).getByRole('button', {
+      await within(await screen.findByRole('region', { name: 'Sources' })).findByRole('button', {
         name: 'Connect incident.io',
       }),
     );

@@ -11,7 +11,6 @@ import { queryKeys } from '../../../../api/keys';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import type { GithubStatus, SourceControlRepository } from '../services/github';
 import { githubCallbackAwaitsAccess } from '../services/githubCallbackRecovery';
@@ -21,6 +20,7 @@ import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
 import { OnboardingGithubHostRow } from './onboarding/OnboardingGithubHostRow';
 import { OnboardingGithubNotice } from './onboarding/OnboardingGithubNotice';
 import { OnboardingGitlabHostRow } from './onboarding/OnboardingGitlabHostRow';
+import { OnboardingHostRowsSkeleton } from './onboarding/OnboardingHostRowsSkeleton';
 import { OnboardingInset } from './onboarding/OnboardingInset';
 import { OnboardingRepositoryError } from './onboarding/OnboardingRepositoryError';
 import { OnboardingRepositoryRows } from './onboarding/OnboardingRepositoryRows';
@@ -203,11 +203,7 @@ export function VcsFactoryStep({
         )
       }
     >
-      {statusPending && (
-        <OnboardingInset>
-          <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-15 w-full" />
-        </OnboardingInset>
-      )}
+      {statusPending && <OnboardingHostRowsSkeleton label="Loading source control status" />}
       {(showGithubRow || showGitlabRow) && (
         <OnboardingInset>
           {showGithubRow && (

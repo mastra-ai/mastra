@@ -4,7 +4,6 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useParams } from 'react-router';
@@ -15,6 +14,7 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { boardConfigPath, boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
 import { NewSkillEditor } from '../domains/boardConfig/components/skills/NewSkillEditor';
 import { SkillEditor } from '../domains/boardConfig/components/skills/SkillEditor';
+import { SkillEditorSkeleton } from '../domains/boardConfig/components/skills/SkillEditorSkeleton';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -74,15 +74,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   const skills = useFactorySkillsQuery(factoryId);
   const skillsPath = boardSkillsPath(factoryId, boardId);
 
-  if (skills.isPending) {
-    return (
-      <div role="status" aria-label="Loading skill" className="flex flex-col gap-4">
-        <Skeleton className="h-9 w-2/3" />
-        <Skeleton className="h-5 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
-  }
+  if (skills.isPending) return <SkillEditorSkeleton />;
   if (skills.isLoadingError) {
     return (
       <LoadErrorState

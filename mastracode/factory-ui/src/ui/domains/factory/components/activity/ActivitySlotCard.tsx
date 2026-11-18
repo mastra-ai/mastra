@@ -1,3 +1,4 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -56,7 +57,7 @@ export function ActivitySlotCard({
               <Icon className={cn('size-4', active ? 'text-foreground' : 'text-muted-foreground')} />
               <div className="flex flex-col gap-0.5">
                 {kind === 'ran' && runs.status === 'pending' ? (
-                  <span className="bg-fill h-7 w-8 rounded-md motion-safe:animate-pulse" />
+                  <Skeleton aria-hidden className="h-7 w-8 rounded-md motion-reduce:before:animate-none" />
                 ) : (
                   <Txt
                     as="span"

@@ -10,7 +10,7 @@ import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
+export const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
 
 /**
  * The board's phases in board order, the way the board lays them out, each showing whether cards in this phase can

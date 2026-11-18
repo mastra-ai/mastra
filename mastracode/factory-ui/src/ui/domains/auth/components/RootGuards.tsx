@@ -8,6 +8,7 @@ import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
+import { RouteFrameSkeleton } from '../../../layouts/RouteFrameSkeleton';
 
 export const RootGuards = () => {
   return (
@@ -26,7 +27,7 @@ const AuthGuard = () => {
 
   if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
-  if (isPending) return <AuthPendingSkeleton />;
+  if (isPending) return <RouteFrameSkeleton label="Checking sign-in" />;
   if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
   if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
@@ -47,7 +48,7 @@ const OnboardingGuard = () => {
   const pathname = useLocation().pathname;
   const { data: factories, isPending: factoriesPending, isFetching, refetch } = useFactoriesQuery();
 
-  if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
+  if (factoriesPending) return <RouteFrameSkeleton label="Loading factories" />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
   if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
@@ -96,7 +97,7 @@ function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; 
   );
 }
 
-export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
+function AuthPendingSkeleton({ label }: { label: string }) {
   return (
     <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
       <BrandLoader size="lg" aria-label={label} />

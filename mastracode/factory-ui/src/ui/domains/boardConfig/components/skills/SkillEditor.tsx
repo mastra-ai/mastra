@@ -13,6 +13,8 @@ import { SkillBadges } from './SkillBadges';
 import { SkillDescription } from './SkillDescription';
 import { SkillInstructions } from './SkillInstructions';
 
+export const SKILL_TOOLBAR = 'flex min-h-8 flex-wrap items-center gap-2 empty:hidden';
+
 export function SkillEditor({
   factoryId,
   skill,
@@ -70,7 +72,7 @@ export function SkillEditor({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-3">
-        <div className="flex min-h-8 flex-wrap items-center gap-2 empty:hidden">
+        <div className={SKILL_TOOLBAR}>
           <SkillBadges skill={skill} />
           {(!canEdit || revertable || deletable) && (
             <div className="ml-auto flex items-center gap-1">

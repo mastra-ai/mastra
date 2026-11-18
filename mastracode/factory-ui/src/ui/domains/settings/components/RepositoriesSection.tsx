@@ -4,12 +4,16 @@ import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { settingsSectionPath } from '../settingsSections';
 import { GithubPatBlock } from './GithubPatBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 import { SourceControlConnections } from './SourceControlConnections';
+import { SettingsListSkeleton } from './common/SettingsListSkeleton';
+
+function addedDescription(factoryName: string): string {
+  return `Repositories agents in ${factoryName} can edit. Pre-cloned repositories are set up in this order.`;
+}
 
 export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -19,11 +23,16 @@ export function RepositoriesSection() {
 
   if (factoryQuery.isLoading) {
     return (
-      <SettingsSubsection scope="factory" title="Added to this Factory">
-        <SettingsContainer>
-          <SettingsSkeleton variant="item" label="Loading repositories" />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <>
+        <SourceControlConnections />
+        <SettingsSubsection
+          scope="factory"
+          title="Added to this Factory"
+          description={addedDescription('this Factory')}
+        >
+          <SettingsListSkeleton label="Loading repositories" rows={2} />
+        </SettingsSubsection>
+      </>
     );
   }
   if (factoryQuery.isError && !activeFactory) {
@@ -43,7 +52,7 @@ export function RepositoriesSection() {
       <SettingsSubsection
         scope="factory"
         title="Added to this Factory"
-        description={`Repositories agents in ${activeFactory.name} can edit. Pre-cloned repositories are set up in this order.`}
+        description={addedDescription(activeFactory.name)}
       >
         <ConnectRepositoriesPanel key={activeFactory.id} factory={activeFactory} />
       </SettingsSubsection>

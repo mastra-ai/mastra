@@ -19,6 +19,7 @@ import {
 
 import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
+import { PlanContentSkeleton } from './PlanContentSkeleton';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -101,9 +102,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <Txt variant="caption" tone="muted" aria-label="Loading plan" className="my-2">
-              Loading plan…
-            </Txt>
+            <PlanContentSkeleton />
           ) : unavailable ? (
             <Txt variant="caption" tone="muted" role="note" className="my-2">
               The plan could not be loaded from {path ?? 'its file'}. You can still respond below.

@@ -1,5 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
@@ -11,7 +12,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery } from '../../../../hooks/useBoardEditor';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarLoadError } from '../../../ui/LoadErrorState';
-import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { SidebarNavRowSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
@@ -75,7 +76,7 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, ru
         <section className="flex flex-col gap-1 pt-2" aria-label="Phases">
           <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
           {query.isPending ? (
-            <SidebarNavigationSkeleton label="Loading phases" rows={4} />
+            <PhasesSkeleton />
           ) : query.isError ? (
             <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
               Couldn’t load phases
@@ -94,6 +95,24 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, ru
         </section>
       </section>
     </nav>
+  );
+}
+
+const DEFAULT_PHASE_COUNT = 7;
+
+function PhasesSkeleton() {
+  return (
+    <div role="status" aria-label="Loading phases" className="flex flex-col gap-1">
+      <Sidebar.NavList aria-hidden className="pointer-events-none">
+        {Array.from({ length: DEFAULT_PHASE_COUNT }, (_, index) => (
+          <SidebarNavRowSkeleton key={index} />
+        ))}
+      </Sidebar.NavList>
+      <div aria-hidden className="h-control-sm flex items-center gap-1.5 px-2.5">
+        <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+        <Skeleton className="h-3 w-16 motion-reduce:before:animate-none" />
+      </div>
+    </div>
   );
 }
 

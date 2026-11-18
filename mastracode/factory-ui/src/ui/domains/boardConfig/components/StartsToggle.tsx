@@ -1,9 +1,12 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { CardRule } from '../boardDraft';
 import { startsText } from '../phaseSummary';
 import { Muted } from './PhaseTimeline';
+
+export const STARTS_ROW = 'flex items-center gap-3';
 
 /**
  * How a phase starts, with a switch to start it on its own when `onChange` is given. Turning it off drops the cards it
@@ -27,7 +30,7 @@ export function StartsToggle({
   const starts = startsText({ autoStart, autoStartWhen });
   if (!onChange) return <Muted>{starts}</Muted>;
   return (
-    <label className="flex cursor-pointer items-center gap-3">
+    <label className={cn(STARTS_ROW, 'cursor-pointer')}>
       <span className="min-w-0 flex-1">
         {failed ? (
           <Txt as="span" variant="caption" className="text-destructive-foreground">

@@ -64,7 +64,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </SettingsListHeader>
         )}
         {environmentQuery.isPending && (
-          <SettingsSkeleton label="Loading repository configuration" variant="item" rows={2} />
+          <SettingsSkeleton
+            label="Loading repository configuration"
+            variant="item"
+            rows={Math.max(repositoryCount, 1)}
+          />
         )}
         {environmentQuery.isError && (
           <SettingsNoticeRow>

@@ -3,7 +3,6 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
@@ -22,6 +21,8 @@ import { useDraftCard } from '../domains/factory/hooks/useDraftCard';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { factoryHomePath } from '../domains/workspaces/services/factoryPaths';
+import { cardDraftActionsClass, cardDraftHintClass, cardDraftTitleClass } from './cardDraftLayout';
+import { CardDraftSkeleton } from './CardDraftSkeleton';
 
 export function CardDraftPage({ workItemId }: { workItemId: string }) {
   const { factoryId = '', workItemId: routedWorkItemId } = useParams<{ factoryId: string; workItemId?: string }>();
@@ -85,14 +86,7 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       </div>
     );
   }
-  if (!item || !factory) {
-    return (
-      <div className={draftPageClass} aria-busy="true">
-        <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
-        <Skeleton className="h-36 w-full rounded-xl" />
-      </div>
-    );
-  }
+  if (!item || !factory) return <CardDraftSkeleton />;
   if (unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
 
   return (
@@ -102,13 +96,13 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       emptyState={
         <section className={emptyThreadClass} aria-labelledby="card-draft-title">
           <Logo size="md" aria-label="Mastra Code" />
-          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
+          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className={cardDraftTitleClass}>
             {item.title}
           </Txt>
-          <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
+          <Txt variant="body-sm" tone="muted" className={cardDraftHintClass}>
             No session yet. Your first message starts one.
           </Txt>
-          <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
+          <div className={cardDraftActionsClass}>
             {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
             <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
             {board && <CardDraftActions factory={factory} item={item} board={board} />}

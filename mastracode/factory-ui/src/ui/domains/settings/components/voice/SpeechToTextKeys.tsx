@@ -5,7 +5,6 @@ import {
   SettingsEmptyRow,
   SettingsListHeader,
   SettingsNoticeRow,
-  SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 
@@ -15,6 +14,7 @@ import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
 import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
+import { SettingsListSkeleton } from '../common/SettingsListSkeleton';
 import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
@@ -45,7 +45,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   const [addOpen, setAddOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  if (providersQuery.isPending) return <SpeechToTextKeysSkeleton />;
+  if (providersQuery.isPending) return <SpeechToTextKeysSkeleton rows={keys.filter(status => status.saved).length} />;
 
   const options = keys.map(status => {
     const provider = speechProviderInfo(status, providersQuery.data);
@@ -110,10 +110,6 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   );
 }
 
-export function SpeechToTextKeysSkeleton() {
-  return (
-    <SettingsContainer>
-      <SettingsSkeleton variant="item" label="Loading providers" rows={2} />
-    </SettingsContainer>
-  );
+export function SpeechToTextKeysSkeleton({ rows = 1 }: { rows?: number }) {
+  return <SettingsListSkeleton label="Loading providers" rows={rows} />;
 }

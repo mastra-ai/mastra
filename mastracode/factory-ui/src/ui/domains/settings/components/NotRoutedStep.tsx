@@ -1,14 +1,50 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { CircleDashed } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import type { IntakeDecisionInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useNotRoutedQuery, useRouteAgain } from '../../../../hooks/useIntakeOrder';
 import { NOT_ROUTED_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { IntakeTesterDialog } from '../../intake/IntakeTesterDialog';
+
+const NOT_ROUTED_SECTION = 'flex scroll-mt-4 flex-col gap-3 px-3.5 pt-3 pb-3.5';
+
+function NotRoutedSummary({ summary }: { summary: ReactNode }) {
+  return (
+    <SettingsItem
+      media={
+        <SettingsItemIcon>
+          <CircleDashed />
+        </SettingsItemIcon>
+      }
+      title={
+        <span className="flex items-center gap-1">
+          Not routed
+          <InfoTooltip aria-label="When an item is not routed">
+            A new issue or pull request ends up here when no board’s rules take it. Change a board’s rules, then route
+            it again.
+          </InfoTooltip>
+        </span>
+      }
+      description={summary}
+    />
+  );
+}
+
+export function NotRoutedStepSkeleton() {
+  return (
+    <div aria-hidden inert className={NOT_ROUTED_SECTION}>
+      <NotRoutedSummary
+        summary={<SkeletonText line="text-caption" className="w-48 motion-reduce:before:animate-none" />}
+      />
+    </div>
+  );
+}
 
 /**
  * The end of the intake order: where a new issue or pull request lands when no board's rules take it, with the recent
@@ -29,39 +65,23 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
       onError: error => toast.error(error.message),
     });
 
-  const summary = query.isPending
-    ? 'Loading…'
-    : query.isError
-      ? 'Items not routed didn’t load.'
-      : query.hasNextPage
-        ? `${items.length > 0 ? `${items.length}+` : 'More'} waiting for a board.`
-        : items.length === 0
-          ? 'Every new issue and pull request found a board.'
-          : `${items.length} waiting for a board.`;
+  const summary = query.isPending ? (
+    <span role="status" aria-label="Loading items not routed">
+      <SkeletonText line="text-caption" className="w-48 motion-reduce:before:animate-none" />
+    </span>
+  ) : query.isError ? (
+    'Items not routed didn’t load.'
+  ) : query.hasNextPage ? (
+    `${items.length > 0 ? `${items.length}+` : 'More'} waiting for a board.`
+  ) : items.length === 0 ? (
+    'Every new issue and pull request found a board.'
+  ) : (
+    `${items.length} waiting for a board.`
+  );
 
   return (
-    <section
-      id={NOT_ROUTED_ANCHOR}
-      aria-label="Not routed"
-      className="flex scroll-mt-4 flex-col gap-3 px-3.5 pt-3 pb-3.5"
-    >
-      <SettingsItem
-        media={
-          <SettingsItemIcon>
-            <CircleDashed />
-          </SettingsItemIcon>
-        }
-        title={
-          <span className="flex items-center gap-1">
-            Not routed
-            <InfoTooltip aria-label="When an item is not routed">
-              A new issue or pull request ends up here when no board’s rules take it. Change a board’s rules, then route
-              it again.
-            </InfoTooltip>
-          </span>
-        }
-        description={summary}
-      />
+    <section id={NOT_ROUTED_ANCHOR} aria-label="Not routed" className={NOT_ROUTED_SECTION}>
+      <NotRoutedSummary summary={summary} />
       {(items.length > 0 || query.hasNextPage) && (
         <ul aria-label="Items not routed" className="ml-11 flex flex-col">
           {items.map(item => (

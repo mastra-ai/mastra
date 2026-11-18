@@ -15,8 +15,9 @@ import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
 import { CreateFactoryNameRows } from './CreateFactoryNameRows';
-import { CreateFactoryPalette } from './CreateFactoryPalette';
+import { CREATE_FACTORY_WIZARD, CreateFactoryPalette } from './CreateFactoryPalette';
 import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
+import { CreateFactoryWizardSkeleton } from './CreateFactoryWizardSkeleton';
 
 interface StepChrome {
   title: string;
@@ -86,14 +87,14 @@ export function CreateFactoryWizard() {
   useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });
 
   const step = draft?.step;
-  if (!step) return null;
+  if (!step) return <CreateFactoryWizardSkeleton label="Loading new factory" />;
 
   // Each step starts from its own field value — the name step from the name already given.
   const typedOnThisStep = typed?.step === step ? typed.value : undefined;
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 pt-6">
+    <div className={CREATE_FACTORY_WIZARD}>
       <CreateFactoryPalette
         {...STEP_CHROME[step]}
         step={step}

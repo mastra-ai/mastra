@@ -11,6 +11,9 @@ type ConnectorLayout = { width: number; y: Record<ModelLane | ModelDefaults, num
 
 export const ROUTING_MAP_GRID_CLASS =
   'grid grid-cols-1 gap-3 @min-[38rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[38rem]:gap-0';
+export const ROUTING_LANES_COLUMN = 'flex flex-col gap-3 self-center';
+export const ROUTING_CONNECTOR_COLUMN = 'hidden h-full w-full overflow-visible @min-[38rem]:block';
+export const ROUTING_DEFAULTS_COLUMN = 'flex min-w-0 flex-col gap-3 self-start';
 
 export function createConnectorAnchors(): ConnectorAnchors {
   return {
@@ -72,10 +75,10 @@ export function RoutingMapLayout({
   return (
     <div className="@container">
       <div className={ROUTING_MAP_GRID_CLASS}>
-        <div ref={lanesRef} className="flex flex-col gap-3 self-center">
+        <div ref={lanesRef} className={ROUTING_LANES_COLUMN}>
           {lanes}
         </div>
-        <svg ref={svgRef} aria-hidden="true" className="hidden h-full w-full overflow-visible @min-[38rem]:block">
+        <svg ref={svgRef} aria-hidden="true" className={ROUTING_CONNECTOR_COLUMN}>
           {layout &&
             MODEL_LANES.map(lane => {
               const fromY = layout.y[lane];
@@ -95,7 +98,7 @@ export function RoutingMapLayout({
               );
             })}
         </svg>
-        <div ref={defaultsRef} className="flex min-w-0 flex-col gap-3 self-start">
+        <div ref={defaultsRef} className={ROUTING_DEFAULTS_COLUMN}>
           {defaults}
         </div>
       </div>

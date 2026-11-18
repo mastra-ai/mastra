@@ -13,6 +13,7 @@ import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 export interface SessionFrameSlots {
   panel: WorkspacePanelPage | undefined;
   title?: ReactNode;
+  titleLoading?: boolean;
   titleMenu?: ReactNode;
   headerCenter?: ReactNode;
 }
@@ -21,11 +22,12 @@ export interface SessionFrameSlots {
 export function SessionRouteFrame({ children }: { children: ReactNode }) {
   const { workItemId } = useParams<{ workItemId?: string }>();
   const thread = useThreadFrame();
-  const { panel, title, titleMenu, headerCenter } = useCardDraftFrame(workItemId) ?? thread;
+  const { panel, title, titleLoading, titleMenu, headerCenter } = useCardDraftFrame(workItemId) ?? thread;
   return (
     <WorkspaceFilesProvider page={panel}>
       <ChatPageLayout
         title={title}
+        titleLoading={titleLoading}
         titleMenu={titleMenu}
         headerCenter={headerCenter}
         headerActions={<WorkspaceFilesToggle />}

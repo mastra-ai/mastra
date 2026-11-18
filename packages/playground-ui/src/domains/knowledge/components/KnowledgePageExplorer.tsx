@@ -1,8 +1,8 @@
-import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
+import { KNOWLEDGE_EXPLORER_VIEWS } from '../lib/explorerViews';
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
@@ -40,7 +40,6 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
-import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
@@ -1256,12 +1255,6 @@ export function KnowledgePageExplorer({
   // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
-  const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
-    { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
-    { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
-    { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
-  ];
-
   const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
@@ -1374,7 +1367,7 @@ export function KnowledgePageExplorer({
               aria-label="View"
             >
               <TabList variant="pill-ghost" size="sm">
-                {views.map(option => (
+                {KNOWLEDGE_EXPLORER_VIEWS.map(option => (
                   <Tab
                     key={option.value}
                     value={option.value}

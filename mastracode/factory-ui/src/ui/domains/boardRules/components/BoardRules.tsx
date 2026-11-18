@@ -1,7 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -16,6 +15,7 @@ import { boardFlow } from '../boardFlow';
 import { phaseName, phaseOptions, reorderWithin } from '../ruleTargets';
 import { arrivalFallback, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
+import { BoardRulesSkeleton } from './BoardRulesSkeleton';
 import { IncomingRules } from './IncomingRules';
 import { IntakeChain } from './IntakeChain';
 import { RuleBuilderDialog } from './RuleBuilderDialog';
@@ -23,6 +23,7 @@ import type { RuleDraft, RuleStep } from './RuleBuilderDialog';
 import { IntoFilter } from './IntoFilter';
 import { RuleLane } from './RuleLane';
 import type { RuleFocus } from './RuleLane';
+import { LaneSection } from './RuleLaneFrame';
 
 const STALE_CODES = new Set(['revision_mismatch', 'intake_route_set_mismatch', 'intake_route_not_found']);
 
@@ -44,7 +45,7 @@ export function BoardRules({ factoryId, boardId }: { factoryId: string; boardId:
   const catalog = useBoardCatalog(factoryId);
   const board = catalog.data?.find(candidate => candidate.id === boardId);
 
-  if (catalog.isPending) return <Skeleton className="h-64 w-full" />;
+  if (catalog.isPending) return <BoardRulesSkeleton />;
   if (catalog.isError) return <Notice variant="destructive">Boards didn’t load.</Notice>;
   if (!board) return <Notice variant="warning">This board isn’t installed.</Notice>;
   // Keyed so an open rule never outlives the board it belongs to when the page moves to another one.
@@ -91,7 +92,7 @@ function BoardLanes({
   const only = flow && new Set((leaving ? flow.leaving : (flow.into.get(into ?? '') ?? [])).map(rule => rule.id));
   const shows = (lane: readonly IntakeRouteInfo[]) => !only || lane.some(rule => only.has(rule.id));
 
-  if (query.isPending || (focused && projectRules.isPending)) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending || (focused && projectRules.isPending)) return <BoardRulesSkeleton />;
   if (query.isError) return <Notice variant="destructive">This board’s rules didn’t load.</Notice>;
 
   const run = (changes: RouteWrite[]) => writes.mutateAsync(changes).catch(error => toast.error(failureMessage(error)));
@@ -204,12 +205,14 @@ function BoardLanes({
       {LANE_SECTIONS.filter(section =>
         section.events.some(event => shows([...laneRules(rules, event), ...laneRules(incoming, event)])),
       ).map(section => (
-        <section key={section.title} aria-label={section.title} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Txt as="h2" variant="subheading" tone="ink">
-              {section.title}
-            </Txt>
-            {section.events.some(isOpenedLane) ? (
+        <LaneSection
+          key={section.title}
+          title={section.title}
+          events={section.events}
+          chain={
+            order.isPending ? (
+              <SkeletonText line="text-caption" className="w-64 max-w-full motion-reduce:before:animate-none" />
+            ) : (
               order.data && (
                 <IntakeChain
                   factoryId={factoryId}
@@ -218,12 +221,9 @@ function BoardLanes({
                   evaluator={order.data.evaluator}
                 />
               )
-            ) : (
-              <Txt as="p" variant="caption" tone="muted">
-                Only cards already on this board; other boards never see them.
-              </Txt>
-            )}
-          </div>
+            )
+          }
+        >
           {section.events.map(event => {
             const opened = isOpenedLane(event);
             const lane = laneRules(rules, event);
@@ -269,7 +269,7 @@ function BoardLanes({
               />
             );
           })}
-        </section>
+        </LaneSection>
       ))}
 
       {editing && (

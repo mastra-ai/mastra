@@ -4,11 +4,11 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { PageLoader } from './PageSuspense';
 
 /** Loader for pages inside `AppLayout`: keeps the header's sidebar trigger reachable while the page code loads. */
-export function AppPageLoader() {
+export function AppPageLoader({ label }: { label?: string }) {
   const slots = useSidebarHeaderSlots();
   return (
     <PageLayout variant="fit" {...slots}>
-      <PageLoader />
+      <PageLoader label={label} />
     </PageLayout>
   );
 }

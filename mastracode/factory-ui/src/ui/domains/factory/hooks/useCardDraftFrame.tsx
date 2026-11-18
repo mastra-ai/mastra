@@ -3,15 +3,18 @@ import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { PanelSubject } from '../../workspace-viewer/components/PanelSubject';
 import { CardDraftOverview } from '../components/CardDraftOverview';
-import { CardStageBar } from '../components/CardStageBar';
+import { CardOverviewSkeleton } from '../components/CardOverviewSkeleton';
+import { CardStageBar, CardStageBarSkeleton } from '../components/CardStageBar';
 import type { SessionFrameSlots } from '../components/SessionRouteFrame';
 import { useDraftCard } from './useDraftCard';
 
 export function useCardDraftFrame(workItemId: string | undefined): SessionFrameSlots | undefined {
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { catalog, item, board } = useDraftCard(factoryId, workItemId);
-  const factory = useFactoryQuery(factoryId).data;
+  const { card, catalog, item, board } = useDraftCard(factoryId, workItemId);
+  const factoryQuery = useFactoryQuery(factoryId);
+  const factory = factoryQuery.data;
   if (!workItemId) return undefined;
+  const pending = card.isPending || catalog.isPending || factoryQuery.isPending;
 
   return {
     panel:
@@ -27,10 +30,17 @@ export function useCardDraftFrame(workItemId: string | undefined): SessionFrameS
               />
             ),
           }
-        : undefined,
+        : pending
+          ? {
+              subject: lead => <PanelSubject lead={lead} loading />,
+              overview: () => <CardOverviewSkeleton />,
+            }
+          : undefined,
     headerCenter:
       item && board && factory ? (
         <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />
+      ) : pending ? (
+        <CardStageBarSkeleton />
       ) : undefined,
   };
 }

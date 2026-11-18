@@ -1,6 +1,5 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -9,6 +8,7 @@ import { accountName } from '../services/accountName';
 import type { FactoryAuthState } from '../services/auth';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
+import { SidebarSettingsLinkSkeleton } from './SidebarSettingsLinkSkeleton';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export function SidebarSettingsLink() {
@@ -20,22 +20,7 @@ export function SidebarSettingsLink() {
 
   if (!factoryId) return null;
 
-  if (auth.isLoading) {
-    return (
-      <Sidebar.NavLink
-        role="status"
-        aria-label="Checking sign-in"
-        render={
-          <div aria-hidden className="pointer-events-none">
-            <Skeleton className="size-icon-md shrink-0 rounded-full motion-reduce:before:animate-none" />
-            <Sidebar.NavLabel>
-              <Skeleton className="h-3 w-24 max-w-full motion-reduce:before:animate-none" />
-            </Sidebar.NavLabel>
-          </div>
-        }
-      />
-    );
-  }
+  if (auth.isLoading) return <SidebarSettingsLinkSkeleton label="Checking sign-in" />;
 
   const account = auth.data;
   const userName = signedInName(account);

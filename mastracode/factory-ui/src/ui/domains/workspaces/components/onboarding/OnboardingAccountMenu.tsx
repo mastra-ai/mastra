@@ -1,5 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -19,7 +20,8 @@ export function OnboardingAccountMenu() {
   const { baseUrl } = useApiConfig();
   const { theme, setTheme } = useTheme();
   // Wait for auth so a signed-in user never sees the theme-only trigger flash first.
-  if (auth.isPending) return null;
+  if (auth.isPending)
+    return <Skeleton aria-hidden className="size-control-md shrink-0 rounded-full motion-reduce:before:animate-none" />;
   const user = auth.data?.authEnabled ? auth.data.user : undefined;
   if (!user)
     return (

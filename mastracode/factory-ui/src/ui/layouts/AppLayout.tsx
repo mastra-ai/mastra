@@ -1,6 +1,7 @@
 import { SIDEBAR_WIDTHS, Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
+import type { ReactNode } from 'react';
 import { Outlet } from 'react-router';
 
 import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
@@ -23,15 +24,38 @@ function SidebarShortcuts() {
   return null;
 }
 
-function AppFrame() {
+export function AppShellFrame({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
   return (
-    <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
+    <AppShell sidebar={sidebar} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
+        {children}
       </MainCard>
     </AppShell>
+  );
+}
+
+export function AppLayoutFrame({ banners, children }: { banners?: ReactNode; children: ReactNode }) {
+  // Board configuration lists phases by name beside the page that edits them, so the sidebar
+  // widens a little while it is open. The stored width is kept and returns when it closes.
+  const configuringBoard = useBoardConfigRoute() !== undefined;
+
+  return (
+    <div className="bg-sidebar flex h-dvh flex-col">
+      {banners}
+      <div className="min-h-0 flex-1">
+        <Sidebar.Provider
+          storageKey="mastracode-web"
+          collapsedWidth={0}
+          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : undefined}
+          collapseBelow={SIDEBAR_WIDTHS.min}
+        >
+          <SidebarShortcuts />
+          {children}
+        </Sidebar.Provider>
+      </div>
+    </div>
   );
 }
 
@@ -43,32 +67,26 @@ function AppFrame() {
  */
 export function AppLayout() {
   const problem = useServerStatus().data?.problems[0];
-  // Board configuration lists phases by name beside the page that edits them, so the sidebar
-  // widens a little while it is open. The stored width is kept and returns when it closes.
-  const configuringBoard = useBoardConfigRoute() !== undefined;
 
   return (
-    <div className="bg-sidebar flex h-dvh flex-col">
-      {problem ? <ServerProblemBanner problem={problem} /> : null}
-      <PwaInstallBanner />
-      <div className="min-h-0 flex-1">
-        <Sidebar.Provider
-          storageKey="mastracode-web"
-          collapsedWidth={0}
-          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : undefined}
-          collapseBelow={SIDEBAR_WIDTHS.min}
-        >
-          <SidebarShortcuts />
-          <OverlaysProvider>
-            <ChatSessionRouteProvider>
-              <BoardDraftProvider>
-                <AppFrame />
-              </BoardDraftProvider>
-              <ChatOverlays />
-            </ChatSessionRouteProvider>
-          </OverlaysProvider>
-        </Sidebar.Provider>
-      </div>
-    </div>
+    <AppLayoutFrame
+      banners={
+        <>
+          {problem ? <ServerProblemBanner problem={problem} /> : null}
+          <PwaInstallBanner />
+        </>
+      }
+    >
+      <OverlaysProvider>
+        <ChatSessionRouteProvider>
+          <BoardDraftProvider>
+            <AppShellFrame sidebar={<AppSidebar />}>
+              <Outlet />
+            </AppShellFrame>
+          </BoardDraftProvider>
+          <ChatOverlays />
+        </ChatSessionRouteProvider>
+      </OverlaysProvider>
+    </AppLayoutFrame>
   );
 }

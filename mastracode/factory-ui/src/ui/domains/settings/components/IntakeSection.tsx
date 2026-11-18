@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -17,6 +18,7 @@ import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
+import { IntakeSourcesSkeleton } from './IntakeSectionSkeleton';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
@@ -29,11 +31,38 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
-function IntakeSkeleton() {
+function IntakeSources({
+  factoryId,
+  loading = false,
+  children,
+}: {
+  factoryId: string | undefined;
+  loading?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <SettingsContainer>
-      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
-    </SettingsContainer>
+    <SettingsSubsection
+      scope="org"
+      title="Sources"
+      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
+    >
+      <div
+        role={loading ? 'status' : undefined}
+        aria-label={loading ? 'Loading intake sources' : undefined}
+        className="flex flex-col gap-3"
+      >
+        {children}
+      </div>
+      {factoryId && (
+        <Txt as="p" variant="caption" tone="muted">
+          Which board takes each item is set in each board's Rules, in the{' '}
+          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
+            intake order
+          </Link>
+          .
+        </Txt>
+      )}
+    </SettingsSubsection>
   );
 }
 
@@ -49,8 +78,13 @@ export function IntakeSection() {
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
   const vanta = useVantaStatusQuery();
   const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
+  const pendingSources = (
+    <IntakeSources factoryId={factoryId} loading>
+      <IntakeSourcesSkeleton />
+    </IntakeSources>
+  );
 
-  if (configQuery.isPending) return <IntakeSkeleton />;
+  if (configQuery.isPending) return pendingSources;
   if (!configQuery.data) {
     return (
       <SettingsContainer>
@@ -76,7 +110,7 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <IntakeSkeleton />;
+    return pendingSources;
   }
 
   const props = { config: configQuery.data };
@@ -164,33 +198,18 @@ export function IntakeSection() {
   ];
 
   return (
-    <SettingsSubsection
-      scope="org"
-      title="Sources"
-      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
-    >
-      <div className="flex flex-col gap-3">
-        {sources.flatMap(source =>
-          source.listing === undefined
-            ? []
-            : [
-                source.listing === 'available' ? (
-                  <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
-                ) : (
-                  <Fragment key={source.id}>{source.content}</Fragment>
-                ),
-              ],
-        )}
-      </div>
-      {factoryId && (
-        <Txt as="p" variant="caption" tone="muted">
-          Which board takes each item is set in each board's Rules, in the{' '}
-          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
-            intake order
-          </Link>
-          .
-        </Txt>
+    <IntakeSources factoryId={factoryId}>
+      {sources.flatMap(source =>
+        source.listing === undefined
+          ? []
+          : [
+              source.listing === 'available' ? (
+                <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
+              ) : (
+                <Fragment key={source.id}>{source.content}</Fragment>
+              ),
+            ],
       )}
-    </SettingsSubsection>
+    </IntakeSources>
   );
 }

@@ -4,6 +4,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { ONBOARDING_CHOICE_ROW } from './onboardingLayout';
 
 /**
  * One row of an onboarding radio group. The radio stays for keyboard and screen readers but is visually
@@ -32,7 +33,8 @@ export function OnboardingChoiceRow({
   return (
     <label
       className={cn(
-        'flex min-w-0 items-start gap-3 rounded-lg p-3 has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
+        ONBOARDING_CHOICE_ROW,
+        'has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
         selected && 'onboarding-card bg-card',
         !selected && !disabled && 'hover:bg-fill-subtle',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',

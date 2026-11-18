@@ -1,6 +1,3 @@
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useEffect, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -21,7 +18,6 @@ import {
 import type { OnboardingDraft, OnboardingStep } from '../services/onboardingFlow';
 import { nextOnboardingStep, restoredOnboardingStep } from '../services/onboardingSteps';
 import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
-import { OnboardingAccountMenu } from './onboarding/OnboardingAccountMenu';
 import { OnboardingAccountsRow } from './onboarding/OnboardingAccountsRow';
 import { OnboardingCodebaseRow } from './onboarding/OnboardingCodebaseRow';
 import { OnboardingModelRow } from './onboarding/OnboardingModelRow';
@@ -32,7 +28,7 @@ import { OnboardingWorkRow } from './onboarding/OnboardingWorkRow';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
-import './onboarding/onboarding.css';
+import { OnboardingFrame } from './onboarding/OnboardingFrame';
 
 interface SectionPreview extends OnboardingModelPreview {
   repository?: SourceControlRepository;
@@ -75,7 +71,6 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const [previewSource, setPreviewSource] = useState<BoardSource>();
   const [preview, setPreview] = useState<SectionPreview>({});
-  const showVisual = !useIsMobile(900);
   const mainRef = useRef<HTMLElement>(null);
   const focusOpenedSection = useRef(false);
 
@@ -148,106 +143,81 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   const personalPreview = lanePreview(setup.personal, preview.personalProviderId, preview.personalMethod);
 
   return (
-    <div className="bg-background text-foreground min-h-dvh min-[900px]:grid min-[900px]:grid-cols-[minmax(0,600px)_minmax(0,1fr)]">
-      <div className="flex min-h-dvh flex-col">
-        <header className="flex items-center justify-between gap-3 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <LogoWithoutText className="w-6" aria-hidden="true" />
-            <Txt as="span" variant="label">
-              Factory
-            </Txt>
-          </div>
-          <OnboardingAccountMenu />
-        </header>
-        <main
-          ref={mainRef}
-          className="mx-auto flex w-full max-w-[520px] flex-col gap-2 px-4 pt-6 pb-6 min-[900px]:px-5"
-        >
-          <Txt as="h1" variant="display" className="mb-4">
-            Set up your factory
-          </Txt>
-          <OnboardingSlot>
-            {openStep === 'vcs' ? (
-              <VcsFactoryStep
-                initialRepository={draft.repository}
-                githubRedirecting={githubRedirecting}
-                githubCallback={githubCallback}
-                onDismissGithubCallback={onDismissGithubCallback}
-                onConnect={connectGithubFromOnboarding}
-                onManageConnection={manageGithubFromOnboarding}
-                onPreviewRepository={repository => setPreview(current => ({ ...current, repository }))}
-                onSelectRepository={repository => {
-                  // The GitHub result has served its purpose; kept, it would reopen Change on GitHub over a GitLab pick.
-                  onDismissGithubCallback();
-                  finish({ repository });
-                }}
-              />
-            ) : (
-              <OnboardingCodebaseRow repository={draft.repository} {...change('vcs')} />
-            )}
-          </OnboardingSlot>
-          <OnboardingSlot>
-            {openStep === 'project-management' ? (
-              <ProjectManagementFactoryStep
-                onPreviewSource={setPreviewSource}
-                onConnect={connectLinearFromOnboarding}
-                onContinue={() => finish({ workConfirmed: true })}
-                repository={draft.repository}
-                codeHostSync={draft.codeHostSync}
-                onCodeHostSyncChange={codeHostSync => updateDraft({ codeHostSync })}
-              />
-            ) : (
-              <OnboardingWorkRow
-                confirmed={draft.workConfirmed === true}
-                repository={draft.repository}
-                codeHostSync={draft.codeHostSync}
-                {...change('project-management')}
-              />
-            )}
-          </OnboardingSlot>
-          <OnboardingSlot>
-            {openStep === 'model' ? (
-              <OnboardingModelSection
-                setup={setup}
-                local={local}
-                creating={complete.isPending}
-                error={complete.error?.message}
-                onScopeChange={modelScope => updateDraft({ modelScope })}
-                onPreview={patch => setPreview(current => ({ ...current, ...patch }))}
-                onCreate={createFactory}
-              />
-            ) : (
-              <>
-                {!local && <OnboardingAccountsRow setup={setup} {...change('model')} />}
-                <OnboardingModelRow setup={setup} local={local} {...change('model')} />
-              </>
-            )}
-          </OnboardingSlot>
-        </main>
-        <Txt as="p" variant="meta" tone="muted" className="mt-auto px-6 pt-2 pb-32 min-[900px]:pb-5">
-          You can change your codebase, work sources and model anytime in Settings.
-        </Txt>
-      </div>
-      {/* The page scrolls the form; the preview stays pinned to the viewport beside it, like ChatGPT's main pane. */}
-      {showVisual && (
-        <div className="sticky top-0 h-dvh p-2">
-          <div className="onboarding-card bg-card rounded-studio-frame h-full overflow-hidden p-px">
-            <OnboardingPreview
-              step={openStep}
-              modelScope={setup.scope}
-              local={local}
-              repository={preview.repository ?? draft.repository}
-              source={previewSource}
-              providerId={companyPreview.providerId}
-              connectionMethod={companyPreview.method}
-              model={companyPreview.model}
-              personalProviderId={personalPreview.providerId}
-              personalConnectionMethod={personalPreview.method}
-              personalModel={personalPreview.model}
-            />
-          </div>
-        </div>
-      )}
-    </div>
+    <OnboardingFrame
+      mainRef={mainRef}
+      visual={
+        <OnboardingPreview
+          step={openStep}
+          modelScope={setup.scope}
+          local={local}
+          repository={preview.repository ?? draft.repository}
+          source={previewSource}
+          providerId={companyPreview.providerId}
+          connectionMethod={companyPreview.method}
+          model={companyPreview.model}
+          personalProviderId={personalPreview.providerId}
+          personalConnectionMethod={personalPreview.method}
+          personalModel={personalPreview.model}
+        />
+      }
+    >
+      <OnboardingSlot>
+        {openStep === 'vcs' ? (
+          <VcsFactoryStep
+            initialRepository={draft.repository}
+            githubRedirecting={githubRedirecting}
+            githubCallback={githubCallback}
+            onDismissGithubCallback={onDismissGithubCallback}
+            onConnect={connectGithubFromOnboarding}
+            onManageConnection={manageGithubFromOnboarding}
+            onPreviewRepository={repository => setPreview(current => ({ ...current, repository }))}
+            onSelectRepository={repository => {
+              // The GitHub result has served its purpose; kept, it would reopen Change on GitHub over a GitLab pick.
+              onDismissGithubCallback();
+              finish({ repository });
+            }}
+          />
+        ) : (
+          <OnboardingCodebaseRow repository={draft.repository} {...change('vcs')} />
+        )}
+      </OnboardingSlot>
+      <OnboardingSlot>
+        {openStep === 'project-management' ? (
+          <ProjectManagementFactoryStep
+            onPreviewSource={setPreviewSource}
+            onConnect={connectLinearFromOnboarding}
+            onContinue={() => finish({ workConfirmed: true })}
+            repository={draft.repository}
+            codeHostSync={draft.codeHostSync}
+            onCodeHostSyncChange={codeHostSync => updateDraft({ codeHostSync })}
+          />
+        ) : (
+          <OnboardingWorkRow
+            confirmed={draft.workConfirmed === true}
+            repository={draft.repository}
+            codeHostSync={draft.codeHostSync}
+            {...change('project-management')}
+          />
+        )}
+      </OnboardingSlot>
+      <OnboardingSlot>
+        {openStep === 'model' ? (
+          <OnboardingModelSection
+            setup={setup}
+            local={local}
+            creating={complete.isPending}
+            error={complete.error?.message}
+            onScopeChange={modelScope => updateDraft({ modelScope })}
+            onPreview={patch => setPreview(current => ({ ...current, ...patch }))}
+            onCreate={createFactory}
+          />
+        ) : (
+          <>
+            {!local && <OnboardingAccountsRow setup={setup} {...change('model')} />}
+            <OnboardingModelRow setup={setup} local={local} {...change('model')} />
+          </>
+        )}
+      </OnboardingSlot>
+    </OnboardingFrame>
   );
 }

@@ -13,6 +13,7 @@ import type { OnboardingModelScope } from '../../services/onboardingFlow';
 import { createBlockedReason } from '../../services/createBlockedReason';
 import { modelSectionIndex } from '../../services/onboardingSteps';
 import { OnboardingAccountLanes } from './OnboardingAccountLanes';
+import { OnboardingChoiceRowsSkeleton } from './OnboardingChoiceRowsSkeleton';
 import { OnboardingCreateNotice } from './OnboardingCreateNotice';
 import { OnboardingInset } from './OnboardingInset';
 import { OnboardingPageAction } from './OnboardingPageAction';
@@ -74,7 +75,7 @@ export function OnboardingModelSection({
           }
         >
           {loading ? (
-            <LoadingInset label="Loading account options" rows={3} />
+            <OnboardingChoiceRowsSkeleton label="Loading account options" rows={3} />
           ) : (
             <OnboardingScopeChoice
               scope={setup.scope}

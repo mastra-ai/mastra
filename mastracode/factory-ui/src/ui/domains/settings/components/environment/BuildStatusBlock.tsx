@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type {
@@ -25,6 +25,8 @@ export function formatBuildTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
+const STATUS_LINE = 'flex items-center gap-2';
+
 /**
  * Build now beside the last build's live status; sits in the Template
  * subsection header. The error, when there is one, shows under the badge.
@@ -48,11 +50,14 @@ export function BuildStatusBlock({
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-3">
         {status === undefined ? (
-          <span role="status" aria-label="Loading build status">
+          <span role="status" aria-label="Loading build status" className={STATUS_LINE}>
             <Skeleton aria-hidden className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
+            {lastBuild?.attemptedAt && (
+              <SkeletonText line="text-meta" className="w-32 motion-reduce:before:animate-none" />
+            )}
           </span>
         ) : status ? (
-          <span className="flex items-center gap-2">
+          <span className={STATUS_LINE}>
             <Badge size="sm" variant={status.variant}>
               {status.label}
             </Badge>

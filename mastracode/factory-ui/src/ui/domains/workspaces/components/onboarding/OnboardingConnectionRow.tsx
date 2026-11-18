@@ -2,6 +2,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
+export const ONBOARDING_CONNECTION_ROW = 'flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5';
+
 /** One integration in a section's inset list; its fixed minimum height matches the loading skeleton. */
 export function OnboardingConnectionRow({
   icon,
@@ -18,7 +20,7 @@ export function OnboardingConnectionRow({
   tone?: 'muted' | 'warning' | 'error';
 }) {
   return (
-    <div className="group/onboarding-connection flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
+    <div className={cn('group/onboarding-connection', ONBOARDING_CONNECTION_ROW)}>
       <span
         className="text-muted-foreground size-icon-md [&>svg]:size-icon-md flex shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110"
         aria-hidden="true"

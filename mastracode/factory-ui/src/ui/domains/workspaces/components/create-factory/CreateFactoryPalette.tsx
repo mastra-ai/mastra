@@ -28,6 +28,24 @@ export interface CreateFactoryPaletteProps {
 
 const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none';
 
+export const CREATE_FACTORY_WIZARD = 'flex min-h-0 flex-col gap-2 pt-6';
+export const CREATE_FACTORY_PALETTE = 'flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent';
+export const CREATE_FACTORY_TITLE_ROW = 'flex shrink-0 items-center gap-3';
+export const CREATE_FACTORY_STEP_BARS = 'flex shrink-0 gap-1';
+export const CREATE_FACTORY_STEP_BAR = 'h-1 w-6 rounded-full';
+export const CREATE_FACTORY_INPUT = 'h-14 px-4';
+
+export function CreateFactoryPaletteKeys() {
+  return (
+    <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">
+      <Kbd size="sm">↑</Kbd>
+      <Kbd size="sm">↓</Kbd>
+      <Kbd size="sm">↵</Kbd>
+      <Kbd size="sm">Esc</Kbd>
+    </div>
+  );
+}
+
 /**
  * The whole flow renders through one mounted palette: only the title and the
  * rows swap between steps, so the field keeps its focus and never blinks.
@@ -46,13 +64,8 @@ export function CreateFactoryPalette({
   const stepIndex = CREATE_FACTORY_STEPS.indexOf(step);
 
   return (
-    <Command
-      loop
-      shouldFilter={false}
-      label={title}
-      className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
-    >
-      <div className="flex shrink-0 items-center gap-3">
+    <Command loop shouldFilter={false} label={title} className={CREATE_FACTORY_PALETTE}>
+      <div className={CREATE_FACTORY_TITLE_ROW}>
         {onBack && (
           <Button
             variant="ghost"
@@ -81,13 +94,14 @@ export function CreateFactoryPalette({
             <IconArrowRight aria-hidden="true" />
           </Button>
         )}
-        <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
+        <ol className={CREATE_FACTORY_STEP_BARS} aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
           {CREATE_FACTORY_STEPS.map((item, index) => (
             <li
               key={item}
               aria-current={item === step ? 'step' : undefined}
               className={cn(
-                'h-1 w-6 rounded-full transition-colors',
+                CREATE_FACTORY_STEP_BAR,
+                'transition-colors',
                 index <= stepIndex ? 'bg-success-indicator' : 'bg-fill',
               )}
             />
@@ -101,15 +115,10 @@ export function CreateFactoryPalette({
         value={value}
         onValueChange={onValueChange}
         rightSlot={<Kbd size="sm">Esc</Kbd>}
-        wrapperClassName={cn('h-14 px-4', !searchable && '[&>svg]:hidden')}
+        wrapperClassName={cn(CREATE_FACTORY_INPUT, !searchable && '[&>svg]:hidden')}
       />
 
-      <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">
-        <Kbd size="sm">↑</Kbd>
-        <Kbd size="sm">↓</Kbd>
-        <Kbd size="sm">↵</Kbd>
-        <Kbd size="sm">Esc</Kbd>
-      </div>
+      <CreateFactoryPaletteKeys />
 
       <CommandList
         scrollArea

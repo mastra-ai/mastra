@@ -17,9 +17,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Table } from '@mastra/playground-ui/components/Table';
-import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
@@ -29,6 +27,9 @@ import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { SandboxEnv, SandboxEnvAppliesTo } from '../../../workspaces/services/sandbox-envs';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+
+import { SandboxEnvsSkeleton } from './SandboxEnvsSkeleton';
+import { SandboxEnvsTableHeader } from './SandboxEnvsTableHeader';
 
 const MASK = '••••••••••••';
 
@@ -83,7 +84,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
       <Notice variant="destructive">{errorMessage(envsQuery.error, 'Failed to load environment variables')}</Notice>
     );
   }
-  if (!envsQuery.data) return <Skeleton className="h-16 w-full" />;
+  if (!envsQuery.data) return <SandboxEnvsSkeleton />;
 
   const { envs, writable } = envsQuery.data;
 
@@ -100,25 +101,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
         </Txt>
       ) : (
         <Table variant="inset" aria-label="Environment variables">
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>Name</Table.Head>
-              <Table.Head>Value</Table.Head>
-              <Table.Head>
-                <span className="inline-flex items-center gap-1">
-                  Applies to
-                  <InfoTooltip aria-label="About where variables apply">
-                    Runtime: every command in the sandbox, from the next one on. Build: only the template image build
-                    and setup commands, never runtime commands.
-                  </InfoTooltip>
-                </span>
-              </Table.Head>
-              <Table.Head>Updated</Table.Head>
-              <Table.Head align="end">
-                <span className="sr-only">Actions</span>
-              </Table.Head>
-            </Table.Row>
-          </Table.Header>
+          <SandboxEnvsTableHeader />
           <Table.Body>
             {envs.map(env => {
               const targets = toTargets(env.appliesTo);

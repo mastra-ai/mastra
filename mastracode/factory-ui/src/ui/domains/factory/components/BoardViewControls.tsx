@@ -13,7 +13,12 @@ import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
 import { BoardPropertiesMenu } from './BoardPropertiesMenu';
-import { BoardViewControlsLayout } from './BoardViewControlsLayout';
+import {
+  BOARD_DEFAULT_VIEW_LABEL,
+  BOARD_SEARCH_CLASS,
+  BOARD_VIEW_TABS_CLASS,
+  BoardViewControlsLayout,
+} from './BoardViewControlsLayout';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
 
@@ -63,11 +68,11 @@ export function BoardViewControls({
         <>
           <SavedViewTabs
             aria-label="Board views"
-            className="max-sm:w-full"
+            className={BOARD_VIEW_TABS_CLASS}
             views={savedViews}
             fields={fields}
             operators={BOARD_FILTER_OPERATORS}
-            defaultLabel="All cards"
+            defaultLabel={BOARD_DEFAULT_VIEW_LABEL}
             newViewSettings={view.newViewSettings}
             describeSettings={settings => <ViewSettingsSummary settings={settings} />}
           />
@@ -91,7 +96,7 @@ export function BoardViewControls({
           value={view.search}
           onValueChange={view.setSearch}
           size="sm"
-          className="w-48 max-w-full max-sm:min-w-0 max-sm:flex-1"
+          className={BOARD_SEARCH_CLASS}
           onKeyDown={event => {
             if (event.key === 'Escape') {
               event.preventDefault();

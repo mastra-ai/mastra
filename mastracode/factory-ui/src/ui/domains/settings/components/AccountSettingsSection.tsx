@@ -67,12 +67,14 @@ export function AccountSettingsSection() {
   );
 }
 
+const PROFILE_DESCRIPTION = 'Your signed-in identity for this MastraCode deployment.';
+
 function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }) {
   if (auth.isPending) {
     return (
-      <SettingsSubsection scope="personal" title="Profile">
+      <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
         <SettingsContainer>
-          <SettingsSkeleton label="Loading your account" rows={3} />
+          <SettingsSkeleton label="Loading your account" rows={4} />
         </SettingsContainer>
       </SettingsSubsection>
     );
@@ -94,11 +96,7 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
   const user = state.user;
 
   return (
-    <SettingsSubsection
-      scope="personal"
-      title="Profile"
-      description="Your signed-in identity for this MastraCode deployment."
-    >
+    <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
       <SettingsContainer>
         <SettingsItem title="Name" description="From your sign-in provider.">
           <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>

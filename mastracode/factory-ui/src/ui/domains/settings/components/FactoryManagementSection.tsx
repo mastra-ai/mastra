@@ -29,11 +29,14 @@ export function FactoryManagementSection() {
   }
   if (!factory) {
     return (
-      <SettingsSubsection scope="factory" title="Environment">
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading Factory settings" rows={3} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <>
+        <EnvironmentSection factoryId={factoryId} />
+        <SettingsSubsection scope="factory" title="Danger zone">
+          <SettingsContainer>
+            <SettingsSkeleton label="Loading Factory settings" rows={1} />
+          </SettingsContainer>
+        </SettingsSubsection>
+      </>
     );
   }
 

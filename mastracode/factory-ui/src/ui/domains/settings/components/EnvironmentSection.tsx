@@ -10,6 +10,7 @@ import {
 } from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
+import { BuildHistorySkeleton } from './environment/BuildHistorySkeleton';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
@@ -17,6 +18,8 @@ import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvs
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { useEnvironmentSave } from './environment/useEnvironmentSave';
 import { SettingsSubsection } from './SettingsSubsection';
+
+const ENVIRONMENT_DESCRIPTION = 'How each sandbox is set up.';
 
 export function EnvironmentSection({ factoryId }: { factoryId: string }) {
   const environmentQuery = useFactoryEnvironmentQuery(factoryId);
@@ -28,37 +31,39 @@ export function EnvironmentSection({ factoryId }: { factoryId: string }) {
       </Notice>
     );
   }
-  if (!environmentQuery.data) {
-    return (
-      <SettingsSubsection scope="factory" title="Environment">
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading environment" rows={3} />
-        </SettingsContainer>
-      </SettingsSubsection>
-    );
-  }
 
   return <EnvironmentBlocks key={factoryId} factoryId={factoryId} environment={environmentQuery.data} />;
 }
 
-function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment?: FactoryEnvironmentPayload }) {
   const { save, disabled } = useEnvironmentSave(factoryId);
-  const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
+  const builds = environment?.sandbox.capabilities.builds;
+  const buildTriggers = builds?.available ? environment?.buildTriggers : undefined;
   return (
     <>
       <SettingsSubsection
         scope="factory"
         title="Environment"
-        description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
+        description={
+          environment
+            ? `${ENVIRONMENT_DESCRIPTION} ${providerLine(environment.sandbox.provider)}`
+            : ENVIRONMENT_DESCRIPTION
+        }
       >
-        <WorkspaceSetupBlock
-          workdir={environment.sandboxWorkingDirectory}
-          command={environment.workspaceSetupCommand}
-          disabled={disabled}
-          onSave={save}
-        >
-          <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
-        </WorkspaceSetupBlock>
+        {environment ? (
+          <WorkspaceSetupBlock
+            workdir={environment.sandboxWorkingDirectory}
+            command={environment.workspaceSetupCommand}
+            disabled={disabled}
+            onSave={save}
+          >
+            <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+          </WorkspaceSetupBlock>
+        ) : (
+          <SettingsContainer>
+            <SettingsSkeleton label="Loading environment" rows={4} />
+          </SettingsContainer>
+        )}
       </SettingsSubsection>
       <SettingsSubsection
         scope="factory"
@@ -68,7 +73,7 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
       >
         <SandboxEnvsBlock factoryId={factoryId} />
       </SettingsSubsection>
-      {canBuild && (
+      {environment && buildTriggers && (
         <SettingsSubsection
           scope="factory"
           title="Builds"
@@ -76,11 +81,11 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
           action={<BuildNow factoryId={factoryId} environment={environment} />}
         >
           <SettingsContainer>
-            <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+            <BuildTriggersRows triggers={buildTriggers} disabled={disabled} onSave={save} />
           </SettingsContainer>
         </SettingsSubsection>
       )}
-      {canBuild && environment.sandbox.capabilities.builds.history && (
+      {buildTriggers && builds?.history && (
         <SettingsSubsection scope="factory" title="Build history">
           <BuildHistory factoryId={factoryId} />
         </SettingsSubsection>
@@ -117,6 +122,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
 
 function BuildHistory({ factoryId }: { factoryId: string }) {
   const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
+  if (buildsQuery.isPending) return <BuildHistorySkeleton />;
   return (
     <BuildHistoryBlock
       builds={buildsQuery.data}

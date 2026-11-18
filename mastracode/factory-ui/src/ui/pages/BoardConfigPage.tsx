@@ -2,10 +2,10 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
+import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { BoardRequestError, useBoardQuery } from '../../hooks/useBoardEditor';
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -13,6 +13,9 @@ import { useShownDraft } from '../domains/boardConfig/BoardDraftProvider';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
+import { BoardConfigHeaderSkeleton } from '../domains/boardConfig/components/BoardConfigHeaderSkeleton';
+import { BoardOverviewSkeleton } from '../domains/boardConfig/components/BoardOverviewSkeleton';
+import { PhaseConfigSkeleton } from '../domains/boardConfig/components/PhaseConfigSkeleton';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { OVERVIEW_SURFACE, SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { boardPath } from '../domains/factory/boardCatalog';
@@ -29,6 +32,8 @@ export function BoardConfigPage() {
   const sidebarHidden = isMobile || desktopState === 'collapsed';
   const query = useBoardQuery(factory.id, boardId);
   const skills = useFactorySkillsQuery(factory.id);
+  const installedPhases = useBoardCatalog(factory.id).data?.find(other => other.id === boardId)?.phases;
+  const installedKind = installedPhases?.find(phase => phase.id === phaseKey)?.kind;
 
   const board = query.data?.board;
   // Phases added but not yet saved have pages too.
@@ -61,26 +66,32 @@ export function BoardConfigPage() {
       ) : undefined,
   });
 
-  const header =
-    query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3')}>
-        <BoardConfigHeader
-          key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-          factoryId={factory.id}
-          boardId={boardId}
-          phaseKey={phaseKey}
-          response={query.data}
-        />
-      </div>
-    ) : undefined;
+  const headerColumn = cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3');
+  const header = query.isPending ? (
+    <div className={headerColumn}>
+      <BoardConfigHeaderSkeleton phase={phaseKey !== undefined} />
+    </div>
+  ) : query.isSuccess && (!phaseKey || shownPhase) ? (
+    <div className={headerColumn}>
+      <BoardConfigHeader
+        key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+        factoryId={factory.id}
+        boardId={boardId}
+        phaseKey={phaseKey}
+        response={query.data}
+      />
+    </div>
+  ) : undefined;
 
   return (
     <PageLayout variant={phaseKey ? 'narrow' : 'fit'} header={header} {...slots}>
-      <div className={phaseKey || !query.isSuccess ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
+      <div className={phaseKey || query.isError ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
         {query.isPending ? (
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading board" rows={3} />
-          </SettingsContainer>
+          phaseKey ? (
+            <PhaseConfigSkeleton working={installedKind === undefined || installedKind === 'working'} />
+          ) : (
+            <BoardOverviewSkeleton columns={installedPhases?.length} />
+          )
         ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState
             variant="fill"

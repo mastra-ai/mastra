@@ -2,6 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   SettingsContainer,
@@ -19,7 +20,7 @@ import { useIntakeOrderQuery, useSaveIntakeOrder } from '../../../../hooks/useIn
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardRulesPath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 import { newItemRules, ruleCount } from '../../boardRules/ruleLanes';
-import { NotRoutedStep } from './NotRoutedStep';
+import { NotRoutedStep, NotRoutedStepSkeleton } from './NotRoutedStep';
 import { SettingsSubsection } from './SettingsSubsection';
 import { useRowDrag } from './useRowDrag';
 
@@ -27,6 +28,8 @@ const DROP_LINE = cn(
   'relative before:pointer-events-none before:absolute before:right-0 before:left-0 before:z-20 before:hidden before:h-0.5 before:rounded-full before:bg-border-focus',
   'data-[drop=before]:before:top-0 data-[drop=before]:before:block data-[drop=after]:before:bottom-0 data-[drop=after]:before:block',
 );
+const ORDER_STACK = 'flex flex-col gap-3';
+const ORDER_FRAME = 'border-border flex flex-col rounded-xl border';
 
 /** The order intake offers a new issue or pull request to the project's boards. Changes show before they are saved. */
 export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
@@ -40,13 +43,18 @@ export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
       description="A new issue or pull request is offered to each board in this order. The first board whose rules take it keeps it."
     >
       {query.isPending ? (
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading intake order" variant="item" rows={3} />
-        </SettingsContainer>
+        <div className={ORDER_STACK}>
+          <div className={ORDER_FRAME}>
+            <SettingsContainer>
+              <SettingsSkeleton label="Loading intake order" variant="item" rows={3} />
+            </SettingsContainer>
+            <NotRoutedStepSkeleton />
+          </div>
+        </div>
       ) : query.isError ? (
-        <div className="flex flex-col gap-3">
+        <div className={ORDER_STACK}>
           <Notice variant="destructive">The intake order didn’t load.</Notice>
-          <div className="border-border rounded-xl border">
+          <div className={ORDER_FRAME}>
             <NotRoutedStep factoryId={factoryId} />
           </div>
         </div>
@@ -93,10 +101,10 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
   const movable = sortable && !save.isPending;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={ORDER_STACK}>
       <OrderStatus order={order} changed={changed} />
       {routes.isError && <Notice variant="warning">Rule counts didn’t load.</Notice>}
-      <div className="border-border flex flex-col rounded-xl border">
+      <div className={ORDER_FRAME}>
         <SettingsContainer role="list" aria-label="Intake order">
           {shown.map((boardKey, index) => {
             const dragging = drag.drag?.from === index;
@@ -138,7 +146,9 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
                   </SettingsItemIcon>
                 }
                 title={name}
-                description={<RuleSummary routes={routes.data?.intakeRoutes} boardKey={boardKey} />}
+                description={
+                  <RuleSummary routes={routes.data?.intakeRoutes} pending={routes.isPending} boardKey={boardKey} />
+                }
               >
                 <div className="flex items-center gap-1 transition-opacity pointer-fine:opacity-0 pointer-fine:group-focus-within/row:opacity-100 pointer-fine:group-hover/row:opacity-100">
                   {sortable && (
@@ -188,7 +198,22 @@ function OrderEditor({ factoryId, order }: { factoryId: string; order: IntakeOrd
 }
 
 /** How many rules a board has for new issues and pull requests, and whether the last one takes everything left. */
-function RuleSummary({ routes, boardKey }: { routes: IntakeRouteInfo[] | undefined; boardKey: string }) {
+function RuleSummary({
+  routes,
+  pending,
+  boardKey,
+}: {
+  routes: IntakeRouteInfo[] | undefined;
+  pending: boolean;
+  boardKey: string;
+}) {
+  if (pending) {
+    return (
+      <span role="status" aria-label="Loading rule count">
+        <SkeletonText line="text-caption" className="w-56 max-w-full motion-reduce:before:animate-none" />
+      </span>
+    );
+  }
   if (!routes) return null;
   const { count, catchesAll } = newItemRules(routes.filter(route => route.target.boardKey === boardKey));
   return (
