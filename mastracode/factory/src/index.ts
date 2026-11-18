@@ -62,7 +62,7 @@ export type {
   WorkItemProvider,
 } from './storage/domains/work-items/work-item-schema.js';
 export { createStateSigner } from './state-signing.js';
-export type { StateSigner, StateTenant } from './state-signing.js';
+export type { StateOrigin, StateSigner, StateTenant } from './state-signing.js';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 export type {
   DecryptedFactorySecret,

@@ -22,10 +22,13 @@ const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
 const providerDefault = vi.fn(
   async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
 );
+// Whether a sender can run some model without choosing one; most tests have one.
+const modelAccess = vi.fn(async (_tenant: unknown) => true);
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
   resolveTenantProviderDefaultModel: (tenant: unknown, current: string | undefined) => providerDefault(tenant, current),
+  tenantHasModelAccess: (tenant: unknown) => modelAccess(tenant),
 }));
 
 import {
@@ -2692,5 +2695,104 @@ describe('Slack voice clips', () => {
     expect(message.attachments).toEqual([]);
     expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
     expect(events).toEqual(['typing']);
+  });
+});
+
+describe('a sender with no model of their own', () => {
+  // Ward's case: invited to a hybrid Factory, linked in Slack, but no personal model or provider yet.
+  // Their new session would start on a model they cannot call and fail with "Provider sign-in required".
+  afterEach(() => {
+    modelAccess.mockImplementation(async () => true);
+  });
+
+  function setup({
+    modelScope = 'hybrid',
+    personalDefault = null,
+    hasAccess = false,
+  }: { modelScope?: 'factory' | 'user' | 'hybrid'; personalDefault?: string | null; hasAccess?: boolean } = {}) {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://factory.example.com';
+    modelAccess.mockImplementation(async () => hasAccess);
+    const deps = {
+      accountLinks: {
+        getAccountLink: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+        setDefaultFactory: vi.fn().mockResolvedValue(true),
+      } as any,
+      projects: makeProjects([{ id: 'fp-1', modelScope } as any]),
+      modelDefaults: { get: vi.fn().mockResolvedValue(personalDefault ? { modelId: personalDefault } : null) } as any,
+      // A configured source control and no internal thread yet: this message opens a new session.
+      sourceControl: { integrationId: 'github' } as any,
+    };
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    return { deps, thread, defaultHandler: vi.fn() };
+  }
+
+  function postedCardText(card: any): string {
+    return JSON.stringify(card);
+  }
+
+  it('asks them to finish setup instead of starting the run', async () => {
+    const { deps, thread, defaultHandler } = setup();
+
+    await createHandlers(deps).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    const card = postedCardText(thread.post.mock.calls[0][0]);
+    expect(card).toContain('Connect your model');
+    expect(card).toContain('<@U-sender>');
+    expect(card).toContain('Finish setup');
+    expect(card).toContain('https://factory.example.com/factories/fp-1/setup?from=slack&team=T-1&channel=C-1');
+    expect(modelAccess).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+  });
+
+  it('tells them in a DM to message the agent again', async () => {
+    const { deps, defaultHandler } = setup();
+    const thread = makeThread({ isDM: true });
+    thread.id = 'slack:D-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+
+    await createHandlers(deps).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).not.toHaveBeenCalled();
+    const card = postedCardText(thread.post.mock.calls[0][0]);
+    expect(card).toContain('message me again');
+    expect(card).not.toContain('<@U-sender>');
+  });
+
+  it('starts the run when they have a personal default model', async () => {
+    const { deps, thread, defaultHandler } = setup({ personalDefault: 'anthropic/claude-opus-5-5' });
+
+    await createHandlers(deps).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(thread.post).not.toHaveBeenCalled();
+  });
+
+  it('starts the run when a connected provider gives them a model', async () => {
+    const { deps, thread, defaultHandler } = setup({ hasAccess: true });
+
+    await createHandlers(deps).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the run in a Factory whose sessions run on the company account', async () => {
+    const { deps, thread, defaultHandler } = setup({ modelScope: 'factory' });
+
+    await createHandlers(deps).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(thread.post).not.toHaveBeenCalled();
+  });
+
+  it('starts the run when a lookup fails, leaving the run to report it', async () => {
+    const { deps, thread, defaultHandler } = setup();
+    deps.modelDefaults.get.mockRejectedValue(new Error('storage down'));
+
+    await createHandlers(deps).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
 });

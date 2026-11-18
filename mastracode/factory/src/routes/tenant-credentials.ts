@@ -312,6 +312,21 @@ export async function resolveTenantProviderDefaultModel(
   return store.get(MASTRA_GATEWAY_PROVIDER) ? `${MASTRA_GATEWAY_PREFIX}anthropic/claude-opus-5.5` : undefined;
 }
 
+/**
+ * Whether a tenant can run some model without choosing one first: it holds a
+ * credential for a provider with a default model (or the Mastra gateway), or
+ * the operator lets sessions use the server's own credentials for some
+ * provider. A session in this scope with no chosen model then still resolves
+ * one (see {@link resolveTenantProviderDefaultModel}); without any, its run
+ * can only fail on a missing credential. Fails open (true) before
+ * registration, when credentials are not tenant-scoped at all.
+ */
+export async function tenantHasModelAccess(tenant: SdkCredentialTenant): Promise<boolean> {
+  if (!registeredCredentials) return true;
+  if (registeredDeploymentProviders.size > 0) return true;
+  return (await resolveTenantProviderDefaultModel(tenant, undefined)) !== undefined;
+}
+
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {
   setCredentialStoreProvider(undefined);

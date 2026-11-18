@@ -44,6 +44,7 @@ import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
   resolveTenantProviderDefaultModel,
+  tenantHasModelAccess,
 } from './tenant-credentials.js';
 import { fakeRouteAuth } from './test-utils.js';
 
@@ -361,6 +362,37 @@ describe('registerTenantCredentialResolver', () => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: USER, organizationId: ORG });
     expect(resolveCredentialStore(ctx)).toBeUndefined();
+  });
+});
+
+describe('tenantHasModelAccess', () => {
+  const USER_SCOPE = { ...USER_TENANT, credentialScope: 'user' } as const;
+
+  it('fails open before credentials are tenant-scoped', async () => {
+    resetTenantCredentialResolverForTests();
+
+    await expect(tenantHasModelAccess(USER_SCOPE)).resolves.toBe(true);
+  });
+
+  it('reports no access for a tenant with nothing connected in its scope', async () => {
+    registerTenantCredentialResolver(seed.credentials);
+    // A company key does not cover a session that runs on personal credentials.
+    await seed.credentials.setCredential(ORG_TENANT, 'anthropic', { type: 'api_key', key: 'org-key' });
+
+    await expect(tenantHasModelAccess(USER_SCOPE)).resolves.toBe(false);
+  });
+
+  it('reports access once the tenant connects a provider in its scope', async () => {
+    registerTenantCredentialResolver(seed.credentials);
+    await seed.credentials.setCredential(USER_TENANT, 'anthropic', FRESH_OAUTH);
+
+    await expect(tenantHasModelAccess(USER_SCOPE)).resolves.toBe(true);
+  });
+
+  it('reports access when the deployment serves a provider itself', async () => {
+    registerTenantCredentialResolver(seed.credentials, new Set(['amazon-bedrock']));
+
+    await expect(tenantHasModelAccess(USER_SCOPE)).resolves.toBe(true);
   });
 });
 

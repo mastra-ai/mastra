@@ -2,8 +2,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
-import type { StateSigner } from '../../state-signing.js';
-import type { ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
+import { isStateOrigin } from '../../state-signing.js';
+import type { StateSigner, StateTenant } from '../../state-signing.js';
+import type { ChannelAccountLink, ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 
 /**
@@ -43,10 +44,28 @@ interface SlackOidcConfig {
 
 const SLACK_AUTHORIZE_URL = 'https://slack.com/openid/connect/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/openid.connect.token';
+const OIDC_START_PATH = '/connect/slack/oidc/start';
 const OIDC_CALLBACK_PATH = '/connect/slack/oidc/callback';
 const SLACK_TOKEN_TIMEOUT_MS = 10_000;
 /** Matches the signer's own `state` lifetime — past it, `verify` rejects anyway. */
 const STATE_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Where the SPA picks the flow back up. A flow started from Slack or from a
+ * Factory's setup page returns to that setup page (Slack's with `from=slack`,
+ * so it can offer the way back); one started from settings returns to that
+ * Factory's Slack settings. Without a Factory, the factory-agnostic
+ * Connections route forwards to the first one.
+ */
+function landingPath(
+  { factoryProjectId, from }: Pick<Partial<StateTenant>, 'factoryProjectId' | 'from'>,
+  status: 'connected' | 'error',
+): string {
+  if (!factoryProjectId) return `/settings/connections?slack=${status}`;
+  const factory = `/factories/${encodeURIComponent(factoryProjectId)}`;
+  if (from) return `${factory}/setup?slack=${status}${from === 'slack' ? '&from=slack' : ''}`;
+  return `${factory}/settings/connections/slack?slack=${status}`;
+}
 
 /**
  * Decode a JWT's payload WITHOUT signature verification. Safe here because the
@@ -71,8 +90,10 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
  * A link is only ever written by the OIDC flow below, where Slack itself
  * asserts the `(team, user)` pair in the id_token — so the web user has to
  * actually control the Slack account they bind. `/connect/slack` is just the
- * Slack-side entry point: it carries no identity and writes nothing, it only
- * sends the visitor to Connections, where the flow starts.
+ * Slack-side entry point: it carries no identity and writes nothing. With OIDC
+ * configured it starts that flow straight away (the visitor already clicked
+ * "Connect" in Slack, so a second click in settings adds nothing); without it,
+ * it sends the visitor to Connections.
  */
 export function createSlackConnectRoutes(deps: {
   auth: RouteAuth;
@@ -108,28 +129,69 @@ export function createSlackConnectRoutes(deps: {
     return true;
   };
 
+  /**
+   * The Factory a fresh link belongs to: the one that started the flow, else the
+   * link's existing default, else the org's only factory. A link with no default
+   * yet gets the resolved one, so the next Slack mention routes without asking
+   * (the same stamp `resolveFactoryForLink` applies at dispatch time).
+   */
+  async function routeNewLink({
+    tenant,
+    link,
+    key,
+  }: {
+    tenant: StateTenant;
+    link: ChannelAccountLink;
+    key: { platform: string; externalTeamId: string; externalUserId: string };
+  }): Promise<string | undefined> {
+    if (!projects) return tenant.factoryProjectId;
+    const orgId = tenant.orgId;
+    const exists = async (id: string | undefined) =>
+      id && orgId ? ((await projects.get({ orgId, id }).catch(() => null)) ?? undefined) : undefined;
+
+    const factory =
+      (await exists(tenant.factoryProjectId)) ??
+      (await exists(link.defaultFactoryProjectId)) ??
+      (orgId ? await projects.list({ orgId }).then(all => (all.length === 1 ? all[0] : undefined)) : undefined);
+    if (!factory) return tenant.factoryProjectId;
+
+    if (!link.defaultFactoryProjectId) {
+      await accountLinks
+        .setDefaultFactory({ ...key, userId: tenant.userId, factoryProjectId: factory.id })
+        .catch(() => false);
+    }
+    return factory.id;
+  }
+
   return [
     registerApiRoute('/connect/slack', {
       method: 'GET',
-      // No auth: nothing here reads a tenant or writes a link. The SPA route
-      // this lands on requires a session and bounces through login itself.
+      // No auth: nothing here reads a tenant or writes a link. The OIDC start
+      // (or the SPA route, without OIDC) requires a session and bounces
+      // through login itself.
       requiresAuth: false,
-      handler: async c => c.redirect(`${uiOrigin}/settings/connections`),
+      handler: async c =>
+        c.redirect(oidcEnabled ? `${OIDC_START_PATH}?from=slack` : `${uiOrigin}/settings/connections`),
     }),
     // Web-initiated connect: "Sign in with Slack" (OIDC). The only route that
     // writes a link, because it is the only one that proves the signed-in web
     // user actually CONTROLS the Slack account: Slack itself asserts the
     // (team, user) pair in the id_token.
-    registerApiRoute('/connect/slack/oidc/start', {
+    registerApiRoute(OIDC_START_PATH, {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        if (!oidcEnabled) return c.redirect(`${uiOrigin}/?slack=error`);
+        if (!oidcEnabled) return c.redirect(`${uiOrigin}${landingPath({}, 'error')}`);
 
         const factoryProjectId = c.req.query('factoryId')?.trim() || undefined;
-        const startPath = factoryProjectId
-          ? `/connect/slack/oidc/start?factoryId=${encodeURIComponent(factoryProjectId)}`
-          : '/connect/slack/oidc/start';
+        const fromParam = c.req.query('from');
+        const from = isStateOrigin(fromParam) ? fromParam : undefined;
+        // Login must hand back the same start, or the Factory and origin are lost on the way.
+        const startQuery = new URLSearchParams({
+          ...(factoryProjectId ? { factoryId: factoryProjectId } : {}),
+          ...(from ? { from } : {}),
+        }).toString();
+        const startPath = startQuery ? `${OIDC_START_PATH}?${startQuery}` : OIDC_START_PATH;
 
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
@@ -145,7 +207,7 @@ export function createSlackConnectRoutes(deps: {
           client_id: oidc!.clientId,
           // Personal accounts have no org; the signer requires a string, so an
           // empty org round-trips and is mapped back to undefined on save.
-          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId, { factoryProjectId }),
+          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId, { factoryProjectId, from }),
           redirect_uri: `${oidc!.redirectBaseUrl.replace(/\/$/, '')}${OIDC_CALLBACK_PATH}`,
         });
         return c.redirect(`${SLACK_AUTHORIZE_URL}?${params.toString()}`);
@@ -159,14 +221,17 @@ export function createSlackConnectRoutes(deps: {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        if (!oidcEnabled) return c.redirect(`${uiOrigin}/?slack=error`);
+        if (!oidcEnabled) return c.redirect(`${uiOrigin}${landingPath({}, 'error')}`);
 
         const tenant = tenantStateSigner!.verify(c.req.query('state'));
         const code = c.req.query('code');
-        if (!tenant || !code) return c.redirect(`${uiOrigin}/?slack=error`);
+        if (!tenant) return c.redirect(`${uiOrigin}${landingPath({}, 'error')}`);
+        // From here the state is trusted, so a failure returns where the flow started.
+        const failed = () => c.redirect(`${uiOrigin}${landingPath(tenant, 'error')}`);
+        if (!code) return failed();
         // Burn the state before spending the code, not after saving: a replay
         // must be refused even if the first attempt fails partway through.
-        if (!consumeNonce(tenant.nonce)) return c.redirect(`${uiOrigin}/?slack=error`);
+        if (!consumeNonce(tenant.nonce)) return failed();
 
         // Bound the exchange: without a deadline a slow token endpoint parks the
         // request until the platform's own timeout, and this route is reachable
@@ -184,7 +249,7 @@ export function createSlackConnectRoutes(deps: {
         }).catch(() => null);
         const token = (await tokenRes?.json().catch(() => null)) as { ok?: boolean; id_token?: string } | null;
         if (!tokenRes?.ok || !token?.ok || typeof token.id_token !== 'string') {
-          return c.redirect(`${uiOrigin}/?slack=error`);
+          return failed();
         }
 
         const claims = decodeJwtPayload(token.id_token);
@@ -206,10 +271,11 @@ export function createSlackConnectRoutes(deps: {
           typeof teamId !== 'string' ||
           typeof slackUserId !== 'string'
         ) {
-          return c.redirect(`${uiOrigin}/?slack=error`);
+          return failed();
         }
 
-        await accountLinks.saveAccountLink({
+        const key = { platform: 'slack', externalTeamId: teamId, externalUserId: slackUserId };
+        const link = await accountLinks.saveAccountLink({
           platform: 'slack',
           externalTeamId: teamId,
           externalUserId: slackUserId,
@@ -219,10 +285,8 @@ export function createSlackConnectRoutes(deps: {
           externalUserName: typeof userName === 'string' ? userName : undefined,
         });
 
-        const successPath = tenant.factoryProjectId
-          ? `/factories/${encodeURIComponent(tenant.factoryProjectId)}/settings/connections/slack`
-          : '/settings/connections';
-        return c.redirect(`${uiOrigin}${successPath}?slack=connected`);
+        const factoryProjectId = await routeNewLink({ tenant, link, key });
+        return c.redirect(`${uiOrigin}${landingPath({ ...tenant, factoryProjectId }, 'connected')}`);
       },
     }),
     // The caller's own linked channel accounts for Connections. Tenant-scoped:

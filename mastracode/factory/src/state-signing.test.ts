@@ -31,6 +31,31 @@ describe('sign/verify round-trip', () => {
     });
   });
 
+  it('round-trips where the flow started', () => {
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1', { factoryProjectId: 'fp-1', from: 'slack' });
+
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      factoryProjectId: 'fp-1',
+      from: 'slack',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
+  });
+
+  it('rejects a signed state naming an unknown origin', () => {
+    // The callback picks its redirect from this field, so only known origins may pass.
+    const signer = createStateSigner('secret');
+    const payload = JSON.parse(Buffer.from(signer.sign('orgA', 'user1').split('.')[0]!, 'base64url').toString('utf8'));
+    const body = Buffer.from(JSON.stringify({ ...payload, from: 'https://evil.example' }), 'utf8').toString(
+      'base64url',
+    );
+    const sig = createHmac('sha256', 'secret').update(body).digest('base64url');
+
+    expect(signer.verify(`${body}.${sig}`)).toBeNull();
+  });
+
   it('rejects missing or malformed state', () => {
     const signer = createStateSigner('secret');
     expect(signer.verify(undefined)).toBeNull();

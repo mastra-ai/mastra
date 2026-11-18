@@ -56,8 +56,8 @@ function getHandler(routes: ReturnType<typeof createSlackConnectRoutes>, method 
 
 describe('/connect/slack route', () => {
   // The Slack-side entry point carries no identity and writes no link — it
-  // only lands the visitor on Connections, where the OIDC flow (which
-  // makes Slack assert the account) starts.
+  // only starts the OIDC flow (which makes Slack assert the account), or lands
+  // the visitor on Connections when that flow is not configured.
   it('redirects to the connections surface without writing a link', async () => {
     const { store, saveAccountLink } = fakeStore();
     const routes = createSlackConnectRoutes({
@@ -286,7 +286,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
   };
 
   function oidcRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
-    const { store, saveAccountLink } = fakeStore();
+    const { store, saveAccountLink, setDefaultFactory } = fakeStore();
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
@@ -294,7 +294,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       oidc,
       ...overrides,
     });
-    return { routes, saveAccountLink };
+    return { routes, saveAccountLink, setDefaultFactory };
   }
 
   /** Unsigned JWT with the given payload — claims validation only, no signature. */
@@ -353,7 +353,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
 
-    expect(c.redirect).toHaveBeenCalledWith('/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('/settings/connections?slack=error');
   });
 
   it('callback exchanges the code and writes the link for the state tenant', async () => {
@@ -444,7 +444,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback rejects an id_token minted for a different client (aud mismatch)', async () => {
@@ -459,7 +459,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback rejects an expired id_token', async () => {
@@ -475,7 +475,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback refuses to bind twice off one signed state', async () => {
@@ -495,7 +495,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await handler(replay);
 
     expect(saveAccountLink).toHaveBeenCalledTimes(1);
-    expect(replay.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(replay.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback gives the token exchange a deadline and fails closed when it is missed', async () => {
@@ -512,7 +512,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     // failed exchange must never bind an account.
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback rejects an id_token with no expiry claim', async () => {
@@ -528,7 +528,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('callback surfaces a failed token exchange as an error redirect', async () => {
@@ -543,7 +543,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=error');
   });
 
   it('list reports canConnect when OIDC is configured', async () => {
@@ -552,13 +552,113 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(result.payload).toEqual({ accounts: [], canConnect: true });
   });
 
-  it('routes the Connect card deep link to the settings surface', async () => {
+  it('starts Sign in with Slack straight from the Connect card deep link', async () => {
+    // The visitor already clicked Connect in Slack: a second click in settings added nothing.
     const { routes, saveAccountLink } = oidcRoutes();
     const c = fakeCtx();
 
     await getHandler(routes, 'GET', '/connect/slack')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections');
+    expect(c.redirect).toHaveBeenCalledWith('/connect/slack/oidc/start?from=slack');
+  });
+
+  it('start binds a Slack origin into the state and keeps it through login', async () => {
+    const signedIn = fakeCtx(undefined, undefined, { from: 'slack' });
+    await getHandler(oidcRoutes().routes, 'GET', '/connect/slack/oidc/start')(signedIn);
+    const state = new URL(signedIn.redirect.mock.calls[0][0]).searchParams.get('state') ?? undefined;
+    expect(tenantSigner.verify(state)).toMatchObject({ orgId: 'org-9', userId: 'user-9', from: 'slack' });
+
+    const signedOut = fakeCtx(undefined, undefined, { factoryId: 'fp-1', from: 'setup' });
+    await getHandler(oidcRoutes({ auth: fakeAuth(undefined) }).routes, 'GET', '/connect/slack/oidc/start')(signedOut);
+    expect(decodeURIComponent(signedOut.redirect.mock.calls[0][0])).toContain(
+      '/connect/slack/oidc/start?factoryId=fp-1&from=setup',
+    );
+  });
+
+  it('start drops an origin it does not know', async () => {
+    const c = fakeCtx(undefined, undefined, { from: 'https://evil.example' });
+
+    await getHandler(oidcRoutes().routes, 'GET', '/connect/slack/oidc/start')(c);
+
+    const state = new URL(c.redirect.mock.calls[0][0]).searchParams.get('state') ?? undefined;
+    expect(tenantSigner.verify(state)).not.toHaveProperty('from');
+  });
+
+  it('callback from Slack lands on the org only Factory setup and makes it the default', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes, setDefaultFactory } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }]) });
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9', { from: 'slack' }), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(setDefaultFactory).toHaveBeenCalledWith({
+      platform: 'slack',
+      externalTeamId: 'T-77',
+      externalUserId: 'U-77',
+      userId: 'user-9',
+      factoryProjectId: 'fp-1',
+    });
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-1/setup?slack=connected&from=slack');
+  });
+
+  it('callback from Slack keeps a link default and lands on that Factory setup', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes, saveAccountLink, setDefaultFactory } = oidcRoutes({
+      projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
+    });
+    saveAccountLink.mockResolvedValue({ userId: 'user-9', defaultFactoryProjectId: 'fp-2', linkedAt: new Date() });
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9', { from: 'slack' }), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(setDefaultFactory).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-2/setup?slack=connected&from=slack');
+  });
+
+  it('callback from Slack falls back to Connections when several factories leave the choice open', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes, setDefaultFactory } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]) });
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9', { from: 'slack' }), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(setDefaultFactory).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=connected');
+  });
+
+  it('callback returns to the setup page that started the flow', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes } = oidcRoutes({ projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]) });
+    const state = tenantSigner.sign('org-9', 'user-9', { factoryProjectId: 'fp-2', from: 'setup' });
+    const c = fakeCtx(state, undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-2/setup?slack=connected');
+  });
+
+  it('callback returns a failed exchange to the setup page that started the flow', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: false }) }));
+    const { routes, saveAccountLink } = oidcRoutes();
+    const state = tenantSigner.sign('org-9', 'user-9', { factoryProjectId: 'fp-1', from: 'slack' });
+    const c = fakeCtx(state, undefined, { code: 'bad' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/factories/fp-1/setup?slack=error&from=slack');
   });
 });
