@@ -65,6 +65,8 @@ export interface SourceControlSessionRoutesOptions {
     Partial<Pick<WorkItemsStorage, 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'>>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Stores a title a person typed on a thread, pinned so automatic naming leaves it alone. */
+  renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -879,6 +881,35 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         else if (live) await controller!.setResourceId(live, { resourceId });
         const owners = await resolveOwnerProfiles([updated.userId]);
         return c.json({ session: withOwnerProfile(updated, owners) });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body: { title?: unknown } | null = await c.req.json().catch(() => null);
+        const title = typeof body?.title === 'string' ? normalizeSessionTitle(body.title) : null;
+        if (!title) return c.json({ error: 'Enter a title for the session.' }, 400);
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may rename; everyone else gets the same 404 as a missing session.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!options.controller || !options.renameThread) {
+          return c.json({ error: 'Renaming sessions is not available on this server.' }, 503);
+        }
+        const threads = await listFactorySessionThreads(options.controller, row, options.workItems);
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        // The first reply names a new conversation, which would replace a title set before it.
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+        // The thread goes first: its pin is what keeps the next automatic title off the row.
+        await options.renameThread({ threadId: thread.id, title });
+        await match.sourceControl.sessions.rename({ sessionId, title });
+        return c.json({ title });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {

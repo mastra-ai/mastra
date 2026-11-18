@@ -7,6 +7,7 @@ import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import { TITLE_PINNED_THREAD_METADATA_KEY, isThreadTitlePinned } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
@@ -47,6 +48,7 @@ function buildApp(
   workItems?: RouteOptions['workItems'],
   viewer: Viewer | ((headers: Headers) => Viewer) = user,
   moveThread?: RouteOptions['moveThread'],
+  renameThread?: RouteOptions['renameThread'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -67,6 +69,7 @@ function buildApp(
       audit,
       ...(workItems ? { workItems } : {}),
       ...(moveThread ? { moveThread } : {}),
+      ...(renameThread ? { renameThread } : {}),
     }),
   );
   return app;
@@ -312,6 +315,96 @@ describe('source-control session routes', () => {
       title: 'Review change',
     });
     await expect(sourceControl.sessions.getBySessionId(threadId)).resolves.toBeNull();
+  });
+
+  it("stores the title its owner typed and pins it on the session's conversation", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-manual-rename';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/manual-rename',
+      baseBranch: 'main',
+      visibility: 'org',
+      title: 'Tell me what have been done',
+    });
+    const storage = new InMemoryStore({ id: sessionId });
+    const controller = await startOwnershipController(sessionId, storage);
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: sessionId,
+        resourceId: project.id,
+        title: 'Tell me what have been done',
+        metadata: { factorySessionId: sessionId },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const app = buildApp(
+      [sourceControl],
+      seed,
+      controller,
+      noRuns,
+      headers => ({ workosId: headers.get('x-viewer')!, organizationId: 'org-1' }),
+      undefined,
+      ({ threadId, title }) =>
+        memory.patchThread({ id: threadId, title, metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true } }),
+    );
+    const rename = (viewer: string, title: unknown) =>
+      app.request(`/web/user-sessions/${sessionId}/title`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', 'x-viewer': viewer },
+        body: JSON.stringify({ title }),
+      });
+
+    // A teammate who can see the shared session still cannot rename it.
+    expect((await rename('user-2', 'Not mine')).status).toBe(404);
+    expect((await rename('user-1', '   ')).status).toBe(400);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      title: 'Tell me what have been done',
+    });
+
+    const renamed = await rename('user-1', '  Launch   checklist ');
+    expect(renamed.status).toBe(200);
+    await expect(renamed.json()).resolves.toEqual({ title: 'Launch checklist' });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      title: 'Launch checklist',
+    });
+    const thread = await controller.queryThreadById({ threadId: sessionId });
+    expect(thread).toMatchObject({ title: 'Launch checklist', metadata: { factorySessionId: sessionId } });
+    // Pinned, so memory's automatic naming leaves the typed title in place as the conversation grows.
+    expect(isThreadTitlePinned(thread?.metadata)).toBe(true);
+  });
+
+  it('refuses a typed title for a session with no conversation yet', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-rename-no-thread';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/rename-no-thread',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const controller = await startOwnershipController(sessionId);
+    const renameThread = vi.fn<NonNullable<RouteOptions['renameThread']>>();
+    const app = buildApp([sourceControl], seed, controller, noRuns, user, undefined, renameThread);
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Too early' }),
+    });
+    expect(response.status).toBe(409);
+    expect(renameThread).not.toHaveBeenCalled();
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ title: null });
   });
 
   it('stops a running turn, hands the session over, and marks the takeover in its thread', async () => {
