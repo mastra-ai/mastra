@@ -930,6 +930,26 @@ describe('Observability Methods', () => {
       );
     });
 
+    it('posts progressive search fields and passes the abort signal through', async () => {
+      mockSuccessfulResponse({
+        spans: [],
+        page: { next: null },
+        searchedRange: { from: '2026-08-25T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        continuation: 'chunk-2',
+      });
+      const controller = new AbortController();
+      const progressiveRequest = { ...request, progressive: true as const, continuation: 'chunk-1' };
+
+      const result = await client.querySpans(progressiveRequest, { signal: controller.signal });
+
+      expect(result.searchedRange).toEqual({ from: '2026-08-25T00:00:00Z', to: '2026-09-01T00:00:00Z' });
+      expect(result.continuation).toBe('chunk-2');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/query`,
+        expect.objectContaining({ body: JSON.stringify(progressiveRequest), signal: controller.signal }),
+      );
+    });
+
     it('should retry span queries with the read default of three retries', async () => {
       vi.mocked(global.fetch).mockResolvedValue(new Response('Unavailable', { status: 503 }));
       const readClient = new MastraClient({ ...clientOptions, backoffMs: 0 });

@@ -78,6 +78,8 @@ export type {
   AggregateTracesResponse,
   AggregateSpansArgs,
   AggregateSpansResponse,
+  ProgressiveSearchRequest,
+  ProgressiveSearchResponse,
   TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
