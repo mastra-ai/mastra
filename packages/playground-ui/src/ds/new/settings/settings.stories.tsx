@@ -11,12 +11,10 @@ import {
   SettingsRow,
   SettingsSkeleton,
   SettingsTitle,
-  SettingsValue,
 } from './index';
 import { Avatar } from '@/ds/components/Avatar';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { CopyField } from '@/ds/components/CopyField';
 import { Input } from '@/ds/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
@@ -33,7 +31,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Every settings page in Studio, Factory and Platform is built from these. `SettingsLayout` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.\n\nA setting the person can change is a `SettingsRow` with its control (`Input`, `Select`, `Switch`); one they can't change is `SettingsRow viewOnly`. A row that only shows a value is a `SettingsItem`: it holds a `CopyField` when they'll paste the value somewhere else (an ID, key, URL, connection string), otherwise a `SettingsValue` (a name, an email, a sign-in method, a version).",
+          "Every settings page in Studio, Factory and Platform is built from these. `SettingsLayout` is the 640px column; each `SettingsGroup` is a `SettingsTitle` above one `SettingsContainer` card. A card holds `SettingsRow`s (a setting: label, description, control) or a list: a `SettingsListHeader` with a count and the list's action, then `SettingsItem`s. An empty list is one `SettingsEmptyRow` holding the empty text and that same action. The card owns all row spacing, so rows carry no padding of their own.",
       },
     },
   },
@@ -175,41 +173,6 @@ export const Controls: Story = {
               <Switch aria-label="System" />
             </div>
           </SettingsFieldsetRow>
-        </SettingsContainer>
-      </SettingsGroup>
-    </SettingsLayout>
-  ),
-};
-
-/**
- * How a row shows its value: a `SettingsRow` with a control to change it, `viewOnly` for a setting this person can't
- * change, and a `SettingsItem` holding `CopyField` (a value they'll paste elsewhere) or `SettingsValue` (to read).
- */
-export const Values: Story = {
-  args: { children: null },
-  render: () => (
-    <SettingsLayout title="Account">
-      <SettingsGroup>
-        <SettingsTitle>Profile</SettingsTitle>
-        <SettingsContainer>
-          <SettingsRow label="Display name" description="Shown to your teammates.">
-            <Input defaultValue="John Doe" />
-          </SettingsRow>
-          <SettingsItem title="Email" description="From your sign-in provider.">
-            <SettingsValue>john.doe@example.com</SettingsValue>
-          </SettingsItem>
-          <SettingsItem title="Authentication" description="How you signed in.">
-            <SettingsValue>WorkOS</SettingsValue>
-          </SettingsItem>
-          <SettingsRow label="Role" description="Only owners can change roles." viewOnly>
-            Member
-          </SettingsRow>
-          <SettingsItem title="Account ID" description="Useful when contacting support.">
-            <CopyField value="user_01KJGEXMA4MYC9B9M44JECM9AQ" label="account ID" />
-          </SettingsItem>
-          <SettingsItem title="Server version" description="Include it when you report an issue.">
-            <SettingsValue mono>@mastra/core@1.4.2</SettingsValue>
-          </SettingsItem>
         </SettingsContainer>
       </SettingsGroup>
     </SettingsLayout>

@@ -18,7 +18,7 @@ const meta: Meta<typeof CopyField> = {
 export default meta;
 type Story = StoryObj<typeof CopyField>;
 
-/** A long value is cut in the middle; a short one shows whole. In a settings card, see New/Settings › Values. */
+/** A long value is cut in the middle; a short one shows whole. */
 export const Default: Story = {
   render: () => (
     <div className="flex max-w-55 flex-col gap-3">
