@@ -33,7 +33,33 @@ function TreeRows() {
   );
 }
 
-export function KnowledgeLoadingSkeleton({ label, view }: { label: string; view: KnowledgeExplorerView }) {
+function PageRows() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="border-border bg-fill-subtle flex flex-col gap-2 border-b px-6 pt-5 pb-4">
+        <SkeletonText line="text-caption" className="w-28 motion-reduce:before:animate-none" />
+        <SkeletonText line="text-title" className="h-5 w-56 motion-reduce:before:animate-none" />
+        <SkeletonText className="w-72 max-w-full motion-reduce:before:animate-none" />
+        <SkeletonText line="text-caption" className="w-40 motion-reduce:before:animate-none" />
+      </div>
+      <div className="flex flex-col gap-3 p-6">
+        <SkeletonText className="w-full max-w-3xl motion-reduce:before:animate-none" />
+        <SkeletonText className="w-5/6 max-w-2xl motion-reduce:before:animate-none" />
+        <SkeletonText className="w-2/3 max-w-xl motion-reduce:before:animate-none" />
+      </div>
+    </div>
+  );
+}
+
+export function KnowledgeLoadingSkeleton({
+  label,
+  view,
+  pageOpen,
+}: {
+  label: string;
+  view: KnowledgeExplorerView;
+  pageOpen: boolean;
+}) {
   return (
     <div role="status" aria-label={label} className="flex min-h-0 flex-1 flex-col gap-2">
       <ActionRow aria-hidden>
@@ -70,11 +96,8 @@ export function KnowledgeLoadingSkeleton({ label, view }: { label: string; view:
         <div className={cn(CARD_CLASS, 'lg:hidden', view === 'tree' ? 'flex' : 'hidden')}>
           <TreeRows />
         </div>
-        <div className={cn(CARD_CLASS, 'gap-3 p-4 lg:hidden', view === 'page' ? 'flex' : 'hidden')}>
-          <SkeletonText line="text-caption" className="w-28 motion-reduce:before:animate-none" />
-          <SkeletonText className="w-72 max-w-full motion-reduce:before:animate-none" />
-          <SkeletonText className="w-5/6 motion-reduce:before:animate-none" />
-          <SkeletonText className="w-2/3 motion-reduce:before:animate-none" />
+        <div className={cn(CARD_CLASS, 'lg:hidden', pageOpen ? 'flex' : 'hidden')}>
+          <PageRows />
         </div>
         <div
           className={cn(
@@ -82,21 +105,32 @@ export function KnowledgeLoadingSkeleton({ label, view }: { label: string; view:
             view === 'graph' ? 'block' : 'hidden',
           )}
         >
-          <div className="absolute inset-0 flex items-center justify-center gap-8 lg:pl-72">
-            <div className="flex flex-col items-center gap-16">
-              <Skeleton className="size-5 rounded-full motion-reduce:before:animate-none" />
-              <Skeleton className="size-8 rounded-full motion-reduce:before:animate-none" />
+          {pageOpen ? (
+            <div className="absolute inset-y-2 right-2 left-76 z-20 flex">
+              <DataPanel variant="inline" title="Page" className="shadow-overlay">
+                <DataPanel.Header>
+                  <DataPanel.Heading>Page</DataPanel.Heading>
+                </DataPanel.Header>
+                <PageRows />
+              </DataPanel>
             </div>
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-px w-8 motion-reduce:before:animate-none" />
-              <Skeleton className="size-12 rounded-full motion-reduce:before:animate-none" />
-              <Skeleton className="h-px w-8 motion-reduce:before:animate-none" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center gap-8 lg:pl-72">
+              <div className="flex flex-col items-center gap-16">
+                <Skeleton className="size-5 rounded-full motion-reduce:before:animate-none" />
+                <Skeleton className="size-8 rounded-full motion-reduce:before:animate-none" />
+              </div>
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-px w-8 motion-reduce:before:animate-none" />
+                <Skeleton className="size-12 rounded-full motion-reduce:before:animate-none" />
+                <Skeleton className="h-px w-8 motion-reduce:before:animate-none" />
+              </div>
+              <div className="flex flex-col items-center gap-16">
+                <Skeleton className="size-8 rounded-full motion-reduce:before:animate-none" />
+                <Skeleton className="size-5 rounded-full motion-reduce:before:animate-none" />
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-16">
-              <Skeleton className="size-8 rounded-full motion-reduce:before:animate-none" />
-              <Skeleton className="size-5 rounded-full motion-reduce:before:animate-none" />
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
