@@ -292,7 +292,9 @@ export async function applyExtractorHooks(opts: {
         previous: isHook ? undefined : opts.previousValues?.[extractor.slug],
         current,
         rawObservations: opts.rawObservations,
-        recentMessages: resolveRecentMessages(),
+        get recentMessages() {
+          return resolveRecentMessages();
+        },
         mainAgent: opts.mainAgent,
         memory: opts.memory,
         sendSignal: opts.sendSignal,

@@ -96,6 +96,17 @@ describe('rendering recent history for observer hooks', () => {
       expect(formatSpy).not.toHaveBeenCalled();
     });
 
+    it(`does not render recent messages when a user hook does not read them (${scope} scope)`, async () => {
+      const onExtracted = vi.fn(() => undefined);
+      const extractor = new Extractor({ name: 'No history', mode: 'hook', onExtracted });
+      const om = createOm(scope, [extractor]);
+      const result = await om.observe({ threadId: 'thread-a', resourceId: 'res-a', messages: createMessages(10) });
+
+      expect(result.observed).toBe(true);
+      expect(onExtracted).toHaveBeenCalledTimes(1);
+      expect(formatSpy).not.toHaveBeenCalled();
+    });
+
     it(`renders recent messages once for an onExtracted hook and passes them through (${scope} scope)`, async () => {
       const seen: Array<string | undefined> = [];
       const extractor = new Extractor({
