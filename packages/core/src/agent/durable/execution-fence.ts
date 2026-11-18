@@ -81,20 +81,40 @@ async function releaseAnswer(
 }
 
 /**
- * True as soon as either release confirmed the claim, and false once both answered without confirming it. A failed
- * release left the claim held, so a later one can confirm it, and an earlier release that hangs must not hide that.
+ * The releases of one claim this fence knows about, as one answer: true as soon as any of them confirmed the claim,
+ * false once every one answered without confirming it. A failed release left the claim held, so a later one can
+ * confirm it, and an earlier release that hangs must not hide that. A release added while the answer is still open
+ * joins that same answer, so a renewal already waiting on it sees the later confirmation.
  */
-function eitherConfirmed(earlier: Promise<boolean> | undefined, next: Promise<boolean>): Promise<boolean> {
-  if (!earlier) return next;
-  return new Promise<boolean>(resolve => {
-    let unanswered = 2;
-    for (const answer of [earlier, next]) {
-      void answer.then(confirmed => {
-        if (confirmed) resolve(true);
-        else if (--unanswered === 0) resolve(false);
-      });
-    }
-  });
+class ReleaseAnswers {
+  #answer?: Promise<boolean>;
+  #resolve?: (confirmed: boolean) => void;
+  #unanswered = 0;
+  #confirmed = false;
+
+  /** The current answer, or undefined while no release was added. */
+  get answer(): Promise<boolean> | undefined {
+    return this.#answer;
+  }
+
+  add(release: Promise<boolean>): void {
+    if (this.#confirmed) return;
+    if (!this.#resolve) this.#answer = new Promise<boolean>(resolve => (this.#resolve = resolve));
+    const resolve = this.#resolve!;
+    this.#unanswered += 1;
+    void release.then(confirmed => {
+      if (this.#resolve !== resolve) return;
+      if (confirmed) {
+        this.#confirmed = true;
+        this.#resolve = undefined;
+        resolve(true);
+      } else if (--this.#unanswered === 0) {
+        // Every release so far answered without confirming. A later release starts a new answer.
+        this.#resolve = undefined;
+        resolve(false);
+      }
+    });
+  }
 }
 
 export { MASTRA_DURABLE_EXECUTIONS_KEY };
@@ -645,13 +665,13 @@ export class ExecutionFence implements RunFenceScope {
    * only that confirmation shows nobody took the run over first. A renewal that succeeded always counts: it reached
    * the backend while the claim was still held.
    */
-  #ownRelease?: Promise<boolean>;
+  #ownRelease = new ReleaseAnswers();
   /**
    * Set when this process starts releasing the claim as abandoned. Resolves true once one of those releases was
    * confirmed: nothing will settle the run, so an unsettled fence gets no grace. A release that failed or found the
    * claim already released leaves the grace for a later release of the claim.
    */
-  #abandonedRelease?: Promise<boolean>;
+  #abandonedRelease = new ReleaseAnswers();
   /** The grace for a release of this claim is spent: a renewal already found it released before this fence settled. */
   #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
@@ -801,7 +821,7 @@ export class ExecutionFence implements RunFenceScope {
   static #noteAbandonedRelease(key: string, released: Promise<boolean>): void {
     const confirmed = released.catch(() => false);
     for (const fence of renewingFencesByClaim.get(key) ?? []) {
-      fence.#abandonedRelease = eitherConfirmed(fence.#abandonedRelease, confirmed);
+      fence.#abandonedRelease.add(confirmed);
     }
   }
 
@@ -1185,7 +1205,7 @@ export class ExecutionFence implements RunFenceScope {
 
   /** Record a release of this claim. A failed release left the claim held, so a later one can still confirm it. */
   #noteReleaseStarted(confirmed: Promise<boolean>): void {
-    this.#ownRelease = eitherConfirmed(this.#ownRelease, confirmed);
+    this.#ownRelease.add(confirmed);
   }
 
   /**
@@ -1196,9 +1216,9 @@ export class ExecutionFence implements RunFenceScope {
   async #releaseExplainsFailedRenewal(recordShowsRelease: boolean): Promise<boolean> {
     // One deadline for the whole decision, so waiting on both releases still takes at most one renewal interval.
     const deadline = Date.now() + EXECUTION_LEASE_RENEW_INTERVAL_MS;
-    if (!recordShowsRelease && !(await releaseAnswer(this.#ownRelease, deadline))) return false;
+    if (!recordShowsRelease && !(await releaseAnswer(this.#ownRelease.answer, deadline))) return false;
     if (this.#settlement) return true;
-    if (this.#releaseSeen || (await releaseAnswer(this.#abandonedRelease, deadline))) return false;
+    if (this.#releaseSeen || (await releaseAnswer(this.#abandonedRelease.answer, deadline))) return false;
     this.#releaseSeen = true;
     return true;
   }
@@ -1351,7 +1371,7 @@ export class ExecutionFence implements RunFenceScope {
         })
         .catch(async cause => {
           // A settled fence's own confirmed release explains a renewal that errored after it.
-          if (this.#settlement && (await releaseAnswer(this.#ownRelease))) return;
+          if (this.#settlement && (await releaseAnswer(this.#ownRelease.answer))) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;
