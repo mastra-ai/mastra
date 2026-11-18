@@ -257,6 +257,8 @@ await durableAgent.stream('Research topic', {
 
 Visit [Background tasks](/docs/harness/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
 
+Background tasks have their own execution lease, stored on each task record, separate from the run claims described in [run ownership](#run-ownership). Replicas that share storage can run and recover each other's background tasks. Recovery and step redelivery can still run a background tool call more than once. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).
+
 ## Cleanup
 
 Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.

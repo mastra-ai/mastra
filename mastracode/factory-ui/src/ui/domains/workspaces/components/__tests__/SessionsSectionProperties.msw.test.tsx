@@ -135,19 +135,19 @@ const sessionRowLabels = () =>
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions properties', () => {
-  it("opens on every owner's sessions in one ungrouped list, with nothing changed", async () => {
+  it("opens on every owner's sessions grouped by board, with nothing changed", async () => {
     const user = userEvent.setup();
     await renderSection();
 
-    const all = await screen.findByRole('region', { name: 'All sessions' });
-    expect(await within(all).findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(within(all).getByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
+    const userGroup = await screen.findByRole('region', { name: 'User sessions' });
+    expect(await within(userGroup).findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(within(userGroup).getByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
     expect(screen.getAllByRole('region', { name: /sessions$/ })).toHaveLength(1);
     expect(sessionPropertiesTrigger()).toBeInTheDocument();
 
     await openSessionProperties(user);
     expect(screen.getByRole('menuitem', { name: /^Owner\s*All owners$/ })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /^Group\s*None$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Group\s*Board$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
     await closeSessionProperties(user);
   });

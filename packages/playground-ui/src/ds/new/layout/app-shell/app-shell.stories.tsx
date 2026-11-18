@@ -11,7 +11,7 @@ import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ function DemoSidebar() {
       </Sidebar.Nav>
       <Sidebar.Footer>
         <Sidebar.NavList>
-          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <IconSettingsGear1 /> }} />
+          <Sidebar.NavLink link={{ name: 'Settings', url: '#settings', icon: <IconSettingsGear5 /> }} />
         </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>

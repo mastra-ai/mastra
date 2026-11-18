@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +11,6 @@ import type { PullRequestSubscription } from '../../../factory/services/githubSu
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { closeSessionProperties, openSessionProperties } from './fixtures/sessionProperties';
 import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -234,6 +232,10 @@ function renderSection() {
   );
 }
 
+function showCompactRows() {
+  localStorage.setItem('mastracode.sessionListView', JSON.stringify({ compact: true }));
+}
+
 const terminalStatusCases: Array<{
   status: PullRequestSubscription['status'];
   knownMerged: boolean;
@@ -298,7 +300,8 @@ describe('Workspace sidebar statuses', () => {
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });
 
-  it('shows the running status belt instead of a merged icon while the agent is active', async () => {
+  it("shows the running status belt instead of a compact row's merged icon while the agent is active", async () => {
+    showCompactRows();
     stubWorkspaceStatuses({
       items: baseItems(true),
       activeSessionIds: [workSession.sessionId],
@@ -317,6 +320,7 @@ describe('Workspace sidebar statuses', () => {
   it.each(terminalStatusCases)(
     'maps a matching $status subscription on a card known merged=$knownMerged to merged=$expectedMerged',
     async ({ status, knownMerged, expectedMerged }) => {
+      showCompactRows();
       stubWorkspaceStatuses({
         items: baseItems(knownMerged),
         activeSessionIds: [],
@@ -388,6 +392,7 @@ describe('Workspace sidebar statuses', () => {
         updatedAt: '2026-07-21T00:00:00.000Z',
       });
       const subscriptions = [pullRequestSubscription(201, 'merged'), pullRequestSubscription(202, newestStatus)];
+      showCompactRows();
       stubWorkspaceStatuses({
         items: [workItem, olderReview, newerReview],
         activeSessionIds: [],
@@ -406,8 +411,7 @@ describe('Workspace sidebar statuses', () => {
     },
   );
 
-  it("names an issue card's linked pull request on its second line once compact view is off", async () => {
-    const user = userEvent.setup();
+  it("names an issue card's linked pull request on its second line", async () => {
     stubWorkspaceStatuses({
       items: baseItems(false),
       activeSessionIds: [],
@@ -418,10 +422,6 @@ describe('Workspace sidebar statuses', () => {
     });
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-
-    await openSessionProperties(user);
-    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Compact view' }));
-    await closeSessionProperties(user);
 
     const row = screen.getByRole('link', { name: 'Implement loader', description: /^Open pull request #202 / });
     expect(within(row).getByText('PR mastra-ai/mastra#202')).toBeInTheDocument();

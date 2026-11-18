@@ -14,6 +14,7 @@ import {
   describeForAllEngines,
   isDurableEngineVariant,
 } from '../aimock-scenario';
+import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 
 /**
  * Regression classes: the end-to-end background-task lifecycle driven by real
@@ -167,6 +168,104 @@ describeForAllEngines(
       );
       expect((task as any).result).toEqual({ summary: 'Research complete on "quantum computing"' });
     }, 30_000);
+
+    // The task turns `completed` before its onResult hook has written the result into the
+    // transcript, here held up by a slow toModelOutput. Durable engines wait for that hook before
+    // the follow-up model call; the main loop never waits in-loop.
+    it.runIf(isDurableEngineVariant(engine))(
+      'shows the follow-up model call a result whose toModelOutput is still running when the task finishes',
+      async () => {
+        const toModelOutput = vi.fn(async (output: { summary?: string }) => {
+          // The placeholder passes through here too, with no summary.
+          if (output.summary === undefined) return { type: 'text', value: 'Research running.' };
+          await new Promise(resolve => setTimeout(resolve, 300));
+          return { type: 'text', value: `Model view: ${output.summary}` };
+        });
+        const research = createTool({
+          id: 'research',
+          description: 'Research a topic in the background',
+          inputSchema: z.object({ topic: z.string() }),
+          outputSchema: z.object({ summary: z.string() }),
+          background: { enabled: true },
+          execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+          toModelOutput,
+        });
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Research slow model output',
+          tools: { research },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+          stopWhen: stepCountIs(3),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call-bg-slow', name: 'research', arguments: { topic: 'slow output' } }] },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+          },
+        });
+
+        expect(JSON.stringify(getMock().getRequests()[1]!.body!.messages)).toContain(
+          'Model view: Research complete on \\"slow output\\"',
+        );
+        // Steps that write the result into their own transcript reuse the hook's output.
+        expect(toModelOutput.mock.calls.filter(([output]) => output.summary !== undefined)).toHaveLength(1);
+      },
+      30_000,
+    );
+
+    // Waiting for a finished task's result reads the task again. A failing read only skips that
+    // wait: the follow-up model call still runs, with the placeholder if the result isn't in yet.
+    it.runIf(isDurableEngineVariant(engine))(
+      'keeps the run going when reading a task fails while waiting for its result',
+      async () => {
+        const getTask = vi
+          .spyOn(BackgroundTaskManager.prototype, 'getTask')
+          .mockRejectedValue(new Error('storage unavailable'));
+        try {
+          const research = createTool({
+            id: 'research',
+            description: 'Research a topic in the background',
+            inputSchema: z.object({ topic: z.string() }),
+            outputSchema: z.object({ summary: z.string() }),
+            background: { enabled: true },
+            execute: async ({ topic }) => ({ summary: `Research complete on "${topic}"` }),
+            // Holds the result hook up, so the check reads the finished task.
+            toModelOutput: async (output: { summary?: string }) => {
+              if (output.summary !== undefined) await new Promise(resolve => setTimeout(resolve, 300));
+              return { type: 'text', value: output.summary ?? 'Research running.' };
+            },
+          });
+
+          const { output } = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            prompt: 'Research a flaky store',
+            tools: { research },
+            agentBackgroundTasks: { tools: { research: true } },
+            backgroundTasks: BG_CONFIG,
+            stopWhen: stepCountIs(3),
+            fixtures: llm => {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                { toolCalls: [{ id: 'call-bg-flaky', name: 'research', arguments: { topic: 'flaky store' } }] },
+              );
+              llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research reported.' });
+            },
+          });
+
+          expect(getTask).toHaveBeenCalled();
+          expect(await output.text).toBe('Research reported.');
+          expect(getMock().getRequests()).toHaveLength(2);
+        } finally {
+          getTask.mockRestore();
+        }
+      },
+      30_000,
+    );
 
     it('runs a foreground tool on the same thread while a background task is still running', async () => {
       let release!: () => void;
@@ -1406,13 +1505,50 @@ describeForAllEngines(
       }
       await waitFor(storedText(memory, thread), s => s.includes('Both research tasks are finished.'));
 
-      // One signal per task: the first wakes the thread, the second joins that run or the one after it.
-      const notified = (r: { body: unknown }, id: string) =>
-        JSON.stringify((r.body as any).messages).includes(`Background task ${id} `);
+      const toolCallIds = chunks!
+        .filter(c => c.type === 'background-task-started')
+        .map(c => c.payload.toolCallId as string);
+      expect(new Set(toolCallIds)).toEqual(new Set(['call-bg-1', 'call-bg-2']));
+      const completedEntries = taskIds.map((id, index) => `${toolCallIds[index]} (research), background task ${id}`);
+      const completionDirectives = [[0], [1], [0, 1], [1, 0]].map(indices => ({
+        indices,
+        content:
+          'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. ' +
+          `IMPORTANT: The following tool-call IDs completed successfully: ${indices.map(index => completedEntries[index]).join(', ')}. ` +
+          'Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+      }));
+      // A completion can wake a new run or continue one still finishing. Both must
+      // identify the completed task and tool call, not merely include its result.
+      const reportsFor = (request: { body: unknown }, index: number): Array<{ isSystem: boolean; content: string }> =>
+        ((request.body as any).messages ?? []).flatMap((message: any) => {
+          if (
+            message.role === 'user' &&
+            typeof message.content === 'string' &&
+            message.content.startsWith(
+              `<background-task status="completed" taskId="${taskIds[index]}" toolCallId="${toolCallIds[index]}" toolName="research">Background task ${taskIds[index]} for tool call ${toolCallIds[index]} (research) has completed.`,
+            )
+          ) {
+            return [{ isSystem: false, content: message.content }];
+          }
+          return message.role === 'system' &&
+            completionDirectives.some(
+              directive => directive.indices.includes(index) && directive.content === message.content,
+            )
+            ? [{ isSystem: true, content: message.content }]
+            : [];
+        });
       const followUps = await waitFor(
         async () => requestsFor(llm, prompt).slice(2),
-        rs => taskIds.every(id => rs.some(r => notified(r, id))),
+        rs => taskIds.every((_, index) => rs.some(request => reportsFor(request, index).length > 0)),
       );
+      for (const [index] of taskIds.entries()) {
+        const reports = followUps.flatMap(request => reportsFor(request, index));
+        // Only persisted user notices may recur in later request histories.
+        const userNotices = new Set(reports.filter(report => !report.isSystem).map(report => report.content));
+        const directives = reports.filter(report => report.isSystem);
+        expect(userNotices.size + directives.length).toBe(1);
+        for (const request of followUps) expect(reportsFor(request, index).length).toBeLessThanOrEqual(1);
+      }
       expect(followUps.length).toBeGreaterThanOrEqual(1);
       expect(followUps.length).toBeLessThanOrEqual(2);
       const lastToolResults = ((followUps.at(-1)!.body as any).messages as any[])

@@ -12,13 +12,13 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { describeNonSuccessFinishReason } from '../../loop/shared/non-success-finish-reason';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 
 import { AgentController } from '../agent-controller';
 import { SessionStartupCancelledError } from '../errors';
-import { describeNonSuccessFinishReason } from '../stream-content';
 import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });

@@ -207,7 +207,7 @@ describe('SidebarNavLink — what it renders a row as', () => {
       <SidebarNavLink state={state} link={{ name: 'Gateway', url: '/gateway', opensView: true }} />,
     );
 
-    expect(container.querySelectorAll('a svg[data-central-icon="IconChevronRight"]')).toHaveLength(carets);
+    expect(container.querySelectorAll('a svg[data-central-icon="IconChevronRightMedium"]')).toHaveLength(carets);
   });
 
   it.each([
@@ -219,7 +219,7 @@ describe('SidebarNavLink — what it renders a row as', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Gateway' });
-    expect(button.querySelector('svg[data-central-icon="IconChevronRight"]')).toBeTruthy();
+    expect(button.querySelector('svg[data-central-icon="IconChevronRightMedium"]')).toBeTruthy();
   });
 
   it('marks a featured row so it reads apart from the rest', () => {

@@ -23,6 +23,7 @@ import {
 } from './platform.js';
 import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
+import { pinMastraPackages, versionTagForAnalytics } from './utils/versions.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
 export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
@@ -48,6 +49,12 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
+  /**
+   * Pin the template's `mastra` / `@mastra/*` packages to the exact versions
+   * this npm dist-tag points at (e.g. `alpha` for prereleases). Omitted → the
+   * template's own version specs are installed as-is.
+   */
+  versionTag?: string;
   analytics: PosthogAnalytics;
 }
 
@@ -109,6 +116,7 @@ export async function create(args: CreateArgs): Promise<void> {
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
     no_platform: Boolean(args.noPlatform),
+    version_tag: versionTagForAnalytics(args.versionTag),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
@@ -136,6 +144,50 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     spinner.stop('Template download failed.');
     throw err;
+  }
+
+  // ── Pin Mastra packages to a release channel ─────────────────────────────
+  if (args.versionTag) {
+    const tag = args.versionTag;
+    const pinSpinner = p.spinner();
+    pinSpinner.start(`Resolving the "${tag}" Mastra packages...`);
+    let pinResult: Awaited<ReturnType<typeof pinMastraPackages>>;
+    try {
+      pinResult = await pinMastraPackages(projectPath, tag);
+    } catch (err) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw err;
+    }
+    const { pinned, unresolved, failed } = pinResult;
+    // Run the check from the project so npm reads the same .npmrc as the lookup.
+    const checkTag = (name: string) => `${cdStep}npm view ${name} dist-tags`;
+    if (failed.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`${checkTag(failed[0]!)}\` to check that the registry is reachable and the tag exists.`,
+      );
+    }
+    if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `No Mastra packages are published under the "${tag}" tag. Run \`${checkTag(unresolved[0]!)}\` to see the available tags.`,
+      );
+    }
+    // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
+    // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to
+    // install prereleases together. Persist the override so later
+    // `npm install`s in the project keep working too.
+    const hasPrerelease = Object.values(pinned).some(version => version.includes('-'));
+    if (hasPrerelease && packageManager === 'npm') {
+      const npmrcPath = path.join(projectPath, '.npmrc');
+      const existing = fs.existsSync(npmrcPath) ? fs.readFileSync(npmrcPath, 'utf8') : '';
+      const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+      fs.writeFileSync(npmrcPath, `${existing}${prefix}legacy-peer-deps=true\n`);
+    }
+    pinSpinner.stop(`Using "${tag}" Mastra packages.`);
+    if (unresolved.length > 0) {
+      p.log.warn(`No "${tag}" release found for ${unresolved.join(', ')}; keeping the template's version.`);
+    }
   }
 
   // ── Install dependencies ─────────────────────────────────────────────────

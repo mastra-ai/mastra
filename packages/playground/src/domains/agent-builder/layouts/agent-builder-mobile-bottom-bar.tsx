@@ -23,22 +23,22 @@ const agentsLink: MobileLink = { name: 'Agents', url: '/agent-builder/agents', i
 const skillsLink: MobileLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
-  icon: <IconBlocks className="size-5" />,
+  icon: <IconBlocks className="size-icon-lg" />,
 };
 const favoritesLink: MobileLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
-  icon: <IconStar className="size-5" />,
+  icon: <IconStar className="size-icon-lg" />,
 };
 const libraryLink: MobileLink = {
   name: 'Library',
   url: '/agent-builder/library',
-  icon: <IconLibrary className="size-5" />,
+  icon: <IconLibrary className="size-icon-lg" />,
 };
 const infrastructureLink: MobileLink = {
   name: 'Infra',
   url: '/agent-builder/infrastructure',
-  icon: <IconServer className="size-5" />,
+  icon: <IconServer className="size-icon-lg" />,
 };
 
 export function AgentBuilderMobileBottomBar() {

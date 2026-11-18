@@ -60,7 +60,7 @@ export function ModelRoutingChangeDialog({
                     <Txt as="span" variant="meta" tone="muted">
                       {MODEL_DEFAULTS_LABELS[MODEL_ROUTES[from][lane]]}
                     </Txt>
-                    <IconArrowRight aria-label="to" className="text-muted-foreground size-3" />
+                    <IconArrowRight aria-label="to" className="text-muted-foreground size-icon-xs" />
                     <Txt as="span" variant="meta">
                       {MODEL_DEFAULTS_LABELS[MODEL_ROUTES[to][lane]]}
                     </Txt>

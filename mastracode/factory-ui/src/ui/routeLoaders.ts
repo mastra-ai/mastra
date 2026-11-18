@@ -2,10 +2,9 @@ import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import type { LoaderFunctionArgs } from 'react-router';
+import type { LoaderFunctionArgs, ShouldRevalidateFunction } from 'react-router';
 
 import type { ApiConfig } from '../api/config';
-import { activeRunsQueryOptions } from '../hooks/useActiveRunResources';
 import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
 import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
@@ -20,25 +19,32 @@ import { intakeBindingsQueryOptions, intakeConfigQueryOptions } from '../hooks/u
 import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
+import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
   boardPhasesQueryOptions,
-  sessionCardsQueryOptions,
+  sessionWorkItemsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
+  workItemQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
-import { workspacesQueryOptions } from '../hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
+import { userSessionQueryOptions } from '../hooks/useWorkspaces';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
 import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
 import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
+import { linkedSessionRepository } from './domains/factory/hooks/useSessionRepository';
 import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
+import { pullRequestSubscriptionsQuery } from './domains/factory/services/githubSubscriptions';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
+import { readPinnedSessions } from './domains/workspaces/hooks/usePinnedSessions';
+import { readSessionFilters } from './domains/workspaces/hooks/useSessionFilters';
+import { readSessionListView } from './domains/workspaces/hooks/useSessionListView';
 import { hasLinkedRepository } from './domains/workspaces/services/factoryRepositories';
+import { sessionRowsRequest } from './domains/workspaces/services/sessionRowReads';
 import type { FactoryProject } from './domains/workspaces/services/github';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 
@@ -47,17 +53,22 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void;
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<void>;
 
-export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
-  return function loadOnEntry(prefetch?: Prefetch, page?: LazyPageComponent) {
+export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
+  return function loadOnEntry(
+    prefetch?: Prefetch,
+    page?: LazyPageComponent,
+    shouldRevalidate: ShouldRevalidateFunction = () => false,
+  ) {
     if (!services) return {};
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
-        prefetch?.(services, args);
+        const reads = prefetch?.(services, args);
+        return holdsNavigation?.() ? reads : undefined;
       },
-      shouldRevalidate: () => false,
+      shouldRevalidate,
     };
   };
 }
@@ -78,16 +89,13 @@ function whenFactoryListed(
   }, noop);
 }
 
-function prefetchSessionRuns({ queryClient, api }: RouteLoaderServices, factoryId: string) {
-  void queryClient.query(workspacesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(activeRunsQueryOptions(AGENT_CONTROLLER_ID, api.baseUrl)).catch(noop);
-}
-
 export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
   const { factoryId } = params;
   if (!factoryId) return;
+  const { queryClient, api } = services;
   whenFactoryListed(services, factoryId, factory => {
-    if (hasLinkedRepository(factory)) prefetchSessionRuns(services, factoryId);
+    if (!hasLinkedRepository(factory)) return;
+    void queryClient.query(sessionActivityQueryOptions(api.baseUrl, factoryId)).catch(noop);
   });
 };
 
@@ -100,9 +108,18 @@ export const prefetchSidebar: Prefetch = (services, { params, request }) => {
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
   void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(sessionCardsQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  prefetchSessionRuns(services, factoryId);
+  const { sort, groupBy, revealChildSessions } = readSessionListView();
+  const rows = sessionRowsRequest({
+    sort,
+    groupBy,
+    filters: readSessionFilters(),
+    pinned: readPinnedSessions(),
+    // User sessions route as `user/threads/:threadId`.
+    open: params.sessionId ?? params.threadId,
+    children: revealChildSessions,
+    windows: {},
+  });
+  void queryClient.query(sessionRowsQueryOptions(api.baseUrl, factoryId, rows)).catch(noop);
 };
 
 export const prefetchBoard: Prefetch = (services, { params, request }) => {
@@ -126,6 +143,7 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
     void queryClient.query(boardPhasesQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
   }
   void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
     void queryClient.query(runQueueQueryOptions(api.baseUrl, factoryId)).catch(noop);
@@ -171,6 +189,66 @@ export const prefetchDraft: Prefetch = (services, args) => {
   void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
 };
+
+/** A card's draft offers the card's own actions under the composer. */
+export const prefetchCardDraft: Prefetch = (services, args) => {
+  prefetchComposer(services, args);
+  const { factoryId, workItemId } = args.params;
+  if (!factoryId || !workItemId) return;
+  const { queryClient, api } = services;
+  void queryClient.query(workItemQueryOptions(api.baseUrl, factoryId, workItemId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+};
+
+const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
+
+export const loadSessionFrame: Prefetch = async (services, { params }) => {
+  const { queryClient, api } = services;
+  const { factoryId, threadId } = params;
+  const sessionId = params.sessionId ?? threadId;
+  if (!factoryId || !sessionId || !threadId) return;
+  const cardReads = params.sessionId
+    ? [
+        queryClient
+          .query({
+            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...CACHED_UNLESS_INVALIDATED,
+          })
+          .catch(noop),
+        queryClient
+          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .catch(noop),
+      ]
+    : [];
+  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+};
+
+async function loadSessionSubscriptions(
+  { queryClient, api }: RouteLoaderServices,
+  factoryId: string,
+  sessionId: string,
+  threadId: string,
+) {
+  const [factories, session] = await Promise.all([
+    queryClient.query({ ...factoriesQueryOptions(api.baseUrl), ...CACHED_UNLESS_INVALIDATED }).catch(() => undefined),
+    queryClient
+      .query({ ...userSessionQueryOptions(api.baseUrl, sessionId), ...CACHED_UNLESS_INVALIDATED })
+      .catch(() => undefined),
+  ]);
+  const factory = factories?.find(candidate => candidate.id === factoryId);
+  const { repository, provider } = linkedSessionRepository(factory, session);
+  if (!repository) return;
+  await queryClient
+    .query({
+      ...pullRequestSubscriptionsQuery(api.baseUrl, sessionId, threadId, provider, true),
+      ...CACHED_UNLESS_INVALIDATED,
+    })
+    .catch(noop);
+}
+
+export const reloadOnAnotherThread: ShouldRevalidateFunction = ({ currentParams, nextParams }) =>
+  currentParams.sessionId !== nextParams.sessionId || currentParams.threadId !== nextParams.threadId;
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {
   const { factoryId } = params;

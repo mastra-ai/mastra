@@ -106,7 +106,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={28} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <IconCircleDashed className="text-muted-foreground size-3" />
+          <IconCircleDashed className="text-muted-foreground size-icon-xs" />
           <Txt variant="meta" tone="muted">
             To do
           </Txt>
@@ -114,7 +114,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={148} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <IconCodeBrackets className="text-muted-foreground size-3" />
+          <IconCodeBrackets className="text-muted-foreground size-icon-xs" />
           <Txt variant="meta" tone="muted">
             Build
           </Txt>
@@ -122,7 +122,7 @@ export function OnboardingIntakePreview({
       </SketchLabel>
       <SketchLabel x={268} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <IconCheckmark2Medium className="text-muted-foreground size-3" />
+          <IconCheckmark2Medium className="text-muted-foreground size-icon-xs" />
           <Txt variant="meta" tone="muted">
             Review
           </Txt>

@@ -67,7 +67,7 @@ export function BulkTagPicker({
                 onClick={() => onRemoveTag(tag)}
                 className="ml-2 text-placeholder hover:text-destructive-foreground"
               >
-                <IconCrossMedium className="h-3 w-3" />
+                <IconCrossMedium className="size-icon-xs" />
               </button>
             </div>
           ))}

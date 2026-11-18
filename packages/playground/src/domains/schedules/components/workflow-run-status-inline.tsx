@@ -33,18 +33,18 @@ export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps
 function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; color: string } {
   switch (status) {
     case 'success':
-      return { icon: <IconCheckmark2Medium size={14} />, color: 'text-success-indicator' };
+      return { icon: <IconCheckmark2Medium className="size-icon-sm" />, color: 'text-success-indicator' };
     case 'failed':
-      return { icon: <IconCrossMedium size={14} />, color: 'text-destructive-foreground' };
+      return { icon: <IconCrossMedium className="size-icon-sm" />, color: 'text-destructive-foreground' };
     case 'running':
       return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':
-      return { icon: <IconPause size={14} />, color: 'text-info-indicator' };
+      return { icon: <IconPause className="size-icon-sm" />, color: 'text-info-indicator' };
     case 'canceled':
-      return { icon: <IconCircleBanSign size={14} />, color: 'text-muted-foreground' };
+      return { icon: <IconCircleBanSign className="size-icon-sm" />, color: 'text-muted-foreground' };
     case 'pending':
     case 'waiting':
-      return { icon: <IconClock size={14} />, color: 'text-muted-foreground' };
+      return { icon: <IconClock className="size-icon-sm" />, color: 'text-muted-foreground' };
     default:
       return { icon: null, color: 'text-muted-foreground' };
   }

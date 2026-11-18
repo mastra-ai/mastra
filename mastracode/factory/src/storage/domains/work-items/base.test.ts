@@ -1059,12 +1059,15 @@ describe('work item subscriptions', () => {
     await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
     await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'subscribed'));
 
-    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
-      true,
-    );
-    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
-      false,
-    );
+    const unfollow = () =>
+      storage.unsubscribeFromWorkItem({
+        orgId: 'org1',
+        factoryProjectId: 'project1',
+        workItemId: item.id,
+        sessionId: 'sess-a',
+      });
+    expect(await unfollow()).toBe(true);
+    expect(await unfollow()).toBe(false);
     expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
     expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: other.id })).toHaveLength(1);
   });

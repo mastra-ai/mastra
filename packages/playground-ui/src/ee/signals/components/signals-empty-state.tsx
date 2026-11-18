@@ -270,7 +270,7 @@ export const SignalsEmptyState = ({
               aria-hidden="true"
               className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green-indicator bg-fill-subtle"
             >
-              <IconChip className="size-4 text-brand-green-indicator" />
+              <IconChip className="size-icon-md text-brand-green-indicator" />
             </div>
             <Txt variant="meta" tone="muted" className="mt-3 max-w-40">
               Clusters similar trace signals into themes for each dimension

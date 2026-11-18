@@ -26,6 +26,7 @@ import { MaterializeError } from '../integrations/github/sandbox.js';
 import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
@@ -40,11 +41,11 @@ import {
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { repositoryChosenByRun, resolveRunRepository } from '../session/work-item-repository.js';
+import { repositoryChosenByRun, resolveRunRepositoryFromIntake } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -79,8 +80,10 @@ import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js'
 import { buildFsRoutes } from './fs.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
+import type { IntakeRoutesDeps } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { createProjectSessionsReader } from './project-sessions.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -126,6 +129,8 @@ export interface FactoryApiRoutesDeps {
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
   /** Saved-environment hand-off for environment builds, present when the sandbox can build templates. */
   onEnvironmentSaved?: (projectId: string) => void;
+  /** Sources newly selected in Work Intake, so their existing items can be brought in. */
+  onIntakeSourcesSelected?: IntakeRoutesDeps['onSourcesSelected'];
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -159,8 +164,13 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Forces an evaluator on every project; without it each project uses its own setting. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Stored boards and their cache; mounts the board management routes when present. */
-  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
+  storedBoards?: {
+    storage: StoredBoardsStorage;
+    cache: ProjectBoardCache;
+  };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -445,17 +455,15 @@ export async function prepareFactoryRuleBinding(
     // PR review on each pull request's), so its session is reused only on the branch it holds.
     const boundSession =
       reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
-    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     // A card that names no repository keeps a retry in its role session's
     // repository, else starts in the environment's first one; its agent
     // determines which repository the card belongs to. An explicit signal is
     // never overridden.
-    const repository = await resolveRunRepository({
+    const repository = await resolveRunRepositoryFromIntake(intake, {
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
       ...(boundSession ? { boundProjectRepositoryId: boundSession.projectRepositoryId } : {}),
     });
     if (repository.status !== 'resolved') {
@@ -588,6 +596,8 @@ export function buildIntegrationContext(
     boardRegistry: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
+    /** Which items intake turned away, so integrations run intake again when one changes. */
+    notRouted?: NotRoutedLookup;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -642,6 +652,7 @@ export function buildIntegrationContext(
             workItems: deps.domains.workItems,
             boards: deps.boardRegistry,
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+            ...(deps.notRouted ? { notRouted: deps.notRouted } : {}),
           },
         }
       : {}),
@@ -812,6 +823,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   ];
   const sourceControls = sourceControlIntegrationIds.map(id => deps.sourceControlStorage.forIntegration(id));
   const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
+  const projectSessions = createProjectSessionsReader({
+    sourceControls,
+    ...(deps.users ? { users: deps.users } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+  });
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -821,6 +837,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        ...(deps.storedBoards ? { notRouted: deps.storedBoards.storage } : {}),
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
@@ -837,6 +854,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           sourceControls,
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
+          projectSessions,
           controller: deps.controller,
           audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
@@ -989,6 +1007,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
+          ...(deps.onIntakeSourcesSelected ? { onSourcesSelected: deps.onIntakeSourcesSelected } : {}),
           integrations: (deps.integrations ?? []).flatMap(({ integration }) => [
             ...(integration.intake ? [{ id: integration.id, intake: integration.intake }] : []),
             ...(integration.additionalIntakes ?? []),
@@ -1011,11 +1030,30 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
+          intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          ...(sourceControlRegistrations.length > 0
+            ? {
+                sessionRepository: async ({ orgId, factoryProjectId, item }) => {
+                  const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+                  if (!sourceControl) {
+                    return { status: 'unlinked', hint: 'Factory project has no linked source-control repository.' };
+                  }
+                  return resolveRunRepositoryFromIntake(deps.domains.intake, {
+                    sourceControl,
+                    orgId,
+                    factoryProjectId,
+                    item,
+                  });
+                },
+              }
+            : {}),
           liveSessions: deps.liveSessions,
           runSlots: deps.runSlots,
+          projectSessions,
+          activeRuns: () => deps.controller.listActiveThreadRuns(),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
@@ -1036,6 +1074,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeEvaluator: deps.intakeEvaluator,
+          intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
+            ready && integration.intakeLookup ? [integration.intakeLookup] : [],
+          ),
         }).routes()
       : []),
     ...(deps.factoryReady

@@ -35,7 +35,7 @@ export function AddJiraFactory({
               factory.name
             ) : (
               <>
-                <IconPlusMedium className="size-3.5" aria-hidden />
+                <IconPlusMedium className="size-icon-sm" aria-hidden />
                 Add factory
               </>
             )}

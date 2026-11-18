@@ -154,7 +154,7 @@ function DefaultErrorFallback({
           className={cn(
             'flex items-center justify-center rounded-full bg-destructive-subtle text-destructive-subtle-foreground',
             isInline
-              ? 'size-10 [&>svg]:size-5'
+              ? 'size-10 [&>svg]:size-icon-lg'
               : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',
           )}
         >

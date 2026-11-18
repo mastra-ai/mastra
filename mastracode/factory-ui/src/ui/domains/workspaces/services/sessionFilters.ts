@@ -1,18 +1,21 @@
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_MY_SESSIONS,
+  SESSION_ROW_STATUSES,
+  sessionRowOwnerKey,
+} from '@mastra/factory/session/session-row-query';
+import type { SESSION_ROW_UPDATED_WITHIN } from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
-import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
-import type { SessionActivityStatus, SessionListRow } from './sessionRows';
+import { SESSION_STATUS_LABELS } from './sessionRows';
+import type { SessionActivityStatus, SessionOwner } from './sessionRows';
 
 export type SessionStatusFilter = 'all' | SessionActivityStatus;
-export type SessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
-
-export const ALL_SESSION_OWNERS = 'all';
-export const MY_SESSIONS = 'mine';
-export const SESSION_OWNER_PREFIX = 'owner:';
+export type SessionUpdatedFilter = 'all' | (typeof SESSION_ROW_UPDATED_WITHIN)[number];
 
 export const SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<SessionStatusFilter>[] = [
   { value: 'all', label: 'All statuses' },
-  ...SESSION_ACTIVITY_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
+  ...SESSION_ROW_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
 ];
 
 export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUpdatedFilter>[] = [
@@ -29,14 +32,10 @@ export interface SessionFiltersState {
 }
 
 export const EMPTY_SESSION_FILTERS: SessionFiltersState = {
-  owner: ALL_SESSION_OWNERS,
+  owner: SESSION_ROW_ALL_OWNERS,
   status: 'all',
   updated: 'all',
 };
-
-export function sessionOwnerFilterValue(userId: string): string {
-  return `${SESSION_OWNER_PREFIX}${userId}`;
-}
 
 export function activeSessionFilterCount(filters: SessionFiltersState): number {
   return (
@@ -46,53 +45,14 @@ export function activeSessionFilterCount(filters: SessionFiltersState): number {
   );
 }
 
-function matchesOwner(row: SessionListRow, owner: string, viewerUserId: string | undefined): boolean {
-  if (owner === ALL_SESSION_OWNERS) return true;
-  if (owner === MY_SESSIONS) return Boolean(viewerUserId) && row.session.userId === viewerUserId;
-  if (!owner.startsWith(SESSION_OWNER_PREFIX)) return false;
-  return row.session.userId === owner.slice(SESSION_OWNER_PREFIX.length);
-}
-
-const UPDATED_WINDOW_HOURS: Record<Exclude<SessionUpdatedFilter, 'all'>, number> = {
-  '24h': 24,
-  '7d': 24 * 7,
-  '30d': 24 * 30,
-};
-
-function updatedCutoff(updated: SessionUpdatedFilter, now: number): number | undefined {
-  if (updated === 'all') return undefined;
-  return now - UPDATED_WINDOW_HOURS[updated] * 60 * 60 * 1_000;
-}
-
-export function filterSessionRows(
-  rows: readonly SessionListRow[],
-  filters: SessionFiltersState,
-  viewerUserId: string | undefined,
-  now = Date.now(),
-): SessionListRow[] {
-  const cutoff = updatedCutoff(filters.updated, now);
-
-  const matches = (row: SessionListRow) =>
-    matchesOwner(row, filters.owner, viewerUserId) &&
-    (filters.status === 'all' || row.status === filters.status) &&
-    (cutoff === undefined || new Date(row.updatedAt).getTime() >= cutoff);
-
-  // A card with revealed sessions matches when any of its sessions does, and lists only the ones that match.
-  return rows.flatMap(row => {
-    if (!row.childRows) return matches(row) ? [row] : [];
-    const childRows = row.childRows.filter(matches);
-    return matches(row) || childRows.length > 0 ? [{ ...row, childRows }] : [];
-  });
-}
-
 export function sessionOwnerOptions(
-  rows: readonly SessionListRow[],
+  owners: readonly SessionOwner[],
   viewerUserId: string | undefined,
 ): DropdownMenuRadioOption<string>[] {
-  const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
-  const namedOptions = sessionOwners(rows).map(({ userId, name }) => ({
-    value: sessionOwnerFilterValue(userId),
+  const viewerOption = viewerUserId ? [{ value: SESSION_ROW_MY_SESSIONS, label: 'Mine' }] : [];
+  const namedOptions = owners.map(({ userId, name }) => ({
+    value: sessionRowOwnerKey(userId),
     label: name,
   }));
-  return [{ value: ALL_SESSION_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
+  return [{ value: SESSION_ROW_ALL_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
 }

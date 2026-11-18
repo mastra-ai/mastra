@@ -10,8 +10,8 @@ import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDoubleLeft } from '@/ds/icons/central/IconChevronDoubleLeft';
 import { IconChevronDoubleRight } from '@/ds/icons/central/IconChevronDoubleRight';
-import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { IconMathEquals } from '@/ds/icons/central/IconMathEquals';
@@ -27,8 +27,8 @@ const OPERATOR_ICONS: Record<ConditionOperator, React.ReactNode> = {
   not_equals: <EqualNot />,
   contains: <IconPageTextSearch />,
   not_contains: <IconAlignmentLeft />,
-  greater_than: <IconChevronRight />,
-  less_than: <IconChevronLeft />,
+  greater_than: <IconChevronRightMedium />,
+  less_than: <IconChevronLeftMedium />,
   greater_than_or_equal: <IconChevronDoubleRight />,
   less_than_or_equal: <IconChevronDoubleLeft />,
   in: <IconListBullets />,

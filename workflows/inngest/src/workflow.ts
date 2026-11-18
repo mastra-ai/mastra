@@ -412,6 +412,33 @@ export class InngestWorkflow<
     return run;
   }
 
+  /**
+   * Records a run Inngest gave up on as failed. Only a row still marked live is
+   * rewritten: a run that failed in its own code already wrote a richer terminal
+   * snapshot in finalize, and a suspended row stays resumable.
+   */
+  async #markRunFailed(runId: string, error: unknown) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return;
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
+    const snapshot = typeof run?.snapshot === 'string' ? undefined : run?.snapshot;
+    if (!snapshot || !['running', 'pending', 'waiting'].includes(snapshot.status)) return;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: this.id,
+      runId,
+      resourceId: run?.resourceId,
+      expectedStatus: ['running', 'pending', 'waiting'],
+      snapshot: {
+        ...snapshot,
+        status: 'failed',
+        activePaths: [],
+        activeStepsPath: {},
+        error: getErrorFromUnknown(error, { fallbackMessage: 'Inngest run failed' }),
+        timestamp: Date.now(),
+      },
+    });
+  }
+
   //createCronFunction is only called if cronConfig.cron is defined.
   private createCronFunction() {
     if (this.cronFunction) {
@@ -468,6 +495,17 @@ export class InngestWorkflow<
         // Every event that triggers this function carries `data.runId`, and
         // `Run.cancel()` sends the same field.
         cancelOn: [{ event: `cancel.workflow.${this.id}`, match: 'data.runId' }],
+        // Inngest calls this once it gives up on a run. The handler's finalize step is
+        // what records a terminal snapshot, so a run that dies before reaching it
+        // (worker crash, retries exhausted on a failed request) would otherwise stay
+        // `running` in storage forever.
+        // A resumed InngestAgent segment carries a resume claim; the resume-claim release function
+        // ends those under the claim, so a stale segment cannot fail a run a later resume took over.
+        onFailure: async ({ event, error }) => {
+          const original = event.data?.event?.data;
+          if (typeof original?.runId !== 'string' || original.resume?.claim) return;
+          await this.#markRunFailed(original.runId, error);
+        },
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,

@@ -8,7 +8,7 @@ import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
@@ -100,7 +100,7 @@ export function ModelPicker({
           </span>
         </>
       )}
-      <IconChevronBottom aria-hidden className="shrink-0" size={12} />
+      <IconChevronDownMedium aria-hidden className="size-icon-xs shrink-0" />
     </>
   );
 

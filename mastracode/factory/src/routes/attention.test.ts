@@ -39,7 +39,6 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
       liveSessions: {
-        isRunning: () => false,
         parked: sessionId => parkedBySession.get(sessionId),
         parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
       },
