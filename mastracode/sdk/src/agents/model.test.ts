@@ -272,6 +272,19 @@ describe('getDynamicModel model route', () => {
     expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
   });
 
+  it('keeps the fast route entry but labels its model with the canonical ID', () => {
+    const selection = 'openai/gpt-5.6-sol:fast';
+    const fastRoute = [{ ...route[1]!, modelId: selection }, route[2]!];
+    const models = getDynamicModel(requestWithSession(selection, { route: fastRoute }));
+    if (!Array.isArray(models)) throw new Error('expected a model route');
+
+    expect(models.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
+    expect(models.map(entry => entry.model)).toMatchObject([
+      { id: 'openai/gpt-5.6-sol', model: { modelId: 'gpt-5.6-sol' } },
+      { id: 'github-copilot/gpt-4.1', model: { modelId: 'gpt-4.1' } },
+    ]);
+  });
+
   it('labels a custom-provider model with its provider/model ID', () => {
     const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
 

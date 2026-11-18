@@ -88,6 +88,24 @@ describe('makeCustomModelItem', () => {
   });
 });
 
+describe('Codex fast model selection', () => {
+  it('focuses the canonical OpenAI row instead of a literal suffix collision', () => {
+    const onSelect = vi.fn();
+    const codex = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [...models, codex, { ...codex, id: 'openai/gpt-6.2-sol:fast' }],
+      currentModelId: 'openai/gpt-6.2-sol:fast',
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    expect(selector.render(100).join('\n')).not.toContain('gpt-6.2-sol:fast');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai/gpt-6.2-sol' }));
+  });
+});
+
 describe('MastraCode gateway catalog models', () => {
   const customProviderModels: ModelItem[] = ['gemma-4-31b', 'gemma-4-9b'].map(modelName => ({
     id: `mastracode/acme-local/${modelName}`,

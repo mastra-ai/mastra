@@ -5,6 +5,7 @@
 
 import { Box, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 import { PickerList } from './picker-list.js';
@@ -94,6 +95,8 @@ export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
           provider: model.provider.slice(MASTRACODE_GATEWAY_PREFIX.length),
         }
       : model;
+    // Reserved selection suffixes are never separate rows in the model catalog.
+    if (parseCodexModelSelection(canonical.id).codexServiceTier) continue;
     const existing = byId.get(canonical.id);
     if (!existing || (!existing.hasApiKey && canonical.hasApiKey)) byId.set(canonical.id, canonical);
   }
@@ -134,8 +137,8 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
-    this.currentModelId = options.currentModelId;
+    this.currentModelId = options.currentModelId && parseCodexModelSelection(options.currentModelId).modelId;
+    this.allModels = this.sortModels(toCanonicalModelItems(options.models), this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;

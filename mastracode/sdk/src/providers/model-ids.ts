@@ -74,6 +74,14 @@ export function getCredentialProviderId(providerId: string): string {
   return providerId;
 }
 
+export type CodexServiceTier = 'fast';
+
+/** `:fast` is reserved on native OpenAI selections, not a catalog model suffix. */
+export function parseCodexModelSelection(modelId: string): { modelId: string; codexServiceTier?: CodexServiceTier } {
+  if (!/^openai\/[^/:]+:fast$/.test(stripMastraGatewayPrefix(modelId))) return { modelId };
+  return { modelId: modelId.slice(0, -':fast'.length), codexServiceTier: 'fast' };
+}
+
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
 

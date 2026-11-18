@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { getCredentialProviderId, normalizeLegacyModelId } from '../model-ids.js';
+import { getCatalogThinkingLevels } from '../../thinking-catalog.js';
+import { getCredentialProviderId, normalizeLegacyModelId, parseCodexModelSelection } from '../model-ids.js';
+
+describe('parseCodexModelSelection', () => {
+  it.each(['openai/gpt-6.2-sol', 'mastra/openai/gpt-6.2-astra'])('keeps the canonical model %s', modelId => {
+    expect(parseCodexModelSelection(`${modelId}:fast`)).toEqual({ modelId, codexServiceTier: 'fast' });
+    expect(getCatalogThinkingLevels(`${modelId}:fast`)).toEqual(getCatalogThinkingLevels(modelId));
+  });
+
+  it.each(['openrouter/openai/gpt-6.2-sol:fast', 'anthropic/claude:fast', 'openai/gpt-6.2-sol:FAST'])(
+    'does not reserve the suffix for %s',
+    modelId => expect(parseCodexModelSelection(modelId)).toEqual({ modelId }),
+  );
+});
 
 describe('normalizeLegacyModelId', () => {
   it.each([
