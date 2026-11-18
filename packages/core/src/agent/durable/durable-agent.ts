@@ -6,11 +6,7 @@ import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
-import {
-  getRunStreamSlot,
-  getScopeStreamSlot,
-  untilIdleHandlesBackgroundTask,
-} from '../../loop/shared/stream-until-idle-helpers';
+import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
@@ -1300,11 +1296,6 @@ export class DurableAgent<
    * request below, aborting a thread whose active run is durable records an
    * intent nothing reads and lets the run stream on.
    */
-  /** @internal Durable `untilIdle` streams are tracked on this agent, not the wrapped one. */
-  override __untilIdleHandlesBackgroundTask(threadId: string, resourceId: string, taskId: string): boolean {
-    return untilIdleHandlesBackgroundTask(this.activeStreamUntilIdle, threadId, resourceId, taskId);
-  }
-
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
     const aborted = this.#abortThreadStreamLocally(options);
     // The lookup is async, so this synchronous call can't report its outcome.
@@ -1516,44 +1507,6 @@ export class DurableAgent<
       ...options,
       untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
     });
-  }
-
-  /**
-   * Override the inherited `approveToolCall()` to route through the durable
-   * `resume()` path.
-   */
-  override async approveToolCall(
-    options: { runId: string; toolCallId?: string } & Record<string, any>,
-  ): Promise<MastraModelOutput<any>> {
-    return this.resumeStream({ approved: true }, options);
-  }
-
-  /**
-   * Override the inherited `declineToolCall()` to route through the durable
-   * `resume()` path.
-   */
-  override async declineToolCall(
-    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
-  ): Promise<MastraModelOutput<any>> {
-    const { reason, ...resumeOptions } = options;
-    return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
-  }
-
-  override async approveToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
-  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    const { runId, ...resumeOptions } = options;
-    return this.resumeGenerate({ approved: true }, { ...resumeOptions, runId } as any) as any;
-  }
-
-  override async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
-  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    const { runId, reason, ...resumeOptions } = options;
-    return this.resumeGenerate({ approved: false, ...(reason !== undefined ? { reason } : {}) }, {
-      ...resumeOptions,
-      runId,
-    } as any) as any;
   }
 
   /**
