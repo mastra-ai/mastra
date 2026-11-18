@@ -213,13 +213,10 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
 export { LOCAL_KNOWLEDGE_ORG_ID };
 
 /**
- * Dynamic memory factory function.
- * Reads OM thresholds from controller state via requestContext.
- * Model functions also read from requestContext (no mutable bridge needed).
- */
-/**
- * Core's default title instructions, asking for a few words instead of capping
- * the title at 80 characters: session lists show one narrow line per title.
+ * Mastra Code's own title instructions: session lists show one narrow line per
+ * title. They differ from Core's default in three ways: the title is 3 to 5
+ * words instead of up to 80 characters, it names the topic instead of
+ * summarising the message, and it does not end with a period.
  */
 export const TITLE_INSTRUCTIONS = `
   - you will generate a short title based on a conversation transcript between a user and an assistant
@@ -230,6 +227,11 @@ export const TITLE_INSTRUCTIONS = `
   - do not use quotes or colons, and do not end with a period
   - the entire text you return will be used as the title`;
 
+/**
+ * Dynamic memory factory function.
+ * Reads OM thresholds from controller state via requestContext.
+ * Model functions also read from requestContext (no mutable bridge needed).
+ */
 export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,
