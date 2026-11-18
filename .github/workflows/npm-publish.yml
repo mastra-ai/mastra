@@ -501,18 +501,15 @@ jobs:
             echo 'EOF_SLACK_TEXT'
           } >> "$GITHUB_OUTPUT"
 
-      # #eng-maintainers-club. The bot must be a member; a failed post only warns.
+      # The bot must be a member of the channel; a failed post only warns.
       - name: Post to Slack
-        if: ${{ !cancelled() && steps.message.outputs.text != '' && vars.RELEASE_FREEZE_SLACK_CHANNEL != '' }}
+        if: ${{ !cancelled() && steps.message.outputs.text != '' }}
         uses: ./.github/actions/slack-alert
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          channel: ${{ vars.RELEASE_FREEZE_SLACK_CHANNEL }}
+          # #eng-maintainers-club
+          channel: 'C08F5FH0KAM'
           text: ${{ steps.message.outputs.text }}
-
-      - name: Slack channel not set
-        if: ${{ !cancelled() && vars.RELEASE_FREEZE_SLACK_CHANNEL == '' }}
-        run: echo "::warning::RELEASE_FREEZE_SLACK_CHANNEL is not set; skipped the Slack post."
 
   # ===========================================
   # PLAYGROUND SNAPSHOT: UI library, observability, and their workspace dependencies only

@@ -106,16 +106,13 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
           node .github/scripts/release-freeze.mjs "${ARGS[@]}"
 
-      # #eng-maintainers-club. The bot must be a member; a failed post only warns.
+      # The bot must be a member of the channel; a failed post only warns.
       - name: Post to Slack
-        if: steps.freeze.outputs.changed == 'true' && vars.RELEASE_FREEZE_SLACK_CHANNEL != ''
+        if: steps.freeze.outputs.changed == 'true'
         uses: ./.github/actions/slack-alert
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
-          channel: ${{ vars.RELEASE_FREEZE_SLACK_CHANNEL }}
+          # #eng-maintainers-club
+          channel: 'C08F5FH0KAM'
           text: >-
             ${{ inputs.action == 'freeze' && format(':ice_cube: main is frozen for a release by @{0}. Only the versioning PR can merge until it is unfrozen. <{1}/{2}/actions/runs/{3}|Run>', github.triggering_actor, github.server_url, github.repository, github.run_id) || format(':sunny: main is unfrozen by @{0}; merges are open again. <{1}/{2}/actions/runs/{3}|Run>', github.triggering_actor, github.server_url, github.repository, github.run_id) }}
-
-      - name: Slack channel not set
-        if: steps.freeze.outputs.changed == 'true' && vars.RELEASE_FREEZE_SLACK_CHANNEL == ''
-        run: echo "::warning::RELEASE_FREEZE_SLACK_CHANNEL is not set; skipped the Slack post."
