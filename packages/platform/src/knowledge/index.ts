@@ -235,7 +235,7 @@ export class PlatformKnowledge extends Knowledge {
     super({
       ...config,
       // Hosts register Knowledge under its id, so it must be the same on every boot.
-      id: config.id ?? 'platform-knowledge',
+      id: config.id ?? `platform-knowledge-${instanceId}`,
       tools: config.tools ?? { read: true },
       // Platform owns every scope declaration and access grant: the instance serves them all through
       // `getScopeDeclarations`, so there is one place to change who reads what. Declaring scopes here

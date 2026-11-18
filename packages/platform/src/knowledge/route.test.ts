@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { Mastra } from '@mastra/core/mastra';
 import {
   InMemoryStore,
   KnowledgeConflictError,
@@ -297,6 +298,17 @@ it('takes the instance ID from MASTRA_KNOWLEDGE_INSTANCE_ID and registers under 
   vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', 'kn_env');
   onTestFinished(() => vi.unstubAllEnvs());
   const options = { apiUrl: 'http://localhost', accessToken: 'token' };
-  expect(new PlatformKnowledge(options).id).toBe('platform-knowledge');
+  expect(new PlatformKnowledge(options).id).toBe('platform-knowledge-kn_env');
   expect(new PlatformKnowledge({ ...options, id: 'team' }).id).toBe('team');
+});
+
+it('registers two default PlatformKnowledge instances side by side when their instance IDs differ', () => {
+  const options = { apiUrl: 'http://localhost', accessToken: 'token' };
+  const mastra = new Mastra({ logger: false });
+  mastra.addKnowledge(new PlatformKnowledge({ ...options, instanceId: 'kn_a' }));
+  mastra.addKnowledge(new PlatformKnowledge({ ...options, instanceId: 'kn_b' }));
+  expect(Object.keys(mastra.listKnowledge())).toEqual(['platform-knowledge-kn_a', 'platform-knowledge-kn_b']);
+  expect(() => mastra.addKnowledge(new PlatformKnowledge({ ...options, instanceId: 'kn_a' }))).toThrow(
+    expect.objectContaining({ id: 'MASTRA_ADD_KNOWLEDGE_DUPLICATE_KEY' }),
+  );
 });

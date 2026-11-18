@@ -91,18 +91,21 @@ it("acts with the host's org scope alone in sessions and on the Knowledge page, 
     storage: knowledgeStorage,
     scopes: { ...knowledgeMemoryScopes(), 'org:$orgId': { access: [{ principal: 'self', role: 'editor' }] } },
   });
+  const hostScopes = ['org:plat'];
   const factory = new MastraFactory({
     storage,
     auth: null,
     mcp: false,
     knowledge,
-    scopes: ['org:plat'],
+    scopes: hostScopes,
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
   onTestFinished(async () => {
     await factory.shutdown();
     await storage.close();
   });
+  // Editing the caller's array after construction changes neither sessions nor the Knowledge page.
+  hostScopes.splice(0, 1, 'org:other');
   const mastra = new Mastra(await factory.prepare());
 
   // A session's run scopes, from the code agent the Factory mounted.

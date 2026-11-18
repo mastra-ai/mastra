@@ -718,7 +718,8 @@ export class MastraFactory {
       console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
-    this.#config = config;
+    // Knowledge pages and sessions both read `scopes`; a copy keeps a caller's later edits from splitting them.
+    this.#config = config.scopes ? { ...config, scopes: [...config.scopes] } : config;
     this.#metrics = new FactoryMetrics(resolveMetricsConfig(config.metrics), metricsService());
     installFactoryMetrics(this.#metrics);
   }
