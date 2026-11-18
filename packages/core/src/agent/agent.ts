@@ -141,7 +141,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
+import { getRequestContextInputSource } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -299,6 +299,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { MessageList } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
+import { validateAgentRequestContext } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
@@ -2377,37 +2378,6 @@ export class Agent<
       );
     }
     return processors;
-  }
-
-  /**
-   * Validates the request context against the agent's requestContextSchema.
-   * Throws an error if validation fails.
-   */
-  async #validateRequestContext(requestContext?: RequestContext) {
-    if (this.#requestContextSchema) {
-      const contextValues = getRequestContextInputValues(requestContext);
-      const validation = await this.#requestContextSchema['~standard'].validate(contextValues);
-
-      if (validation.issues) {
-        const errors = validation.issues;
-        const errorMessages = errors
-          .map(e => {
-            const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-            return `- ${pathStr}: ${e.message}`;
-          })
-          .join('\n');
-        throw new MastraError({
-          id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `Request context validation failed for agent '${this.id}':\n${errorMessages}`,
-          details: {
-            agentId: this.id,
-            agentName: this.name,
-          },
-        });
-      }
-    }
   }
 
   /**
@@ -10353,7 +10323,12 @@ export class Agent<
   async #resolvePlainRunOptions<OUTPUT>(
     options?: AgentExecutionOptionsBase<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
   ) {
-    await this.#validateRequestContext(options?.requestContext);
+    await validateAgentRequestContext({
+      requestContextSchema: this.#requestContextSchema,
+      requestContext: options?.requestContext,
+      agentId: this.id,
+      agentName: this.name,
+    });
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(

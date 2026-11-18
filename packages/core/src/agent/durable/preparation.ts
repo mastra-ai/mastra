@@ -24,7 +24,6 @@ import type {
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
-import { getRequestContextInputValues } from '../../request-context/input-source';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -39,6 +38,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { snapshotRequestContextEntries } from '../request-context-snapshot';
+import { validateAgentRequestContext } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
@@ -299,29 +299,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2a. Validate the request context against the agent's requestContextSchema,
   // mirroring Agent.stream()/generate(). Without this, schema violations are
   // silently ignored on the durable path.
-  if (typedAgent.requestContextSchema) {
-    const contextValues = getRequestContextInputValues(requestContext);
-    const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
-
-    if (validation.issues) {
-      const errorMessages = validation.issues
-        .map(e => {
-          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-          return `- ${pathStr}: ${e.message}`;
-        })
-        .join('\n');
-      throw new MastraError({
-        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
-        details: {
-          agentId: publicAgentId,
-          agentName: publicAgentName,
-        },
-      });
-    }
-  }
+  await validateAgentRequestContext({
+    requestContextSchema: typedAgent.requestContextSchema,
+    requestContext,
+    agentId: publicAgentId,
+    agentName: publicAgentName,
+  });
 
   // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
