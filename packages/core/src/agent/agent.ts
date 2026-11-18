@@ -236,6 +236,8 @@ import {
 } from './durable/execution-fence';
 import { getExecutionStreamOwner } from './durable/execution-stream-publisher';
 import { detachFullStreamOnEnd } from './durable/observe-full-stream';
+import type { PreparationOptions, PreparationResult } from './durable/preparation';
+import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './durable/preparation';
 import { createRunAbortController } from './durable/run-abort';
 import { createRunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
@@ -14380,7 +14382,58 @@ export class Agent<
   }
 
   /** Prepare a durable execution without starting it. Requires createDurableAgent() or DurableAgent. */
-  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<unknown> {
-    return this.#requireDurableExecution('prepare');
+  async prepare(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<TOutput>,
+  ): Promise<Omit<PreparationResult<TOutput>, 'messageList'>> {
+    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('prepare');
+
+    const preparation = await prepareForDurableExecution<TOutput>({
+      agent: this.agentForExecution as Agent<string, any, TOutput>,
+      messages,
+      options,
+      // Forward the caller-provided runId (mirrors stream()). Without this,
+      // prepareForDurableExecution mints a fresh id, so prepare() registers a
+      // different run than requested and a follow-up resume(runId) — e.g. when
+      // rehydrating a persisted, suspended run in a fresh process — can't find
+      // its registry entry.
+      runId: options?.runId,
+      requestContext: options?.requestContext,
+      scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
+      resumedSpanData: (options as { [RESUMED_SPAN_DATA]?: PreparationOptions['resumedSpanData'] } | undefined)?.[
+        RESUMED_SPAN_DATA
+      ],
+      mastra: this.#mastra,
+      durableAgentId: this.id,
+      durableAgentName: this.name,
+    });
+
+    preparation.registryEntry.agentId = this.id;
+    this.executionRunRegistry.registerWithMessageList(
+      preparation.runId,
+      preparation.registryEntry,
+      preparation.messageList,
+      {
+        threadId: preparation.threadId,
+        resourceId: preparation.resourceId,
+      },
+    );
+    await this.attachStreamPublisher(preparation.runId, {
+      threadId: preparation.threadId,
+      resourceId: preparation.resourceId,
+    });
+    globalRunRegistry.set(preparation.runId, {
+      ...preparation.registryEntry,
+      messageList: preparation.messageList,
+    });
+
+    return {
+      runId: preparation.runId,
+      messageId: preparation.messageId,
+      workflowInput: preparation.workflowInput,
+      registryEntry: preparation.registryEntry,
+      threadId: preparation.threadId,
+      resourceId: preparation.resourceId,
+    };
   }
 }

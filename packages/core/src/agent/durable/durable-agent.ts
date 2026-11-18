@@ -78,8 +78,8 @@ import {
 } from './execution-fence';
 import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
-import type { PreparationOptions, PreparationResult } from './preparation';
-import { prepareForDurableExecution } from './preparation';
+import type { PreparationResult } from './preparation';
+import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './preparation';
 import { createRunAbortController } from './run-abort';
 import { createRunCleanup } from './run-cleanup';
 import type { ExtendedRunRegistry } from './run-registry';
@@ -113,10 +113,6 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
-/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
-const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
-/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
-const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 /**
@@ -3863,59 +3859,6 @@ export class DurableAgent<
       ...options,
       untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
     } as DurableAgentStreamOptions<TOutput>) as unknown as Promise<DurableAgentStreamResult<OUTPUT>>;
-  }
-
-  /**
-   * Prepare for durable execution without starting it.
-   */
-  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
-    const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
-      messages,
-      options,
-      // Forward the caller-provided runId (mirrors stream()). Without this,
-      // prepareForDurableExecution mints a fresh id, so prepare() registers a
-      // different run than requested and a follow-up resume(runId) — e.g. when
-      // rehydrating a persisted, suspended run in a fresh process — can't find
-      // its registry entry.
-      runId: options?.runId,
-      requestContext: options?.requestContext,
-      scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
-      resumedSpanData: (options as { [RESUMED_SPAN_DATA]?: PreparationOptions['resumedSpanData'] } | undefined)?.[
-        RESUMED_SPAN_DATA
-      ],
-      mastra: this.#mastra,
-      durableAgentId: this.id,
-      durableAgentName: this.name,
-    });
-
-    preparation.registryEntry.agentId = this.id;
-    this.executionRunRegistry.registerWithMessageList(
-      preparation.runId,
-      preparation.registryEntry,
-      preparation.messageList,
-      {
-        threadId: preparation.threadId,
-        resourceId: preparation.resourceId,
-      },
-    );
-    await this.attachStreamPublisher(preparation.runId, {
-      threadId: preparation.threadId,
-      resourceId: preparation.resourceId,
-    });
-    globalRunRegistry.set(preparation.runId, {
-      ...preparation.registryEntry,
-      messageList: preparation.messageList,
-    });
-
-    return {
-      runId: preparation.runId,
-      messageId: preparation.messageId,
-      workflowInput: preparation.workflowInput,
-      registryEntry: preparation.registryEntry,
-      threadId: preparation.threadId,
-      resourceId: preparation.resourceId,
-    };
   }
 
   /**
