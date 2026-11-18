@@ -306,7 +306,10 @@ describe('generated GitLab tools', () => {
 
       await expect(run('gitlab_get_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
 
-      expect(requests.length).toBeGreaterThan(1);
+      // get_branch asks the proxy for three attempts; writes ask for one.
+      expect(requests).toEqual(
+        Array.from({ length: 3 }, () => ({ method: 'GET', target: '/api/v4/projects/42/repository/branches/feature' })),
+      );
     });
   });
 
