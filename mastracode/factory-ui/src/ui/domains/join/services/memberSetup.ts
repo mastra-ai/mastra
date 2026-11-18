@@ -2,6 +2,7 @@ import { createLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-s
 
 import type { ProviderInfo } from '../../../../api/types';
 import { credentialAt } from '../../settings/components/provider-credential';
+import type { ConnectedChannelAccount } from '../../settings/services/channelAccounts';
 import type { OnboardingDraftModel } from '../../workspaces/services/onboardingFlow';
 
 /**
@@ -9,7 +10,7 @@ import type { OnboardingDraftModel } from '../../workspaces/services/onboardingF
  * that, a member who skipped it meets the same model step inline where a session would start. The `mastracode`
  * prefix means signing out forgets it, so the next account to sign in here gets its own first visit.
  */
-const seenStore = createLocalStorageStore<ReadonlySet<string>>({
+export const memberSetupSeenStore = createLocalStorageStore<ReadonlySet<string>>({
   key: 'mastracode.memberSetupSeen',
   defaultValue: new Set(),
   parse: stored => {
@@ -19,13 +20,9 @@ const seenStore = createLocalStorageStore<ReadonlySet<string>>({
   toJSON: seen => [...seen],
 });
 
-export function hasSeenMemberSetup(factoryId: string): boolean {
-  return seenStore.read().has(factoryId);
-}
-
 export function markMemberSetupSeen(factoryId: string) {
-  const seen = seenStore.read();
-  if (!seen.has(factoryId)) seenStore.write(new Set([...seen, factoryId]));
+  const seen = memberSetupSeenStore.read();
+  if (!seen.has(factoryId)) memberSetupSeenStore.write(new Set([...seen, factoryId]));
 }
 
 /**
@@ -34,11 +31,11 @@ export function markMemberSetupSeen(factoryId: string) {
  * provider list.
  */
 export function personalLaneSelection(
-  providers: readonly ProviderInfo[] | undefined,
-  defaultModelId: string | null | undefined,
+  providers: readonly ProviderInfo[],
+  defaultModelId: string | undefined,
 ): OnboardingDraftModel | undefined {
   const defaultProvider = defaultModelId?.split('/')[0];
-  const ordered = [...(providers ?? [])].sort(
+  const ordered = providers.toSorted(
     (a, b) => Number(b.provider === defaultProvider) - Number(a.provider === defaultProvider),
   );
   for (const provider of ordered) {
@@ -54,8 +51,23 @@ export function personalLaneSelection(
  * Slack's web client opens the workspace (and channel, when known) the member came from, or hands off to the
  * desktop app when it is installed.
  */
-export function slackClientUrl(teamId: string | null | undefined, channelId?: string | null): string {
+export function slackClientUrl(teamId: string | undefined, channelId: string | undefined): string {
   if (!teamId) return 'https://app.slack.com/client';
   const channel = channelId ? `/${encodeURIComponent(channelId)}` : '';
   return `https://app.slack.com/client/${encodeURIComponent(teamId)}${channel}`;
+}
+
+export function slackAccountLabel(account: ConnectedChannelAccount): string {
+  return `@${account.externalUserName ?? account.externalUserId} in ${account.externalTeamName ?? account.externalTeamId}`;
+}
+
+/** Where the member came from: Slack's "Connect" or "Finish setup" card, with the workspace and channel to go back to. */
+export interface SlackOrigin {
+  teamId?: string;
+  channelId?: string;
+}
+
+export function slackOrigin(params: URLSearchParams): SlackOrigin | undefined {
+  if (params.get('from') !== 'slack') return undefined;
+  return { teamId: params.get('team') ?? undefined, channelId: params.get('channel') ?? undefined };
 }

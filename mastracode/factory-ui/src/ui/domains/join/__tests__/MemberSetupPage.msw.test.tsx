@@ -20,17 +20,18 @@ const providersUrl = `${TEST_BASE_URL}/web/config/providers`;
 function stubMember({
   modelScope = 'hybrid',
   personalKey = false,
-  personalDefault = null,
+  personalDefault,
   slackLinked = false,
   canConnectSlack = true,
 }: {
   modelScope?: FactoryModelScope;
   personalKey?: boolean;
-  personalDefault?: string | null;
+  personalDefault?: string;
   slackLinked?: boolean;
   canConnectSlack?: boolean;
 } = {}) {
-  const state = { personalKey, personalDefault, keyWrites: [] as unknown[] };
+  const keyWrites: unknown[] = [];
+  const state = { personalKey, personalDefault, keyWrites };
   const project = { id: 'fp-1', name: 'Shipyard', modelScope, defaultModelId: 'anthropic/claude-opus-5-5' };
   const openai = (): ProviderInfo => ({
     provider: 'openai',
@@ -70,7 +71,7 @@ function stubMember({
       });
     }),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: state.personalDefault, thinkingLevel: null }),
+      HttpResponse.json({ modelId: state.personalDefault ?? null, thinkingLevel: null }),
     ),
     http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
       state.personalDefault = (await request.json()).modelId;
@@ -103,64 +104,86 @@ function renderAt(path: string) {
   return router;
 }
 
-describe('Member setup', () => {
-  it('walks a member with nothing connected from their own model to Slack to done', async () => {
-    const state = stubMember();
-    const user = userEvent.setup();
+/** Connects OpenAI with a personal key in the open model step, then confirms the model it suggests. */
+async function connectOwnModel(user: ReturnType<typeof userEvent.setup>) {
+  await chooseProvider(user, 'OpenAI');
+  const dialog = within(screen.getByRole('dialog'));
+  await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-member');
+  await user.click(dialog.getByRole('button', { name: 'Save' }));
+  // The key is the member's own; the lane stays put until they confirm, even though the server now has a model.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
+  await user.click(screen.getByRole('button', { name: 'Continue' }));
+}
 
-    renderAt('/factories/fp-1/setup');
+describe('MemberSetupPage', () => {
+  describe('when a member of a hybrid Factory has no model of their own', () => {
+    it('explains what runs on their account and waits for a model before going on', async () => {
+      stubMember();
 
-    expect(await screen.findByRole('heading', { name: 'Welcome to Shipyard' })).toBeInTheDocument();
-    expect(screen.getByText(/Board work runs on the company account/)).toBeInTheDocument();
-    const continueButton = screen.getByRole('button', { name: 'Continue' });
-    expect(continueButton).toBeDisabled();
+      renderAt('/factories/fp-1/setup');
 
-    await chooseProvider(user, 'OpenAI');
-    const dialog = within(screen.getByRole('dialog'));
-    await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-member');
-    await user.click(dialog.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByRole('heading', { name: 'Welcome to Shipyard' })).toBeInTheDocument();
+      expect(screen.getByText(/Board work runs on the company account/)).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
 
-    // The key is the member's own; the lane stays put until they confirm, even though the server now has a model.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
-    expect(state.keyWrites).toEqual([{ key: 'sk-member', envVar: 'OPENAI_API_KEY', scope: 'user' }]);
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
-    await waitFor(() => expect(state.personalDefault).toBe('openai/gpt-5.5'));
-    expect(await screen.findByRole('region', { name: 'Model' })).toHaveTextContent('openai/gpt-5.5');
-    expect(screen.getByRole('button', { name: 'Sign in with Slack' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Not now' }));
-
-    expect(await screen.findByRole('heading', { name: "You're all set" })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Start a session' })).toHaveAttribute('href', '/factories/fp-1/new');
-  });
-
-  it('has nothing to ask a member of a Factory that runs everything on the company account', async () => {
-    stubMember({ modelScope: 'factory', slackLinked: true });
-
-    renderAt('/factories/fp-1/setup');
-
-    expect(await screen.findByRole('heading', { name: "You're all set" })).toBeInTheDocument();
-    expect(screen.queryByText('Your model')).not.toBeInTheDocument();
-    expect(screen.getByText('@ward in Kepler')).toBeInTheDocument();
-  });
-
-  describe('coming from Slack', () => {
-    it('asks for the model the Slack thread needs, then points back to the thread', async () => {
-      const state = stubMember({ slackLinked: true });
+    it('saves the key they connect as theirs and the picked model as their default', async () => {
+      const state = stubMember();
       const user = userEvent.setup();
+      renderAt('/factories/fp-1/setup');
+      await screen.findByRole('button', { name: 'Continue' });
+
+      await connectOwnModel(user);
+
+      await waitFor(() => expect(state.personalDefault).toBe('openai/gpt-5.5'));
+      expect(state.keyWrites).toEqual([{ key: 'sk-member', envVar: 'OPENAI_API_KEY', scope: 'user' }]);
+      expect(await screen.findByRole('region', { name: 'Model' })).toHaveTextContent('openai/gpt-5.5');
+    });
+
+    it('offers Slack next as optional, then a way into the Factory', async () => {
+      stubMember();
+      const user = userEvent.setup();
+      renderAt('/factories/fp-1/setup');
+      await screen.findByRole('button', { name: 'Continue' });
+      await connectOwnModel(user);
+
+      await user.click(await screen.findByRole('button', { name: 'Not now' }));
+
+      expect(await screen.findByRole('heading', { name: "You're all set" })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Start a session' })).toHaveAttribute('href', '/factories/fp-1/new');
+    });
+  });
+
+  describe('when the Factory runs everything on the company account', () => {
+    it('has nothing to ask', async () => {
+      stubMember({ modelScope: 'factory', slackLinked: true });
+
+      renderAt('/factories/fp-1/setup');
+
+      expect(await screen.findByRole('heading', { name: "You're all set" })).toBeInTheDocument();
+      expect(screen.queryByText('Your model')).not.toBeInTheDocument();
+      expect(screen.getByText('@ward in Kepler')).toBeInTheDocument();
+    });
+  });
+
+  describe('when the member comes from Slack', () => {
+    it('shows the Slack link and asks only for the model the thread needs', async () => {
+      stubMember({ slackLinked: true });
 
       renderAt('/factories/fp-1/setup?from=slack&slack=connected&team=T-1&channel=C-9');
 
       expect(await screen.findByRole('heading', { name: 'Finish setting up Slack' })).toBeInTheDocument();
       expect(screen.getByRole('region', { name: 'Slack' })).toHaveTextContent('@ward in Kepler');
+      expect(screen.queryByRole('button', { name: 'Sign in with Slack' })).not.toBeInTheDocument();
+    });
 
-      await chooseProvider(user, 'OpenAI');
-      const dialog = within(screen.getByRole('dialog'));
-      await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-member');
-      await user.click(dialog.getByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
-      await user.click(screen.getByRole('button', { name: 'Continue' }));
+    it('points back to the Slack thread once their model is saved', async () => {
+      const state = stubMember({ slackLinked: true });
+      const user = userEvent.setup();
+      renderAt('/factories/fp-1/setup?from=slack&slack=connected&team=T-1&channel=C-9');
+      await screen.findByRole('button', { name: 'Continue' });
+
+      await connectOwnModel(user);
 
       expect(await screen.findByRole('heading', { name: "You're all set" })).toBeInTheDocument();
       expect(state.personalDefault).toBe('openai/gpt-5.5');
@@ -182,7 +205,7 @@ describe('Member setup', () => {
   });
 });
 
-describe('Opening a Factory with setup left', () => {
+describe('Opening a Factory home', () => {
   beforeEach(() => {
     // Ambient board plumbing for the tests that land on a Factory's work board.
     server.use(
@@ -193,36 +216,37 @@ describe('Opening a Factory with setup left', () => {
     );
   });
 
-  it('opens setup the first time, then the board', async () => {
-    stubMember();
+  describe('when the member still has to connect a model', () => {
+    it('opens setup the first time, then the board', async () => {
+      stubMember();
 
-    const first = renderAt('/factories/fp-1');
-    await waitFor(() => expect(first.state.location.pathname).toBe('/factories/fp-1/setup'));
-    first.dispose();
+      const first = renderAt('/factories/fp-1');
+      await waitFor(() => expect(first.state.location.pathname).toBe('/factories/fp-1/setup'));
+      first.dispose();
 
-    const second = renderAt('/factories/fp-1');
-    await waitFor(() => expect(second.state.location.pathname).toBe('/factories/fp-1/work'));
+      const second = renderAt('/factories/fp-1');
+      await waitFor(() => expect(second.state.location.pathname).toBe('/factories/fp-1/work'));
+    });
   });
 
-  it('goes straight to the board when the member already has a model', async () => {
-    stubMember({ personalKey: true, personalDefault: 'openai/gpt-5.5' });
+  describe('when the member already has a model', () => {
+    it('goes straight to the board', async () => {
+      stubMember({ personalKey: true, personalDefault: 'openai/gpt-5.5' });
 
-    const router = renderAt('/factories/fp-1');
+      const router = renderAt('/factories/fp-1');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/work'));
+      await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/work'));
+    });
   });
 
-  it('never redirects a deep link, which shows the model step inline instead', async () => {
-    stubMember();
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
-        HttpResponse.json({ categories: {}, tools: {} }),
-      ),
-    );
+  describe('when the member opens a deep link', () => {
+    it('shows the model step inline instead of redirecting', async () => {
+      stubMember();
 
-    const router = renderAt('/factories/fp-1/new');
+      const router = renderAt('/factories/fp-1/new');
 
-    expect(await screen.findByRole('heading', { name: 'Connect your model to start chatting' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/factories/fp-1/new');
+      expect(await screen.findByRole('heading', { name: 'Connect your model to start chatting' })).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe('/factories/fp-1/new');
+    });
   });
 });

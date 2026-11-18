@@ -1,6 +1,6 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
-import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
@@ -9,20 +9,15 @@ import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 
 import { traySurface } from '../../../ui/tray';
-import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
-import { useDefaultModelQuery, useSetDefaultModel } from '../../../../hooks/use-default-model';
-import { useOrgKeyAdminQuery, useProvidersQuery } from '../../../../hooks/use-providers';
-import { PersonalModelLane, usePersonalModelLane } from '../../join/components/PersonalModelLane';
-import { personalLaneSelection } from '../../join/services/memberSetup';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
-import type { FactoryModelScope } from '../../workspaces/services/github';
 import { reservedSpaceClass } from '../../workspace-viewer/layout';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';
 import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
 import { ComposerPanel } from './ComposerPanel';
+import { MissingPersonalModelState } from './MissingPersonalModelState';
 import { TranscriptEntries } from './Transcript';
 
 const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
@@ -154,91 +149,19 @@ function MissingCredentialState({
 }
 
 function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
-  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) return <MissingFactoryModelState factoryId={factoryId} />;
-  return <MissingPersonalModelState factoryId={factoryId} anchor={anchor} />;
-}
-
-/** Runs here use the organization's keys: an admin can add one, anyone else has to ask. */
-function MissingFactoryModelState({ factoryId }: { factoryId: string }) {
-  const isAdmin = useOrgKeyAdminQuery().data === true;
+  if (anchor !== MODEL_DEFAULTS_ANCHORS.factory)
+    return <MissingPersonalModelState factoryId={factoryId} anchor={anchor} />;
   return (
     <EmptyState
       as="h2"
-      iconSlot={<EmptyStateIllustration name="locked" />}
-      titleSlot={isAdmin ? 'Connect the company model' : 'Waiting on an admin'}
-      descriptionSlot={
-        isAdmin
-          ? `Chats here run on the organization's keys, and none is connected yet. Add one under ${MODEL_DEFAULTS_LABELS.factory}.`
-          : `Chats here run on the organization's keys, and none is connected yet. Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory}.`
-      }
+      iconSlot={<IconRobot />}
+      titleSlot="No model available"
+      descriptionSlot={`Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`}
       actionSlot={
-        isAdmin ? (
-          <Link
-            to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)}
-            className={buttonVariants({ variant: 'primary' })}
-          >
-            Open Models settings
-          </Link>
-        ) : undefined
+        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
+          Open Models settings
+        </Link>
       }
     />
-  );
-}
-
-function MissingPersonalModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
-  const project = useFactoryProjectQuery(factoryId);
-  const providers = useProvidersQuery();
-  const modelScope = project.data?.modelScope ?? 'hybrid';
-  return (
-    <div className="flex flex-col items-center gap-5">
-      <EmptyState
-        as="h2"
-        className="py-0"
-        iconSlot={<EmptyStateIllustration name="api-keys" />}
-        titleSlot="Connect your model to start chatting"
-        descriptionSlot={
-          modelScope === 'hybrid'
-            ? 'Board work here runs on the company account. Your own chats run on yours: connect it once and every session, here or in Slack, is ready.'
-            : 'Chats in this Factory run on your own account. Connect it once and every session, here or in Slack, is ready.'
-        }
-      />
-      {/* The lane opens on what the member already connected, so it waits for the provider list. */}
-      {!providers.isPending && <InlinePersonalModel modelScope={modelScope} />}
-      <Link
-        to={settingsSectionPath(factoryId, 'models', anchor)}
-        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-      >
-        More options in Models settings
-      </Link>
-    </div>
-  );
-}
-
-/**
- * Member setup's personal lane, inline. Connecting a provider usually unblocks the composer by itself (the
- * server then has a personal fallback model); when it doesn't, saving the picked model as the personal default
- * does.
- */
-function InlinePersonalModel({ modelScope }: { modelScope: FactoryModelScope }) {
-  const providers = useProvidersQuery();
-  const personalDefault = useDefaultModelQuery();
-  const lane = usePersonalModelLane(personalLaneSelection(providers.data, personalDefault.data?.modelId));
-  const setDefault = useSetDefaultModel();
-  const choice = lane.lane.choice;
-  return (
-    <div className={cn(traySurface, 'flex w-full max-w-lg flex-col gap-1.5 p-1.5 text-start')}>
-      <PersonalModelLane modelScope={modelScope} state={lane} />
-      {setDefault.isError && (
-        <Notice variant="destructive">Couldn&apos;t save your default model. {setDefault.error.message}</Notice>
-      )}
-      <Button
-        variant="primary"
-        className="self-end"
-        disabled={!choice || setDefault.isPending}
-        onClick={() => choice && setDefault.mutate(choice.modelId)}
-      >
-        {setDefault.isPending ? 'Saving…' : 'Start chatting'}
-      </Button>
-    </div>
   );
 }

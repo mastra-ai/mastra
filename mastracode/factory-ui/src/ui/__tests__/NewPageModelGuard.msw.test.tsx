@@ -61,31 +61,18 @@ function stubFallbackModel(catalogQuery: string, provider: Record<string, unknow
 }
 
 describe('NewPage default-model guard', () => {
-  it('replaces the composer with a way to the company model when no key can run a model', async () => {
+  it('replaces the composer with an empty state linking to Model settings when no key can run a model', async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'Connect the company model' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What should we ship?' })).not.toBeInTheDocument();
-  });
-
-  it('tells a member who cannot add organization keys to ask an admin', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [], orgKeyAdmin: false })),
-    );
-
-    renderNewPage();
-
-    expect(await screen.findByRole('heading', { name: 'Waiting on an admin' })).toBeInTheDocument();
-    expect(screen.getByText(/Ask an org admin to add one under Factory defaults/)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open Models settings' })).not.toBeInTheDocument();
   });
 
   it("asks a personal-routed chat for the member's own model instead of starting on the Factory's", async () => {
@@ -103,11 +90,11 @@ describe('NewPage default-model guard', () => {
   });
 
   it('starts the chat in place once the member saves a model on the provider they already connected', async () => {
-    let personalDefault: string | null = null;
+    let personalDefault: string | undefined;
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: personalDefault, thinkingLevel: null }),
+        HttpResponse.json({ modelId: personalDefault ?? null, thinkingLevel: null }),
       ),
       http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
         personalDefault = (await request.json()).modelId;
@@ -198,7 +185,7 @@ describe('NewPage default-model guard', () => {
 
     releaseProject();
 
-    expect(await screen.findByRole('heading', { name: 'Connect the company model' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 

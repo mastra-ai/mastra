@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 
-import { hasSeenMemberSetup } from '../services/memberSetup';
-import { useMemberModelStep } from './useMemberSetup';
+import { memberSetupSeenStore } from '../services/memberSetup';
+import { useMemberModelStep } from './useMemberModelStep';
 
 /**
  * Whether opening a Factory's home should go to its setup page first: once per Factory (the setup page records
@@ -10,9 +10,10 @@ import { useMemberModelStep } from './useMemberSetup';
  * known, so it doesn't flash.
  */
 export function useMemberSetupRedirect(factoryId: string | undefined): 'pending' | 'setup' | 'none' {
-  const seen = useMemo(() => !factoryId || hasSeenMemberSetup(factoryId), [factoryId]);
-  const step = useMemberModelStep(seen ? undefined : factoryId);
-  if (seen || !factoryId) return 'none';
+  const seen = useLocalStorageStore(memberSetupSeenStore);
+  const askFor = factoryId && !seen.has(factoryId) ? factoryId : undefined;
+  const step = useMemberModelStep(askFor);
+  if (!askFor) return 'none';
   if (!step.settled) return 'pending';
-  return step.model === 'needed' ? 'setup' : 'none';
+  return step.needsModel ? 'setup' : 'none';
 }

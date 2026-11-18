@@ -40,8 +40,8 @@ export function OnboardingAccountLane({
   /** The factory is being created: every control locks. */
   creating: boolean;
   onPreviewProvider: PreviewProvider;
-  /** Under the personal lane's model. Defaults to create-factory's note; member setup passes its own, null hides it. */
-  personalNote?: string | null;
+  /** Under the personal lane's model. Defaults to create-factory's note; member setup passes its own. */
+  personalNote?: string;
 }) {
   const labelId = useId();
   const headed = Boolean(heading?.shown);
@@ -76,7 +76,7 @@ export function OnboardingAccountLane({
           <Collapsible open={Boolean(lane.connectedProvider)} className="onboarding-collapse">
             <CollapsibleContent className="flex min-w-0 flex-col gap-3 pt-3">
               {lane.connectedProvider && <FactoryDefaultModelForm scope={scope} lane={lane} />}
-              {scope === 'user' && personalNote && (
+              {scope === 'user' && (
                 <Txt variant="meta" tone="muted">
                   {personalNote}
                 </Txt>
