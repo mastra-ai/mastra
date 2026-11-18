@@ -1886,6 +1886,15 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it('reads events only from the Mastra Factory app’s connections, not the reviews app’s', async () => {
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const route = integration.connectEventRoute(reconcileContext(seed));
+
+    expect(route?.binding.providerKeys).toEqual(['factory-github', 'factory-reviews-github']);
+    expect(route?.eventProviderKeys).toEqual(['factory-github']);
+  });
+
   it('keeps the reconcile worker alive when polling is disabled', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const seed = await createPlatformStorageForTests();

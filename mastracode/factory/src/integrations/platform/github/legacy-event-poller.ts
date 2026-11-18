@@ -11,6 +11,8 @@ import type { LegacyGithubEventCursor, LegacyGithubTransport } from './legacy-tr
 
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
+// A backlogged repository yields to the others and resumes next cycle.
+const MAX_PAGES_PER_REPOSITORY_PER_CYCLE = 10;
 const MIN_LEASE_TTL_MS = 30_000;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const HANDLER_ATTEMPTS = 3;
@@ -218,22 +220,25 @@ export class PlatformGithubLegacyEventPoller extends MastraWorker {
   async #pollRepository(repositoryId: number): Promise<void> {
     const key = String(repositoryId);
     if (!this.#settings.repositories[key]) await this.#saveCursor(key, { afterTimestamp: this.#startedAt });
-    while (this.#running && this.#hasLease) {
+    for (let page = 0; page < MAX_PAGES_PER_REPOSITORY_PER_CYCLE; page += 1) {
+      if (!this.#running || !this.#hasLease) return;
       const cursor = this.#settings.repositories[key]!;
-      const page = await this.#config.transport.listRepositoryEvents(repositoryId, cursor, EVENT_PAGE_SIZE);
-      for (const entry of page.events) {
+      const result = await this.#config.transport.listRepositoryEvents(repositoryId, cursor, EVENT_PAGE_SIZE);
+      for (const entry of result.events) {
         // A replica that lost its lease must not move a cursor the new holder owns.
         if (!this.#running || !this.#hasLease) return;
         await this.#deliver(repositoryId, {
           id: entry.id,
-          timestamp: streamIdTime(entry.id) ?? this.#now(),
+          timestamp: this.#eventTime(repositoryId, entry.id),
           event: entry.event,
           deliveryId: entry.deliveryId,
           payload: entry.payload,
         });
+        // The lease can lapse while a handler runs; the event is then the new holder's to deliver again.
+        if (!this.#running || !this.#hasLease) return;
         await this.#saveCursor(key, { afterEventId: entry.id });
       }
-      if (page.events.length < EVENT_PAGE_SIZE || !page.nextCursor) return;
+      if (result.events.length < EVENT_PAGE_SIZE || !result.nextCursor) return;
     }
   }
 
@@ -267,9 +272,26 @@ export class PlatformGithubLegacyEventPoller extends MastraWorker {
     }
   }
 
+  /**
+   * When the platform logged an event, read from its stream id. The switch
+   * boundary compares it with an org's switch time, so an id that carries no
+   * time is logged rather than silently read as the present.
+   */
+  #eventTime(repositoryId: number, id: string): number {
+    const time = streamIdTime(id);
+    if (time !== undefined) return time;
+    this.deps?.logger.warn('Platform GitHub events: event id carries no time; using the present', {
+      repositoryId,
+      eventId: id,
+    });
+    return this.#now();
+  }
+
   async #saveCursor(key: string, cursor: LegacyGithubEventCursor): Promise<void> {
-    this.#settings.repositories[key] = cursor;
-    await this.#config.storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, this.#settings);
+    const next = { ...this.#settings, repositories: { ...this.#settings.repositories, [key]: cursor } };
+    await this.#config.storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, next);
+    // Only a saved cursor moves: if the save fails, the next cycle delivers the event again.
+    this.#settings = next;
   }
 
   #leaseKey(): string {

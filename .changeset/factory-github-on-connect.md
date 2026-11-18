@@ -11,4 +11,4 @@ Organizations using Platform GitHub can now move onto the new Mastra Factory Git
 - Accounts both apps are installed on later are picked up when Source control loads.
 - Agent sandboxes get a token scoped to their session's repositories, never one for the whole installation.
 
-Organizations that don't switch keep using the Mastra GitHub App unchanged. There is no switch back.
+Organizations that don't switch keep using the Mastra GitHub App, with one change: a webhook Factory fails to handle three times in a row is now skipped and repaired by the next reconcile, instead of holding up every later webhook for its repository. There is no switch back.
