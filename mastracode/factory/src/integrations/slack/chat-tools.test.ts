@@ -62,6 +62,8 @@ function answer(method: string, args: Record<string, string>): Record<string, un
     case 'conversations.replies': {
       const messages = workspace.history[args.channel!] ?? [];
       if (!args.ts || !messages.some(message => message.ts === args.ts)) return { messages: [] };
+      // Slack returns the message at `oldest` only when the request asks for it inclusively.
+      if (args.inclusive !== 'true') return { messages: [] };
       return { messages: messages.filter(message => message.ts === args.oldest) };
     }
     case 'conversations.history': {
