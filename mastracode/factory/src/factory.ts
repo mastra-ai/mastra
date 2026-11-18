@@ -34,6 +34,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -2321,6 +2322,14 @@ export class MastraFactory {
                 resourceId,
               });
               await sessionMemory.settled();
+            },
+            renameThread: async ({ threadId, title }) => {
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              await sessionMemory({ requestContext: new RequestContext() }).updateThread({
+                id: threadId,
+                title,
+                metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true },
+              });
             },
             factoryStorage: storage,
             integrationStorage,
