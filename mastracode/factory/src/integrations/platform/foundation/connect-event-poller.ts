@@ -280,6 +280,8 @@ export class PlatformConnectEventPoller extends MastraWorker {
         // A replica that lost its lease must not move a cursor the new holder owns.
         if (!this.#running || !this.#hasLease) return;
         await this.#deliver(route, connectionId, entry);
+        // The lease can lapse while a handler runs; the event is then the new holder's to deliver again.
+        if (!this.#running || !this.#hasLease) return;
         await this.#saveCursor(connectionId, entry.id);
       }
       if (result.events.length < EVENT_PAGE_SIZE) return;
@@ -334,8 +336,13 @@ export class PlatformConnectEventPoller extends MastraWorker {
   }
 
   async #saveCursor(connectionId: string, afterEventId: string): Promise<void> {
-    this.#settings.connections[connectionId] = { afterEventId };
-    await this.#storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, this.#settings);
+    const next = {
+      ...this.#settings,
+      connections: { ...this.#settings.connections, [connectionId]: { afterEventId } },
+    };
+    await this.#storage.settings.save(CURSOR_ORG_ID, CURSOR_USER_ID, next);
+    // Only a saved cursor moves: if the save fails, the next cycle delivers the event again.
+    this.#settings = next;
   }
 
   #leaseKey(): string {

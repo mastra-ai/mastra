@@ -189,6 +189,24 @@ describe('PlatformConnectEventPoller', () => {
     await vi.waitFor(() => expect(settings.read()?.connections['conn-1']?.afterEventId).toBe('2000-1'));
   });
 
+  it('delivers an event again when its cursor could not be saved, never skipping past it', async () => {
+    const platform = await platformWith([{ id: 'conn-1', integrationId: 'gitlab' }]);
+    platform.connectionEvents.set('conn-1', [logEvent('2000-0')]);
+    const settings = settingsStorage({ version: 1, connections: { 'conn-1': { afterEventId: '1-0' } } });
+    settings.save.mockRejectedValueOnce(new Error('storage unavailable'));
+    const gitlab = route(platform, 'gitlab');
+    const poller = new PlatformConnectEventPoller({
+      storage: settings.storage,
+      routes: [gitlab.route],
+      intervalMs: 20,
+    });
+    await start(poller);
+
+    await vi.waitFor(() => expect(settings.read()?.connections['conn-1']?.afterEventId).toBe('2000-0'));
+    expect(gitlab.handled.map(event => event.id)).toEqual(['2000-0', '2000-0']);
+    expect(eventReads(platform, 'conn-1').slice(0, 2)).toEqual(['1-0', '1-0']);
+  });
+
   it('retries a failing handler, then skips the event and asks its integration to reconcile', async () => {
     const platform = await platformWith([{ id: 'conn-1', integrationId: 'gitlab' }]);
     platform.connectionEvents.set('conn-1', [logEvent('2000-0'), logEvent('2000-1')]);
@@ -331,6 +349,45 @@ describe('PlatformConnectEventPoller', () => {
     expect(settings.save).not.toHaveBeenCalled();
     await poller.stop();
     expect(lease.releaseLease).not.toHaveBeenCalled();
+  });
+
+  it('saves no cursor for an event whose handler outlived its lease', async () => {
+    // Only lease renewal runs on an interval; the fake platform keeps real timeouts.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const platform = await platformWith([{ id: 'conn-1', integrationId: 'gitlab' }]);
+    platform.connectionEvents.set('conn-1', [logEvent('2000-0')]);
+    const settings = settingsStorage({ version: 1, connections: { 'conn-1': { afterEventId: '1-0' } } });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => (release = resolve));
+    const gitlab = route(platform, 'gitlab', () => blocked);
+    const lease: LeaseProvider = {
+      acquireLease: vi
+        .fn()
+        .mockImplementationOnce(async (_key: string, owner: string) => ({ acquired: true, owner }))
+        .mockResolvedValue({ acquired: false, owner: 'other' }),
+      getLeaseOwner: vi.fn(async () => 'other'),
+      releaseLease: vi.fn(async () => undefined),
+      renewLease: vi.fn(async () => false),
+      transferLease: vi.fn(async () => true),
+    };
+    const poller = new PlatformConnectEventPoller({
+      storage: settings.storage,
+      routes: [gitlab.route],
+      intervalMs: 20,
+    });
+    await start(poller, deps(lease));
+
+    await vi.waitFor(() => expect(eventReads(platform, 'conn-1')).toEqual(['1-0']));
+    // Renewal runs every third of the 30-second lease and is refused.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(lease.renewLease).toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(gitlab.handled).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(settings.read()?.connections['conn-1']?.afterEventId).toBe('1-0');
   });
 
   it('releases its lease on a clean stop and reads no further', async () => {
