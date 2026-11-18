@@ -300,3 +300,29 @@ test('a package that fails does not stop packages that do not depend on it', asy
   assert.match(output, /Not published because a dependency failed: @fx\/server@1\.0\.0 \(needs @fx\/memory\)/);
   assert.match(output, /Published 3 of 5 package\(s\)/);
 });
+
+test('a filtered release publishes only the selected packages and the packages they depend on', async t => {
+  const { url, state } = await startRegistry(t, { dependencies: releaseDependencies });
+  const cwd = makeWorkspace(t, url, releasePackages);
+
+  const { status, output } = await run(cwd, url, ['--tag', 'snapshot-ui', '--pnpm-filter-prod', '@fx/memory...']);
+
+  assert.equal(status, 0, output);
+  assert.deepEqual(state.puts.map(put => put.name).sort(), ['@fx/core', '@fx/memory']);
+  assert.deepEqual(state.publishedBeforeDependency, []);
+  assert.ok(state.puts.every(put => put.distTags['snapshot-ui'] === '1.0.0'));
+});
+
+test('a dry run packs every new version and uploads nothing', async t => {
+  const { url, state } = await startRegistry(t, { published: ['@fx/stable@1.0.0'] });
+  const cwd = makeWorkspace(t, url, releasePackages);
+
+  const { status, output } = await run(cwd, url, ['--dry-run']);
+
+  assert.equal(status, 0, output);
+  assert.deepEqual(state.puts, []);
+  for (const name of ['@fx/core', '@fx/memory', '@fx/server', '@fx/voice']) {
+    assert.match(output, new RegExp(`${name}@1\\.0\\.0`));
+  }
+  assert.doesNotMatch(output, /@fx\/stable@1\.0\.0/);
+});
