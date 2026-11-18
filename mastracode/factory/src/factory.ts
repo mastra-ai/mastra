@@ -25,13 +25,14 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -301,10 +302,19 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
-   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * Host-owned Knowledge runtime. Factory registers this exact instance under its `id` and uses that
+   * key for its read surfaces; pass `{ key, instance }` to register it under another key. Omitted,
+   * Knowledge stays off.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: Knowledge | { key: string; instance: Knowledge };
+  /**
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `['org:acme']`. With an
+   * `org:` here, every project's sessions and Knowledge page act with these alone instead of their own
+   * `org:` and `project:` scopes, for a Knowledge instance that declares only that org; every org and
+   * project on this Factory then shares it. A `resource:` or `thread:` scope throws, since those are
+   * each run's own identity, and so does a `project:` beside an `org:`.
+   */
+  scopes?: string[];
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -684,6 +694,9 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
+    // A `resource:` or `thread:` scope, or a `project:` beside an `org:`, is refused by every session; fail here.
+    const hostScopes = resolveKnowledgeSessionScopes({ factoryOrgId: 'factory' }, config.scopes);
+    if (!hostScopes.resolved) throw new Error(`MastraFactory: 'scopes': ${hostScopes.reason}`);
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
     this.#boards = createBoardRegistry({ boards: config.boards });
     warnDefinedBoards(this.#boards);
@@ -705,7 +718,8 @@ export class MastraFactory {
       console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
-    this.#config = config;
+    // Knowledge pages and sessions both read `scopes`, checked above; a copy keeps a caller's later edits out.
+    this.#config = { ...config, ...(config.scopes && { scopes: [...config.scopes] }) };
     this.#metrics = new FactoryMetrics(resolveMetricsConfig(config.metrics), metricsService());
     installFactoryMetrics(this.#metrics);
   }
@@ -2025,6 +2039,7 @@ export class MastraFactory {
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
+        scopes: this.#config.scopes,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase and work-item signals, when work
         // items are on, come after it.
@@ -2341,7 +2356,11 @@ export class MastraFactory {
             mcpEnabled,
             deploymentModelProviders,
             skills: this.#skills,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey:
+              this.#config.knowledge instanceof Knowledge
+                ? this.#config.knowledge.id
+                : this.#config.knowledge?.key.trim(),
+            knowledgeScopes: this.#config.scopes,
             configVersion,
             boardRegistry: boards,
             intakeEvaluator: this.#forcedIntake,
