@@ -181,7 +181,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             </Txt>
           ) : (
             <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
-              <IconLoadingCircle size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
+              <IconLoadingCircle className="size-icon-sm motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
                 Waiting for authorization…
               </Txt>

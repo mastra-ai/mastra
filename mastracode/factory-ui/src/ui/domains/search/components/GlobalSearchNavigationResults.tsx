@@ -51,10 +51,10 @@ export function GlobalSearchNavigationResults({
       />
       <CommandPaletteItem
         icon={<IconSettingsGear5 />}
-        title={SETTINGS_SECTION_LABELS.preferences}
+        title={SETTINGS_SECTION_LABELS.account}
         subtitle="Settings"
-        value={`Preferences Settings preferences ${settingsSectionPath(factoryId, 'preferences')}`}
-        onSelect={() => onSelect(settingsSectionPath(factoryId, 'preferences'), true)}
+        value={`My account Settings account profile preferences theme ${settingsSectionPath(factoryId, 'account')}`}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'account'), true)}
       />
       <CommandPaletteItem
         icon={<IconSettingsGear5 />}
@@ -81,7 +81,7 @@ export function GlobalSearchNavigationResults({
         icon={<IconSettingsGear5 />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake order not routed new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

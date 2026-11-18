@@ -100,12 +100,31 @@ function isWSL(): boolean {
   }
 }
 
-export function openBrowser(url: string) {
-  // Use execFileSync (shell: false) to avoid shell-injection via the URL.
+/**
+ * Parses `url` and returns its normalized form. Throws unless it is an http(s) URL, so that values
+ * such as `file:`, `javascript:` or option-like strings (`--foo`) never reach the OS opener.
+ */
+function toBrowserUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Refusing to open invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Refusing to open non-http(s) URL: ${url}`);
+  }
+  return parsed.href;
+}
+
+export function openBrowser(rawUrl: string) {
+  const url = toBrowserUrl(rawUrl);
+  // Use execFileSync (shell: false) with argument arrays so the URL is never parsed by a shell.
   if (process.platform === 'darwin') {
     execFileSync('open', [url]);
   } else if (process.platform === 'win32') {
-    execFileSync('cmd', ['/c', 'start', '', url]);
+    // Not `cmd /c start`: cmd.exe would treat `&`, `|` etc. in the URL as command separators.
+    execFileSync('rundll32.exe', ['url.dll,FileProtocolHandler', url]);
   } else if (isWSL()) {
     // Pass the URL through the environment so it is never parsed as PowerShell code.
     execFileSync(

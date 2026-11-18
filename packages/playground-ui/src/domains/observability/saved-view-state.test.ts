@@ -242,18 +242,15 @@ describe("the page's default date preset", () => {
   });
 });
 
-describe.each(['traces', 'spans'] as const)('text search in %s saved views', page => {
-  describe('when a search is saved', () => {
-    it('restores the term when the view is applied', () => {
-      const state = savedViewFromSearchParams(page, new URLSearchParams('textSearch=needle'));
-      const applied = applySavedView(state, new URLSearchParams('textSearch=other'));
-      expect(applied.params.get('textSearch')).toBe('needle');
-    });
-  });
-  describe('when a view has no search', () => {
-    it('clears a search left by the previous view', () => {
-      const state = savedViewFromSearchParams(page, new URLSearchParams());
-      expect(applySavedView(state, new URLSearchParams('textSearch=old')).params.has('textSearch')).toBe(false);
-    });
-  });
+describe.each(['traces', 'spans'] as const)('content fields in %s saved views', page => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'round-trips %s word search',
+    field => {
+      const key = page === 'spans' ? `filter.${field}` : `filterSpan${field[0].toUpperCase()}${field.slice(1)}`;
+      const state = savedViewFromSearchParams(page, new URLSearchParams(`${key}=needle&${key}.op=hasAllTokens`));
+      const applied = applySavedView(state, new URLSearchParams());
+      expect(applied.params.get(key)).toBe('needle');
+      expect(applied.params.get(`${key}.op`)).toBe('hasAllTokens');
+    },
+  );
 });

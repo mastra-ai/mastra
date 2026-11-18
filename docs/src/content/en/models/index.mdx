@@ -465,6 +465,32 @@ Other keys behave differently unless they match the key from the `id`:
 
 Options under a key that doesn't apply are dropped without a warning. If an option has no effect on the request, check the key first.
 
+### Set `maxOutputTokens` for other models on an Anthropic-compatible endpoint
+
+When a model that isn't Claude runs behind an Anthropic-compatible endpoint, the bundled Anthropic provider doesn't recognize its ID and caps each response at 4,096 output tokens. A reasoning model can spend that whole budget thinking and stop before it writes any text. The agent then fails with "The model stopped because it reached its maximum output length before finishing."
+
+Set `maxOutputTokens` to the limit your model supports:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
+
+const provider = createAnthropic({
+  baseURL: "https://your-anthropic-compatible-endpoint.com/v1",
+  apiKey: process.env.MY_PROVIDER_API_KEY,
+});
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: provider("my-reasoning-model"),
+  defaultOptions: {
+    modelSettings: { maxOutputTokens: 32000 },
+  },
+})
+```
+
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.

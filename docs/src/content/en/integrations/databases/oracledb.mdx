@@ -194,7 +194,7 @@ const storage = new OracleStore({
 })
 ```
 
-For external authentication, set `externalAuth: true` and omit `password`. To reuse an existing `oracledb.Pool`, pass it as `pool`. Mastra uses it but doesn't close it.
+For external authentication, set `externalAuth: true` and omit `password`. To reuse an existing `oracledb.Pool`, pass it as `pool`, and Mastra uses it but doesn't close it.
 
 `OracleStore` backs memory, workflow snapshots, observability, scores, scorer definitions, MCP client metadata, and agent registry data. When using the store outside a `Mastra` instance, call `await storage.init()` and access a domain with `await storage.getStore('memory')`.
 
@@ -221,7 +221,7 @@ Repeatable migrations are idempotent. They reconcile the tables and indexes owne
 
 Initialization also creates the provider's default indexes for common Mastra query paths. Use `skipDefaultIndexes` when indexes are managed separately, or pass `indexes` for custom Oracle indexes. Custom definitions support Oracle options such as `bitmap`, `online`, `invisible`, `parallel`, `compress`, `noLogging`, and `reverse`, as well as function-based expressions like `JSON_VALUE(...)`.
 
-Custom indexes are useful when your app repeatedly filters on JSON metadata or when database administrators (DBAs) want to test an index before the optimizer uses it:
+Custom indexes are useful when your app filters on JSON metadata in most queries or when database administrators (DBAs) want to test an index before the optimizer uses it:
 
 ```ts
 const storage = new OracleStore({

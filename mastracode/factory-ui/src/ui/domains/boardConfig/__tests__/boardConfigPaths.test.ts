@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardCardMovesPath, boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
+import {
+  boardRulesPath,
+  boardConfigPath,
+  boardSkillPath,
+  boardSkillsPath,
+  newSkillPath,
+  parseBoardConfigPath,
+} from '../boardConfigPaths';
 
 describe('board config paths', () => {
   it('nests a board configuration under the board it configures', () => {
@@ -44,17 +51,25 @@ describe('board config paths', () => {
     });
   });
 
-  it("keeps a board's card moves beside its settings, apart from a phase named moves", () => {
-    expect(boardCardMovesPath('fp-1', 'work')).toBe('/factories/fp-1/work/moves');
-    expect(parseBoardConfigPath(boardCardMovesPath('fp-1', 'release notes'))).toEqual({
+  it('keeps a skill page and the new skill form beside the skills page, even for a skill named new', () => {
+    expect(boardSkillPath('fp-1', 'work', 'new')).toBe('/factories/fp-1/work/skills/new');
+    expect(newSkillPath('fp-1', 'release notes')).toBe('/factories/fp-1/boards/release%20notes/new-skill');
+    for (const path of [boardSkillPath('fp-1', 'work', 'release notes'), newSkillPath('fp-1', 'work')]) {
+      expect(parseBoardConfigPath(path)).toEqual({ factoryId: 'fp-1', boardId: 'work', skills: true });
+    }
+  });
+
+  it("keeps a board's rules beside its settings, apart from a phase named rules", () => {
+    expect(boardRulesPath('fp-1', 'work')).toBe('/factories/fp-1/work/rules');
+    expect(parseBoardConfigPath(boardRulesPath('fp-1', 'release notes'))).toEqual({
       factoryId: 'fp-1',
       boardId: 'release notes',
-      moves: true,
+      rules: true,
     });
-    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'moves'))).toEqual({
+    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'rules'))).toEqual({
       factoryId: 'fp-1',
       boardId: 'work',
-      phaseKey: 'moves',
+      phaseKey: 'rules',
     });
   });
 
@@ -63,8 +78,8 @@ describe('board config paths', () => {
     expect(parseBoardConfigPath('/factories/fp-1/boards/release')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/settings/board')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/config/planning/extra')).toBeUndefined();
-    expect(parseBoardConfigPath('/factories/fp-1/work/skills/extra')).toBeUndefined();
-    expect(parseBoardConfigPath('/factories/fp-1/work/moves/extra')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/work/skills/plan/extra')).toBeUndefined();
+    expect(parseBoardConfigPath('/factories/fp-1/work/rules/extra')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/review/config')).toBeUndefined();
   });
 

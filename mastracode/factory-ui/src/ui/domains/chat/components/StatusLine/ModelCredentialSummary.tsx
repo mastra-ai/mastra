@@ -10,7 +10,7 @@ export function ModelCredentialSummary({ modelId }: { modelId: string | undefine
   return (
     <div className="text-caption flex flex-col gap-1 px-3 py-2">
       <div className="flex min-w-0 items-center gap-1.5">
-        <ProviderBrandIcon provider={credential.provider} fallback={<IconKey2 className="size-3.5" />} />
+        <ProviderBrandIcon provider={credential.provider} fallback={<IconKey2 className="size-icon-sm" />} />
         <span className="text-foreground truncate font-medium">{credential.credential}</span>
       </div>
       <div className="text-muted-foreground flex min-w-0 items-center gap-1.5">

@@ -15276,6 +15276,7 @@ createWorkflowTestSuite({
     // Known failure, pinned with it.fails (#29424 case):
     schemaInitDataDefaultFails: true, // getInitData() returns undefined, not the defaulted input; cause not yet investigated
     abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
+    perStepCancel: true, // same in-step abort() as abortStatus: no 'canceled' status on Inngest
     streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
     abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
     agentStepDeepNested: true, // Deep nested agent workflow fails on Inngest
@@ -15343,6 +15344,7 @@ createWorkflowTestSuite({
     resumeForeachPartialIndex: true, // Foreach partial index resume not supported
     resumeForeachLabel: true, // Foreach label resume not supported
     resumeForeachPartial: true, // Foreach partial resume not supported
+    resumeForeachSuspendData: true, // Relies on the forEachIndex and concurrent foreach resumes skipped above
     resumeNotSuspendedWorkflow: true, // Error for non-suspended workflow differs
     // Storage tests - enabled for testing
     storageListRuns: false,

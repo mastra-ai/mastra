@@ -16,7 +16,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { SettingsSubsection } from './SettingsSubsection';
 import { SoundPicker } from './SettingsFields';
 
-export function GeneralSettings() {
+export function PreferencesSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -25,7 +25,7 @@ export function GeneralSettings() {
     playDoneSound(next);
   };
   return (
-    <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
+    <SettingsSubsection scope="personal" title="Preferences" description="Stored in this browser.">
       <SettingsContainer>
         <SettingsRow label="Theme" description="Color scheme for the interface.">
           <ThemeToggle />
