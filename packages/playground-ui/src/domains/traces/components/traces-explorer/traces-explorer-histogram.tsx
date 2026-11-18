@@ -24,8 +24,15 @@ const SELECTION_CLOCK = new Date(0);
  * Dragging across bars narrows the list to their time span as a custom range.
  */
 export function TracesExplorerHistogram() {
-  const { withQueryTrace, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields } =
-    useTracesConfig();
+  const {
+    rootSource,
+    withQueryTrace,
+    withTokenSearch,
+    withRootDuration,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
+    withOutcomeFields,
+  } = useTracesConfig();
   const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
@@ -34,6 +41,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
+      withTokenSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -49,6 +57,7 @@ export function TracesExplorerHistogram() {
       filters,
       dateFrom,
       dateTo,
+      withTokenSearch,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -63,10 +72,24 @@ export function TracesExplorerHistogram() {
       // No groupBy means a single group; the default limit would multiply past the server's row cap.
       limit: 1,
     };
-  }, [filters, dateFrom, dateTo, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, now]);
+  }, [
+    filters,
+    dateFrom,
+    dateTo,
+    withRootDuration,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
+    withOutcomeFields,
+    withTokenSearch,
+    now,
+  ]);
 
   const hidden =
-    !withQueryTrace || !aggregateAvailable.enabled || runningSelected || exceedsAggregateWindow(request.timeRange);
+    rootSource === 'aggregated' ||
+    !withQueryTrace ||
+    !aggregateAvailable.enabled ||
+    runningSelected ||
+    exceedsAggregateWindow(request.timeRange);
 
   const { data, isLoading, isError, isPlaceholderData } = useTraceAggregate({
     request,

@@ -86,6 +86,18 @@ export interface FactorySandboxContext {
    * the default branch head itself.
    */
   resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
+  /**
+   * Environment for template builds and setup steps only, never for runtime
+   * commands. Providers keep it out of template identity and out of the
+   * image, and may ignore it when their builder can't do that.
+   */
+  buildEnv?: Record<string, string>;
+  /**
+   * Opaque id that changes whenever `buildEnv` changes. Providers include it
+   * in template identity so an edit rebuilds the template. Never derived
+   * from the values.
+   */
+  buildEnvRevision?: string;
 }
 
 /**

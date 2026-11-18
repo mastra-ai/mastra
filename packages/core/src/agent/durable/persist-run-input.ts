@@ -44,7 +44,8 @@ export async function persistDurableRunInput(
   });
   // Input membership is also used by OM and tool context, not just persistence.
   // Save a copy so later consumers still see the accepted request; saves upsert by ID.
-  await entry.saveQueueManager.flushMessages(entry.messageList.clone(), state.threadId, state.memoryConfig, {
+  const inputCopy = entry.messageList.clone();
+  await entry.saveQueueManager.flushMessages(inputCopy, state.threadId, state.memoryConfig, {
     throwOnError: true,
     beforePersist: () =>
       assertExecutionOwned({
@@ -54,4 +55,12 @@ export async function persistDurableRunInput(
         requestContext,
       }),
   });
+  // The save embedded the input on the copy. Carry that onto the live list so the finalize step
+  // (the SemanticRecall processor, then the final flush) does not embed it again. A finalize on
+  // another worker (evented, Inngest) never sees this list; it embeds the input once more into
+  // the same rows, because row ids come from the message id.
+  const embedded = entry.messageList.getEmbeddedMessages();
+  for (const [messageId, textHash] of inputCopy.getEmbeddedMessages()) {
+    embedded.set(messageId, textHash);
+  }
 }

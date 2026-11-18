@@ -2,7 +2,6 @@
 title: "Reference: Context recall scorer | Evals"
 description: "The createContextRecallScorer() function creates a scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -102,7 +101,7 @@ The score is then calculated as the ratio of attributed claims to total claims, 
 
 ### Scoring formula
 
-```
+```text
 Context Recall = attributed_claims / total_claims × scale
 
 Where:

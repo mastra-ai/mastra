@@ -42,6 +42,7 @@ import {
   SPAN_PAYLOAD_COLUMNS,
   apiPreview,
   previewFromPayload,
+  timeRangeOf,
 } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
 import { storedPreview as buildStoredPreview, needsPreview } from './preview-compat';
@@ -236,7 +237,9 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('resourceId')},
     ${argMaxNonNull('error')},
     ${argMaxNonNull('metadata')},
-    ${RECONSTRUCT_PREVIEWS_SQL}
+    ${RECONSTRUCT_PREVIEWS_SQL},
+    min(timestamp) AS firstEventAt,
+    max(timestamp) AS lastEventAt
   FROM span_events
 `;
 
@@ -390,13 +393,15 @@ async function fillMissingReconstructedPreviews(db: DuckDBConnection, rows: Reco
   if (flagged.length === 0) return;
 
   const traceIds = [...new Set(flagged.map(row => row.traceId as string))];
+  const [minTs, maxTs] = timeRangeOf(flagged.flatMap(row => [row.firstEventAt, row.lastEventAt] as Date[]));
   const payloads = await db.query<Record<string, unknown>>(
     `SELECT traceId, spanId, ${PREVIEW_PAYLOADS.map(([, payload]) => argMaxNonNull(payload)).join(', ')}
      FROM span_events
-     WHERE traceId IN (${traceIds.map(() => '?').join(', ')})
+     WHERE timestamp BETWEEN ? AND ?
+       AND traceId IN (${traceIds.map(() => '?').join(', ')})
        AND (traceId, spanId) IN (SELECT * FROM (VALUES ${flagged.map(() => '(?, ?)').join(', ')}))
      GROUP BY traceId, spanId`,
-    [...traceIds, ...flagged.flatMap(row => [row.traceId, row.spanId])],
+    [minTs, maxTs, ...traceIds, ...flagged.flatMap(row => [row.traceId, row.spanId])],
   );
   const byKey = new Map(payloads.map(payload => [`${payload.traceId}\u0000${payload.spanId}`, payload]));
   for (const row of flagged) {

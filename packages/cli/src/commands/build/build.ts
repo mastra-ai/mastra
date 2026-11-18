@@ -9,7 +9,7 @@ import {
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { findMastraEntryFile } from '../../utils/find-mastra-entry';
 import { createLogger } from '../../utils/logger';
-import { getMastraPackages } from '../../utils/mastra-packages';
+import { getMastraPackages, writeMastraPackagesManifest } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
 import { buildFactoryUI, copyFactorySkills } from './factory-ui-build';
@@ -41,6 +41,15 @@ export async function build({
   const mastraPackages = await getMastraPackages(rootDir);
   const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
   logPeerDepWarnings(peerDepMismatches);
+
+  // Ship the resolved package versions so the deployed server can report them.
+  // Optional metadata: a failed write must not fail the build.
+  const shipPackageVersions = () =>
+    writeMastraPackagesManifest(join(outputDirectory, 'output'), mastraPackages).catch((error: unknown) => {
+      logger.warn(
+        `Could not write the package versions manifest: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 
   try {
     // Look for the user's mastra entry file. When it doesn't exist (fully
@@ -92,6 +101,7 @@ export async function build({
       // fs-routed agents start with those files on disk.
       await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
       if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
+      await shipPackageVersions();
 
       // Write build manifest with source hash for staleness detection
       const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
@@ -128,6 +138,7 @@ export async function build({
     // fs-routed agents start with those files on disk.
     await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
     if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
+    await shipPackageVersions();
 
     // Write build manifest with source hash for staleness detection
     const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);

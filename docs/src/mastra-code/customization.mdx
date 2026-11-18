@@ -213,7 +213,7 @@ const { controller } = await createMastraCode({
 | Field | Type | Default | Description |
 | - | - | - | - |
 | `yolo` | `boolean` | `true` | Auto-approve all tool calls |
-| `thinkingLevel` | `string` | `"off"` | Extended thinking depth for Anthropic models |
+| `thinkingLevel` | `string` | — | Session override for model reasoning effort. When unset, Mastra Code uses a host-provided default (such as a Factory default) if one exists, then the per-mode setting, then the global preference |
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert when the TUI needs attention |
 | `permissionRules` | `object` | Default policies | Per-category and per-tool approval policies |

@@ -42,13 +42,13 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   <StepItem>
     The CLI runs a preflight check before every deploy. Storage that would fall back to a local file path (which doesn't survive on the platform's ephemeral filesystem) would normally block the deploy:
 
-    ```
+    ```text
     file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
     ```
 
     Instead of erroring out, the CLI offers to fix it inline for you:
 
-    ```
+    ```text
     Preflight needs TURSO_DATABASE_URL for the production environment. Create a managed turso database now and attach it? (Y/n)
     ```
 

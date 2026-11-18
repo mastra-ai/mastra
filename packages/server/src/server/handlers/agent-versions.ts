@@ -1,5 +1,6 @@
-import type { z } from 'zod/v4';
+import type { RequestContext } from '@mastra/core/request-context';
 
+import type { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -19,6 +20,8 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
+import { assertReadAccess, assertWriteAccess } from './authorship';
+import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import {
@@ -51,6 +54,24 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'requestContextSchema',
   'mcpClients',
 ] as const;
+
+/**
+ * Versions carry the agent's full config and decide which config is live, so they follow the same owner/visibility
+ * rules as `/stored/agents/:id` (404 "Not found" when denied). Code agents have no stored record and aren't checked.
+ */
+function assertVersionAccess(
+  requestContext: RequestContext,
+  agentId: string,
+  record: OwnedRecord | null | undefined,
+  action: 'read' | 'edit' | 'delete',
+): void {
+  if (!record) return;
+  if (action === 'read') {
+    assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
+  } else {
+    assertWriteAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, action, record });
+  }
+}
 
 // ============================================================================
 // Route Definitions
@@ -97,6 +118,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
       assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, storedAgent, 'read');
 
       const result = await agentsStore.listVersions({
         agentId,
@@ -145,6 +167,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'edit');
 
       // Get the current active version to snapshot its config
       let currentConfig: Record<string, unknown> = {};
@@ -244,6 +267,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
       }
       const agent = await agentsStore.getById(agentId);
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'read');
 
       return version;
     } catch (error) {
@@ -284,6 +308,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'edit');
 
       // Verify version exists and belongs to this agent
       const version = await agentsStore.getVersion(versionId);
@@ -353,6 +378,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'edit');
 
       // Get the version to restore
       const versionToRestore = await agentsStore.getVersion(versionId);
@@ -455,6 +481,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'delete');
 
       // Verify version exists and belongs to this agent
       const version = await agentsStore.getVersion(versionId);
@@ -527,6 +554,7 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
       }
       const agent = await agentsStore.getById(agentId);
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      assertVersionAccess(requestContext, agentId, agent, 'read');
 
       // Get both versions
       const fromVersion = await agentsStore.getVersion(from);

@@ -1,15 +1,9 @@
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import { GitLabIcon } from '../../../../../ui/icons';
+import { REPOSITORY_PROVIDER_ICONS } from '../../repositoryProviderIcons';
 import type { RepositoryProvider } from './change-tree';
-
-const PROVIDER_ICONS: Record<RepositoryProvider, ComponentType<{ className?: string }>> = {
-  github: GithubIcon,
-  gitlab: GitLabIcon,
-};
 
 interface RepositoryGroupHeaderProps {
   label: string;
@@ -20,7 +14,7 @@ interface RepositoryGroupHeaderProps {
 }
 
 export function RepositoryGroupHeader({ label, provider, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
-  const ProviderIcon = provider && PROVIDER_ICONS[provider];
+  const ProviderIcon = provider && REPOSITORY_PROVIDER_ICONS[provider];
   return (
     <button
       type="button"

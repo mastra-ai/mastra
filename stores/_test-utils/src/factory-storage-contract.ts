@@ -130,6 +130,12 @@ export function describeFactoryStorageContract(
         expect(storage.getMastraStorage()).toBe(storage.getMastraStorage());
       });
 
+      it('reports whether a collection table exists', async () => {
+        expect(storage.collectionExists).toBeTypeOf('function');
+        expect(await storage.collectionExists!(CONTRACT_ITEMS.name)).toBe(true);
+        expect(await storage.collectionExists!('contract_never_created')).toBe(false);
+      });
+
       it('rejects operations on unregistered collections', async () => {
         await expect(storage.ops.findOne('no_such_collection', {})).rejects.toThrow(/no_such_collection/);
       });
@@ -172,6 +178,50 @@ export function describeFactoryStorageContract(
         await expect(storage.ops.insertOne(v2.name, { org_id: 'org-1', note: 'dup' })).rejects.toThrow(
           UniqueViolationError,
         );
+      });
+
+      it('keeps a column removed from the schema, and its data, but stops requiring it', async () => {
+        const v1: CollectionSchema = {
+          name: 'contract_retire',
+          columns: {
+            id: { type: 'uuid-pk' },
+            org_id: { type: 'text' },
+            retired: { type: 'text' },
+            retired_flag: { type: 'boolean', default: false },
+            drifted: { type: 'text' },
+          },
+          uniqueIndexes: [{ name: 'contract_retire_org_unique', columns: ['org_id'] }],
+        };
+        await storage.ensureCollections([v1]);
+        await storage.ops.deleteMany(v1.name, {});
+        await storage.ops.insertOne(v1.name, {
+          org_id: 'org-1',
+          retired: 'old value',
+          retired_flag: true,
+          drifted: 'x',
+        });
+
+        // `retired` and `retired_flag` leave the schema; `drifted` becomes nullable in the same
+        // step, which on some backends rebuilds the table.
+        const v2: CollectionSchema = {
+          name: v1.name,
+          columns: { id: { type: 'uuid-pk' }, org_id: { type: 'text' }, drifted: { type: 'text', nullable: true } },
+          uniqueIndexes: v1.uniqueIndexes,
+        };
+        await storage.ensureCollections([v2]);
+
+        const inserted = await storage.ops.insertOne<Record<string, unknown>>(v2.name, { org_id: 'org-2' });
+        expect(inserted).toEqual({ id: expect.any(String), org_id: 'org-2', drifted: null });
+        await expect(storage.ops.insertOne(v2.name, { org_id: 'org-1' })).rejects.toThrow(UniqueViolationError);
+
+        // Re-declaring the old shape reads the retired columns back: nothing was dropped.
+        await storage.ensureCollections([
+          { ...v1, columns: { ...v1.columns, drifted: { type: 'text', nullable: true } } },
+        ]);
+        const prior = await storage.ops.findOne<Record<string, unknown>>(v1.name, { org_id: 'org-1' });
+        expect(prior).toMatchObject({ retired: 'old value', retired_flag: true, drifted: 'x' });
+        const fresh = await storage.ops.findOne<Record<string, unknown>>(v1.name, { org_id: 'org-2' });
+        expect(fresh).toMatchObject({ retired: null, retired_flag: false });
       });
     });
 

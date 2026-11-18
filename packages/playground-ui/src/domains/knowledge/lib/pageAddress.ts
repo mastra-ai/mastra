@@ -1,4 +1,51 @@
+import type { ComponentType, SVGProps } from 'react';
+
 import type { KnowledgePagePayload } from '../pageTypes';
+
+import { ConfluenceIcon, GithubIcon, GoogleIcon, LinearIcon, NotionIcon, SlackIcon, ZendeskIcon } from '@/ds/icons';
+
+type KnowledgeSource = { label: string; icon?: ComponentType<SVGProps<SVGSVGElement>> };
+
+const SOURCES: Record<string, KnowledgeSource> = {
+  linear: { label: 'Linear', icon: LinearIcon },
+  notion: { label: 'Notion', icon: NotionIcon },
+  confluence: { label: 'Confluence', icon: ConfluenceIcon },
+  zendesk: { label: 'Zendesk', icon: ZendeskIcon },
+  fireflies: { label: 'Fireflies' },
+  github: { label: 'GitHub', icon: GithubIcon },
+  slack: { label: 'Slack', icon: SlackIcon },
+  google: { label: 'Google', icon: GoogleIcon },
+};
+
+function importerRootKey(page: KnowledgePagePayload) {
+  return !page.isScope && page.parentId === page.scopeId ? page.key : undefined;
+}
+
+/**
+ * The source imported pages came from: an importer's own scope (`linear:…`), or the page an importer
+ * writes its pages under, directly inside the organization scope and keyed by its source (`notion`).
+ */
+export function scopeSource(page: KnowledgePagePayload) {
+  const key = page.isScope && page.address ? page.address.slice(0, page.address.indexOf(':')) : importerRootKey(page);
+  return key && Object.hasOwn(SOURCES, key) ? SOURCES[key] : undefined;
+}
+
+/** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */
+const SCOPE_KINDS = new Map([
+  ['org', 'Organization'],
+  ['project', 'Project'],
+  ['user', 'User'],
+  ['agent', 'Agent'],
+  ['team', 'Team'],
+]);
+
+export function scopeTitle(page: KnowledgePagePayload): string {
+  const importerKey = importerRootKey(page);
+  if (importerKey && page.name === importerKey) return scopeSource(page)?.label ?? page.name;
+  if (!page.address || page.name !== page.address) return page.name;
+  const kind = page.address.slice(0, page.address.indexOf(':'));
+  return scopeSource(page)?.label ?? SCOPE_KINDS.get(kind) ?? page.name;
+}
 
 /** The page's place from its root scope down, through the pages the graph holds. */
 export function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string {

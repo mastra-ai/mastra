@@ -7,7 +7,7 @@ description: "Browse Ollama Cloud model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/ollama-cloud.svg" alt="Ollama Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ollama Cloud
 
-Access 25 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
+Access 26 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
 
 Learn more in the [Ollama Cloud documentation](https://docs.ollama.com/cloud).
 
@@ -212,6 +212,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "ollama-cloud/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "ollama-cloud/mimo-v2.6-flash",

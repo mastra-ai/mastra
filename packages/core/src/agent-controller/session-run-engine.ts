@@ -11,6 +11,7 @@ import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/th
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
+import { describeNonSuccessFinishReason } from '../loop/shared/non-success-finish-reason';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -21,12 +22,7 @@ import {
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
-import {
-  describeNonSuccessFinishReason,
-  describeServerSideFallback,
-  getDisplayTransform,
-  toStepTokenUsage,
-} from './stream-content';
+import { describeServerSideFallback, getDisplayTransform, toStepTokenUsage } from './stream-content';
 import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
@@ -907,7 +903,8 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
+        // The policy is that of the run's own thread, which may not be the one the session holds now.
+        const policy = this.#session.resolveToolApproval(toolName, requestContext);
 
         // Resolve the call against the run that raised it, not the session's
         // currently-bound thread/run/resource. The session can switch thread or
@@ -1248,7 +1245,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }
@@ -1610,6 +1607,9 @@ export class SessionRunEngine {
             toolCallId,
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
+            killed: getBoolean(d?.killed, false),
+            timedOut: getBoolean(d?.timedOut, false),
+            error: getString(d?.error),
           });
         }
         break;
@@ -1950,10 +1950,11 @@ export class SessionRunEngine {
             chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+            // Finish the stream state before checking the chunk type: it emits the
+            // `message_end` that closes the assistant message, which a turn ending in a
+            // tool suspension needs as much as any other.
+            const finished = streamResult ?? this.finishStreamState(currentRun);
+            const suspended = chunk.type === 'tool-call-suspended' || finished.suspended || undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the

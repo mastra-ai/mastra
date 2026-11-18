@@ -231,6 +231,53 @@ describe('useTracesListSource', () => {
         await new Promise(resolve => setTimeout(resolve, 100));
       });
 
+    describe('when search disables delta polling after the page has been open', () => {
+      it('uses the current time on the first search request and continues refreshing', async () => {
+        const requests = deltaHandlers();
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'], shouldAdvanceTime: true });
+        vi.setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+        const { rerender } = renderHook(
+          ({ searchTerm }: { searchTerm?: string }) =>
+            useTracesListSource({
+              query: now => ({
+                ...query(now),
+                ...(searchTerm
+                  ? {
+                      where: {
+                        spans: {
+                          some: {
+                            op: 'hasAllTokens' as const,
+                            left: { path: 'all' as const },
+                            right: { literal: searchTerm },
+                          },
+                        },
+                      },
+                    }
+                  : {}),
+              }),
+              withDeltaPolling: !searchTerm,
+            }),
+          { wrapper: Wrapper, initialProps: { searchTerm: undefined } },
+        );
+        await waitFor(() => expect(requests.listRequests).toHaveLength(1));
+        await waitFor(() => expect(requests.deltaRequests).toHaveLength(1));
+        vi.setSystemTime(new Date('2026-09-01T12:00:00.000Z'));
+        rerender({ searchTerm: 'needle' });
+        await waitFor(() => expect(requests.listRequests).toHaveLength(2));
+        expect(Date.parse(requests.listRequests[1]?.timeRange.to ?? '')).toBeGreaterThanOrEqual(
+          Date.parse('2026-09-01T12:00:00.000Z'),
+        );
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
+        });
+        await waitFor(() => expect(requests.listRequests).toHaveLength(3));
+        expect(Date.parse(requests.listRequests[2]?.timeRange.to ?? '')).toBeGreaterThan(
+          Date.parse(requests.listRequests[1]?.timeRange.to ?? ''),
+        );
+        expect(requests.deltaRequests).toHaveLength(1);
+      });
+    });
+
     it('merges new traces from delta polls without reloading the list', async () => {
       const requests = deltaHandlers();
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });

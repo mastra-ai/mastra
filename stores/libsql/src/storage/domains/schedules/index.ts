@@ -62,6 +62,8 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   if (metadata !== undefined) schedule.metadata = metadata;
   if (row.owner_type != null) schedule.ownerType = String(row.owner_type) as Schedule['ownerType'];
   if (row.owner_id != null) schedule.ownerId = String(row.owner_id);
+  if (row.run_at != null) schedule.runAt = toNumber(row.run_at);
+  if (row.end_at != null) schedule.endAt = toNumber(row.end_at);
   return schedule;
 }
 
@@ -110,6 +112,17 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULES,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
     });
+    for (const column of ['run_at', 'end_at']) {
+      try {
+        await this.#db.alterTable({
+          tableName: TABLE_SCHEDULES,
+          schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+          ifNotExists: [column],
+        });
+      } catch (error) {
+        if (!(await this.#db.hasColumn(TABLE_SCHEDULES, column))) throw error;
+      }
+    }
     await this.#db.createTable({
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
@@ -225,6 +238,8 @@ export class SchedulesLibSQL extends SchedulesStorage {
         metadata: schedule.metadata ?? null,
         owner_type: schedule.ownerType ?? null,
         owner_id: schedule.ownerId ?? null,
+        run_at: schedule.runAt ?? null,
+        end_at: schedule.endAt ?? null,
       },
     });
     return schedule;
@@ -324,6 +339,14 @@ export class SchedulesLibSQL extends SchedulesStorage {
     if ('ownerId' in patch) {
       setClauses.push('owner_id = ?');
       params.push((patch.ownerId as string | undefined) ?? null);
+    }
+    if ('runAt' in patch) {
+      setClauses.push('run_at = ?');
+      params.push(patch.runAt ?? null);
+    }
+    if ('endAt' in patch) {
+      setClauses.push('end_at = ?');
+      params.push(patch.endAt ?? null);
     }
 
     setClauses.push('updated_at = ?');

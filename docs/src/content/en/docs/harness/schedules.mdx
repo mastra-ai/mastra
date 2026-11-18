@@ -50,7 +50,7 @@ await mastra.schedules.create({
 })
 ```
 
-Mastra starts the scheduler the first time a schedule is created, then fires the agent on the cron you specify.
+Schedules fire only in a process where Mastra's background [workers](/docs/deployment/workers) are running. The server that `mastra dev` and `mastra build` generate starts them for you. With a [server adapter](/docs/server/server-adapters) or your own script, call `mastra.startWorkers()` yourself, otherwise schedules are saved but never fire. See [Start background workers](/docs/server/server-adapters#start-background-workers).
 
 ## Cadence
 
@@ -204,6 +204,8 @@ The hooks are:
 - `onAbort`: runs when the run of a schedule without a `threadId` was aborted.
 
 For a schedule with a `threadId`, the worker sends the prompt to the thread and doesn't wait for the run. Errors and aborts after the run starts surface on that thread's run, not through `onError` or `onAbort`.
+
+If you need to react to the completed run, use a threadless schedule. For lifecycle state, cleanup, retries, or multiple steps, use a [scheduled workflow](/docs/workflows/scheduled-workflows).
 
 Every hook context includes `agentId` (the agent the schedule fired for) alongside `schedule` and `trigger`.
 

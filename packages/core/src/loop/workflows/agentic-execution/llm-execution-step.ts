@@ -87,6 +87,7 @@ import {
   MEMORY_KEY,
   RESOURCE_ID_KEY,
   SAVE_ACCEPTED_USER_SIGNALS_KEY,
+  SKIP_BG_TASK_WAIT_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
@@ -98,17 +99,19 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
+import { backgroundOutcomesInPrompt, snapshotBackgroundOutcomes } from '../../shared/background-outcomes';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { trackOpenReasoning, watchInterruptibleStream } from '../../shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { describeNonSuccessFinishReason } from '../../shared/non-success-finish-reason';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
-import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import { TERMINAL_FINISH_REASONS, TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
@@ -569,6 +572,8 @@ async function processOutputStream<OUTPUT = undefined>({
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   let hasStepContent = false;
+  // Like hasStepContent, but reasoning alone does not count: it is not an answer.
+  let hasAnswerContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
   const getToolResultProcessorRunner = (): ProcessorRunner => {
@@ -785,6 +790,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
       hasStepContent = true;
+      hasAnswerContent = true;
       controller.enqueue(chunk);
       continue;
     }
@@ -845,6 +851,10 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (STEP_CONTENT_CHUNK_TYPES.has(chunk.type)) {
       hasStepContent = true;
+      // An empty text-delta can still arrive to carry provider metadata (e.g. a Gemini
+      // thought signature), and a source is a citation; neither is part of an answer.
+      const isEmptyTextDelta = chunk.type === 'text-delta' && !chunk.payload.text;
+      if (chunk.type !== 'reasoning-delta' && chunk.type !== 'source' && !isEmptyTextDelta) hasAnswerContent = true;
     }
 
     // Collect every chunk for post-stream message building
@@ -1000,6 +1010,34 @@ async function processOutputStream<OUTPUT = undefined>({
               ...runState.state.stepResult,
               reason: 'error',
               isContinued: false,
+            },
+          });
+        }
+
+        // A model that spends its whole output budget before answering (typically all of it
+        // on reasoning) stops with finishReason 'length' and no text. Truncated text is a
+        // usable result, but an empty one is not: without an error the caller just gets ''.
+        // Report it the way AgentController does, through the deferred-error path.
+        if (chunk.payload.stepResult.reason === 'length' && !hasAnswerContent && !runState.state.hasErrored) {
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: `${describeNonSuccessFinishReason('length', chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata)} The step produced no text or tool calls; increase maxOutputTokens to leave room for the answer.`,
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              runId: chunk.runId,
+              finishReason: 'length',
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
             },
           });
         }
@@ -1651,7 +1689,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
         materializeFailedAttempt = undefined;
         settleRequest();
-        settleRequest = startRunStep(options?.abortSignal);
+        settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1991,6 +2029,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
+        // `skipBgTaskWait` marks an `untilIdle` inner run, the only reader of these outcomes. Taken
+        // before the prompt is built so an outcome that lands meanwhile is never counted as sent.
+        const backgroundOutcomes = readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')
+          ? snapshotBackgroundOutcomes(messageList)
+          : undefined;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
           if (!isDownloadAssetsError(error)) {
@@ -1999,6 +2042,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        const builtPrompt = inputMessages;
         removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
@@ -2103,6 +2147,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
+        // A cached reply may come from a different prompt under a custom cache key, so it never
+        // counts as having answered a background result.
+        const backgroundResultTaskIds =
+          backgroundOutcomes && !cachedResponse
+            ? backgroundOutcomesInPrompt(backgroundOutcomes, builtPrompt, inputMessages)
+            : [];
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -2131,10 +2181,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               for (const chunk of replayChunks) {
                 // Reattach per-run metadata that was stripped at cache time. A cached
                 // step-start timestamp belongs to the original provider call, so omit it
-                // rather than reporting stale inference timing for the replay.
+                // rather than reporting stale inference timing for the replay. Cached background
+                // task ids belong to the original run.
                 let replayChunk = chunk;
                 if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
-                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
+                  const {
+                    startedAt: _startedAt,
+                    backgroundResultTaskIds: _cachedTaskIds,
+                    ...payload
+                  } = chunk.payload as Record<string, unknown>;
                   replayChunk = { ...chunk, payload };
                 }
                 controller.enqueue({
@@ -2194,7 +2249,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // runs while the retry waits, so a lease lost during that wait stops the run too.
                 onRequestFailed: () => settleRequest(),
                 onRequestRetry: () => {
-                  settleRequest = startRunStep(options?.abortSignal);
+                  settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
                 },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,
@@ -2244,6 +2299,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       startedAt: inferenceStartedAt,
                       modelId: currentStep.model.modelId,
                       provider: currentStep.model.provider,
+                      ...(backgroundResultTaskIds.length > 0 ? { backgroundResultTaskIds } : {}),
                     },
                   };
                 },
@@ -3002,6 +3058,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
       // 2. Last model: error came as a stream chunk, run processAPIError now
       let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
+      const attemptError = runState.state.apiError;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         // Settled first so the suspension gate below sees calls still running.
@@ -3119,6 +3176,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
+        // The retry opens its own inference span within this step, so close the failed one with its error.
+        if (attemptError) {
+          const failure = attemptError instanceof Error ? attemptError : new Error(String(attemptError));
+          modelSpanTracker?.failInference?.(failure);
+        }
         cleanupProviderToolSpans(true);
         // The failed attempt already streamed its partial output into the messageList.
         // Roll it back to this iteration's boundary, as a retrying tripwire does, so the
@@ -3160,6 +3222,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             reason: 'retry',
             warnings,
             isContinued: true,
+            // The failed request is re-attempted within the same logical step, as durable does:
+            // no step, no step-finish, and nothing counted against maxSteps (COR-1554).
+            signalPreempted: true,
           },
           metadata: {
             providerMetadata: runState.state.providerOptions,
@@ -3388,11 +3453,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // some models return finishReason='stop' alongside tool calls, which the
       // loop must process.
       const hasPendingToolCalls =
-        toolCalls &&
-        toolCalls.some(tc => !tc.providerExecuted) &&
-        finishReason !== 'error' &&
-        finishReason !== 'length' &&
-        finishReason !== 'content-filter';
+        toolCalls && toolCalls.some(tc => !tc.providerExecuted) && !TOOL_CALL_TERMINAL_FINISH_REASONS.has(finishReason);
       // A non-terminal finish reason only re-enters the loop when the step produced tool calls
       // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
       // when the stream omits finish_reason) re-sending the same request would duplicate the

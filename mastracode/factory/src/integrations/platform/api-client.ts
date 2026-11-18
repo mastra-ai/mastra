@@ -1,3 +1,5 @@
+import { bootDiagnosticsEnabled } from '../../timing.js';
+
 export interface PlatformApiClientConfig {
   baseUrl: string;
   accessToken: string;
@@ -213,6 +215,11 @@ function redact(message: string, accessToken: string): string {
 
 export function logPlatformInfo(message: string, fields?: Record<string, unknown>): void {
   writePlatformLog('info', message, fields);
+}
+
+/** Startup detail that `mastra factory dev` hides unless run with `--debug`. */
+export function logPlatformBootInfo(message: string, fields?: Record<string, unknown>): void {
+  if (bootDiagnosticsEnabled) writePlatformLog('info', message, fields);
 }
 
 export function logPlatformWarn(message: string, fields?: Record<string, unknown>): void {

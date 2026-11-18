@@ -329,7 +329,7 @@ For output guardrails, run `TokenLimiterProcessor` and `BatchPartsProcessor` seq
 ```typescript title="src/mastra/processors/output-guardrails.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows'
 import {
-  ProcessorStepSchema,
+  ProcessorStepOutputSchema,
   PIIDetector,
   ModerationProcessor,
   SystemPromptScrubber,
@@ -339,8 +339,8 @@ import {
 
 export const outputGuardrails = createWorkflow({
   id: 'output-guardrails',
-  inputSchema: ProcessorStepSchema,
-  outputSchema: ProcessorStepSchema,
+  inputSchema: ProcessorStepOutputSchema,
+  outputSchema: ProcessorStepOutputSchema,
 })
   // Sequential: limit tokens first, then batch stream chunks
   .then(createStep(new TokenLimiterProcessor({ limit: 1000 })))

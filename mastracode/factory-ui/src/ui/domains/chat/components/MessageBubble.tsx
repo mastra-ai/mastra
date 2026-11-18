@@ -3,7 +3,6 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
@@ -130,19 +129,12 @@ export function MessageBubble({
   const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
   const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const modelLabel = modelId && (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <MessageMetadata tabIndex={0}>
-            <Metadata>
-              <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
-              {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
-            </Metadata>
-          </MessageMetadata>
-        }
-      />
-      <TooltipContent>{modelId}</TooltipContent>
-    </Tooltip>
+    <MessageMetadata>
+      <Metadata>
+        <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+        {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+      </Metadata>
+    </MessageMetadata>
   );
   const replyFooter = (text: string) => ({
     model: modelLabel,
@@ -165,7 +157,7 @@ export function MessageBubble({
         from="user"
         pending={steeringPending}
         attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
-        avatar={sender && <SenderAvatar author={sender} />}
+        avatar={!origin && sender && <SenderAvatar author={sender} />}
         footer={
           <>
             {steeringStatus && (
@@ -179,7 +171,7 @@ export function MessageBubble({
                 {steeringStatus}
               </Txt>
             )}
-            {origin && <ChannelOriginBadge origin={origin} />}
+            {origin && <ChannelOriginBadge origin={origin} author={author} />}
             {messageActions}
           </>
         }

@@ -36,7 +36,6 @@ Configure the platform credentials. The access token, project ID, and environmen
     MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
-    SANDBOX_PROVIDER=railway
     ```
   </TabItem>
 
@@ -53,7 +52,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 
 On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
-The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`.
 
 ## Usage
 
@@ -99,6 +98,20 @@ const workspace = new Workspace({
 ```
 
 The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
+
+### Public ports
+
+Ports are private by default: opening one needs a signed-in preview link. Set `publicPorts` to let anyone with a port's URL reach it, for example a webhook receiver:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    publicPorts: true,
+  }),
+})
+```
+
+The port URL is the same either way. Only whether it asks for sign-in changes. The setting is fixed when the sandbox is created, so passing it when reattaching changes nothing for that sandbox. Clones use the `publicPorts` option you passed, not the reattached sandbox's setting.
 
 ### Reattaching to a running sandbox
 
@@ -182,7 +195,7 @@ await sandbox.start()
 
 `createRepoTemplate()` accepts the same `cpuCount`, `memoryMB`, and `docker` settings as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
 
-`setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
+`setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition. `buildEnvRevision` is an opaque id written ahead of the clone and setup steps. A new revision rebuilds them. Change it whenever `buildEnv` changes and never derive it from the values.
 
 `getRepositoryAccess` mirrors the resolver a Factory sandbox context carries, so a host can pass its context straight through; when it's absent, `createRepoTemplate()` returns `undefined` and the sandbox boots the provider default. The resolver skips reattachment to an existing `sandboxId`; on a fresh start, it resolves the repository's default-branch head before Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. For private repositories, the short-lived authorization token is sent as an ephemeral build environment value that stays out of the serialized definition and the persisted template record. It has no effect on content identity.
 
@@ -281,7 +294,7 @@ const sandbox = new PlatformSandbox({
 
 ### Cloning for a fleet of sandboxes
 
-`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout, public ports) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
 
 ```typescript
 const template = new PlatformSandbox({
@@ -354,7 +367,7 @@ A long-running process's output stream reconnects periodically, and the process 
   {
     name: 'sandboxProvider',
     type: "'railway' | 'e2b'",
-    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then e2b.',
     isOptional: true,
   },
   {
@@ -404,6 +417,13 @@ A long-running process's output stream reconnects periodically, and the process 
     type: "'ISOLATED' | 'PRIVATE'",
     description:
       "Network mode. 'ISOLATED' (default) allows outbound internet only. 'PRIVATE' joins the platform environment's private network.",
+    isOptional: true,
+  },
+  {
+    name: 'publicPorts',
+    type: 'boolean',
+    description:
+      "Let anyone with a port's URL reach it without signing in. Defaults to `false`. Fixed when the sandbox is created.",
     isOptional: true,
   },
   {
@@ -462,7 +482,7 @@ const url = await sandbox.networking?.getPortUrl(3000)
 // https://3000-<sandbox id>.sandbox.us.mastra.cloud/
 ```
 
-Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. You can share it, since it never expires, and opening it wakes a paused sandbox.
+Ports are private by default: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. With [`publicPorts: true`](#public-ports), anyone with the URL can open it without signing in. You can share it, since it never expires, and opening it wakes a paused sandbox.
 
 `networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port that isn't a whole number from 1 to 65535, and for the sandbox's reserved control port. Other platform errors, such as an invalid access token, are thrown.
 
@@ -508,7 +528,7 @@ if (cookie) await browserContext.addCookies([cookie])
     name: 'networking',
     type: 'SandboxNetworking | undefined',
     description:
-      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
+      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra (or for anyone, with `publicPorts: true`), or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
   },
   {
     name: 'filesystem',

@@ -1,4 +1,5 @@
-import type { PlanResume } from '@mastra/client-js';
+import type { AgentControllerCommandAck, PlanResume } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
@@ -67,8 +68,9 @@ export function useApproveAgentControllerToolMutation(args: AgentControllerRunMu
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: ({ toolCallId, approved }: { toolCallId: string; approved: boolean }) =>
-      requireAgentControllerSession(session).approveTool(toolCallId, approved),
+      requireAgentControllerSession(session).approveTool(toolCallId, approved).then(requireAccepted),
     onSuccess: invalidateSession,
+    onError: reportRejectedReply,
   });
 }
 
@@ -77,7 +79,37 @@ export function useRespondAgentControllerSuspensionMutation(args: AgentControlle
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: ({ toolCallId, resumeData }: { toolCallId: string; resumeData: string | string[] | PlanResume }) =>
-      requireAgentControllerSession(session).respondToToolSuspension(toolCallId, resumeData),
+      requireAgentControllerSession(session).respondToToolSuspension(toolCallId, resumeData).then(requireAccepted),
     onSuccess: invalidateSession,
+    onError: error => {
+      reportRejectedReply(error);
+      // Refetch so a prompt nothing is waiting on stops offering buttons.
+      void invalidateSession();
+    },
   });
+}
+
+export class RejectedReplyError extends Error {
+  constructor(readonly reason: string | undefined) {
+    super(
+      reason === 'no_pending_suspension'
+        ? 'This request is no longer waiting for a reply. Its run has ended.'
+        : 'Your reply was not delivered. Someone may have already answered it.',
+    );
+  }
+}
+
+/** True when nothing will ever answer the prompt, so its card should go. */
+export function isEndedPrompt(error: unknown): boolean {
+  return error instanceof RejectedReplyError && error.reason === 'no_pending_suspension';
+}
+
+/** The server answers a reply it can't deliver with 200 and `ok: false`. */
+function requireAccepted(ack: AgentControllerCommandAck): AgentControllerCommandAck {
+  if (ack.ok) return ack;
+  throw new RejectedReplyError(ack.reason);
+}
+
+function reportRejectedReply(error: Error) {
+  toast.error(error.message, { id: 'agent-controller-reply-rejected' });
 }

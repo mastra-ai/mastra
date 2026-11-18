@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
 import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
@@ -18,7 +18,7 @@ import {
   valueYAxis,
 } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_AXIS_FONT_SIZE, CHART_MARGIN, ChartHideYAxis } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { DragSelectionBand, activeIndex, useDragSelection } from '@/ds/primitives/charts/drag-selection';
@@ -233,7 +233,9 @@ function BarPlot({
   }, [keyList, colorList, variant, id]);
 
   const format = valueFormatter ?? compactNumber.format;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const hideYAxis = useContext(ChartHideYAxis);
+  const withYAxis = showYAxis && !hideYAxis;
+  const plotWidth = size.width - (withYAxis ? Y_AXIS_WIDTH : 0);
   const margin = columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN;
 
   return (
@@ -278,7 +280,7 @@ function BarPlot({
           {selection.enabled && <DragSelectionBand selection={selection} count={data.length} />}
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
           {valueYAxis({
-            show: showYAxis,
+            show: withYAxis,
             size,
             formatter: axisFormatter ?? format,
             domain: yDomain,

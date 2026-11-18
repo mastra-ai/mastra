@@ -65,6 +65,29 @@ export async function destroyDetachedSessionSandbox(options: {
 }
 
 /**
+ * Stop a session's VM by identity from a process that holds no instance of
+ * it, keeping its files for the next start. Like the detached destroy it
+ * calls the provider's plain `stop()`, never the `_stop` lifecycle wrapper:
+ * E2B pauses the VM it finds by identity, Docker stops the container named
+ * after it, and providers with nothing to stop from outside (Platform,
+ * local) return.
+ */
+export async function stopDetachedSessionSandbox(options: {
+  sandbox: FactorySandbox;
+  session: Pick<SourceControlSession, 'id' | 'sandboxId'>;
+}): Promise<void> {
+  const sandbox = options.sandbox.create(
+    {
+      sessionId: options.session.id,
+      sandboxId: options.session.sandboxId ?? undefined,
+      getRepositoryAccess: undefined,
+    },
+    {},
+  );
+  await sandbox.stop();
+}
+
+/**
  * Tear down the sandbox a just-deleted user session was holding. The row is
  * already gone, so the VM is destroyed rather than stopped — nothing will
  * ever resolve this session id again.

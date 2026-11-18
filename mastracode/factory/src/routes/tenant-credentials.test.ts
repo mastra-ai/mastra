@@ -6,7 +6,7 @@ import {
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock the SDK OAuth provider registry so refresh/getApiKey behavior is
@@ -211,6 +211,25 @@ describe('TenantCredentialStore', () => {
     await seed.credentials.removeCredential(USER_TENANT, 'openai');
     await expect(store.getApiKey('openai')).resolves.toBeUndefined();
     expect(store.get('openai')).toBeUndefined();
+  });
+
+  it('retries an unavailable credential storage every 15 seconds, not on every request and model call', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+    const ensureReady = vi.spyOn(seed.credentials, 'ensureReady').mockRejectedValue(new Error('no encryption key'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+
+    await store.ensureFresh();
+    await expect(store.getApiKey('openai')).resolves.toBeUndefined();
+    expect(ensureReady).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 15_000);
+    await store.getApiKey('openai');
+    expect(ensureReady).toHaveBeenCalledTimes(2);
   });
 });
 

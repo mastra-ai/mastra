@@ -3,7 +3,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { WrenchIcon } from 'lucide-react';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 
 export interface ToolMockReportSectionProps {
   report: ToolMockReport;
@@ -39,7 +39,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 
   return (
     <div className="grid gap-2" data-testid="tool-mock-report">
-      <DataPanel.SectionHeading icon={<WrenchIcon />}>Tool Mocks</DataPanel.SectionHeading>
+      <DataPanel.SectionHeading icon={<IconMaintenance />}>Tool Mocks</DataPanel.SectionHeading>
 
       {failure && (
         <Notice variant="destructive" title="Mock mismatch">

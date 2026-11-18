@@ -153,8 +153,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
   });
 
-  // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
-  const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
+  // Trackers without recordChunk trace chunks as the consumer reads them.
+  const stream = rest.modelSpanTracker?.recordChunk
+    ? baseStream
+    : (rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream);
 
   // Build observability context from modelSpanTracker if tracing context is available
   const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
@@ -174,6 +176,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
+      beforeDeadlineSave: rest.options?.beforeDeadlineSave,
+      onDeadlineTripwire: rest.options?.onDeadlineTripwire,
       includeRawChunks: !!includeRawChunks,
       structuredOutput: rest.structuredOutput,
       outputProcessors,

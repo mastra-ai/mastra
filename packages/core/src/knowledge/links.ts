@@ -5,6 +5,7 @@ import {
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_BODY_LINKS,
   MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
   parseKnowledgePageRef,
 } from '../storage/domains/knowledge';
 
@@ -154,7 +155,7 @@ async function pageRefKeys(storage: KnowledgeStorage, page: KnowledgePage): Prom
 }
 
 /** The page and its live ordinary descendants, at most {@link MAX_KNOWLEDGE_MOVE_PAGES} + 1. */
-async function subtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<KnowledgePage[]> {
+export async function knowledgeSubtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<KnowledgePage[]> {
   const pages = [root];
   for (let index = 0; index < pages.length && pages.length <= MAX_KNOWLEDGE_MOVE_PAGES; index++) {
     let cursor: string | undefined;
@@ -180,6 +181,13 @@ async function subtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<
 export const MAX_KNOWLEDGE_LINK_REFRESH_SOURCES = 100;
 
 /**
+ * Most same-named pages a write checks for links its page made ambiguous or took over: one under the
+ * store's page list limit, so a full page means there may be more. Past it, links to the rest keep
+ * their targets until `knowledge.reindexLinks()` runs; the write reports it.
+ */
+export const MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES = MAX_KNOWLEDGE_PAGE_LIST_LIMIT - 1;
+
+/**
  * Re-resolves the pages whose body links one of `pages` or names a ref one of them answers to now,
  * after they were created, renamed, moved, merged or deleted, in page id order up to
  * {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES}. With `withDescendants`, the pages' subtrees count too
@@ -192,20 +200,42 @@ export async function refreshKnowledgeLinksTo(
   options: { withDescendants?: boolean } = {},
 ): Promise<void> {
   const affected = options.withDescendants
-    ? (await Promise.all(pages.map(page => subtree(storage, page)))).flat()
+    ? (await Promise.all(pages.map(page => knowledgeSubtree(storage, page)))).flat()
     : pages;
   const refs = new Set<string>();
+  const targets = new Set(affected.map(page => page.id));
+  const names = new Set<string>();
   for (const page of affected) {
-    if (page.deletedAt) continue;
+    // A removed page still frees its name: a link left unresolved by the tie may now resolve.
     for (const key of await pageRefKeys(storage, page)) refs.add(key);
+    if (!page.deletedAt) names.add(page.name);
+  }
+  // A page that now answers to a name can make a link by that name to another page ambiguous, or
+  // claim it from another scope. Those links are stored resolved, so find them by their target.
+  const crowded: string[] = [];
+  for (const name of names) {
+    const namesakes = await storage.findPagesByName({
+      name,
+      read: 'all',
+      limit: MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES + 1,
+    });
+    if (namesakes.length > MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES) crowded.push(`"${name}"`);
+    for (const namesake of namesakes.slice(0, MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES)) targets.add(namesake.id);
   }
   const sources = (
     await storage.listPageBodyLinkSources({
       refs: [...refs],
-      toPageIds: affected.map(page => page.id),
+      toPageIds: [...targets],
     })
   ).sort();
-  if (!sources.length) return;
+  const crowdedError = () =>
+    new Error(
+      `More than ${MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES} pages are named ${crowded.join(', ')}; links to the rest were left as they were`,
+    );
+  if (!sources.length) {
+    if (crowded.length) throw crowdedError();
+    return;
+  }
   const batch = sources.slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES);
   const live = new Map((await storage.getPages({ ids: batch, read: 'all' })).map(page => [page.id, page]));
   const resolver = new BodyLinkResolver(storage);
@@ -223,6 +253,7 @@ export async function refreshKnowledgeLinksTo(
     const names = pages.map(page => `"${page.name}"`).join(', ');
     throw new Error(`${left} more pages link to ${names}; their links were left as they were`);
   }
+  if (crowded.length) throw crowdedError();
 }
 
 /**

@@ -6,22 +6,18 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
-import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
-import { isObservationalMemoryEnabled } from '../../../memory/types';
+import { isObservationalMemoryEnabled, parseMemoryRequestContext } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { compactStopReasonContext } from '../../../observability/outcome-schema';
 import { StructuredOutputProcessor } from '../../../processors';
-import type { OutputProcessorOrWorkflow } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { StepTripwireData, MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import type { MastraDBMessage, MessageList } from '../../message-list';
-import { resolveTurnSaver } from '../../resolve-turn-saver';
 import { createAcceptedUserSignalSaver } from '../../save-accepted-user-signals';
 import type { SaveAcceptedUserSignals } from '../../save-accepted-user-signals';
 import type { SaveQueueManager } from '../../save-queue';
@@ -111,30 +107,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         threadCreatedByStep = true;
       }
-    };
-
-    // Configured output processors as resolved for this run, captured before execution so the
-    // total-timeout save sees the same selection the run used.
-    let configuredOutputProcessors: OutputProcessorOrWorkflow[] = [];
-
-    const saveInputAfterTotalTimeout = async () => {
-      if (!memory || !memoryData.thread?.id) return;
-      // Save where the finish path would. Observational memory owns its writes, so nothing is
-      // saved under it here.
-      const saver = resolveTurnSaver({ memory, memoryConfig, configuredOutputProcessors });
-      if (!saver || (saver.kind === 'memory' && saver.observational)) return;
-      const input = filterMessagesForPersistence(messageList.get.input.db());
-      if (input.length === 0) return;
-
-      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
-      const messages = messageList.transformMessagesForTranscript(input);
-      // A configured MessageHistory may use its own storage and creates its own thread there.
-      if (saver.kind === 'configured-history') {
-        await saver.processor.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
-        return;
-      }
-      await ensureThreadExists();
-      await memory.saveMessages({ messages, memoryConfig });
     };
 
     const result = {
@@ -272,19 +244,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
-    // Saves before the finish need the configured processors. Resolve them once
-    // and pass them on as overrides so a function-form resolver runs only once.
+    // Passed on as overrides, so a function-form `outputProcessors` resolves once per run.
     let outputProcessorOverrides = options.outputProcessors;
     let saveAcceptedUserSignals: SaveAcceptedUserSignals | undefined;
     const threadId = memoryData.thread?.id;
     if (memory && threadId) {
-      configuredOutputProcessors =
-        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
-      outputProcessorOverrides = configuredOutputProcessors;
+      outputProcessorOverrides ??= await capabilities.agent.listConfiguredOutputProcessors(result.requestContext);
       saveAcceptedUserSignals = createAcceptedUserSignalSaver({
         memory,
         memoryConfig,
-        configuredOutputProcessors,
+        configuredOutputProcessors: outputProcessorOverrides,
         messageList,
         authorizeWrite: () => authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId),
         logger: capabilities.logger,
@@ -393,6 +362,37 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
+        // The deadline pass saves the turn through MessageHistory, so it needs write access. Check the
+        // thread MessageHistory will write to: it reads the request context first, and can save
+        // without a Memory instance or a thread option.
+        beforeDeadlineSave: async () => {
+          const memoryContext = parseMemoryRequestContext(requestContext);
+          // A read-only run saves nothing at the deadline. MessageHistory only reads the request
+          // context's config, so a per-run readOnly has to stop the pass here.
+          if (memoryConfig?.readOnly || memoryContext?.memoryConfig?.readOnly) return false;
+          // MessageHistory creates the request context's thread, but the saved rows keep the thread
+          // they were added under, so check every thread the pass can write. This is strict on purpose:
+          // a denial on any of them skips the whole save, even if another thread would have been allowed.
+          const threadIds = new Set(
+            [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
+          );
+          for (const threadId of threadIds) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+          }
+        },
+        // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
+        // deadline turn: it holds the streamed text a processor before the tripwire may have saved.
+        onDeadlineTripwire: (turn: MessageList) =>
+          undoSavedResponseMessages({
+            memory,
+            threadId: memoryData.thread?.id ?? threadIdFromArgs,
+            memoryConfig,
+            messageList: turn,
+            saveQueueManager,
+            earlierTurnSnapshot,
+            logger: capabilities.logger,
+            runId,
+          }),
         onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
@@ -566,17 +566,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
         onError: async ({ error }: { error: Error | string }) => {
-          // A run that hits `timeout.totalMs` ends without a `finish` chunk, so the output
-          // processors that normally persist the turn never run. Save the accepted user
-          // message; completed steps are only saved by `savePerStep`, and the unfinished
-          // step is never saved after the deadline.
-          if (isMastraTimeoutError(error) && error.timeoutType === 'total') {
-            try {
-              await saveInputAfterTotalTimeout();
-            } catch (e) {
-              capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
-            }
-          }
           const spanError = error instanceof Error ? error : new Error(String(error));
           // Record the failure without preempting model usage/output finalization.
           // The stream owner notifies tracing separately if no finish will follow.
@@ -589,6 +578,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
+        stepOwner: options.stepOwner,
       },
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,

@@ -1,8 +1,8 @@
-import { Info } from 'lucide-react';
 import * as React from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import type { TooltipContentProps } from './tooltip';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { Icon } from '@/ds/icons/Icon';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -41,7 +41,7 @@ function InfoTooltip({ children, side = 'top', align, contentClassName, ...name 
         }
       >
         <Icon size="xs">
-          <Info />
+          <IconCircleInfo />
         </Icon>
       </TooltipTrigger>
       <TooltipContent

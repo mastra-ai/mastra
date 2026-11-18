@@ -188,8 +188,62 @@ describe('pinned Knowledge in chat', () => {
       expect(within(card).getAllByText('Listing')).toHaveLength(1);
       expect(within(listing).queryByText(/docs:acme#guides\/setup — Setup/)).toBeNull();
 
-      fireEvent.click(within(listing).getByRole('button', { name: 'Pages' }));
+      fireEvent.click(within(listing).getByRole('button', { name: 'Show 6 pages' }));
       expect(within(listing).getByTestId('pinned-knowledge-listing').textContent).toBe(listingText);
+      expect(within(listing).getByRole('button', { name: 'Hide pages' }).getAttribute('aria-expanded')).toBe('true');
+
+      fireEvent.click(within(listing).getByRole('button', { name: 'Hide pages' }));
+      expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
+      expect(within(listing).getByRole('button', { name: 'Show 6 pages' }).getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('counts the listed pages, including the ones it says follow, in a collapsed toggle', () => {
+      render(withLinks(<SignalBadge signal={withListing} defaultOpen />));
+
+      const [, listing] = within(screen.getByTestId('pinned-knowledge')).getAllByTestId('pinned-knowledge-row') as [
+        HTMLElement,
+        HTMLElement,
+      ];
+      const toggle = within(listing).getByRole('button', { name: 'Show 6 pages' });
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.textContent).toBe('Show 6 pages ▾');
+      expect(within(listing).queryByTestId('pinned-knowledge-listing')).toBeNull();
+    });
+
+    const listingRowFor = (text: string) => {
+      const signal = {
+        ...withListing,
+        metadata: {
+          ...withListing.metadata,
+          value: { pins: [{ id: 'list:p-guides', text, name: 'Guides', scope: 'docs:acme' }] },
+        },
+      };
+      render(withLinks(<SignalBadge signal={signal} defaultOpen />));
+      return within(screen.getByTestId('pinned-knowledge')).getByTestId('pinned-knowledge-row');
+    };
+
+    it('shows the count as a lower bound when the listing was cut short without a total', () => {
+      const row = listingRowFor(
+        [
+          'Pages under Guides (docs:acme#guides, depth 1):',
+          '- docs:acme#guides/setup — Setup',
+          '- docs:acme#guides/deploy — Deploy',
+          '…and more; knowledge_list from: "docs:acme#guides"',
+        ].join('\n'),
+      );
+      expect(within(row).getByRole('button', { name: 'Show 2+ pages' }).textContent).toBe('Show 2+ pages ▾');
+    });
+
+    it('names a single listed page in the singular', () => {
+      const row = listingRowFor(
+        ['Pages under Guides (docs:acme#guides, depth 1):', '- docs:acme#guides/setup — Setup'].join('\n'),
+      );
+      expect(within(row).getByRole('button', { name: 'Show 1 page' })).not.toBeNull();
+    });
+
+    it('falls back to a plain label when the listing has no pages', () => {
+      const row = listingRowFor('Pages under Guides (docs:acme#guides, depth 1): none.');
+      expect(within(row).getByRole('button', { name: 'Show pages' })).not.toBeNull();
     });
 
     it('shows a changed or removed listing against the page it lists', () => {

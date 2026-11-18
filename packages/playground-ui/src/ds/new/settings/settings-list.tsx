@@ -1,0 +1,113 @@
+import type { ComponentProps, ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+
+/**
+ * A list's first row: its count, caption or empty text on the left and its one action ("Add account", "Invite
+ * member") on the right. A full list and an empty one share this exact look, so the card reads the same either way.
+ */
+function SettingsListBar({ action, className, children, ...props }: ComponentProps<'div'> & { action?: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        // As tall as a `SettingsRow` (label + one-line description) plus the 13px the card puts above and below each
+        // row, since this row's own box includes that padding. Keeps a list's first row level with the settings above it.
+        'flex min-h-8 items-center justify-between gap-3 sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5+--spacing(6.5))]',
+        className,
+      )}
+      {...props}
+    >
+      <div className="min-w-0 truncate text-label text-foreground">{children}</div>
+      {action != null && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+    </div>
+  );
+}
+
+export type SettingsListHeaderProps = ComponentProps<'div'> & {
+  /** The list's action, on the right. Refresh and other list controls can sit beside it. */
+  action?: ReactNode;
+};
+
+/** The first row of a list's `SettingsContainer`: a count ("2 accounts") and the list's action. */
+export function SettingsListHeader(props: SettingsListHeaderProps) {
+  return <SettingsListBar data-slot="settings-list-header" {...props} />;
+}
+
+export type SettingsEmptyRowProps = ComponentProps<'div'> & {
+  /** The same action the list's header would hold, so an empty list still offers it. */
+  action?: ReactNode;
+};
+
+/**
+ * An empty list's only row: what's missing on the left ("No join links"), the list's action on the right. Looks
+ * exactly like `SettingsListHeader`, so empty and full lists match; use it for every empty list in a card.
+ */
+export function SettingsEmptyRow(props: SettingsEmptyRowProps) {
+  return <SettingsListBar data-slot="settings-empty-row" {...props} />;
+}
+
+/** A list's notices and errors, as a row of its `SettingsContainer`. Takes no space while it has nothing in it. */
+export function SettingsNoticeRow({ className, ...props }: ComponentProps<'div'>) {
+  return <div data-slot="settings-notice-row" className={cn('flex flex-col gap-2', className)} {...props} />;
+}
+
+/** The square on the left of a `SettingsItem` holding an icon or logo. Avatars use `Avatar size="md"`, the
+ * same size, so every list's text starts at the same place. */
+export function SettingsItemIcon({ className, ...props }: ComponentProps<'span'>) {
+  return (
+    <span
+      data-slot="settings-item-icon"
+      aria-hidden
+      className={cn(
+        'flex size-avatar-md shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:size-icon-md',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export type SettingsItemProps = Omit<ComponentProps<'div'>, 'title'> & {
+  /** A `SettingsItemIcon` or an `Avatar size="md"`. */
+  media?: ReactNode;
+  title: ReactNode;
+  /** One line under the title: "GitHub · Connected 3 weeks ago". */
+  description?: ReactNode;
+  /** The item's status or actions, on the right. */
+  children?: ReactNode;
+};
+
+/**
+ * One thing in a settings list (an account, a member, a session, a source, a package version). Its right side holds
+ * the item's status or its own actions (Remove, Revoke, Copy), not a control that changes a setting. Goes in a
+ * `SettingsContainer`, usually under a `SettingsListHeader`.
+ *
+ * For a setting the person changes (an input, select or switch with a label), use `SettingsRow` instead.
+ *
+ * @example
+ * <SettingsItem media={<Avatar size="md" … />} title="Ada Lovelace" description="ada@example.com">
+ *   <Button size="sm" variant="ghost">Remove</Button>
+ * </SettingsItem>
+ */
+export function SettingsItem({ media, title, description, children, className, ...props }: SettingsItemProps) {
+  return (
+    <div
+      data-slot="settings-item"
+      // Below `sm` the item's value or actions wrap onto their own full-width line under the title, as a
+      // `SettingsRow`'s control does, so a long value (an email, a type) never squeezes the title out.
+      className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:flex-nowrap', className)}
+      {...props}
+    >
+      {media}
+      <div className="flex min-w-0 flex-1 flex-col gap-px">
+        {/* A string title truncates, so it also goes in the hover title to stay readable in full. */}
+        <div className="truncate text-label text-foreground" title={typeof title === 'string' ? title : undefined}>
+          {title}
+        </div>
+        {description != null && <div className="truncate text-caption text-muted-foreground">{description}</div>}
+      </div>
+      {children != null && (
+        <div className="flex min-w-0 basis-full items-center gap-2 sm:shrink-0 sm:basis-auto">{children}</div>
+      )}
+    </div>
+  );
+}

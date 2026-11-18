@@ -63,7 +63,7 @@ For retryable errors with a `Retry-After` response header, the processor reads c
 
 ## Retry unknown errors
 
-Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known credential and quota refusals, including HTTP `401` and `403` responses, aren't retried:
+Set `retryUnknownErrors` to retry errors that no custom matcher, provider metadata, or built-in OpenAI matcher selects a policy for. Custom matchers retry the errors they match whether or not `retryUnknownErrors` is enabled. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known credential and quota refusals, including HTTP `401` and `403` responses, aren't retried as unknown errors. A custom matcher that matches them still retries them:
 
 ```typescript title="src/mastra/agents/resilient-agent.ts"
 import { Agent } from '@mastra/core/agent'

@@ -46,14 +46,15 @@ describe('message sender', () => {
     expect(screen.queryByLabelText(/^Sent by/)).toBeNull();
   });
 
-  it("gives a Slack message its sender's initial and the channel badge", () => {
+  it("keeps a Slack sender's avatar and name together in the channel attribution", () => {
     renderAs('user_me', [
       userMessage('m1', 'ship it', { channels: { slack: { author: { userId: 'U1', fullName: 'Caleb Barnes' } } } }),
     ]);
 
-    expect(screen.getByLabelText('Sent by Caleb Barnes')).toHaveTextContent('C');
+    expect(screen.queryByLabelText(/^Sent by/)).toBeNull();
     const origin = within(screen.getByLabelText('Sent from Slack'));
     expect(origin.getByText('via Slack')).toBeInTheDocument();
+    expect(origin.getByText('C')).toBeInTheDocument();
     expect(origin.getByText('Caleb Barnes')).toBeInTheDocument();
   });
 });

@@ -47,6 +47,7 @@ import { showError, showInfo } from './display.js';
 
 import type { FooterAnimationRenderer } from './footer-animation-renderer.js';
 import { GoalManager } from './goal-manager.js';
+import { MouseController } from './mouse/controller.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
@@ -237,6 +238,7 @@ export interface TUIState {
   // ── TUI framework (set once) ──────────────────────────────────────────
   ui: TUI;
   renderScheduler?: RenderScheduler;
+  mouseController?: MouseController;
   footerAnimationRenderer?: FooterAnimationRenderer;
   chatContainer: Container;
   editorContainer: Container;
@@ -454,6 +456,11 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   globalBackgroundNoticeContainer.addChild(globalBackgroundNotice);
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.requestRender = () => ui.requestRender();
+  const { mouseDialogs, mouseInput } = loadSettings().preferences;
+  const mouseController = new MouseController(ui, editor, {
+    dialogMouseEnabled: mouseDialogs,
+    inputMouseModeEnabled: mouseInput,
+  });
   result = {
     // Core dependencies
     controller: options.controller,
@@ -471,6 +478,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // TUI framework
     ui,
     renderScheduler,
+    mouseController,
     chatContainer,
     editorContainer,
     editor,

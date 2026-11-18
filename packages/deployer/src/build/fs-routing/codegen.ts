@@ -196,7 +196,8 @@ async function emitAgentEntry(
  * 3. assembles `Agent` instances via `assembleAgentFromFsEntry`, wiring any
  *    declared `subagents/` into the parent (nested up to `MAX_FS_SUBAGENT_DEPTH`),
  * 4. registers them onto the user's `mastra` instance (code-registered agents
- *    win on name collisions), and
+ *    win on name collisions). When that export is a factory, the wrapper
+ *    exports a factory that does this for every instance it returns, and
  * 5. re-exports everything from the user's entry so this module is a drop-in
  *    replacement for the original `#mastra` target.
  *
@@ -250,8 +251,15 @@ export async function generateFsAgentsModule(
   // at `<bundle>/workspace/<name>` wherever the bundle is deployed. Seed files
   // authored under `agents/<name>/workspace/**` are mirrored there at build time.
   // `name` may be a slash-joined path (`<parent>/<child>`) for subagents.
-  lines.push(`const __bundleDir = __dirname(__fileURLToPath(import.meta.url));`);
-  lines.push(`const __workspaceBasePath = name => __join(__bundleDir, 'workspace', ...name.split('/'));`);
+  // Cloudflare Workers have no local filesystem or processes, so agents there
+  // get no default workspace. Their legacy module registry also leaves
+  // `import.meta.url` undefined.
+  lines.push(
+    `const __bundleDir = import.meta.url && globalThis.navigator?.userAgent !== 'Cloudflare-Workers' ? __dirname(__fileURLToPath(import.meta.url)) : undefined;`,
+  );
+  lines.push(
+    `const __workspaceBasePath = name => __bundleDir === undefined ? undefined : __join(__bundleDir, 'workspace', ...name.split('/'));`,
+  );
   lines.push(``);
 
   // Singleton imports (storage.ts, observability.ts, etc.).
@@ -293,17 +301,13 @@ export async function generateFsAgentsModule(
     entryExprs.push(expr);
   }
 
-  // In standalone mode (no user entry), auto-construct a Mastra instance.
-  // In wrapper mode, reference the user's exported instance.
-  if (standalone) {
-    lines.push(``);
-    lines.push(`const __mastra = new Mastra({});`);
-  } else {
-    lines.push(``);
-    lines.push(`const __mastra = __userEntry.mastra;`);
-  }
-
+  // Agents are assembled per call so each instance a `mastra` factory returns
+  // gets its own. `addAgent` binds an agent to the Mastra that registers it, so
+  // a shared agent would follow whichever request registered it last. Modules
+  // the agents import (config, memory, tools, storage.ts, ...) stay shared.
   lines.push(``);
+  lines.push(`function __registerFsPrimitives(__mastra) {`);
+  const bodyStart = lines.length;
   lines.push(`const __fsAgentEntries = [`);
   for (const expr of entryExprs) {
     lines.push(`  ${expr},`);
@@ -375,7 +379,26 @@ export async function generateFsAgentsModule(
   }
 
   lines.push(``);
-  lines.push(`export const mastra = __mastra;`);
+  lines.push(`return __mastra;`);
+  for (let i = bodyStart; i < lines.length; i++) {
+    if (lines[i]) {
+      lines[i] = `  ${lines[i]}`;
+    }
+  }
+  lines.push(`}`);
+  lines.push(``);
+
+  if (standalone) {
+    lines.push(`export const mastra = __registerFsPrimitives(new Mastra({}));`);
+  } else {
+    // The Cloudflare deployer rewrites the user's export into a factory that
+    // builds a new Mastra per request; register onto each instance it returns.
+    lines.push(`const __userMastra = __userEntry.mastra;`);
+    lines.push(`export const mastra =`);
+    lines.push(`  typeof __userMastra === 'function'`);
+    lines.push(`    ? (...args) => __registerFsPrimitives(__userMastra(...args))`);
+    lines.push(`    : __registerFsPrimitives(__userMastra);`);
+  }
 
   return lines.join('\n');
 }

@@ -139,7 +139,10 @@ const isQueryableToken = (token: TraceFilterToken, unqueryableFieldIds: Readonly
  */
 export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQueryFieldSupport): TracesFilters => {
   const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, unqueryableFieldIds));
+  const tokens = filters.tokens.filter(
+    token =>
+      isQueryableToken(token, unqueryableFieldIds) && (support.withTokenSearch || token.operatorId !== 'hasAllTokens'),
+  );
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -186,6 +189,7 @@ export const buildTracesQueryRequest = ({
     tokens: filters.tokens,
     groups: filters.groups,
     excludedFieldIds: traceQueryUnqueryableFieldIds(support),
+    withTokenSearch: support.withTokenSearch,
     now,
   });
 
@@ -204,8 +208,9 @@ export const resolveTracesDateWindow = (
   datePreset: TraceDatePreset,
   dateFrom: Date | undefined,
   dateTo: Date | undefined,
+  now: Date = new Date(),
 ): { dateFrom?: Date; dateTo?: Date } => {
   if (datePreset === 'custom') return { dateFrom, dateTo };
   const ms = PRESET_MS[datePreset];
-  return { dateFrom: ms ? new Date(Date.now() - ms) : undefined, dateTo: undefined };
+  return { dateFrom: ms ? new Date(now.getTime() - ms) : undefined, dateTo: undefined };
 };

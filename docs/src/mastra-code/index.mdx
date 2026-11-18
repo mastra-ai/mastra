@@ -76,7 +76,7 @@ Mastra Code requires Node.js 22.19.0 or later. To enable `@` filename suggestion
   </StepItem>
 
   <StepItem>
-    Type a message and press Enter. If the agent is already working, Enter queues your next message and sends it automatically after the current run finishes.
+    Type a message and press Enter. If the agent is already working, Enter delivers text messages to the active run, runs slash and `!` shell commands immediately, and queues messages with images. Press Ctrl+F instead to queue any message until the current run finishes.
   </StepItem>
 </Steps>
 
@@ -190,7 +190,8 @@ You can also define custom slash commands as markdown files. See [Configuration]
 | `Alt+Z` | Undo last clear |
 | `Ctrl+T` | Toggle thinking blocks visibility |
 | `Ctrl+E` | Expand/collapse all tool outputs |
-| `Enter` | Send a message, or queue a follow-up while the agent is running |
+| `Enter` | Send a message. While the agent is running, text messages are delivered to the active run, slash commands and `!` shell commands run immediately, and messages with images are queued |
+| `Ctrl+F` | Queue a follow-up message to send after the current run finishes. When no run is active, sends the message immediately |
 | `Ctrl+Y` | Toggle YOLO mode |
 
 ## Next steps

@@ -107,6 +107,15 @@ export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceAggregate: true },
 };
 
+export const traceTokenSearchCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceAggregateCapabilities,
+  capabilities: {
+    ...traceAggregateCapabilities.capabilities,
+    traceQueryTokenSearch: true,
+    traceAggregateTokenSearch: true,
+  },
+};
+
 const HOUR = 60 * 60 * 1000;
 
 const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>

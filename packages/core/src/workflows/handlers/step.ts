@@ -12,9 +12,11 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../observability/error-count';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
+import { resolveDynamicArgument } from '../../utils/dynamic-argument';
 import {
   HAND_BACK_STATE_SYMBOL,
   PARENT_STATE_SYMBOL,
@@ -37,9 +39,11 @@ import type {
   TimeTravelExecutionParams,
 } from '../types';
 import {
+  applyStateDelta,
   validateStepInput,
   createDeprecationProxy,
   defineLazyWriter,
+  defineStateAccessors,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -325,13 +329,15 @@ export async function executeStep(
       // End the step span with the nested workflow result
       if (stepSpan) {
         if (workflowResult.status === 'failed') {
+          const failure = getErrorFromUnknown(workflowResult.error, { supportSerialization: false });
+          const origin = getSpanErrorOrigin(workflowResult.error);
+          if (origin) setSpanErrorOrigin(failure, origin);
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
               ...workflowTermination(workflowResult),
-              error:
-                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              error: failure,
               attributes: { status: 'failed' },
             },
           });
@@ -411,6 +417,7 @@ export async function executeStep(
         resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
         stateUpdate: any;
         stateBase?: Record<string, unknown>;
+        stateDelta?: Record<string, unknown>;
         requestContextUpdate: Record<string, any> | null;
       } = {
         suspendedPaths: {},
@@ -429,18 +436,33 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
+      let completedNestedOutput: {
+        found: boolean;
+        value?: unknown;
+        state?: unknown;
+        base?: Record<string, unknown>;
+      } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
-        // The nested workflow's own option: it can differ from this run's.
-        const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
-        if (nestedStorageVersion === 2) {
+        // The nested run has this run's version, which is 2 when this run has a journal.
+        if (journal) {
           const nestedRun = { workflowName: step.id, runId: persistedNestedRunId };
           const stored = await workflowsStore?.loadWorkflowRunHeader(nestedRun);
           if (stored?.header.status === 'success') {
             // The header alone has no state; read it only once the run is known to be finished.
             const run = await workflowsStore?.loadWorkflowRun({ ...nestedRun, successfulSteps: 'summary' });
-            completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
+            // The state the nested run's last drive started from: the one it parked with, which
+            // this run already took in, or its start state if it never parked.
+            const base =
+              stored.startStateSeq === undefined
+                ? undefined
+                : await workflowsStore?.loadWorkflowRunState({ ...nestedRun, seq: stored.startStateSeq });
+            completedNestedOutput = {
+              found: true,
+              value: stored.header.result,
+              state: run?.state,
+              base: base ?? undefined,
+            };
           }
         } else {
           const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -449,7 +471,17 @@ export async function executeStep(
             storageVersion: 1,
           });
           if (snapshot?.status === 'success') {
-            completedNestedOutput = { found: true, value: snapshot.result, state: snapshot.value };
+            // The state the nested run started from, recorded when this run parked on it.
+            const meta = stepResults[step.id]?.suspendPayload?.__workflow_meta;
+            completedNestedOutput = {
+              found: true,
+              value: snapshot.result,
+              state: snapshot.value,
+              base:
+                executionContext.foreachIndex !== undefined
+                  ? meta?.foreachOutput?.[executionContext.foreachIndex]?.suspendPayload?.__workflow_meta?.startState
+                  : meta?.startState,
+            };
           }
         }
       }
@@ -465,14 +497,10 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
-        // The state this nested run started from, recorded when the parent parked on it. Merging
-        // against it replays only the nested run's own changes, so keys another step changed while
-        // it ran keep their newer value instead of reverting to the nested run's copy.
-        contextMutations.stateBase =
-          executionContext.foreachIndex !== undefined
-            ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]
-                ?.suspendPayload?.__workflow_meta?.startState
-            : stepResults[step.id]?.suspendPayload?.__workflow_meta?.startState;
+        // Merging against the state the nested run started from replays only its own changes, so
+        // keys another step changed while it ran keep their newer value instead of reverting to the
+        // nested run's copy, and changes it handed back before parking aren't applied twice.
+        contextMutations.stateBase = completedNestedOutput.base;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }
@@ -485,6 +513,7 @@ export async function executeStep(
         };
       }
 
+      // A nested run hands back its state with the version of this run's state it started from.
       const setState = async (state: any, base?: Record<string, unknown>) => {
         const { stateData, validationError: stateValidationError } = await validateStepStateData({
           stateData: state,
@@ -495,7 +524,57 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
+        // Replacing the pending state also drops pending updateState changes, so an earlier update
+        // can't override this call when the step's mutations are applied.
+        contextMutations.stateDelta = undefined;
         contextMutations.stateBase = base;
+      };
+
+      // The state as this step sees it, with its own setState and updateState changes, in call order:
+      // the pending state replaces what earlier calls left, then the delta applies on top.
+      const stateView = (): Record<string, any> => {
+        const base = contextMutations.stateUpdate
+          ? { ...executionContext.state, ...contextMutations.stateUpdate }
+          : executionContext.state;
+        if (!contextMutations.stateDelta) return base;
+        const view = { ...base };
+        applyStateDelta(view, contextMutations.stateDelta);
+        return view;
+      };
+
+      const mergeIntoStateView = (update: Record<string, unknown> | null | undefined) => {
+        const changes = update ?? {};
+        const merged = { ...stateView() };
+        applyStateDelta(merged, changes);
+        return { changes, merged };
+      };
+
+      // updateState merges its top-level keys into the state and validates the result.
+      // Only the keys it was given change: a key the step's stateSchema strips isn't set.
+      const updateState = async (update: Record<string, unknown> | null | undefined) => {
+        const { changes, merged } = mergeIntoStateView(update);
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: merged,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        // Record only the given keys, so a key set to undefined is removed when the step's mutations
+        // are applied instead of becoming an own property that holds undefined.
+        const delta = { ...contextMutations.stateDelta };
+        for (const [key, value] of Object.entries(changes)) {
+          if (value === undefined) delta[key] = undefined;
+          else if (Object.prototype.hasOwnProperty.call(stateData, key)) delta[key] = stateData[key];
+        }
+        contextMutations.stateDelta = delta;
+      };
+
+      // A nested run hands back its whole state, so its partial update is merged first.
+      const updateNestedState = async (update: Record<string, unknown> | null | undefined) => {
+        const { merged } = mergeIntoStateView(update);
+        await setState(merged);
       };
 
       const stepParams = {
@@ -510,7 +589,9 @@ export async function executeStep(
         actor,
         inputData,
         state: executionContext.state,
+        // A nested workflow hands back its state through the internal path, as on v1.
         setState: (state: any) => setState(state),
+        updateState: (state: any) => (isNestedWorkflow ? updateNestedState(state) : updateState(state)),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
@@ -600,7 +681,7 @@ export async function executeStep(
       };
       const output = await runStep(
         defineLazyWriter(
-          stepParams,
+          defineStateAccessors(stepParams, stateView, !!journal && !isNestedWorkflow),
           () =>
             new ToolStream(
               {
@@ -730,6 +811,7 @@ export async function executeStep(
           : executionContext.state,
       }),
       stateBase: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateBase : undefined,
+      stateDelta: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateDelta : undefined,
     },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
@@ -760,9 +842,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
     try {
-      scorersToUse = await scorersToUse({
-        requestContext: requestContext,
-      });
+      scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
     } catch (e) {
       const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
       const mastraError = new MastraError(

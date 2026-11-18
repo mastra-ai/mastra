@@ -45,6 +45,7 @@ export {
   traceSelectionSchema,
   threadPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryRootSourceSchema,
   queryThreadsInputSchema,
   traceQueryTraceSchema,
   traceQueryTraceResponseSchema,
@@ -65,6 +66,10 @@ export {
   TraceQueryCursorError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceQueryUnsupportedError,
+  TRACE_QUERY_TOKEN_FIELDS,
+  TRACE_QUERY_TOKEN_SEARCH_MAX_LENGTH,
+  hasTraceQueryTokenPredicate,
   resolveTraceQueryTimeoutMs,
   findPredicateComplexityIssue,
   isTraceQueryMetadataPath,
@@ -91,6 +96,7 @@ export {
   getTraceQueryDeltaWatermark,
 } from './trace-query-plan';
 export type {
+  TraceQueryTokenField,
   TraceQueryLiteral,
   TraceQueryPathOrLiteral,
   TraceQueryScalarPredicate,
@@ -163,3 +169,5 @@ export * from './tracing';
 export * from './types';
 export * from './span-query';
 export * from './thread-query';
+
+export * from './trace-page';

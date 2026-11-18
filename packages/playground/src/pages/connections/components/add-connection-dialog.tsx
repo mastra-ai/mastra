@@ -27,6 +27,7 @@ import {
   headlessAuthFieldKey,
   headlessAuthFields,
   headlessAuthRequiresForm,
+  isHeadlessAuthFieldVisible,
   supportsHeadlessAuth,
   usePendingConnect,
 } from '@mastra/playground-ui/domains/connect';
@@ -98,7 +99,8 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
     connect(provider);
   };
 
-  const fields = attempt && collecting ? headlessAuthFields(attempt) : [];
+  const allFields = attempt && collecting ? headlessAuthFields(attempt) : [];
+  const fields = allFields.filter(field => isHeadlessAuthFieldVisible(allFields, field, values));
   const missingRequired = fields.some(field => !!field.required && !values[headlessAuthFieldKey(field)]?.trim());
 
   const submitForm = () => {

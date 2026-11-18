@@ -2158,6 +2158,38 @@ describe('Memory', () => {
       });
     });
 
+    describe('__experimental_updateWorkingMemoryVNext - concurrency', () => {
+      it('keeps appends from two threads on the same resource when scope is the default', async () => {
+        const memory = new TestableMemoryWithWorkingMemory({
+          storage: new InMemoryStore(),
+          // No scope set, so it defaults to 'resource'.
+          options: { workingMemory: { enabled: true } },
+        });
+        const resourceId = 'vnext-concurrent-resource';
+        for (const id of ['vnext-concurrent-a', 'vnext-concurrent-b']) {
+          await memory.saveThread({ thread: { id, resourceId, createdAt: new Date(), updatedAt: new Date() } });
+        }
+        await memory.updateWorkingMemory({ threadId: 'vnext-concurrent-a', resourceId, workingMemory: '# Facts' });
+
+        await Promise.all([
+          memory.testExperimentalUpdateWorkingMemoryVNext({
+            threadId: 'vnext-concurrent-a',
+            resourceId,
+            workingMemory: '- likes tea',
+          }),
+          memory.testExperimentalUpdateWorkingMemoryVNext({
+            threadId: 'vnext-concurrent-b',
+            resourceId,
+            workingMemory: '- lives in Paris',
+          }),
+        ]);
+
+        const finalMemory = await memory.getWorkingMemory({ threadId: 'vnext-concurrent-a', resourceId });
+        expect(finalMemory).toContain('likes tea');
+        expect(finalMemory).toContain('lives in Paris');
+      });
+    });
+
     describe('__experimental_updateWorkingMemoryVNext - template duplication prevention', () => {
       let memory: TestableMemoryWithWorkingMemory;
 

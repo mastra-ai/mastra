@@ -17,6 +17,8 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import { AgentChannels } from '../agent-channels';
+import { ChatChannelGenerativeUIProcessor } from '../generative-ui';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 import type { ChannelConfig } from '../types';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
@@ -619,5 +621,83 @@ describe('reaction guidance reaches the model only with the reaction tool', () =
     const system = await systemPromptSent(false);
     expect(system).toContain('You are in a public channel or thread.');
     expect(system).not.toContain('add_reaction');
+  });
+});
+
+describe('generative UI through the agent loop', () => {
+  it('gives the model render_card and posts the card it calls with', async () => {
+    const posted: any[] = [];
+    const render = {
+      platform: 'slack',
+      generativeUI: true,
+      chatThread: {
+        post: async (card: unknown) => {
+          posted.push(card);
+          return { id: 'card-1' };
+        },
+      },
+    };
+    const toolNames: string[][] = [];
+    let call = 0;
+    const agent = new Agent({
+      id: 'generative-ui-loop',
+      name: 'generative-ui-loop',
+      instructions: 'You are a test agent',
+      inputProcessors: [new ChatChannelGenerativeUIProcessor()],
+      model: new MockLanguageModelV2({
+        doStream: async options => {
+          toolNames.push((options.tools ?? []).map(t => t.name));
+          const first = call++ === 0;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+              ...(first
+                ? [
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'call-1',
+                      toolName: 'render_card',
+                      input: JSON.stringify({
+                        spec: {
+                          root: 'card',
+                          elements: {
+                            card: { type: 'Card', props: { title: 'Deploy' }, children: ['f'] },
+                            f: { type: 'Fields', children: ['env'] },
+                            env: { type: 'Field', props: { label: 'Env', value: 'beta' } },
+                          },
+                        },
+                      }),
+                    },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'stop' as const,
+                      usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+                    },
+                  ]),
+            ]),
+          };
+        },
+      }),
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+    const result = await agent.stream('show the deploy', { requestContext, maxSteps: 3 });
+    await result.consumeStream();
+
+    expect(toolNames[0]).toContain('render_card');
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ type: 'card', title: 'Deploy' });
+    expect((await result.toolResults)[0]?.payload.result).toEqual({ ok: true, messageId: 'card-1' });
   });
 });

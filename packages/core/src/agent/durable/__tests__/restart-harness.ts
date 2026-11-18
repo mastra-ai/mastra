@@ -99,8 +99,9 @@ export async function loadGraph() {
     { createTool },
     { createDurableAgent },
     { createEventedAgent },
-    { globalRunRegistry },
+    { globalRunRegistry, takeRunScorerInstances },
     { __resetExecutionFencesForTests },
+    { releaseRunMessageRefs },
     workflows,
     eventedWorkflows,
   ] = await Promise.all([
@@ -112,6 +113,7 @@ export async function loadGraph() {
     import('../create-evented-agent'),
     import('../run-registry'),
     import('../execution-fence'),
+    import('../run-message-refs'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
   ]);
@@ -123,8 +125,10 @@ export async function loadGraph() {
     createDurableAgent,
     createEventedAgent,
     globalRunRegistry,
+    takeRunScorerInstances,
     /** Stops this graph's claim heartbeats and forgets its local executions. */
     resetExecutionFences: __resetExecutionFencesForTests,
+    releaseRunMessageRefs,
     createWorkflow: workflows.createWorkflow,
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
@@ -214,6 +218,12 @@ export type ScenarioOptions<K extends RestartKind> = {
   /** Park graph 1 inside the write that leaves the snapshot this picks out. */
   hold?: HoldWrite;
   timeoutMs?: number;
+  /**
+   * The workflow storage version agents store their runs in. Defaults to 1. On
+   * 2, only gate checkpoints restart: `copyStore` carries v2's tables over as
+   * they are at `restart()`, which is the checkpoint only while graph 1 is parked.
+   */
+  storageVersion?: 1 | 2;
 };
 
 export type Graph = {
@@ -244,10 +254,14 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
     }
 
+    // Checkpoints are v1 rows, restored through `persistWorkflowSnapshot`, and `copyStore` carries
+    // v2's tables over as they are now rather than as they were at the checkpoint. So agents
+    // store their runs in v1 unless the scenario asks for v2.
+    const storageVersion = options.storageVersion === 2 ? 2 : 1;
     const agent =
       options.kind === 'durable'
-        ? core.createDurableAgent({ agent: built })
-        : core.createEventedAgent({ agent: built });
+        ? core.createDurableAgent({ agent: built, storageVersion })
+        : core.createEventedAgent({ agent: built, storageVersion });
     // Before `new Mastra(...)`: the engine resolves during agent registration.
     if (options.kind === 'evented-fallback') {
       vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
@@ -460,7 +474,12 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
             `(found ${root ? root.snapshot.status : 'none'}; rows: ${checkpoint.rows.map(r => `${r.workflowName}:${r.snapshot.status}`).join(', ') || 'none'})`,
         );
       }
-      for (const row of checkpoint.rows) await graph.workflows.persistWorkflowSnapshot(structuredClone(row));
+      if (options.storageVersion === 2) {
+        // `copyStore` already carried the v2 runs over; replaying them as v1 rows would duplicate them.
+        if (checkpoint.write !== 0) throw new Error('restart: storage v2 restarts only from a gate checkpoint');
+      } else {
+        for (const row of checkpoint.rows) await graph.workflows.persistWorkflowSnapshot(structuredClone(row));
+      }
 
       if (options.kind === 'workflow') {
         const run = await graph.workflow.createRun({ runId: options.runId });
@@ -515,12 +534,23 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       return result;
     },
 
-    /** Call at the end of a test to stop the event workers every graph started. */
+    /** Call at the end of a test to stop the event workers every graph started and release its graphs. */
     async stop() {
       // Release holds first: a parked write blocks the execution `stopWorkers()`
       // awaits, so stopping before releasing would deadlock.
       for (const hold of holds.splice(0)) hold.release();
-      for (const graph of graphs) await graph.mastra?.stopWorkers?.();
+      for (const graph of graphs.splice(0)) {
+        try {
+          await graph.mastra?.stopWorkers?.();
+        } finally {
+          // Module-level caches and heartbeats arm timers that would keep each
+          // graph alive long after the test, so empty them.
+          graph.core.resetExecutionFences();
+          graph.core.releaseRunMessageRefs(options.runId);
+          graph.core.globalRunRegistry.clear();
+          graph.core.takeRunScorerInstances(options.runId, undefined);
+        }
+      }
     },
   };
 }

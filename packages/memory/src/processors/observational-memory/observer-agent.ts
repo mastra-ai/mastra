@@ -1394,7 +1394,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 }
 
 /** Truncate a string to maxLen characters, appending a note if truncated. */
-function maybeTruncate(str: string, maxLen?: number): string {
+function maybeTruncate(str: unknown, maxLen?: number): string {
+  if (typeof str !== 'string') return '';
   if (!maxLen || str.length <= maxLen) return str;
   const truncated = safeSlice(str, maxLen);
   const remaining = str.length - truncated.length;
