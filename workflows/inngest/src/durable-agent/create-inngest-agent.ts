@@ -70,15 +70,24 @@ import type {
   AgentSuspendedEventData,
   DurableToolCallInput,
   RunDeadline,
+  SegmentSpanData,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { MastraServerCache } from '@mastra/core/cache';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
+import {
+  EntityType,
+  getOrCreateSpan,
+  getResumeTracingContext,
+  resolveExportedSpanId,
+  SpanType,
+} from '@mastra/core/observability';
+import type { AIModelGenerationSpan, Span, SpanSnapshot } from '@mastra/core/observability';
 import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
 import type { RunFence } from '@mastra/core/storage';
@@ -102,7 +111,12 @@ import {
   mergeResumeRequestContext,
   RESUME_CLAIM_DISPATCH_LEASE_MS,
 } from '../durable-event-payload';
-import { endRunSpansWithError } from '../observability-compat';
+import {
+  carriesSegmentSpans,
+  carrySegmentSpans,
+  endRunSpansWithError,
+  executionFailureTermination,
+} from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -1034,6 +1048,76 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * The AGENT_RUN + MODEL_GENERATION pair a resumed execution reports under, nested under the run's
+   * first pair in its trace, with its wire form for the workers' steps. `null` when the run is
+   * untraced, span creation fails, or this core's steps would not end a carried pair. Never throws.
+   */
+  function openResumeSegment(
+    runId: string,
+    snapshot: WorkflowRunState | undefined,
+    requestContext: RequestContext | undefined,
+  ): { agentSpan: Span<SpanType.AGENT_RUN>; modelSpan?: AIModelGenerationSpan; carried: SegmentSpanData } | null {
+    const input = snapshot?.context?.input as
+      | { agentSpanData?: SpanSnapshot<SpanType.AGENT_RUN>; modelSpanData?: SpanSnapshot<SpanType.MODEL_GENERATION> }
+      | undefined;
+    const previous = input?.agentSpanData;
+    if (!previous || !mastra?.observability || !carriesSegmentSpans()) return null;
+    // The pair travels in the resume event and in every step the worker memoizes, so it leaves the
+    // system prompt on the run's first span, as the core resume does.
+    const { instructions: _instructions, ...attributes } = (previous.attributes ?? {}) as Record<string, unknown>;
+    try {
+      // An unsampled run saved a no-op span, which yields no lineage: its resume stays unsampled.
+      const resumeFrom = getResumeTracingContext(previous);
+      const resolvedVersionId = (
+        agent as { toRawConfig?: () => { resolvedVersionId?: unknown } | undefined }
+      ).toRawConfig?.()?.resolvedVersionId;
+      const agentSpan = getOrCreateSpan({
+        type: SpanType.AGENT_RUN,
+        outcome: null,
+        name: `agent run: '${agent.id}' (resumed)`,
+        entityType: EntityType.AGENT,
+        entityId: agent.id,
+        entityName: agent.name,
+        attributes,
+        metadata: {
+          runId,
+          resumed: true,
+          ...(resumeFrom ? { resumedFromSpanId: previous.id } : {}),
+          ...(typeof resolvedVersionId === 'string' ? { entityVersionId: resolvedVersionId } : {}),
+        },
+        resumeFrom,
+        tracingPolicy: agent.getTracingPolicy?.(),
+        tracingOptions: { traceId: previous.traceId, ...previous.traceState },
+        traceState: previous.traceState,
+        samplingDecision: !!resumeFrom,
+        requestContext,
+        mastra,
+      });
+      if (!agentSpan) return null;
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        outcome: null,
+        name: input.modelSpanData?.name ?? "llm: ''",
+        attributes: input.modelSpanData?.attributes ?? {},
+        metadata: { runId, resumed: true },
+        requestContext,
+      });
+      return {
+        agentSpan,
+        modelSpan,
+        carried: {
+          agentSpanData: agentSpan.snapshot?.() ?? agentSpan.exportSpan(),
+          modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
+          stepParentId: resolveExportedSpanId(modelSpan ?? agentSpan),
+        },
+      };
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.(`[InngestAgent] resume(${runId}) failed to open its spans: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * The request context a segment's event carries: the caller's, plus this segment's absolute
    * deadline (or none), so a worker that subscribes after the deadline's abort request went out
    * still stops at it.
@@ -1942,8 +2026,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Steps and stream-side processors on this segment see the merged
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
-      // Resume span identity must travel with the worker handoff before we can
-      // open a separate traced segment here (OBS-754).
+      // The resumed execution reports under its own span pair. The claim is held, so this resume is
+      // the one the workers run; they end the pair where the run finishes or parks again.
+      const resumeSegment = openResumeSegment(runId, suspendedSnapshot, callbackOptions.requestContext);
+      existingEntry.resumeAgentSpan = resumeSegment?.agentSpan;
+      existingEntry.resumeModelSpan = resumeSegment?.modelSpan;
+      // Fresh spans capture their own first-chunk clock, never an earlier resume's.
+      existingEntry.resumeCompletionStartTime = undefined;
+      existingEntry.resumeTimeToFirstTokenMs = undefined;
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
@@ -2140,6 +2230,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           notResumable = true;
           throw error;
         }
+        carrySegmentSpans(requestContext, runId, resumeSegment?.carried ?? null);
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,
@@ -2192,8 +2283,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeResumeRegistry();
         // A failed send may still have reached Inngest, so the claim stays until its lease lapses and a
-        // later resume takes it over. A failure before sending hands the suspension straight back.
+        // later resume takes it over, and the pair stays open for the worker that may yet end it. A
+        // failure before sending hands the suspension straight back and ends the pair here.
         if (!sendStarted) {
+          const failure = getErrorFromUnknown(error);
+          for (const span of [resumeSegment?.modelSpan, resumeSegment?.agentSpan]) {
+            span?.error({ error: failure, ...executionFailureTermination(failure), endSpan: true });
+          }
           await claim
             .release()
             .catch(releaseError =>

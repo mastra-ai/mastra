@@ -11,12 +11,12 @@ import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/componen
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
 import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
 import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -223,7 +223,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'status',
-            icon: <IconCircleRecord />,
+            icon: <CircleDotIcon />,
             label: 'Status',
             value: <ReviewStatusBadge status={result.status} />,
             delta: null,

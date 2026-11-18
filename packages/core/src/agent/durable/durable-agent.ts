@@ -125,6 +125,8 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
+import { carrySegmentSpans, openedSegment } from './segment-spans';
+import type { SegmentSpanData } from './segment-spans';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -1873,6 +1875,19 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
       }
     }
+    // Every worker's steps report under the recovered pair and finish the MODEL_STEP the crashed
+    // execution left open. The originals' own steps stay as a suspension ended them.
+    carrySegmentSpans(
+      requestContext,
+      runId,
+      recoverAgentSpan
+        ? {
+            ...openedSegment(recoverAgentSpan, recoverModelSpan),
+            adoptsOpenSteps: true,
+            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+          }
+        : null,
+    );
     executionFence.throwIfLost();
 
     const restoredCompletion = await restoreCompletionPolicy({
@@ -1905,13 +1920,10 @@ export class DurableAgent<
       saveQueueManager,
       requestContext,
       agentSpan: recoverAgentSpan,
-      // Same override resume() installs: steps nest under, and terminal
-      // end()/error() target, the recovered spans instead of the persisted
-      // originals ended above.
+      // Same live handles resume() installs: terminal end()/error() in this process target the
+      // recovered spans instead of the persisted originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -3215,10 +3227,48 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it, so a run that is already executing
-    // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, () => this.#startStream(messages, options, runId, requestContext));
+  }
+
+  /**
+   * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
+   * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
+   * A registered run owns the thread from then on. A run that fails before it registers gives the
+   * thread back.
+   */
+  async #onReservedThread<T>(
+    runId: string,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    const pubsub = this.getPubSub();
+    // The same options registerRun reads, so both name the same thread.
+    const reserved =
+      (await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as unknown as Agent<any, any, any, any>,
+        { memory: options?.memory, requestContext: options?.requestContext, runId },
+        pubsub,
+      )) === 'reserved';
+    try {
+      return await start();
+    } catch (error) {
+      // A thread already held under this run id belongs to whoever started the run: a signal wake,
+      // a queued message, or an earlier call with the same run id. It stays theirs to release.
+      if (reserved) agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
+      throw error;
+    }
+  }
+
+  async #startStream(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    // 1. Claim the run before preparing it, so a run that is already executing
+    // fails before any span or memory write is made for this call.
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -4049,6 +4099,8 @@ export class DurableAgent<
     const origSpanId = entry.agentSpan?.id;
     // Spans this resume opened, ended by it alone if it turns out to have lost the run.
     const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
+    // The pair every worker's steps report under for this segment; none when it opened no spans.
+    let resumeSegment: SegmentSpanData | null = null;
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
@@ -4087,12 +4139,13 @@ export class DurableAgent<
           requestContext: resolvedOptions.requestContext,
         });
         ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
+        if (resumeAgentSpan) {
+          resumeSegment = openedSegment(resumeAgentSpan, resumeModelSpan);
+        }
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
           reg.resumeTimeToFirstTokenMs = undefined;
@@ -4102,6 +4155,7 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
       }
     }
+    carrySegmentSpans(resumeRequestContext, runId, resumeSegment);
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
     // Same default-false semantics as the initial stream() path.
@@ -4626,12 +4680,11 @@ export class DurableAgent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult } = result.result;
-            // map-final-output, which ends the recovered spans, did not re-run.
-            // Workflow success alone cannot distinguish an agent success from a limit/block.
-            // Keep unknown until the authoritative termination is recovered (OBS-754).
-            recoverModelSpan?.end();
-            recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
+            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
+            // it ended the run's spans with, so the recovered pair ends the same way.
+            recoverModelSpan?.end({ ...tracingTermination });
+            recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
@@ -4837,9 +4890,18 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, () => this.#runGenerate(messages, options, runId, requestContext));
+  }
+
+  async #runGenerate(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<FullOutput<TOutput>> {
+    // 1. Claim the run before preparing it — see stream().
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -5016,6 +5078,20 @@ export class DurableAgent<
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
+
+    // 4b. Register with the thread runtime, as stream() does. A run that only reserves its thread
+    // is invisible to signals and leaves nothing to start the thread's queued work when it ends.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+      {
+        generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+      },
+    );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = runCleanup.run;

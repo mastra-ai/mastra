@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function TracesScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-46,19.4Q-46,17.7 -44,16.7L-2,-4.3Q0,-5.3 2,-4.3L74.1,31.7Q76,32.7 76,34.4L76,34.8Q76,36.5 74.1,37.4L32,58.5Q30.1,59.4 28.1,58.5L-44,22.4Q-46,21.4 -46,19.7Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="17.7" cy="32.1" r="61.1">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-41.6,17.5C-42.6,13.3 -27.9,10.6 -21,7.1C-14.1,3.6 -4.3,-1.8 -0.3,-3.3C3.7,-4.9 1.9,-2.7 3,-2.4C4.1,-2 2.5,-3.1 6.3,-1.4C10,0.3 19,4.8 25.3,8C31.7,11.1 38.8,14.4 44.5,17.6C50.2,20.8 54.6,23.9 59.6,27.1C64.6,30.3 74.4,33.8 74.6,36.5C74.9,39.2 65.7,41.1 61.2,43.3C56.7,45.6 51.6,49 47.7,50.2C43.8,51.4 41.1,50.5 37.8,50.6C34.5,50.7 29.7,50.9 27.8,50.9C25.8,51 26.7,51 26.1,51C25.6,51 25,51 24.5,51C23.9,50.9 23.4,50.8 22.9,50.7C22.4,50.6 22.1,50.7 21.3,50.5C20.5,50.3 19.1,49.8 17.9,49.5C16.8,49.1 15.3,48.7 14.6,48.4C13.8,48.2 13.7,48.1 13.2,47.9C12.8,47.8 16.6,50.1 11.9,47.4C7.2,44.8 -6.1,37.3 -15,32.3C-23.9,27.3 -40.6,21.7 -41.6,17.5Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-35.4,-7.6Q-35.4,-9.8 -33.4,-10.8L-2,-26.5Q0,-27.5 2,-26.5L29.9,-12.6Q31.8,-11.6 31.8,-9.4L31.8,13.7Q31.8,15.9 29.9,16.9L-1.6,32.6Q-3.5,33.6 -5.5,32.6L-33.4,18.7Q-35.4,17.7 -35.4,15.5Z"
         fill="var(--face)"

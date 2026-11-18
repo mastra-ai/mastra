@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  externalLinkLabel,
-  isPersistedCandidate,
-  itemSessionSpec,
-  metadataLabelColors,
-  persistedSourceKeys,
-} from './boardItems';
+import { isPersistedCandidate, itemSessionSpec, metadataLabelColors, persistedSourceKeys } from './boardItems';
 import { workItemMeta } from './services/relationships';
 import type { WorkItem } from './services/workItems';
 
@@ -79,11 +73,10 @@ describe('workItemMeta', () => {
     expect(workItemMeta(item)).toEqual(['INC-42', 'Grace Hopper', 'just now']);
   });
 
-  it('names a GitLab merge request by its IID and links to GitLab', () => {
+  it('names a GitLab merge request by its IID', () => {
     expect(
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
     ).toEqual(['MR !5', 'Rhys', 'just now']);
-    expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
   });
 
   it('names a card filed by hand by its card number', () => {

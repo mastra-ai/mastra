@@ -4,15 +4,37 @@ import type { SceneProps } from './scene-style';
 export function DestinationsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-65.4,23.8Q-65.4,22.1 -63.4,21.1L-3.7,-8.7Q-1.8,-9.7 0.2,-8.7L40.5,11.4Q42.4,12.4 42.4,14.1L42.4,14.4Q42.4,16.1 40.5,17.1L-19.2,47Q-21.2,48 -23.2,47L-63.4,26.8Q-65.4,25.9 -65.4,24.1Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="-3.5" cy="8.8" r="16.4">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+        <radialGradient id={`${id}-gg1`} gradientUnits="userSpaceOnUse" cx="-19.4" cy="32.7" r="23.5">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm1`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg1)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-13.3,8.8C-13.3,8 -10.3,7.2 -8.7,6.3C-7.1,5.5 -5.2,4 -3.8,3.7C-2.4,3.4 -1.5,4.3 -0.3,4.6C0.9,5 2,5.2 3.4,5.8C4.8,6.4 6.6,7.6 8.2,8.4C9.7,9.3 12.8,10.1 12.8,10.9C12.7,11.7 9.7,12.5 8.1,13.4C6.5,14.2 4.7,15.7 3.3,16C1.9,16.2 0.9,15.4 -0.3,15C-1.5,14.7 -2.5,14.5 -3.9,13.9C-5.3,13.2 -7.2,12.1 -8.7,11.2C-10.3,10.4 -13.3,9.6 -13.3,8.8Z"
+          fill={`url(#${id}-gh)`}
+        />
+        <path
+          mask={`url(#${id}-gm1)`}
+          d="M-36.3,32.7C-36.3,31.3 -30.9,29.8 -28.1,28.4C-25.4,27 -21.6,24.6 -19.6,24C-17.7,23.4 -17.4,24.6 -16.2,25C-15,25.3 -14.7,25.1 -12.7,26C-10.7,26.9 -7,29 -4.2,30.5C-1.5,31.9 3.9,33.3 3.9,34.7C3.9,36.2 -1.5,37.6 -4.3,39C-7,40.5 -10.8,42.8 -12.7,43.4C-14.7,44 -15,42.8 -16.2,42.4C-17.4,42.1 -17.7,42.3 -19.7,41.4C-21.7,40.5 -25.4,38.4 -28.2,36.9C-30.9,35.5 -36.3,34.1 -36.3,32.7Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-7.1,-31.5Q-7.1,-33.7 -5.5,-34.5L-5.1,-34.6Q-3.5,-35.4 -1.9,-34.6L-1.6,-34.5Q0,-33.7 0,-31.5L0,6.6Q0,8.8 -1.6,9.6L-1.9,9.8Q-3.5,10.6 -5.1,9.8L-5.5,9.6Q-7.1,8.8 -7.1,6.6Z"
         fill="var(--face)"
