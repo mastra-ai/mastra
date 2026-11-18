@@ -128,6 +128,7 @@ import {
 import { buildFeedEventsRoutes } from './routes/feed-events.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
+import { createRunStopMarker } from './routes/run-stop-marker.js';
 import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -2468,6 +2469,10 @@ export class MastraFactory {
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
           const sessionActivity = createSessionActivityMiddleware(() => this.#sessionUnloader);
+          const runStopMarker = createRunStopMarker({
+            auth: routeAuth,
+            workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
+          });
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
@@ -2475,6 +2480,7 @@ export class MastraFactory {
               middleware: [
                 ...timing,
                 sessionActivity,
+                runStopMarker,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
@@ -2513,6 +2519,7 @@ export class MastraFactory {
                 },
                 controller: () => this.#prepared?.base.controller,
               }),
+              runStopMarker,
               sessionActivity,
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
