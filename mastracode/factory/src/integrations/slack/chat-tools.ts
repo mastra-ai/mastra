@@ -113,31 +113,32 @@ export function createSlackChatTools({
     downloadSlackAttachment: createTool({
       id: 'downloadSlackAttachment',
       description:
-        'Read an attachment from a Slack message in a channel this session can read. Use the threadId and message id from fetchMessages, plus the zero-based attachmentIndex. Images are shown directly to the model without storing a sandbox file; other files return base64 (up to 8 MiB).',
+        'Inspect an image attachment from a Slack message in a channel this session can read. Use the threadId and message id from fetchMessages, plus the zero-based attachmentIndex. Only images are supported (up to 8 MiB); they are shown directly to the model without storing a sandbox file.',
       inputSchema: z.object({
         threadId: z.string().min(1),
         messageId: z.string().regex(/^\d+\.\d+$/),
         attachmentIndex: z.number().int().min(0),
       }),
-      outputSchema: z.object({ name: z.string().optional(), mimeType: z.string().optional(), base64: z.string() }),
+      outputSchema: z.object({ name: z.string().optional(), mimeType: z.string(), base64: z.string() }),
       execute: async ({ threadId, messageId, attachmentIndex }) => {
         guard(threadId);
         const message = await (chat.getAdapter('slack') as SlackAdapter).fetchMessage(threadId, messageId);
         if (!message) throw new Error('Message not found in this thread.');
         const attachment = message.attachments[attachmentIndex];
         if (!attachment) throw new Error('Attachment not found on this message.');
+        const mimeType = attachment.mimeType;
+        if (!mimeType?.startsWith('image/')) throw new Error('Only image attachments can be inspected.');
         if (!attachment.fetchData) throw new Error('This attachment cannot be downloaded.');
         const maxBytes = 8 * 1024 * 1024;
         if (attachment.size !== undefined && attachment.size > maxBytes) throw new Error('Attachment exceeds 8 MiB.');
         const bytes = await attachment.fetchData();
         const data = Buffer.from(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes);
         if (data.byteLength > maxBytes) throw new Error('Attachment exceeds 8 MiB.');
-        return { name: attachment.name, mimeType: attachment.mimeType, base64: data.toString('base64') };
+        return { name: attachment.name, mimeType, base64: data.toString('base64') };
       },
-      toModelOutput: ({ name, mimeType, base64 }) =>
-        mimeType?.startsWith('image/')
-          ? { type: 'content', value: [{ type: 'image-data', data: base64, mediaType: mimeType }] }
-          : { type: 'text', value: JSON.stringify({ name, mimeType, base64 }) },
+      toModelOutput: ({ mimeType, base64 }) => ({
+        type: 'content', value: [{ type: 'image-data', data: base64, mediaType: mimeType }],
+      }),
     }),
     fetchChannelMessages: note(fetchChannelMessages(chat, guard)),
     fetchThread: fetchThread(chat, guard),

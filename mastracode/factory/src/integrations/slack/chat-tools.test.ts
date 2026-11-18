@@ -224,6 +224,22 @@ describe('Slack tools on a Factory session, by default', () => {
     }
   });
 
+  it('refuses non-image attachments before downloading or putting bytes in model context', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F2', name: 'report.pdf', mimetype: 'application/pdf', size: 20,
+      url_private: 'https://files.slack.com/files-pri/T1-F2/report.pdf',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Only image attachments can be inspected');
+      expect(sent('file.download')).toHaveLength(0);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
   it('reads and posts in its own channel', async () => {
     const { run } = await slackSession();
 
