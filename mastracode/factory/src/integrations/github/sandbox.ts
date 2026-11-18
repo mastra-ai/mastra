@@ -141,6 +141,23 @@ async function execute(
   }
 }
 
+/**
+ * Drop GitHub credentials from a per-command env: `GH_TOKEN(_n)` and any
+ * `GIT_CONFIG_*` block that scopes a header to github.com. Other hosts'
+ * credentials (GitLab) are left alone.
+ */
+function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
+  const githubConfig = Object.entries(env).some(
+    ([name, value]) => /^GIT_CONFIG_KEY_\d+$/.test(name) && !!value?.startsWith('http.https://github.com/'),
+  );
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) =>
+        !/^GH_TOKEN(_\d+)?$/.test(name) && !(githubConfig && /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name)),
+    ),
+  ) as T;
+}
+
 /** Single structured command execution attempt, bounded by the hang guard. */
 async function executeOnce(
   sandbox: ExecutableSandbox,
@@ -157,12 +174,15 @@ async function executeOnce(
     }, timeoutMs);
     timer.unref?.();
   });
+  // Re-decided per attempt: a retry may land on a replacement VM whose
+  // credential-vault mode differs from the one the env was built for.
+  const env = options.env && !sandboxAcceptsGithubToken(sandbox) ? withoutGithubCredentials(options.env) : options.env;
   try {
     return await Promise.race([
       sandbox.executeCommand(command, args, {
         timeout: timeoutMs,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-        ...(options.env !== undefined ? { env: options.env } : {}),
+        ...(env !== undefined ? { env } : {}),
       }),
       hangGuard,
     ]);

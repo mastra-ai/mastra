@@ -520,6 +520,23 @@ describe('credential-vault sandboxes', () => {
     expect(gh.options?.env?.GH_TOKEN).toBeUndefined();
   });
 
+  it('drops GitHub credentials from a retry that lands on a vault VM', async () => {
+    let clones = 0;
+    const sandbox: FakeSandbox & { vault?: boolean } = vaultSandbox(false, script => {
+      if (!script.startsWith('git clone')) return OK;
+      clones++;
+      if (clones > 1) return OK;
+      sandbox.vault = true;
+      return { exitCode: 128, stdout: '', stderr: 'fatal: early EOF' };
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const attempts = sandbox.executions.filter(entry => entry.command === 'git' && entry.args[0] === 'clone');
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]!.options?.env?.GIT_CONFIG_COUNT).toBe('2');
+    expect(attempts[1]!.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
   it('keeps process-scoped credentials when the platform reports a non-vault sandbox', async () => {
     const sandbox = vaultSandbox(false);
     await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
