@@ -45,5 +45,10 @@
     "oxfmt": "latest",
     "typescript": "^5.9.0",
     "vitest": "5.1.0"
+  },
+  "overrides": {
+    "readdir-glob": {
+      "minimatch": "11.0.9"
+    }
   }
 }
