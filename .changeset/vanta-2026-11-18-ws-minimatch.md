@@ -8,4 +8,4 @@
 '@mastra/voice-google-gemini-live': patch
 ---
 
-Raised the minimum `ws` version to 8.23.0, which limits automatically sent pongs so a peer can no longer flood the connection with pings.
+Raised the minimum `ws` version to 8.23.0, which limits pending automatic pongs and terminates the connection when that limit is exceeded.
