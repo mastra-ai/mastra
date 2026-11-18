@@ -260,6 +260,58 @@ describe('Tab', () => {
     expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true');
   });
 
+  describe('chips', () => {
+    const chips = (props: { value?: string; onValueChange?: (value: string) => void } = {}) => (
+      <Tabs defaultTab="first" {...props}>
+        <TabList variant="chips" size="sm">
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+          <Tab value="third">Third</Tab>
+        </TabList>
+      </Tabs>
+    );
+
+    it('switches on one click, with no sliding indicator', () => {
+      render(chips());
+      fireEvent.click(screen.getByRole('tab', { name: 'Third' }));
+      expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Third' }).hasAttribute('data-active')).toBe(true);
+      expect(document.querySelector('[data-slot="tabs-indicator"]')).toBeNull();
+    });
+
+    it('folds the chips that do not fit into a "+N" menu after the last that fits', () => {
+      // Room for two 100px chips and the menu.
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(260);
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
+      render(chips());
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Second']);
+      const menu = screen.getByRole('button', { name: '1 more tabs' });
+      // In the row, not pinned over it as contained tabs' menu is.
+      expect(menu.closest('[data-slot="tabs-overflow"]')?.getAttribute('style')).toBeNull();
+    });
+
+    it('opens a folded chip from the menu, which then shows as the selected chip', () => {
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(260);
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
+      const onValueChange = vi.fn();
+      render(chips({ onValueChange }));
+      fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Third' }));
+      expect(onValueChange).toHaveBeenCalledWith('third');
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Third']);
+      const third = screen.getByRole('tab', { name: 'Third' });
+      expect(third.getAttribute('aria-selected')).toBe('true');
+      expect(third.hasAttribute('data-active')).toBe(true);
+    });
+
+    it('keeps every chip in the row when they all fit', () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
+      render(chips());
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+  });
+
   describe('keepMounted panels', () => {
     const renderTabs = () => (
       <Tabs defaultTab="first" appearance="contained" frame="inset">

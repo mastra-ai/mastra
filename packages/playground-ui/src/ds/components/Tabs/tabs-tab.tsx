@@ -3,6 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -83,6 +84,21 @@ export const Tab = ({
           'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-muted-foreground',
           className,
         );
+  // An outlined pill, filled when open. No colour transition: picking a chip swaps at once.
+  const chipClassName =
+    list?.variant === 'chips'
+      ? cn(
+          'relative flex cursor-pointer items-center justify-center rounded-full border whitespace-nowrap outline-none',
+          size === 'sm' ? 'h-6 px-2.5 text-column' : cn(controlHeight.md, 'px-3 text-label'),
+          'border-border text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
+          // The selected chip, from `aria-selected`: Base UI's `data-active` follows keyboard highlight too.
+          'aria-selected:border-border-strong aria-selected:bg-fill-hover aria-selected:text-foreground',
+          focusRing,
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
+          className,
+        )
+      : undefined;
   const tab = (
     <BaseTabs.Tab
       ref={ref}
@@ -97,7 +113,7 @@ export const Tab = ({
       // tab inside a drawer starts a swipe and the click never reaches the tab.
       data-base-ui-swipe-ignore=""
       data-closable={onClose ? '' : undefined}
-      className={tabClassName}
+      className={chipClassName ?? tabClassName}
       onClick={onClick}
     >
       {children}

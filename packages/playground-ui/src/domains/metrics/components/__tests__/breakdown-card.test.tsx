@@ -26,8 +26,6 @@ import {
 import { emptyBreakdownFixture } from './fixtures/metrics';
 import { aggregateCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import {
-  openViewMenu,
-  pickView,
   renderInMetrics,
   serveCapabilities,
   serveOrgAggregate,
@@ -37,6 +35,18 @@ import {
 import type { SpanAggregateRequest, TraceAggregateRequest } from './metrics-msw';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
+
+/** The view chips under the card's title, by name, folded ones included. */
+const chipNames = () => screen.getAllByRole('tab', { hidden: true }).map(tab => tab.textContent);
+const selectedChip = () =>
+  screen.getAllByRole('tab', { hidden: true }).find(tab => tab.getAttribute('aria-selected') === 'true')?.textContent;
+/** Opens a view: one click on its chip, or from the "+N" menu when it's folded there. */
+const pickChip = (name: string) => {
+  const chip = screen.queryByRole('tab', { name });
+  if (chip) return fireEvent.click(chip);
+  fireEvent.click(screen.getByRole('button', { name: /more tabs$/ }));
+  fireEvent.click(screen.getByRole('menuitem', { name }));
+};
 
 const BREAKDOWN_API = `${TEST_BASE_URL}/api/observability/metrics/breakdown`;
 
@@ -116,7 +126,7 @@ describe('BreakdownCard', () => {
       expect(await screen.findByTitle('Explore Subagent')).toBeDefined();
       expect(rowNames()).toEqual(['Explore Subagent', 'Code Agent', 'Reflector']);
       expect(within(await rowOf('Explore Subagent')).getByText('30')).toBeDefined();
-      expect(await openViewMenu('Breakdown by agent')).not.toContain('Breakdown by project');
+      expect(chipNames()).not.toContain('Projects');
       expect(spans[0]).toMatchObject({
         groupBy: ['entityName'],
         where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
@@ -192,7 +202,7 @@ describe('BreakdownCard', () => {
       await screen.findByTitle('Code Agent');
       const sentBefore = totals.length;
 
-      await pickView('Breakdown by agent', 'Breakdown by tool');
+      pickChip('Tools');
       const search = await rowOf('search');
       expect(within(search).getByText('300')).toBeDefined();
       expect(headerDescription('Spans')).toMatch(/^A span is one step inside a trace/);
@@ -216,7 +226,7 @@ describe('BreakdownCard', () => {
       const onRowClick = vi.fn();
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
-      await pickView('Breakdown by agent', 'Breakdown by tool');
+      pickChip('Tools');
       fireEvent.click(await screen.findByTitle('search'));
       expect(onRowClick).toHaveBeenCalledWith({
         span: { spanTypes: ['tool_call', 'mcp_tool_call'], entityName: 'search' },
@@ -236,7 +246,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      await pickView('Breakdown by agent', 'Breakdown by environment');
+      pickChip('Environments');
       fireEvent.click(await screen.findByTitle('staging'));
       expect(rowNames()).toEqual(['production', 'staging']);
       expect(within(await rowOf('production')).getByText('$1.00')).toBeDefined();
@@ -331,7 +341,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      await pickView('Breakdown by agent', 'Breakdown by model');
+      pickChip('Models');
       fireEvent.click(await screen.findByTitle('gpt-5'));
       expect(rowNames()).toEqual(['claude-haiku-4-5', 'gpt-5']);
       const haiku = await rowOf('claude-haiku-4-5');
@@ -363,7 +373,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      await pickView('Breakdown by agent', 'Breakdown by thread');
+      pickChip('Threads');
       const thread = await rowOf('thread-a');
       expect(within(thread).getByText('$0.40')).toBeDefined();
       expect(within(thread).getByText('user-1')).toBeDefined();
@@ -386,7 +396,7 @@ describe('BreakdownCard', () => {
 
       fireEvent.click(await screen.findByTitle('Project p2'));
       expect(rowNames()).toEqual(['Project p1', 'Project p2']);
-      expect(screen.getByRole('button', { name: 'Breakdown by project' })).toBeDefined();
+      expect(selectedChip()).toBe('Projects');
       // Only the name column: the rows are the projects.
       expect(screen.getAllByRole('columnheader', { name: 'Project' })).toHaveLength(1);
       expect(onRowClick).toHaveBeenCalledWith({ projectId: 'p2' });
@@ -405,7 +415,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />, { scope });
       await screen.findByTitle('Project p1');
 
-      await pickView('Breakdown by project', 'Breakdown by agent');
+      pickChip('Agents');
       const code = await rowOf('Code Agent');
       // Right after the name: the row's texts start with the name, then its project.
       expect(code.textContent?.startsWith('Code AgentProject p1')).toBe(true);
@@ -432,7 +442,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />, { scope });
       await screen.findByTitle('Project p1');
 
-      await pickView('Breakdown by project', 'Breakdown by thread');
+      pickChip('Threads');
       const thread = await rowOf('thread-a');
       expect(within(thread).getByText('Project p1')).toBeDefined();
       expect(await within(thread).findByText('user-1')).toBeDefined();
@@ -456,17 +466,17 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard />, { scope: { projectLabel: id => id } });
 
       expect(await screen.findByTitle('Code Agent')).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Breakdown by agent' })).toBeDefined();
+      expect(selectedChip()).toBe('Agents');
     });
   });
 
   describe('when the data fails to load', () => {
-    it('keeps the view menu and says so', async () => {
+    it('keeps the view chips and says so', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpanAggregate(() => HttpResponse.json({ error: 'boom' }, { status: 500 }));
       renderInMetrics(<BreakdownCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-      expect(await openViewMenu('Breakdown by agent')).toContain('Breakdown by tool');
+      expect(chipNames()).toContain('Tools');
     });
   });
 });

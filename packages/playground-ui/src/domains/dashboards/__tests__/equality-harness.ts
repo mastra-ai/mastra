@@ -23,6 +23,7 @@ import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtur
 import { aggregateCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
 import { serveCapabilities } from '../../metrics/components/__tests__/metrics-msw';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
+import { shortViewLabels } from '../../metrics/lib/view-labels';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -106,7 +107,12 @@ export function recordRequests() {
  * Delete these comparisons with the cards; the behaviour assertions beside them are what stays.
  */
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
-export const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
+export const normalise = (html: string) =>
+  html
+    .replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID')
+    // Base UI's keyboard-highlight marks on a chip: set a tick apart when a list remounts (the widget
+    // re-renders its card on a new view, the card doesn't), so they aren't part of what's compared.
+    .replace(/ data-(?:active|composite-item-active)=""/g, '');
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
 export async function settle(recorder: ReturnType<typeof recordRequests>) {
@@ -138,8 +144,23 @@ export function expectSame(card: Rendered, widget: Rendered) {
   expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
 }
 
-/** Picks a view from the card's title menu. The menu portals out, but only one is open at a time. */
+/**
+ * Picks a view: a chip, for a card that lists its views under its title (named by its short name,
+ * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
+ * one is open at a time.
+ */
 export function pickIn(root: HTMLElement, view: string) {
+  if (within(root).queryAllByRole('tab', { hidden: true }).length) {
+    const [name] = shortViewLabels([view, 'Breakdown by view']);
+    const chip = within(root).queryByRole('tab', { name });
+    if (chip) fireEvent.click(chip);
+    else {
+      // Folded into the "+N" menu.
+      fireEvent.click(within(root).getByRole('button', { name: /more tabs$/ }));
+      fireEvent.click(screen.getByRole('menuitem', { name }));
+    }
+    return;
+  }
   const trigger = within(root)
     .getAllByRole('button')
     .find(b => b.getAttribute('aria-haspopup') === 'menu');

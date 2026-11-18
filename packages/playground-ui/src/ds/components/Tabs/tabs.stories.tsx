@@ -278,6 +278,34 @@ export const PillGhostVariant: Story = {
   ),
 };
 
+const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
+
+/**
+ * `variant="chips"`: separate outlined pills, the open one filled, for a card's views (a metrics
+ * card's Breakdown). No track and no sliding indicator: picking a chip swaps at once. Chips that
+ * don't fit fold into a "+N" menu after the last one that does, and the open chip always stays in
+ * the row. Narrow the frame to see them fold.
+ */
+export const ChipsVariant: Story = {
+  render: () => (
+    <div className="flex w-150 flex-col gap-6">
+      {[600, 320].map(width => (
+        <div key={width} style={{ width }} className="resize-x overflow-hidden">
+          <Tabs defaultTab="Agents">
+            <TabList variant="chips" size="sm">
+              {BREAKDOWN_VIEWS.map(view => (
+                <Tab key={view} value={view}>
+                  {view}
+                </Tab>
+              ))}
+            </TabList>
+          </Tabs>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 /** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
 /**
  * Tabs take the shared control rung: a `pill` track and a `pill-ghost` tab are as tall as a
