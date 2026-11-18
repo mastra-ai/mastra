@@ -589,6 +589,36 @@ describe('the new skill page', () => {
     await waitForMutationsIdle(client);
   });
 
+  it('locks the draft while creating it, and unlocks it to fix a refused name', async () => {
+    const { client } = openAt(NEW_SKILL_PAGE);
+    let answer = () => {};
+    const answered = new Promise<void>(resolve => {
+      answer = resolve;
+    });
+    server.use(
+      http.post(CREATE_URL, async () => {
+        await answered;
+        return HttpResponse.json(
+          { error: 'skill_exists', message: 'A skill named "changelog-lint" already exists. Edit it instead.' },
+          { status: 409 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'changelog-lint');
+    const description = screen.getByRole('textbox', { name: 'Description' });
+    await user.type(description, 'Mine');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    expect(await screen.findByRole('button', { name: 'Creating…' })).toBeDisabled();
+    expect(description.closest('[inert]')).not.toBeNull();
+    answer();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
+    expect(description.closest('[inert]')).toBeNull();
+    await waitForMutationsIdle(client);
+  });
+
   it('is not offered to members who are not admins', async () => {
     openAt(SKILLS_PAGE, { canEdit: false });
 
