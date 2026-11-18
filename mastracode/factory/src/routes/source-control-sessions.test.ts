@@ -433,6 +433,14 @@ describe('source-control session routes', () => {
     vi.spyOn(controller, 'queryThreadById').mockImplementation(input => watch(queryThreadById(input)));
     vi.spyOn(controller, 'queryThreads').mockImplementation(input => watch(queryThreads(input)));
     const LOOKUPS_PER_REQUEST = 3;
+    // A regeneration reads the owner's memory settings after those lookups, as its last step before its turn.
+    const settingsReads: Array<Promise<unknown>> = [];
+    const readSettings = seed.memorySettings.get.bind(seed.memorySettings);
+    vi.spyOn(seed.memorySettings, 'get').mockImplementation(input => {
+      const read = readSettings(input);
+      settingsReads.push(read);
+      return read;
+    });
     return {
       sourceControl,
       controller,
@@ -447,10 +455,16 @@ describe('source-control session routes', () => {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ title }),
         }),
-      /** Resolves once `count` title requests have finished their lookups and taken their place in line. */
-      inLine: async (count: number) => {
-        await vi.waitFor(() => expect(lookups.length).toBeGreaterThanOrEqual(count * LOOKUPS_PER_REQUEST));
-        await Promise.allSettled(lookups);
+      /**
+       * Resolves once `count` title requests, `regenerations` of them regenerations, have finished
+       * everything they read first and taken their place in line.
+       */
+      inLine: async (count: number, regenerations: number) => {
+        await vi.waitFor(() => {
+          expect(lookups.length).toBeGreaterThanOrEqual(count * LOOKUPS_PER_REQUEST);
+          expect(settingsReads.length).toBeGreaterThanOrEqual(regenerations);
+        });
+        await Promise.allSettled([...lookups, ...settingsReads]);
         await new Promise(resolve => setImmediate(resolve));
       },
     };
@@ -465,7 +479,7 @@ describe('source-control session routes', () => {
     // Two typed titles while the model is still thinking: the later one must be the one kept.
     const first = session.typed('Typed first');
     const second = session.typed('Typed second');
-    await session.inLine(3);
+    await session.inLine(3, 1);
     expect(session.renameThread).not.toHaveBeenCalled();
     session.release(1);
     expect((await regenerated).status).toBe(200);
@@ -487,10 +501,10 @@ describe('source-control session routes', () => {
     const before = session.regenerate();
     await session.asked(1);
     const typed = session.typed('Typed title');
-    await session.inLine(2);
+    await session.inLine(2, 1);
     // Asked for after the typed title, so it must replace it, not report the answer still pending from before.
     const after = session.regenerate();
-    await session.inLine(3);
+    await session.inLine(3, 2);
     session.release(1);
     await session.asked(2);
     session.release(2);
@@ -511,7 +525,7 @@ describe('source-control session routes', () => {
     await session.asked(1);
     const typed = session.typed('Typed by the old owner');
     // Past its owner check and waiting behind the regeneration when the session changes hands.
-    await session.inLine(2);
+    await session.inLine(2, 1);
     await session.sourceControl.sessions.transferOwner({ sessionId, expectedUserId: 'user-1', toUserId: 'user-2' });
     session.release(1);
     await regenerated;
