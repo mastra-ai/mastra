@@ -1,6 +1,7 @@
 import { cardContextSessions } from '@mastra/factory/work-items/card-context-sessions';
 import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
-import { matchesSearch, searchableCard, searchTerms } from '@mastra/factory/work-items/search-terms';
+import { workItemNumber } from '@mastra/factory/work-items/card-number';
+import { matchesSearch, searchableCard } from '@mastra/factory/work-items/search-terms';
 import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/search-terms';
 
 import { boardOf } from '../../factory/boardFlow';
@@ -25,7 +26,10 @@ export interface SessionSearchResult {
   title: string;
   context: readonly string[];
   identifier?: string;
+  /** The row's own words, which the palette's filter reads; see {@link matchingResults}. */
   value: string;
+  /** What the shared search reads of the row: its card's, and its own words. */
+  search: SearchableCard;
   path: string;
   preserveOrigin: boolean;
   updatedAt: string;
@@ -37,7 +41,10 @@ export interface WorkItemSearchResult {
   title: string;
   context: readonly string[];
   identifier?: string;
+  /** The row's own words, which the palette's filter reads; see {@link matchingResults}. */
   value: string;
+  /** What the shared search reads of the row: its card's, and its own words. */
+  search: SearchableCard;
   path: string;
   updatedAt: string;
   item: WorkItem;
@@ -53,33 +60,51 @@ function joinValue(parts: (string | undefined | null)[]): string {
   return parts.filter(part => part !== undefined && part !== null).join(' ');
 }
 
+// A card's search, once per card object: the query cache hands the same object back until the card changes.
+const searchByCard = new WeakMap<WorkItem, SearchableCard>();
+
 /** What the server's search reads of the card (`cardSearch` in `@mastra/factory`), from the card the browser holds. */
-function searchedCard(item: WorkItem): SearchableCard {
-  return searchableCard({
-    id: item.id,
-    title: item.title,
-    number: searchedNumber(item),
-    sourceId: item.sourceKey,
-    key: item.workItem?.key,
-    urls: [item.url, item.workItem?.url],
-    sources: item.workItem?.sources ?? [],
-    sessions: item.sessions,
-  });
+function cardSearch(item: WorkItem): SearchableCard {
+  let search = searchByCard.get(item);
+  if (!search) {
+    search = searchableCard({
+      id: item.id,
+      title: item.title,
+      number: workItemNumber(item),
+      sourceId: item.sourceKey,
+      key: item.workItem?.key,
+      urls: [item.url, item.workItem?.url],
+      sources: item.workItem?.sources ?? [],
+      sessions: item.sessions,
+    });
+    searchByCard.set(item, search);
+  }
+  return search;
+}
+
+/** What the shared search reads of a row: its card's search, plus the row's own words (its branch, its kind, its phase). */
+function rowSearch(item: WorkItem | undefined, value: string): SearchableCard {
+  const own = value.toLowerCase();
+  if (item === undefined) return { text: own, ids: [], sourceKeys: [], links: [] };
+  const card = cardSearch(item);
+  return { ...card, text: `${card.text} ${own}` };
 }
 
 /**
- * The row's `value` with the typed words it lacks, when the card answers them. The palette keeps a
- * row whose `value` holds every typed word, and the server's search reads more than a row shows: an
- * attached pull request's key, a branch, the card's id, a link to any page of its pull request. The
- * words go in only when the card answers every one the row lacks, so no word stands in for another
- * (`…/pull/307` is in `…/pull/30772`): a card the server's search keeps, the palette keeps, and no other.
+ * The rows that answer every typed term, read by the board's own search (`matchesSearch`), each with
+ * the typed words added to its `value`. The palette's filter keeps a row whose `value` holds every
+ * typed word, so it keeps exactly these: `#12` never keeps `#123`, and a link to any page of a pull
+ * request keeps the card it rides on. Render only these.
  */
-function withAnsweredWords(value: string, item: WorkItem | undefined, terms: readonly SearchTerm[]): string {
-  if (item === undefined || terms.length === 0) return value;
-  const text = value.toLowerCase();
-  const lacking = terms.filter(term => !text.includes(term.word));
-  if (lacking.length === 0 || !matchesSearch(searchedCard(item), lacking)) return value;
-  return joinValue([value, ...lacking.map(term => term.word)]);
+export function matchingResults<T extends { value: string; search: SearchableCard }>(
+  results: readonly T[],
+  terms: readonly SearchTerm[],
+): readonly T[] {
+  if (terms.length === 0) return results;
+  const words = terms.map(term => term.word);
+  return results
+    .filter(result => matchesSearch(result.search, terms))
+    .map(result => ({ ...result, value: joinValue([result.value, ...words]) }));
 }
 
 function buildValue(
@@ -107,7 +132,6 @@ function createFactorySessionResult(
   factoryId: string,
   session: FactoryUserSession,
   association: SessionWorkItem | undefined,
-  terms: readonly SearchTerm[],
 ): SessionSearchResult {
   const item = association?.item;
   const factoryKind = getFactorySessionKind(session, item);
@@ -121,6 +145,7 @@ function createFactorySessionResult(
   const threadId = contextSession?.ref.threadId ?? session.sessionId;
   // Work items carry the issue/PR number; when they fail to load the review branch is the only place it survives.
   const identifier = (item ? workItemIdentifier(item) : undefined) ?? getReviewBranchIdentifier(session.branch);
+  const value = buildValue(session, kind, title, identifier, item, contextSession?.label);
 
   return {
     id: session.sessionId,
@@ -128,7 +153,8 @@ function createFactorySessionResult(
     title,
     context,
     identifier,
-    value: withAnsweredWords(buildValue(session, kind, title, identifier, item, contextSession?.label), item, terms),
+    value,
+    search: rowSearch(item, value),
     path: threadPath(factoryId, { sessionId: session.sessionId, threadId }),
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
@@ -138,13 +164,15 @@ function createFactorySessionResult(
 function createUserSessionResult(factoryId: string, session: FactoryUserSession): SessionSearchResult {
   const kind = 'user-session';
   const title = getUserSessionLabel(session);
+  const value = buildValue(session, kind, title, undefined, undefined);
 
   return {
     id: session.sessionId,
     kind,
     title,
     context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
-    value: buildValue(session, kind, title, undefined, undefined),
+    value,
+    search: rowSearch(undefined, value),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,
     updatedAt: session.updatedAt,
@@ -175,15 +203,12 @@ export function createSessionSearchGroups(input: {
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each session reads by the phase it runs. */
   boards?: readonly BoardInfo[];
-  /** What is typed: the server's search decides what else than a row's text a card answers. */
-  query: string;
 }): {
   work: SessionSearchResult[];
   review: SessionSearchResult[];
   user: SessionSearchResult[];
 } {
   const bySessionId = workItemsBySessionId(input.workItems, input.boards);
-  const terms = searchTerms(input.query);
   // Sessions on one card share its update time; the one its current phase runs in leads.
   const newestThenCurrent = (a: SessionSearchResult, b: SessionSearchResult) =>
     newestFirst(a, b) ||
@@ -194,7 +219,7 @@ export function createSessionSearchGroups(input: {
 
   for (const repository of input.repositories) {
     for (const session of repository.workspaces) {
-      const result = createFactorySessionResult(input.factoryId, session, bySessionId.get(session.sessionId), terms);
+      const result = createFactorySessionResult(input.factoryId, session, bySessionId.get(session.sessionId));
       if (result.kind === 'review-session') review.push(result);
       else work.push(result);
     }
@@ -210,49 +235,30 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-/**
- * The card's number as the server's search reads it (`workItemNumber` in `@mastra/factory`): the
- * source's own, else the one given to a card filed by hand.
- */
-function searchedNumber(item: WorkItem): number | null {
-  const facts = item.workItem?.metadata;
-  const number =
-    facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? item.metadata.cardNumber;
-  return typeof number === 'number' ? number : null;
-}
-
-function createWorkItemResult(
-  factoryId: string,
-  item: WorkItem,
-  board: BoardInfo | undefined,
-  terms: readonly SearchTerm[],
-): WorkItemSearchResult {
+function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
   const stage = currentItemStageLabel(item, board);
-  const number = searchedNumber(item);
+  const number = workItemNumber(item);
+  const value = joinValue([
+    item.title,
+    'work item',
+    sourceLabel,
+    stage,
+    identifier,
+    // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
+    item.workItem?.key,
+    number === null ? undefined : `#${number}`,
+    item.sourceKey,
+  ]);
 
   return {
     id: item.id,
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    // With the typed words the card answers, so a row the server matched passes the palette's filter.
-    value: withAnsweredWords(
-      joinValue([
-        item.title,
-        'work item',
-        sourceLabel,
-        stage,
-        identifier,
-        // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
-        item.workItem?.key,
-        number === null ? undefined : `#${number}`,
-        item.sourceKey,
-      ]),
-      item,
-      terms,
-    ),
+    value,
+    search: rowSearch(item, value),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     item,
@@ -266,11 +272,8 @@ export function createWorkItemSearchResults(input: {
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
   boards?: readonly BoardInfo[];
-  /** What is typed: the server's search decides what else than a row's text a card answers. */
-  query: string;
 }): WorkItemSearchResult[] {
-  const terms = searchTerms(input.query);
   return input.workItems
-    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item), terms))
+    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item)))
     .sort(newestFirst);
 }

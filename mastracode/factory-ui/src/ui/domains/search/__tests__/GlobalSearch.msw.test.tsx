@@ -970,7 +970,8 @@ describe('Global search', () => {
     expect(within(results).queryByText('Review command palette PR')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(requests.workItemQueries).toContain(
-        `started=false&q=${encodeURIComponent('GitHub.com/Mastra-AI/mastra/pull/4242?tab=checks')}`,
+        // Asked lowercased: the server reads it so, and `GitHub.com` and `github.com` share one answer.
+        `started=false&q=${encodeURIComponent('github.com/mastra-ai/mastra/pull/4242?tab=checks')}`,
       ),
     );
 
