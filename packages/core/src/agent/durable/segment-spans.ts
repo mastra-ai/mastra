@@ -10,12 +10,15 @@
 import type { ExportedSpan, SpanType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
+import type { RunRegistryEntry } from './types';
 
 export interface SegmentSpanData {
   agentSpanData?: ExportedSpan<SpanType.AGENT_RUN>;
   modelSpanData?: ExportedSpan<SpanType.MODEL_GENERATION>;
-  /** Recovery: the MODEL_GENERATION the crashed segment left a MODEL_STEP open under. */
-  adoptsStepsOf?: string;
+  /** Recovery: it finishes the MODEL_STEP the crashed execution left open. */
+  adoptsOpenSteps?: boolean;
+  /** Recovery: the MODEL_GENERATION a suspension ended before the crash, whose steps stay ended. */
+  endedStepsOf?: string;
 }
 
 /** A plain record stands in for the context on engines that serialize it before the handoff. */
@@ -54,21 +57,31 @@ export function carrySegmentSpans(target: CarrierTarget, runId: string, segment:
 /**
  * The pair the current execution reports under: the one a resume or recovery carried for `runId`,
  * else the run's first pair from `state` (the workflow input or the loop state). A carried `null`
- * means the execution opened no spans, so its steps end none.
+ * means the execution opened no spans, so its steps end none. `carried` tells the two apart.
+ * `live` is this process's registry entry, the fallback when the context lost the carried pair.
  */
 export function segmentSpanData(
   requestContext: Pick<RequestContext, 'getRaw'> | undefined,
   runId: string,
   state: { agentSpanData?: unknown; modelSpanData?: unknown },
-): SegmentSpanData {
+  live?: Pick<RunRegistryEntry, 'resumeAgentSpan' | 'resumeModelSpan'>,
+): SegmentSpanData & { carried: boolean } {
   const carried = readCarrier(requestContext, runId);
-  if (carried === null) return {};
-  return (
-    carried ?? {
-      agentSpanData: state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
-      modelSpanData: state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined,
-    }
-  );
+  if (carried === null) return { carried: true };
+  if (carried) return { ...carried, carried: true };
+  // User code can clear the request context. The process that opened the pair still holds it.
+  if (live?.resumeAgentSpan) {
+    return {
+      agentSpanData: live.resumeAgentSpan.snapshot?.() ?? live.resumeAgentSpan.exportSpan(),
+      modelSpanData: live.resumeModelSpan?.snapshot?.() ?? live.resumeModelSpan?.exportSpan(),
+      carried: true,
+    };
+  }
+  return {
+    agentSpanData: state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
+    modelSpanData: state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined,
+    carried: false,
+  };
 }
 
 /** The live span behind `data` when this process holds it, so it is ended in place; otherwise undefined. */
@@ -80,14 +93,14 @@ export function liveSegmentSpan<S extends { id: string }>(
 }
 
 /**
- * Whether `segment` may end the MODEL_STEP `stepSpanData`: one opened under its own
- * MODEL_GENERATION, or the one the segment it recovered left open. A step opened by the segment
- * that suspended was ended by that suspension, so the segment that finishes its tool call leaves
- * it alone.
+ * Whether `segment` may end the MODEL_STEP `stepSpanData`. The run's first execution opened every
+ * step it sees. A resumed one ends only a step opened under its own pair (under the AGENT_RUN when
+ * the generation is not exported): the step that suspended was ended by that suspension. A
+ * recovered one also finishes the step its crashed execution left open.
  */
-export function segmentOwnsStep(segment: SegmentSpanData, stepSpanData: unknown): boolean {
+export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }, stepSpanData: unknown): boolean {
+  if (!segment.carried) return true;
   const parent = (stepSpanData as { parentSpanId?: unknown } | undefined)?.parentSpanId;
-  return (
-    parent === segment.modelSpanData?.id || (segment.adoptsStepsOf !== undefined && parent === segment.adoptsStepsOf)
-  );
+  if (segment.adoptsOpenSteps) return parent !== segment.endedStepsOf;
+  return typeof parent === 'string' && [segment.modelSpanData?.id, segment.agentSpanData?.id].includes(parent);
 }

@@ -515,7 +515,7 @@ export function createDurableToolCallStep() {
           // The pair this execution reports under: the run's first, or the one a resume or
           // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-          const segment = segmentSpanData(requestContext, runId, initData);
+          const segment = segmentSpanData(requestContext, runId, initData, reg);
           const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
@@ -528,6 +528,7 @@ export function createDurableToolCallStep() {
                   completionStartTime: typedInput.completionStartTime,
                   timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
                 },
+            segment.carried,
           );
           if (typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData)) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
@@ -613,7 +614,7 @@ export function createDurableToolCallStep() {
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
       // in-process, rebuilt cross-process). Without it they export as orphan trace roots.
-      const processorAgentSpanData = segmentSpanData(requestContext, runId, initData).agentSpanData;
+      const processorAgentSpanData = segmentSpanData(requestContext, runId, initData, registryEntry).agentSpanData;
       const processorAgentSpan =
         liveSegmentSpan(processorAgentSpanData, registryEntry?.resumeAgentSpan, registryEntry?.agentSpan) ??
         (processorAgentSpanData && observability ? observability.rebuildSpan(processorAgentSpanData) : undefined);

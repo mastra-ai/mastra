@@ -847,15 +847,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // The run's first pair is threaded through the iteration state (seeded in preparation.ts);
             // a resume or recovery carries its own pair on the request context.
-            const segment = segmentSpanData(requestContext, runId, inputData);
+            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+            const segment = segmentSpanData(requestContext, runId, inputData, resumeRegistry);
             const inputModelSpanData = segment.modelSpanData;
             // Rebuilt spans come from the run-start snapshot, so re-apply the carried
             // first-chunk clocks before the tracker sees them; otherwise a later
             // step would overwrite them mid-run. The loop state carries the originals'
             // clocks; a resumed segment has fresh spans, so its clocks live on the
             // registry beside them.
-            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData);
+            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData, segment.carried);
             const withCarriedClocks = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T => {

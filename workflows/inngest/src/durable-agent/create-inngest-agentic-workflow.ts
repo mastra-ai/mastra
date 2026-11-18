@@ -728,12 +728,21 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // the timeout failure rather than a normal loop finish.
           const deadlineTermination =
             deadlineError && !tripwire ? executionFailureTermination(deadlineError) : undefined;
+          // The pair this execution reports under: the run's first, or the one its resume carried.
+          const { agentSpanData, modelSpanData, carried } = segmentSpanData(
+            requestContext,
+            state.runId,
+            state,
+            registry,
+          );
+          // The loop state's clocks belong to the run's first pair, so a carried pair gets its own or none.
+          const firstPairClocks = carried ? undefined : state;
           const completionClock = registry?.resumeModelSpan
             ? registry.resumeCompletionStartTime
-            : state.completionStartTime;
+            : firstPairClocks?.completionStartTime;
           const timeToFirstTokenMs = registry?.resumeModelSpan
             ? registry.resumeTimeToFirstTokenMs
-            : state.timeToFirstTokenMs;
+            : firstPairClocks?.timeToFirstTokenMs;
           const clocks = {
             ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
             ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
@@ -761,8 +770,6 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   tripwire: tripwire ?? state.lastStepResult?.tripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
-          // The pair this execution reports under: the run's first, or the one its resume carried.
-          const { agentSpanData, modelSpanData } = segmentSpanData(requestContext, state.runId, state);
           if (modelSpanData) {
             const modelSpan =
               liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
@@ -825,7 +832,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // This step's span is internal and has no live parent, so a score read from it
           // would name a span that is never stored.
           const registry = getRunRegistryEntry(initData.runId, mastra);
-          const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData);
+          const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, registry);
           const agentSpan =
             liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
             (agentSpanData ? mastra?.observability?.getSelectedInstance({})?.rebuildSpan(agentSpanData) : undefined);

@@ -1875,8 +1875,8 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
       }
     }
-    // Every worker's steps report under the recovered pair, and finish the MODEL_STEP the crashed
-    // segment left open under its generation.
+    // Every worker's steps report under the recovered pair and finish the MODEL_STEP the crashed
+    // execution left open. The originals' own steps stay as a suspension ended them.
     carrySegmentSpans(
       requestContext,
       runId,
@@ -1884,7 +1884,8 @@ export class DurableAgent<
         ? {
             agentSpanData: recoverAgentSpan.snapshot?.() ?? recoverAgentSpan.exportSpan(),
             modelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
-            ...(!originalSpansEnded && origModelSpanData?.id ? { adoptsStepsOf: origModelSpanData.id } : {}),
+            adoptsOpenSteps: true,
+            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
           }
         : null,
     );

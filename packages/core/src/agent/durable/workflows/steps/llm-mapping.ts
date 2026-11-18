@@ -228,7 +228,8 @@ export function createDurableLLMMappingStep() {
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
-          if (segmentOwnsStep(segmentSpanData(requestContext, _runId, initData), llmOutput.stepSpanData)) {
+          const segment = segmentSpanData(requestContext, _runId, initData, getRunRegistryEntry(_runId, mastra));
+          if (segmentOwnsStep(segment, llmOutput.stepSpanData)) {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
             stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
           }

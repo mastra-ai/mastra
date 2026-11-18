@@ -51,7 +51,9 @@ export function carrySegmentSpans(...args: Parameters<typeof coreDurable.carrySe
 }
 
 /** The pair the current execution reports under; an older core reports under the run's first pair. */
-export function segmentSpanData(...args: Parameters<typeof coreDurable.segmentSpanData>): SegmentSpanData {
+export function segmentSpanData(
+  ...args: Parameters<typeof coreDurable.segmentSpanData>
+): SegmentSpanData & { carried?: boolean } {
   if (carriesSegmentSpans()) return coreDurable.segmentSpanData?.(...args) ?? {};
   const [, , state] = args;
   return {

@@ -1257,10 +1257,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const { agentSpanData, modelSpanData } = segmentSpanData(requestContext, initData.runId, initData);
+              const { agentSpanData, modelSpanData, carried } = segmentSpanData(
+                requestContext,
+                initData.runId,
+                initData,
+                reg,
+              );
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
-              const clocks = carriedSpanClocks(reg, state);
+              const clocks = carriedSpanClocks(reg, state, carried);
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan =
