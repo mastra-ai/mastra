@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const deleteFileInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
   file_path: z.string().describe('Full path to the file. Example: hello.txt'),
@@ -35,7 +45,7 @@ export function deleteFileTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.delete({
         // https://docs.gitlab.com/api/repository_files/#delete-a-file-in-a-repository
-        endpoint: `/api/v4/projects/${String(input.project_id)}/repository/files/${encodeURIComponent(input.file_path)}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/files/${gitlabPathSegment(input.file_path)}`,
         data: {
           branch: input.branch,
           commit_message: input.commit_message,

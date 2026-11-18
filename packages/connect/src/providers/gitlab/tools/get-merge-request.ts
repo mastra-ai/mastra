@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getMergeRequestInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
@@ -81,7 +91,7 @@ const ProviderMergeRequestSchema = z.object({
   merge_when_pipeline_succeeds: z.boolean().optional(),
   merge_status: z.string().optional(),
   detailed_merge_status: z.string(),
-  sha: z.string(),
+  sha: z.string().nullable(),
   merge_commit_sha: z.string().nullable().optional(),
   squash_commit_sha: z.string().nullable().optional(),
   user_notes_count: z.number(),
@@ -103,7 +113,7 @@ const ProviderMergeRequestSchema = z.object({
   merged_at: z.string().nullable().optional(),
   merge_user: UserSchema.nullable().optional(),
   merge_after: z.string().nullable().optional(),
-  prepared_at: z.string().optional(),
+  prepared_at: z.string().nullish(),
   imported: z.boolean().optional(),
   imported_from: z.string().nullable().optional(),
 });
@@ -120,7 +130,7 @@ export function getMergeRequestTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/merge_requests/#get-single-mr
-        endpoint: `/api/v4/projects/${String(input.project_id)}/merge_requests/${input.merge_request_iid}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
         retries: 3,
       });
 

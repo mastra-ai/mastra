@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const listMergeRequestsInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
@@ -53,7 +63,7 @@ const MergeRequestSchema = z.object({
   draft: z.boolean(),
   work_in_progress: z.boolean().nullable().optional(),
   web_url: z.string(),
-  sha: z.string(),
+  sha: z.string().nullable(),
   merge_commit_sha: z.string().nullable(),
   squash_commit_sha: z.string().nullable().optional(),
   source_project_id: z.number(),
@@ -99,7 +109,7 @@ export function listMergeRequestsTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/merge_requests/#list-project-merge-requests
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${String(input.project_id)}/merge_requests`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests`,
         params: {
           page: String(page),
           per_page: '20',

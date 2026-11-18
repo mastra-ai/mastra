@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const cancelPipelineInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
   pipeline_id: z.number().describe('Pipeline ID. Example: 46'),
@@ -37,7 +47,7 @@ const ProviderPipelineSchema = z
     committed_at: z.string().nullable().optional(),
     duration: z.number().nullable().optional(),
     queued_duration: z.number().nullable().optional(),
-    coverage: z.number().nullable().optional(),
+    coverage: z.union([z.number(), z.string()]).nullish(),
     web_url: z.string().optional(),
     archived: z.boolean().optional(),
   })
@@ -55,7 +65,7 @@ export function cancelPipelineTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.post({
         // https://docs.gitlab.com/api/pipelines/#cancel-all-jobs-for-a-pipeline
-        endpoint: `/api/v4/projects/${String(input.project_id)}/pipelines/${input.pipeline_id}/cancel`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/pipelines/${gitlabPathSegment(input.pipeline_id)}/cancel`,
         retries: 1,
       });
 

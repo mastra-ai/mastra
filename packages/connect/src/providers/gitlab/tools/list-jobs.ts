@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const listJobsInputSchema = z.object({
   project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded namespace path. Example: 82599306'),
   scope: z
@@ -66,7 +76,7 @@ export function listJobsTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://docs.gitlab.com/api/jobs/
-        endpoint: `/api/v4/projects/${String(input.project_id)}/jobs`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs`,
         params: {
           ...(input.scope !== undefined && { scope: input.scope }),
           ...(input.order_by !== undefined && { order_by: input.order_by }),

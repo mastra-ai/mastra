@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const deleteGroupInputSchema = z
   .object({
     group_id: z.union([z.number(), z.string()]).describe('The ID or URL-encoded path of the group. Example: 123'),
@@ -32,7 +42,8 @@ export const deleteGroupOutputSchema = z.object({
 export function deleteGroupTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_delete_group',
-    description: 'Delete or archive a group in GitLab.',
+    description:
+      'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
     inputSchema: deleteGroupInputSchema,
     outputSchema: deleteGroupOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGroupOutputSchema>> => {
@@ -49,7 +60,7 @@ export function deleteGroupTool(proxy: PlatformProxy) {
 
       // https://docs.gitlab.com/api/groups/#delete-a-group
       await platformProxy.delete({
-        endpoint: `/api/v4/groups/${String(input.group_id)}`,
+        endpoint: `/api/v4/groups/${gitlabPathSegment(input.group_id)}`,
         params,
         retries: 3,
       });

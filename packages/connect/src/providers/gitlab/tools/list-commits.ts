@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const listCommitsInputSchema = z.object({
   project_id: z.number().describe('The ID of the project. Example: 82599306'),
   ref_name: z
@@ -48,7 +58,7 @@ export function listCommitsTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/commits/#list-repository-commits
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/repository/commits`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/repository/commits`,
         params: {
           ...(input.ref_name !== undefined && { ref_name: input.ref_name }),
           ...(input.path !== undefined && { path: input.path }),

@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const getJobInputSchema = z.object({
   project_id: z.number().describe('Project ID. Example: 82599306'),
   job_id: z.number().describe('Job ID. Example: 1'),
@@ -147,7 +157,7 @@ export function getJobTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://docs.gitlab.com/api/jobs/#retrieve-a-job-by-job-id
       const response = await platformProxy.get({
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/jobs/${encodeURIComponent(String(input.job_id))}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/jobs/${gitlabPathSegment(input.job_id)}`,
         retries: 3,
       });
 

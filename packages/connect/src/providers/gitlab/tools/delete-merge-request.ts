@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}
+
 export const deleteMergeRequestInputSchema = z.object({
   project_id: z.number().describe('The ID of the project containing the merge request. Example: 82599306'),
   merge_request_iid: z.number().describe('The internal ID of the merge request. Example: 1'),
@@ -39,7 +49,7 @@ export function deleteMergeRequestTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.delete({
         // https://docs.gitlab.com/api/merge_requests/#delete-a-merge-request
-        endpoint: `/api/v4/projects/${encodeURIComponent(String(input.project_id))}/merge_requests/${encodeURIComponent(String(input.merge_request_iid))}`,
+        endpoint: `/api/v4/projects/${gitlabPathSegment(input.project_id)}/merge_requests/${gitlabPathSegment(input.merge_request_iid)}`,
         retries: 10,
       });
 

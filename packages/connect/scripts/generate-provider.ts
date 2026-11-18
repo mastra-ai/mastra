@@ -830,7 +830,179 @@ function adaptOpenAICreateImage(action: ExtractedAction): ExtractedAction {
   return { ...action, moduleStatements, execBody };
 }
 
+/**
+ * GitLab templates build request paths inconsistently: some encode the project,
+ * group, or file path, some insert it raw, and some encode a value their schema
+ * already documents as URL-encoded. A raw `?` or `#` moves the rest of the path
+ * into the query (`project_id: "42?"` turns delete-pipeline into
+ * `DELETE /projects/42`), a raw `group/project` adds a path segment, and an
+ * encoded `group%2Fproject` passed through `encodeURIComponent` becomes
+ * `group%252Fproject`. Route every interpolated endpoint segment through one
+ * helper that decodes once and encodes once, so numeric IDs, raw paths, and
+ * already-encoded paths all reach GitLab as a single segment.
+ */
+const GITLAB_PATH_SEGMENT_HELPER = `/** Encodes one GitLab path segment exactly once, whether \`value\` arrives raw or already URL-encoded. */
+function gitlabPathSegment(value: string | number): string {
+  const text = String(value);
+  try {
+    return encodeURIComponent(decodeURIComponent(text));
+  } catch {
+    return encodeURIComponent(text);
+  }
+}`;
+
+function stripEncodingWrappers(expression: string): string {
+  let core = expression.trim();
+  for (;;) {
+    const wrapped = /^(?:encodeURIComponent|String)\((.*)\)$/s.exec(core);
+    if (!wrapped) return core;
+    core = wrapped[1]!.trim();
+  }
+}
+
+function encodeGitLabPathSegments(action: ExtractedAction): ExtractedAction {
+  let rewrites = 0;
+  const execBody = action.execBody.replace(/(endpoint:\s*`)([^`]*)`/g, (_match, prefix: string, path: string) => {
+    const encoded = path.replace(/\$\{([^{}]*)\}/g, (_segment, expression: string) => {
+      rewrites++;
+      return `\${gitlabPathSegment(${stripEncodingWrappers(expression)})}`;
+    });
+    return `${prefix}${encoded}\``;
+  });
+  if (rewrites === 0) return action;
+  return { ...action, moduleStatements: [GITLAB_PATH_SEGMENT_HELPER, ...action.moduleStatements], execBody };
+}
+
+interface StatementRewrite {
+  pattern: RegExp;
+  replacement: string;
+  /** Matches expected across all module statements; a different count means the template changed. */
+  count: number;
+  what: string;
+}
+
+function rewriteModuleStatements(action: ExtractedAction, rewrites: readonly StatementRewrite[]): ExtractedAction {
+  let moduleStatements = action.moduleStatements;
+  for (const { pattern, replacement, count, what } of rewrites) {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`);
+    const found = moduleStatements.reduce((total, statement) => total + (statement.match(global)?.length ?? 0), 0);
+    if (found !== count) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+      );
+    }
+    moduleStatements = moduleStatements.map(statement => statement.replace(global, replacement));
+  }
+  return { ...action, moduleStatements };
+}
+
+/**
+ * GitLab returns `null`, not an omitted field, for these values, and the
+ * templates reject null, so a successful read or write failed validation after
+ * GitLab had answered (or acted): a commit with no CI, a release or milestone
+ * with no description or dates, a merge request read before GitLab prepared it,
+ * a retried job with no user, and pipeline coverage, which GitLab sends as a
+ * decimal string. Drop each entry once the upstream template accepts it.
+ */
+const GITLAB_RESPONSE_SCHEMA_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> = {
+  'get-commit': [
+    {
+      pattern: /last_pipeline: LastPipelineSchema,/,
+      replacement: 'last_pipeline: LastPipelineSchema.nullable(),',
+      count: 2,
+      what: 'nullable last_pipeline',
+    },
+    {
+      pattern: /status: z\.string\(\)\.optional\(\),/,
+      replacement: 'status: z.string().nullish(),',
+      count: 2,
+      what: 'nullable commit status',
+    },
+  ],
+  'get-release': [
+    {
+      pattern: /(description|due_date|start_date): z\.string\(\)\.optional\(\),/,
+      replacement: '$1: z.string().nullish(),',
+      count: 4,
+      what: 'nullable release and milestone fields',
+    },
+  ],
+  'get-merge-request': [
+    { pattern: /\bsha: z\.string\(\),/, replacement: 'sha: z.string().nullable(),', count: 1, what: 'nullable sha' },
+    {
+      pattern: /prepared_at: z\.string\(\)\.optional\(\),/,
+      replacement: 'prepared_at: z.string().nullish(),',
+      count: 1,
+      what: 'nullable prepared_at',
+    },
+  ],
+  'list-merge-requests': [
+    { pattern: /\bsha: z\.string\(\),/, replacement: 'sha: z.string().nullable(),', count: 1, what: 'nullable sha' },
+  ],
+  'retry-job': [
+    {
+      pattern: /user: ProviderUserSchema\.optional\(\),/,
+      replacement: 'user: ProviderUserSchema.nullish(),',
+      count: 1,
+      what: 'nullable job user',
+    },
+  ],
+  'cancel-pipeline': [
+    {
+      pattern: /coverage: z\.number\(\)\.nullable\(\)\.optional\(\),/,
+      replacement: 'coverage: z.union([z.number(), z.string()]).nullish(),',
+      count: 1,
+      what: 'string coverage',
+    },
+  ],
+  'delete-project': [
+    {
+      pattern: /If true, archive the project instead of permanently deleting it\. Defaults to false\./,
+      replacement:
+        'If true, archive the project instead of deleting it. Defaults to false, which requests deletion; GitLab.com and instances with delayed deletion keep the project for a retention period before removing it.',
+      count: 1,
+      what: 'archive description',
+    },
+  ],
+};
+
+/**
+ * Templates advertise "delete or archive" on tools that can only delete, so an
+ * agent asked to archive a branch, issue, or group could pick a tool that
+ * deletes it. delete-project really can archive; it keeps its description.
+ */
+const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  'delete-branch': 'Delete a branch in GitLab.',
+  'delete-issue': 'Delete an issue in GitLab.',
+  'delete-group':
+    'Schedule a group for deletion in GitLab. With permanently_remove and full_path, immediately remove a subgroup that is already scheduled for deletion.',
+};
+
+function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
+  const slug = action.candidate.actionSlug;
+  let adapted = encodeGitLabPathSegments(action);
+  const schemaFixes = GITLAB_RESPONSE_SCHEMA_FIXES[slug];
+  if (schemaFixes) adapted = rewriteModuleStatements(adapted, schemaFixes);
+  if (slug === 'delete-project') {
+    adapted = {
+      ...adapted,
+      execBody: replaceOnce(
+        adapted.execBody,
+        /'Project deleted successfully\.'/,
+        "'GitLab accepted the deletion request. GitLab.com and instances with delayed deletion keep the project for a retention period before removing it.'",
+        adapted,
+        'deletion message',
+      ),
+    };
+  }
+  const description = GITLAB_DESCRIPTIONS[slug];
+  return description ? { ...adapted, description } : adapted;
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (action.candidate.providerId === 'gitlab') {
+    return adaptGitLabAction(action);
+  }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);
   }
@@ -941,6 +1113,11 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
  * a credential and must not see one.
  */
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  // GitLab returns the project's runner registration token to maintainers.
+  gitlab: {
+    'create-project': ['runners_token'],
+    'get-project': ['runners_token'],
+  },
   resend: {
     'create-webhook': ['signing_secret'],
     'get-webhook': ['signing_secret'],
@@ -1034,9 +1211,17 @@ function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const secretFields = outputSecretFields(action);
   const redactImport = secretFields ? "import { withoutSecretFields } from '../../../runtime/redact.js';\n" : '';
   const redactedSchemaName = `${action.outputSchemaName}Redacted`;
-  const omitKeys = (secretFields ?? []).map(field => `${JSON.stringify(field)}: true`).join(', ');
+  // `.omit` rejects keys the schema doesn't declare. An undeclared secret can
+  // still arrive through `.passthrough()`; `withoutSecretFields` removes it from
+  // the result either way, so only declared fields need dropping from the schema.
+  const declaredSecretFields = (secretFields ?? []).filter(field =>
+    action.moduleStatements.some(statement => new RegExp(`\\b${escapeRegExp(field)}:`).test(statement)),
+  );
+  const omitKeys = declaredSecretFields.map(field => `${JSON.stringify(field)}: true`).join(', ');
   const redactedSchema = secretFields
-    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
+    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${
+        declaredSecretFields.length > 0 ? `${action.outputSchemaName}.omit({ ${omitKeys} })` : action.outputSchemaName
+      };\n`
     : '';
   const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
   const fieldPatterns = Object.entries(
