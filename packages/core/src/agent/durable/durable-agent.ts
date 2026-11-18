@@ -3227,10 +3227,48 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it, so a run that is already executing
-    // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, () => this.#startStream(messages, options, runId, requestContext));
+  }
+
+  /**
+   * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
+   * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
+   * A registered run owns the thread from then on. A run that fails before it registers gives the
+   * thread back.
+   */
+  async #onReservedThread<T>(
+    runId: string,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    const pubsub = this.getPubSub();
+    // The same options registerRun reads, so both name the same thread.
+    const reserved =
+      (await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as unknown as Agent<any, any, any, any>,
+        { memory: options?.memory, requestContext: options?.requestContext, runId },
+        pubsub,
+      )) === 'reserved';
+    try {
+      return await start();
+    } catch (error) {
+      // A thread already held under this run id belongs to whoever started the run: a signal wake,
+      // a queued message, or an earlier call with the same run id. It stays theirs to release.
+      if (reserved) agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
+      throw error;
+    }
+  }
+
+  async #startStream(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    // 1. Claim the run before preparing it, so a run that is already executing
+    // fails before any span or memory write is made for this call.
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -4852,9 +4890,18 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, () => this.#runGenerate(messages, options, runId, requestContext));
+  }
+
+  async #runGenerate(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<FullOutput<TOutput>> {
+    // 1. Claim the run before preparing it — see stream().
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -5031,6 +5078,20 @@ export class DurableAgent<
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
+
+    // 4b. Register with the thread runtime, as stream() does. A run that only reserves its thread
+    // is invisible to signals and leaves nothing to start the thread's queued work when it ends.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+      {
+        generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+      },
+    );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = runCleanup.run;
