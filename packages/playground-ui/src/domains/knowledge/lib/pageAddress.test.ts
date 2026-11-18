@@ -56,8 +56,38 @@ describe('scopeTitle', () => {
     expect(scopeTitle({ ...notion, parentId: 'deeper' })).toBe('notion');
   });
 
-  it('keeps the address of a scope of an unknown kind', () => {
-    expect(scopeTitle(scope('region:eu'))).toBe('region:eu');
+  it.each([
+    ['org:org_01', 'Acme'],
+    ['project:proj_01', 'Roadmap'],
+    ['customer:c42', 'Customer success'],
+  ])('uses the API label for %s', (address, displayLabel) => {
+    expect(scopeTitle({ ...scope(address), displayLabel })).toBe(displayLabel);
+  });
+
+  it('uses the label of a child scope stored under its canonical child key', () => {
+    expect(scopeTitle({ ...scope('org:acme/handbook', 'handbook'), displayLabel: 'Company handbook' })).toBe(
+      'Company handbook',
+    );
+  });
+
+  it('preserves explicit titles and importer source titles ahead of declaration labels', () => {
+    expect(scopeTitle({ ...scope('project:p1', 'Launch roadmap'), displayLabel: 'Project' })).toBe('Launch roadmap');
+    expect(scopeTitle({ ...scope('org:acme/handbook', 'Team reference'), displayLabel: 'Handbook' })).toBe(
+      'Team reference',
+    );
+    expect(scopeTitle({ ...scope('notion:acme:n1'), displayLabel: 'Imported documents' })).toBe('Notion');
+  });
+
+  it('uses a readable custom kind when no label is available', () => {
+    expect(scopeTitle(scope('region:eu'))).toBe('Region');
+    expect(scopeTitle(scope('customer-account:c42'))).toBe('Customer account');
+  });
+
+  it('ignores blank labels and labels on ordinary pages', () => {
+    expect(scopeTitle({ ...scope('org:acme'), displayLabel: '   ' })).toBe('Organization');
+    expect(scopeTitle({ ...scope('org:acme', 'Overview'), isScope: false, displayLabel: 'Organization' })).toBe(
+      'Overview',
+    );
   });
 });
 
