@@ -2,12 +2,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
+import type { FormLayoutProps } from '@mastra/playground-ui/components/FormLayout';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import {
   SettingsContainer,
   SettingsGroup,
@@ -15,16 +14,16 @@ import {
   SettingsRow,
   SettingsTitle,
 } from '@mastra/playground-ui/new/settings';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode, SubmitEvent } from 'react';
+import type { SubmitEvent } from 'react';
 
 export type NewProject = { name: string; model: string; size: string };
 
 export type CreateFailure = { title: string; message: string };
 
 export type CreateProjectProps = {
-  backLink: (children: ReactNode) => ReactNode;
+  projectsHref: string;
+  LinkComponent?: FormLayoutProps['LinkComponent'];
   models: ComboboxOption[];
   sizes: ComboboxOption[];
   onCreate: (project: NewProject) => Promise<CreateFailure | undefined>;
@@ -33,7 +32,7 @@ export type CreateProjectProps = {
 
 const nameHint = 'Give the project a name, for example “support-agent”.';
 
-export function CreateProject({ backLink, models, sizes, onCreate, onCancel }: CreateProjectProps) {
+export function CreateProject({ projectsHref, LinkComponent, models, sizes, onCreate, onCancel }: CreateProjectProps) {
   const [name, setName] = useState('');
   const [model, setModel] = useState(models[0]?.value ?? '');
   const [size, setSize] = useState(sizes[0]?.value ?? '');
@@ -54,25 +53,8 @@ export function CreateProject({ backLink, models, sizes, onCreate, onCancel }: C
   }
 
   return (
-    <PageLayout
-      variant="narrow"
-      header={
-        <PageHeader>
-          <PageHeader.Eyebrow>
-            {backLink(
-              <>
-                <Icon size="xs">
-                  <ArrowLeftIcon aria-hidden />
-                </Icon>
-                Projects
-              </>,
-            )}
-          </PageHeader.Eyebrow>
-          <PageHeader.Title>New project</PageHeader.Title>
-        </PageHeader>
-      }
-    >
-      <form noValidate onSubmit={submit} className="mt-6 flex max-w-160 flex-col gap-6 pb-16">
+    <FormLayout backHref={projectsHref} backLabel="Projects" title="New project" LinkComponent={LinkComponent}>
+      <form noValidate onSubmit={submit} className="flex flex-col gap-6">
         <Field invalid={Boolean(nameError)} disabled={busy}>
           <FieldLabel required>Project name</FieldLabel>
           <Input
@@ -111,6 +93,6 @@ export function CreateProject({ backLink, models, sizes, onCreate, onCancel }: C
           </Button>
         </div>
       </form>
-    </PageLayout>
+    </FormLayout>
   );
 }
