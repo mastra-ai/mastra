@@ -48,7 +48,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
     The CLI uploads environment variables from one env file:
 
     - **Which file:** `.env.<environment>` if it exists, for example `.env.production` for the default `production` environment. Otherwise, the only `.env` or `.env.*` file. If there are several and none matches, the CLI asks which one to use. Pass `--env-file <file>` to choose the file yourself, which non-interactive runs (`--yes` or CI) require in that case.
-    - **How it merges:** Values from the file overwrite the environment's stored variables, but an empty value doesn't clear a stored one. The CLI lists the keys it will overwrite and asks you to confirm, unless you pass `--yes` or run in CI. To manage a variable only in the dashboard, remove it from the env file.
+    - **How it merges:** Values from the file overwrite the environment's stored variables. An empty value, such as `KEY=`, replaces the stored value with an empty string. The CLI lists the keys it will overwrite and asks you to confirm. With `--yes` or in CI, it lists the keys without asking. To manage a variable only in the dashboard, remove it from the env file.
     - **No file:** Nothing is uploaded, and the environment keeps its stored variables.
 
     Review the selected file before you deploy, so you don't upload development-only or personal secrets.

@@ -101,7 +101,7 @@ Every deploy that runs on a platform environment with a workspace receives these
 
 | Variable | Contents |
 | - | - |
-| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform-issued JSON Web Token (JWT) the workspace providers use to authenticate. The token is scoped to the deploy's organization and project. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform-issued JSON Web Token (JWT) the workspace providers use to authenticate. The token is scoped to the deploy's organization and project. The platform injects it unless [observability](/docs/mastra-platform/observability/overview) is turned off for the project. |
 | `MASTRA_PROJECT_ID` | Project the deploy belongs to. |
 | `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
@@ -110,7 +110,7 @@ These names are reserved. If your project sets any of them explicitly, the platf
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` API token on your organization's settings page under **API Tokens**. Platform deploys use an injected JWT instead.
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` API token on your organization's settings page under **API Tokens**. Platform deploys use an injected JWT instead. If observability is turned off for the project, set `MASTRA_PLATFORM_ACCESS_TOKEN` on the environment yourself.
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token

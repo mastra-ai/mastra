@@ -32,13 +32,13 @@ Pending invitations appear under **Invitations** until they're accepted. To canc
 
 ## Change a member's role
 
-Admins can change any member's role from the **Members** list. The new role applies to everything in the organization.
+Admins can change a member's role from the **Members** list. The new role applies to everything in the organization. To change the role of the only admin, first make another member an admin.
 
 ## Remove a member
 
 Admins can remove a member from the **Members** list. The member loses access to every resource in the organization immediately. You can invite them again later.
 
-Access tokens a member creates are tied to them and stop working when they leave the organization. Replace any tokens used by CI or deployed apps before you remove the member who created them.
+Access tokens a member creates are tied to them and stop working when they leave the organization. Before you remove a member, replace any tokens they created that CI or deployed apps use. Have a member who's staying in the organization create the replacement tokens, so they don't stop working too. Confirm that CI and deployed apps use the new tokens, then remove the member.
 
 ## Leave an organization
 

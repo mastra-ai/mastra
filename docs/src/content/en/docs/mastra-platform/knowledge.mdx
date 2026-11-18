@@ -45,6 +45,15 @@ Install the package:
 npm install @mastra/platform
 ```
 
+`PlatformKnowledge` needs the instance ID and an access token, and throws when either is missing. To run locally, copy the instance ID from the **Connect an agent** dialog, [create an access token](/docs/mastra-platform/access-tokens#create-an-access-token), and add both to your `.env` file:
+
+```bash title=".env"
+MASTRA_KNOWLEDGE_INSTANCE_ID=your-instance-id
+MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+```
+
+When you deploy to Mastra platform, the platform sets these values for you. See [When you deploy to Mastra platform](#when-you-deploy-to-mastra-platform).
+
 Give the agent a `PlatformKnowledge` instance and the [scopes](/docs/knowledge/scopes-and-access) its runs use. The Knowledge page shows your organization's scope when you select **Connect an agent**:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
@@ -81,15 +90,6 @@ You can also pass these values as the `instanceId`, `accessToken`, and `apiUrl` 
 ### When you deploy to Mastra platform
 
 When you deploy a server to the project, the platform sets `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_ACCESS_TOKEN` for you. The agent needs no extra configuration.
-
-### When you run locally
-
-Copy the instance ID from the **Connect an agent** dialog, [create an access token](/docs/mastra-platform/access-tokens#create-an-access-token), and add both to your `.env` file:
-
-```bash title=".env"
-MASTRA_KNOWLEDGE_INSTANCE_ID=your-instance-id
-MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
-```
 
 ## Related
 

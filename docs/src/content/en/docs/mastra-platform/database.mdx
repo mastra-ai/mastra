@@ -42,7 +42,7 @@ For most agent-focused projects, **Turso** is a good starting point. It provides
 A database is attached at one of two scopes:
 
 - **Environment scope**: The default. Attached to a single environment so data stays isolated between environments (for example separate production and staging databases). When your project has one environment, `mastra env db create` picks it automatically; with several, the CLI prompts you to select one.
-- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/deploy/environments). Opt in with `--shared`. Its variables are injected into every deploy.
+- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/deploy/environments). Opt in with `--shared`. Its variables are injected into every deploy. Available for Turso and Neon.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
@@ -67,7 +67,7 @@ mastra env db create --kind turso --shared
 
 Supported kinds are `turso`, `neon` (public serverless Postgres), and `postgres` (VPC-isolated Postgres). Useful flags:
 
-- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument.
+- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument. Turso and Neon only.
 - `--name <name>`: Database name. Defaults to a name derived from the project slug.
 - `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored.
 - `--no-wait`: Return immediately instead of polling. Check progress later with `mastra env db show`.
@@ -102,7 +102,9 @@ mastra env db delete <database>
     Configure the database:
 
     - **Name**: A label for the database within your project.
-    - **Region**: Where the database is hosted. Select the region closest to your users. Turso defaults to `sjc` (San Jose) and is available in 20+ locations worldwide. Neon defaults to `aws-us-west-2` and is available across AWS and Azure regions in the US, EU, and APAC. Postgres runs on the same private network as your deployment. Its region follows the environment's [region](/docs/mastra-platform/deploy/regions).
+    - **Environment**: The [environment](/docs/mastra-platform/deploy/environments) the database is attached to. When the project has one environment, it's selected for you. An environment that already has a database with the same variables can't be selected.
+
+    The **Database location** is chosen for you from the environment's [region](/docs/mastra-platform/deploy/regions). Postgres runs on the same private network as the environment's server.
   </StepItem>
 
   <StepItem>
@@ -110,7 +112,7 @@ mastra env db delete <database>
   </StepItem>
 </Steps>
 
-Databases attached from project settings are project-scoped. Use the [CLI](#attach-with-the-cli) to attach an environment-scoped database.
+Databases attached from project settings are environment-scoped. To share one Turso or Neon database across all environments, use the [CLI](#attach-with-the-cli) with `--shared`. Postgres can only be attached to a single environment.
 
 ## Connect from your code
 

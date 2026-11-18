@@ -43,7 +43,7 @@ Different tools read the token from different environment variables:
 | `MASTRA_API_TOKEN` | The `mastra` CLI. When it's set, commands such as `mastra deploy` run without an interactive login. |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | `@mastra/platform` and `@mastra/connect`. |
 
-For example, to deploy from CI:
+For example, to deploy from CI to the `production` environment:
 
 ```bash
 MASTRA_API_TOKEN=your-token \
@@ -51,6 +51,8 @@ MASTRA_ORG_ID=your-org-id \
 MASTRA_PROJECT_ID=your-project-id \
 mastra deploy --yes
 ```
+
+`MASTRA_PROJECT_ID` selects the project, not the environment. Without `--env`, `mastra deploy` deploys to `production`. To deploy to another environment, add `--env`, for example `mastra deploy --env staging --yes`.
 
 Store tokens as secrets in your CI provider or hosting platform. Don't commit them to your repository.
 
@@ -68,7 +70,13 @@ To revoke a token, select its remove icon on the **API Keys** page, then select 
 mastra auth tokens revoke <token-id>
 ```
 
-A revoked token stops working immediately, and you can't restore it. Any CLI sessions, CI pipelines, or telemetry ingestion that use it lose access. Create a new token and update those places first.
+A revoked token stops working immediately, and you can't restore it. Any CLI sessions, CI pipelines, or telemetry ingestion that use it lose access. To replace a token without downtime:
+
+1. Create a new token.
+1. Update every place that uses the old token, such as CI secrets and environment variables.
+1. Redeploy or [restart](/docs/mastra-platform/deploy/environments#environment-variables) affected environments. Running deploys keep the old value until they restart.
+1. Confirm that each service works with the new token.
+1. Revoke the old token.
 
 ## Related
 
