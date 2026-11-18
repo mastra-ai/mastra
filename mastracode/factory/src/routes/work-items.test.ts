@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -20,6 +20,10 @@ import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from 
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+/** Work the build seat was handed (see acceptsWork): production syncs acceptance labels from here. */
+let acceptedHook: Array<{ workItemId: string }> = [];
+/** Committed stage changes: production reports them and ends the left phase's goal from here. */
+let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -102,6 +106,12 @@ function buildApp(
         storage: seed.workItems,
         boards: boardRegistry,
         audit: auditRecorder,
+        onAccepted: async args => {
+          acceptedHook.push({ workItemId: args.workItemId });
+        },
+        onTransitionCommitted: async args => {
+          committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
+        },
       }),
       startCoordinator,
       sessionRepository,
@@ -154,6 +164,8 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
+  acceptedHook = [];
+  committedHook = [];
   await seedProject();
 });
 
@@ -958,6 +970,286 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item, { board: 'review' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+  });
+});
+
+describe('POST transition moving a card to another board', () => {
+  // On live projects, Work cards that belong on another board (e.g. OSS Features) had no manual
+  // path off their board: the transition endpoint rejected any `board` other than the card's.
+
+  // A board sharing a phase name with Work: on another board, a same-named phase is a new phase.
+  const previewBoard = defineBoard({
+    id: 'preview',
+    title: 'Preview',
+    initialPhase: 'inbox',
+    phases: {
+      inbox: { title: 'Inbox', kind: 'resting', nextPhases: ['triage'] },
+      triage: {
+        title: 'Triage',
+        kind: 'working',
+        runner: { context: 'triage', skill: 'preview-triage' },
+        next: 'done',
+      },
+      done: { title: 'Done', kind: 'terminal' },
+    },
+  });
+  const registry = () => boardRegistryOf([triageWorkBoard, createTestBoard(), previewBoard]);
+
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody(overrides)),
+      },
+    );
+    return (await res.json()).workItem;
+  }
+
+  const move = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
+    buildApp(orgUser, undefined, undefined, registry()).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          board: 'release',
+          stage: 'queued',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
+          cause: 'move_to_board',
+          ...overrides,
+        }),
+      },
+    );
+
+  it("a person moves a Work card to another board's phase, keeping its id, sessions and history", async () => {
+    const created = await createItem();
+    // A triage session from an earlier run stays on the card; only its board placement changes.
+    await seed.workItems.update({ orgId: 'org1', id: created.id, userId: 'u1', patch: { sessions: run } });
+    const item = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    auditRecorded = [];
+
+    const res = await move(item);
+
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result).toMatchObject({ status: 'accepted', itemId: created.id, stage: 'queued' });
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('release');
+    expect(stored.stages).toEqual(['queued']);
+    expect(stored.sessions).toEqual(item.sessions);
+    expect(stored.sessions.execute).toMatchObject(run.execute);
+    expect(stored.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
+      ['intake', true],
+      ['queued', false],
+    ]);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        actorType: 'human',
+        actorId: 'u1',
+        metadata: expect.objectContaining({ ingressType: 'human', fromBoard: 'work', toBoard: 'release' }),
+      }),
+    );
+  });
+
+  it('holds a busy card, then supersedes the run the old board proposed once it moves', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: moving the card away would strand it mid-flight.
+    const busy = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab2' },
+    );
+    expect(busy.status).toBe(422);
+    expect(await busy.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+
+    // A dispatcher parks the run for a person's approval; the proposal is not a live run.
+    const ownerId = 'dispatcher-1';
+    const now = new Date();
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId,
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 10,
+    });
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed!.id, orgId: claimed!.orgId, factoryProjectId: claimed!.factoryProjectId, ownerId },
+      now,
+    );
+
+    const moved = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab5' },
+    );
+
+    expect(moved.status).toBe(200);
+    // The old board's proposed run means nothing on the new board.
+    const proposals = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID, { statuses: ['proposed'] });
+    expect(proposals).toHaveLength(0);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('release');
+  });
+
+  it('returns typed stale on a lost revision race without moving the card', async () => {
+    const item = await createItem();
+    const res = await move({ id: item.id, revision: item.revision + 5 });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses a board that is not installed and a phase the target board does not declare', async () => {
+    const item = await createItem();
+
+    const unknownBoard = await move(item, { board: 'oss-features' });
+    expect(unknownBoard.status).toBe(422);
+    expect(await unknownBoard.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: 'Board "oss-features" is not installed.' },
+    });
+
+    const unknownPhase = await move(item, { stage: 'missing', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab3' });
+    expect(unknownPhase.status).toBe(422);
+    expect(await unknownPhase.json()).toMatchObject({
+      result: { status: 'rejected', code: 'invalid_transition', reason: expect.stringContaining('no phase missing') },
+    });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it("refuses the target board's terminal phase: a card finishes on its own board", async () => {
+    const item = await createItem();
+    const res = await move(item, { stage: 'shipped' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).not.toBe('release');
+  });
+
+  it('refuses to move a finished card off its board', async () => {
+    const item = await createItem();
+    const canceled = await move(item, { board: 'work', stage: 'canceled' });
+    expect(canceled.status).toBe(200);
+    const { result } = await canceled.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab4' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'invalid_transition' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.stages).toEqual(['canceled']);
+  });
+
+  it('enters a same-named phase on the other board as a new phase: its runner queues and the move is audited', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+    await finishQueuedRunsForTests(seed.workItems);
+    auditRecorded = [];
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab6' },
+    );
+
+    expect(res.status).toBe(200);
+    const moved = (await res.json()).result;
+    expect(moved.status).toBe('accepted');
+    // Preview's Triage is not Work's Triage: entering it starts Preview's own runner, and the
+    // card's notice names both boards — the phase names alone would hide the move.
+    expect(moved.decisions).toContainEqual(
+      expect.objectContaining({
+        type: 'invokeSkill',
+        skillName: 'preview-triage',
+        startsAfterOwnMove: true,
+        precedingMessage:
+          'This work was moved from the triage stage on the Work board to the triage stage on the Preview board.',
+      }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+    // Leaving Work's triage for Preview's is a stage change: the old phase's goal must end.
+    await vi.waitFor(() =>
+      expect(committedHook).toContainEqual({ workItemId: item.id, fromStage: 'triage', toStage: 'triage' }),
+    );
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        metadata: expect.objectContaining({ fromBoard: 'work', toBoard: 'preview' }),
+      }),
+    );
+  });
+
+  it('holds a busy card even when the destination phase shares its name', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    // The triage run is still queued: the same-named phase on another board is no exception.
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { board: 'preview', stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab7' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
+  });
+
+  it('queues the destination runner even when the move names run_start as its cause', async () => {
+    // A run-start cause marks the card's own agent landing it where its run already is; crossing
+    // boards is never that, so the destination phase's runner still queues.
+    const item = await createItem();
+    const res = await move(item, { board: 'preview', stage: 'triage', cause: 'run_start' });
+    expect(res.status).toBe(200);
+    const { result } = await res.json();
+    expect(result.status).toBe('accepted');
+    expect(result.decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'preview-triage', startsAfterOwnMove: true }),
+    );
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('preview');
+  });
+
+  it("accepts the work when a person hands the card to the destination board's build seat", async () => {
+    const created = await createItem();
+    const toPreview = await move(created, { board: 'preview', stage: 'inbox' });
+    expect(toPreview.status).toBe(200);
+    const parked = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(acceptedHook).toEqual([]);
+    // The move's own notice is delivered before the next move, as a running dispatcher would.
+    await finishQueuedRunsForTests(seed.workItems);
+
+    // Inbox is a resting phase Work does not have; handing the card to Work's builder accepts it.
+    const toBuild = await move(
+      { id: created.id, revision: parked.revision },
+      { board: 'work', stage: 'planning', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab9' },
+    );
+    expect(toBuild.status).toBe(200);
+    const stored = (await seed.workItems.get({ orgId: 'org1', id: created.id }))!;
+    expect(stored.board).toBe('work');
+    // The move is the approval: the acceptance hook (production: GitHub labels) fires for the card.
+    await vi.waitFor(() => expect(acceptedHook).toEqual([{ workItemId: created.id }]));
+  });
+
+  it('holds a busy card whatever cause the request names', async () => {
+    const item = await createItem();
+    const triaged = await move(item, { board: 'work', stage: 'triage' });
+    expect(triaged.status).toBe(200);
+    const { result } = await triaged.json();
+
+    const res = await move(
+      { id: item.id, revision: result.revision },
+      { cause: 'run_start', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab8' },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'card_busy' } });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.board).toBe('work');
   });
 });
 
@@ -2728,6 +3020,32 @@ describe('run activity on the work-item listing', () => {
       expect((await unstarted('&q=login')).total).toBe(2);
     });
 
+    it('finds the card a pasted link names, as the board’s search does', async () => {
+      await createCard('github:7:issue:12', {
+        title: 'Fix the login flow',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:12',
+          url: 'https://github.com/acme/app/issues/12',
+        },
+        metadata: { number: 12 },
+      });
+      await createCard('github:7:issue:120', {
+        title: 'Rework the login palette',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:120',
+          url: 'https://github.com/acme/app/issues/120',
+        },
+        metadata: { number: 120 },
+      });
+
+      const pasted = encodeURIComponent('https://github.com/acme/app/issues/12#issuecomment-1');
+      expect(await unstarted(`&q=${pasted}`)).toEqual({ titles: ['Fix the login flow'], total: 1 });
+    });
+
     it('never lists a card holding a session, whatever is typed', async () => {
       await startRun('session-mine');
       await createCard('1', { title: 'Work nobody started' });
@@ -3394,6 +3712,102 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(body.matchingTotal).toBe(expected.length);
       // The board's own count ignores the search and the filters.
       expect(body.boardTotal).toBe(5);
+    });
+  });
+
+  describe('a search for a pasted link or a whole name', () => {
+    const github = (type: 'issue' | 'pull-request', repository: string, number: number) => ({
+      integrationId: 'github',
+      type,
+      externalId: `github:${repository}:${type}:${number}`,
+      url: `https://github.com/${repository}/${type === 'issue' ? 'issues' : 'pull'}/${number}`,
+    });
+    const fileLinkedBoard = async () => {
+      // Its pull request was opened from its session, so the pull request rides on the issue's card.
+      const issue = await file('', {
+        externalSource: github('issue', 'acme/app', 12),
+        title: 'Fix the login flow',
+        metadata: { number: 12 },
+      });
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: github('pull-request', 'acme/app', 307),
+        metadata: { githubPullRequestNumber: 307, headBranch: 'octo.cat/login-redirect' },
+      });
+      // Its number starts with the attached pull request's.
+      const pullRequest = await file('', {
+        externalSource: github('pull-request', 'acme/app', 30772),
+        title: 'Tidy the palette',
+        metadata: { number: 30772 },
+      });
+      const linear = await file('', {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:issue-uuid',
+          url: 'https://linear.app/acme/issue/ENG-42/slow-sync',
+        },
+        title: 'Slow sync',
+        metadata: { identifier: 'ENG-42' },
+      });
+      const otherRepository = await file('', {
+        externalSource: github('issue', 'acme/web', 5),
+        title: 'List open issues in the sidebar',
+        metadata: { number: 5 },
+      });
+      return {
+        issue,
+        names: new Map([
+          [issue.id, 'issue'],
+          [pullRequest.id, 'pull request'],
+          [linear.id, 'linear'],
+          [otherRepository.id, 'other repository'],
+        ]),
+      };
+    };
+    const found = async (names: Map<string, string>, q: string) => {
+      const body = await read(`q=${encodeURIComponent(q)}`);
+      expect(body.matchingTotal).toBe(under(body, 'intake').total);
+      return under(body, 'intake')
+        .ids.map(id => names.get(id))
+        .sort();
+    };
+
+    it.each([
+      ['a link to a pull request attached to an issue’s card', 'https://github.com/acme/app/pull/307', ['issue']],
+      ['a link to a page of it, in any case', 'https://GitHub.com/Acme/App/pull/307/files#diff-1a2b', ['issue']],
+      ['a link without its scheme', 'github.com/acme/app/pull/307?tab=checks', ['issue']],
+      ['the issue link GitHub gives the same number', 'https://github.com/acme/app/issues/307', ['issue']],
+      [
+        'a link to a pull request, never to one whose number starts the same',
+        'https://github.com/acme/app/pull/30772',
+        ['pull request'],
+      ],
+      ['a Linear link with another title in it', 'https://linear.app/acme/issue/ENG-42/renamed-since', ['linear']],
+      ['a repository’s link', 'https://github.com/acme/app', ['issue', 'pull request']],
+      ['a link and a word', 'https://github.com/acme/app login', ['issue']],
+      ['an attached pull request’s key, never one it starts', 'acme/app#307', ['issue']],
+      ['an attached pull request’s number, never one it starts', '#307', ['issue']],
+      // Bare digits read as a word: they find the numbers holding them.
+      ['digits of a number', '307', ['issue', 'pull request']],
+      ['a branch, whole', 'octo.cat/login-redirect', ['issue']],
+      // Every GitHub issue link holds `issues`; only one title does.
+      ['a word of links but of one title', 'issues', ['other repository']],
+      ['a link to an issue no card carries', 'https://github.com/acme/app/issues/404', []],
+    ])('finds the cards for %s', async (_case, q, expected) => {
+      const { names } = await fileLinkedBoard();
+
+      expect(await found(names, q)).toEqual(expected);
+    });
+
+    it('finds the card a Factory link opens', async () => {
+      const { issue, names } = await fileLinkedBoard();
+
+      expect(await found(names, `https://factory.example.com/factories/${PROJECT_ID}/cards/${issue.id}`)).toEqual([
+        'issue',
+      ]);
+      expect(await found(names, issue.id)).toEqual(['issue']);
     });
   });
 

@@ -24,62 +24,69 @@ export type RuleEvent = IntakeRouteInfo['on'][number];
 /** The events a rule can trigger on, as the route contract lists them: one lane each, in this order. */
 export const LANE_EVENTS: readonly RuleEvent[] = STATUS_EVENTS;
 
-/** The events a new item arrives on: an issue on `work_item.opened`, a pull request with no issue card on `pull_request.opened`. */
+/** The events new issues and pull requests arrive on: an issue on `work_item.opened`, a pull request with no issue card on `pull_request.opened`. */
 const ARRIVAL_LANES: readonly RuleEvent[] = ['work_item.opened', 'pull_request.opened'];
 
-/** Lanes in two sections, as the events split: `work_item.*` are work items, `pull_request.*` are pull requests. */
+/**
+ * Lanes in two sections, by who their rules see: new issues and pull requests, offered to every board in intake order,
+ * and cards already on this board, which no other board sees.
+ */
 export const LANE_SECTIONS: readonly { title: string; events: readonly RuleEvent[] }[] = [
-  { title: 'Work items', events: LANE_EVENTS.filter(event => !event.startsWith('pull_request.')) },
-  { title: 'Pull requests', events: LANE_EVENTS.filter(event => event.startsWith('pull_request.')) },
+  { title: 'New issues and pull requests', events: LANE_EVENTS.filter(event => ARRIVAL_LANES.includes(event)) },
+  { title: 'Cards on this board', events: LANE_EVENTS.filter(event => !ARRIVAL_LANES.includes(event)) },
 ];
 
 /** The pre-rename event: stored rules on it take new issues and card-less pull requests, so they show in both arrival lanes. */
 export const LEGACY_OPENED_EVENT = 'work_item.created';
 
-/** Every event a rule filing new items listens on, legacy included. */
+/** Every event a rule filing new issues or pull requests listens on, legacy included. */
 const ARRIVAL_EVENTS = new Set<string>([...ARRIVAL_LANES, LEGACY_OPENED_EVENT]);
 
 interface LaneText {
   label: string;
   description: string;
   icon: LucideIcon;
+  /** GitLab reports no such event for a merge request: a reopen arrives as opened, and it has no review requests. */
+  githubOnly?: true;
 }
 
 const LANE_TEXT: Record<string, LaneText> = {
   [LEGACY_OPENED_EVENT]: {
-    label: 'Work item or pull request opened (legacy)',
-    description: 'Takes new work items and pull requests with no card yet.',
+    label: 'Issue or pull request opened (legacy)',
+    description: 'Takes new issues, and pull requests with no card yet.',
     icon: Inbox,
   },
   'work_item.opened': {
-    label: 'Work item opened',
-    description: 'A new issue arrives and creates a work item.',
+    label: 'Issue opened',
+    description: 'A new issue, incident or alert arrives from a connected source.',
     icon: Inbox,
   },
   'work_item.reopened': {
-    label: 'Work item reopened',
-    description: 'A closed work item is opened again.',
+    label: 'Issue reopened',
+    description: 'The card’s issue is opened again.',
     icon: RotateCcw,
   },
   'work_item.updated': {
-    label: 'Work item labels or assignees change',
-    description: 'Someone adds or removes a label or an assignee on a work item.',
+    label: 'Issue labels or assignees change',
+    description: 'Someone adds or removes a label or an assignee on the card’s issue.',
     icon: PencilLine,
   },
   'work_item.closed': {
-    label: 'Work item closed',
-    description: 'The card’s work item is closed.',
+    label: 'Issue closed',
+    description: 'The card’s issue is closed.',
     icon: CircleCheck,
   },
   'pull_request.opened': {
     label: 'Pull request opened',
-    description: 'Links to its issue’s work item if one exists; otherwise creates a new work item.',
+    description:
+      'A GitHub pull request or GitLab merge request arrives. It joins the card of the issue it closes, or gets a card of its own.',
     icon: GitPullRequest,
   },
   'pull_request.reopened': {
     label: 'Pull request reopened',
     description: 'A closed pull request is opened again.',
     icon: GitPullRequestArrow,
+    githubOnly: true,
   },
   'pull_request.updated': {
     label: 'Pull request labels or assignees change',
@@ -95,6 +102,7 @@ const LANE_TEXT: Record<string, LaneText> = {
     label: 'Review requested',
     description: 'A reviewer is requested on the card’s pull request.',
     icon: Eye,
+    githubOnly: true,
   },
   'pull_request.merged': {
     label: 'Pull request merged',
@@ -118,6 +126,15 @@ export function laneText(event: string): LaneText {
     description: '',
     icon: event.startsWith('pull_request.') ? GitPullRequest : event.startsWith('work_item.') ? CircleDot : Zap,
   };
+}
+
+/** "1 rule", "3 rules". */
+export const ruleCount = (count: number) => (count === 1 ? '1 rule' : `${count} rules`);
+
+/** What a rule with no conditions takes on a lane: "Every new issue", "Every pull request" or "Every card". */
+export function everythingOn(event: string): string {
+  if (event === 'pull_request.opened') return 'Every pull request';
+  return isOpenedLane(event) ? 'Every new issue' : 'Every card';
 }
 
 /**
@@ -235,38 +252,61 @@ function requiredKinds(rule: IntakeRouteInfo): string[] {
   );
 }
 
-/** Where a board sits in intake order, in words, naming the boards on both sides: "Checked after Ship, before Work". */
-export function intakePosition(order: readonly { boardKey: string; name: string }[], boardKey: string): string {
-  const at = order.findIndex(board => board.boardKey === boardKey);
-  if (at === -1) return 'Not in the intake order yet';
-  if (order.length === 1) return 'The only board intake checks';
-  const before = order[at - 1]?.name;
-  const after = order[at + 1]?.name;
-  if (before && after) return `Checked after ${before}, before ${after}`;
-  return before
-    ? `Checked last, after ${before} (no board after it)`
-    : `Checked first (no board before it), before ${after}`;
-}
-
 /**
- * Where a new item no rule on this board takes goes next: "Otherwise: checked by Work next, then Not routed", or
- * "…by Work next, then the boards after it, then Not routed" when more than one board follows. Falls back to a generic
- * line while the intake order is loading or doesn't list the board.
+ * Where a new item no rule on this board takes goes next: "Otherwise: Work is asked next", or "Otherwise: Not routed"
+ * on the last board. Falls back to a generic line while the intake order is loading or doesn't list the board.
  */
 export function arrivalFallback(order: readonly { boardKey: string; name: string }[] | undefined, boardKey: string) {
   const at = order?.findIndex(board => board.boardKey === boardKey) ?? -1;
-  if (!order || at === -1) return 'Otherwise: checked by the next board, then Not routed';
+  if (!order || at === -1) return 'Otherwise: the next board is asked';
   const next = order[at + 1]?.name;
-  if (!next) return 'Otherwise: Not routed (no board after this one)';
-  return at + 2 < order.length
-    ? `Otherwise: checked by ${next} next, then the boards after it, then Not routed`
-    : `Otherwise: checked by ${next} next, then Not routed`;
+  return next ? `Otherwise: ${next} is asked next` : 'Otherwise: Not routed';
 }
 
-/** 1 → "1st", 2 → "2nd", 3 → "3rd", 11 → "11th". */
-export function ordinal(n: number): string {
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  const last = n % 10;
-  if (teen || last > 3 || last === 0) return `${n}th`;
-  return `${n}${last === 1 ? 'st' : last === 2 ? 'nd' : 'rd'}`;
+const FILLER_WORDS = new Set([
+  'a',
+  'all',
+  'an',
+  'and',
+  'board',
+  'card',
+  'cards',
+  'every',
+  'go',
+  'goes',
+  'has',
+  'if',
+  'in',
+  'is',
+  'it',
+  'item',
+  'items',
+  'its',
+  'move',
+  'moves',
+  'new',
+  'of',
+  'on',
+  'only',
+  'or',
+  'the',
+  'this',
+  'to',
+  'when',
+  'work',
+]);
+
+function meaningfulWords(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+    .filter(word => !FILLER_WORDS.has(word))
+    .map(word => word.replace(/s$/, ''));
+}
+
+/**
+ * Whether a rule's name only restates what its card already shows (lane, conditions and target), as the names the
+ * builder suggests do: "When labels has security, move to Backlog". Then the card shows no name, only what it says.
+ */
+export function nameRepeats(name: string, shown: string): boolean {
+  const seen = new Set(meaningfulWords(shown));
+  return meaningfulWords(name).every(word => seen.has(word));
 }

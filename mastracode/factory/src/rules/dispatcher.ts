@@ -164,6 +164,12 @@ const RECONCILE_INTERVAL_MS = 30_000;
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
 class FactoryDecisionSuperseded extends Error {}
 
+/**
+ * A client stopped the run on purpose (Stop, Esc, /stop). Like a card that moved on, nothing is
+ * left for the decision to do: it settles as superseded, neither failed nor retried.
+ */
+class FactoryRunStopped extends FactoryDecisionSuperseded {}
+
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
 class FactoryDecisionPostponed extends Error {
   constructor(readonly availableAt?: Date) {
@@ -261,6 +267,7 @@ function watchRun(
     onAgentEnd,
     label,
     runStillActive,
+    stopRequested,
   }: {
     timeoutMs: number;
     /** The tool this run answers itself when it pauses on it; any other pause waits for a person. */
@@ -273,6 +280,7 @@ function watchRun(
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
     runStillActive: () => boolean;
+    stopRequested?: () => Promise<boolean>;
   },
 ) {
   let resolveAgentEnd!: () => void;
@@ -384,6 +392,7 @@ function watchRun(
       }
       if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
+        if (await stopRequested?.()) throw new FactoryRunStopped();
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
         // the run because observation/reflection failed. Surface that real
@@ -400,13 +409,10 @@ function watchRun(
           }
           throw new Error(`${label} was aborted after an observational-memory failure: ${omFailure}`);
         }
-        // Retryable, though an abort reads as deliberate. The stream does not
-        // say who aborted, and in practice the dominant cause is the process
-        // going away underneath the run — an operator restarting the server —
-        // not anyone deciding this work should stop. Treating that as terminal
-        // dead-ends the card at attempt 1 with nothing on the board to press. A
-        // spurious retry is bounded by MAX_ATTEMPTS; a dead card costs a human
-        // a manual nudge.
+        // Nobody marked this run stopped, so the abort is the process going
+        // away underneath it — an operator restarting the server. Treating
+        // that as terminal dead-ends the card at attempt 1 with nothing on the
+        // board to press. A spurious retry is bounded by MAX_ATTEMPTS.
         throw new Error(`${label} was aborted before it finished.`);
       }
     },
@@ -1337,7 +1343,13 @@ export class FactoryDecisionDispatcher {
       throw new FactoryDispatchError('run_configuration_invalid', 'The Factory session has no storage to hold a goal.');
     }
     if (!item || !phaseKey) return objective;
-    const stamp = { phaseKey, goalId: record.id, threadId: binding.threadId, sessionId: binding.sessionId };
+    const stamp = {
+      phaseKey,
+      boardKey: boardForWorkItem(item),
+      goalId: record.id,
+      threadId: binding.threadId,
+      sessionId: binding.sessionId,
+    };
     if (phaseGoalOf(item.metadata)?.goalId !== record.id) {
       await this.#storage.update({
         orgId: record.orgId,
@@ -1346,9 +1358,10 @@ export class FactoryDecisionDispatcher {
         patch: { metadata: { [PHASE_GOAL_METADATA_KEY]: stamp } },
       });
     }
-    // A move that committed before the stamp landed found no goal to end: end it here instead.
+    // A move that committed before the stamp landed found no goal to end: end it here instead. A
+    // same-named phase on another board is a different phase, so the board counts as a move too.
     const after = await this.#storage.get({ orgId: record.orgId, id: item.id });
-    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey) {
+    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey || boardForWorkItem(after) !== stamp.boardKey) {
       await endPhaseGoal(stamp, { agentFor: async () => session.machinery.getAgent(), store: async () => undefined });
       throw new FactoryDecisionSuperseded();
     }
@@ -1764,6 +1777,7 @@ export class FactoryDecisionDispatcher {
               ? []
               : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
           );
+          const stopRequested = () => this.#runStopRequested(record.orgId, binding.id);
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool(record),
@@ -1772,9 +1786,11 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
+            stopRequested,
           });
 
           const sendKickoff = async () => {
+            await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
             const result = session.sendSignal(
               {
                 id: deliveryId,
@@ -1828,6 +1844,8 @@ export class FactoryDecisionDispatcher {
               // a stale kickoff would restart a phase that already finished.
               if (await kickoffLanded()) break;
               if (await kickoffStale()) throw new FactoryDecisionSuperseded();
+              // Stopped while the kickoff was queued: resending would restart what was just stopped.
+              if (await stopRequested()) throw new FactoryRunStopped();
               run.arm();
               settled = await sendKickoff();
             }
@@ -3248,6 +3266,22 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
+   * An unreadable stop counts as a stop: retrying would clear the marker and restart a run a person
+   * may have just stopped, while a wrongly settled run only leaves the card idle until started again.
+   */
+  async #runStopRequested(orgId: string, bindingId: string): Promise<boolean> {
+    try {
+      return await this.#storage.runBindingStopRequested({ orgId, bindingId });
+    } catch (error) {
+      console.warn(
+        `[factory] could not read the stop request for binding ${bindingId}; treating the run as stopped:`,
+        error,
+      );
+      return true;
+    }
+  }
+
+  /**
    * Settle a watched run; when it fails terminally, tell the item's followers.
    * A retryable failure says nothing, since the retry reports. How a run that
    * ran ends (done, blocked, an error) is reported by the session's own
@@ -3367,6 +3401,7 @@ export class FactoryDecisionDispatcher {
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
           const since = new Date();
+          const stopRequested = () => this.#runStopRequested(record.orgId, binding.id);
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
@@ -3375,9 +3410,11 @@ export class FactoryDecisionDispatcher {
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+            stopRequested,
           });
-          const sendKickoff = (dedupeKey: string) =>
-            awaitNotification(
+          const sendKickoff = async (dedupeKey: string) => {
+            await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
+            return awaitNotification(
               () =>
                 session.sendNotificationSignal(
                   {
@@ -3393,6 +3430,7 @@ export class FactoryDecisionDispatcher {
                 ),
               true,
             );
+          };
           try {
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
             let deliveryGeneration = 0;
@@ -3407,6 +3445,7 @@ export class FactoryDecisionDispatcher {
               if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
+              if (await stopRequested()) throw new FactoryRunStopped();
               run.arm();
               deliveryGeneration += 1;
               settled = await sendKickoff(
@@ -3430,6 +3469,11 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
+      // The kickoff started its run; retrying would undo the stop.
+      if (error instanceof FactoryRunStopped) {
+        await this.#storage.completePendingStart(leaseIdentity(record, this.#ownerId), new Date());
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),

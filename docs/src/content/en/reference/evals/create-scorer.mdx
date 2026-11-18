@@ -208,7 +208,7 @@ Coordinated processor retries require a judge model that uses Mastra’s current
 
 You can specify input/output types when creating scorers for better type inference and IntelliSense support:
 
-### Agent Type Shortcut
+### Agent type shortcut
 
 For evaluating agents, use `type: 'agent'` to automatically get the correct types for agent input/output:
 
@@ -233,7 +233,7 @@ const agentScorer = createScorer({
   })
 ```
 
-### Custom Types with Generics
+### Custom types with generics
 
 For custom input/output types, use the generic approach:
 
@@ -253,7 +253,7 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
 })
 ```
 
-### Built-in Agent Types
+### Built-in agent types
 
 - **`ScorerRunInputForAgent`** - Contains `inputMessages`, `rememberedMessages`, `systemMessages`, and `taggedSystemMessages` for agent evaluation
 - **`ScorerRunOutputForAgent`** - Array of agent response messages

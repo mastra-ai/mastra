@@ -522,8 +522,18 @@ export class StepExecutor extends MastraBase {
         },
         errorInstance,
       );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+      // A processor tripwire is an intentional block, not a failure: log it quietly without a stack.
+      // Check `error` not `errorInstance` (see below).
+      if (error instanceof TripWire) {
+        this.logger?.debug(`Step ${stepId} stopped by tripwire`, {
+          stepId,
+          processorId: error.processorId,
+          reason: error.message,
+        });
+      } else {
+        this.logger?.trackException(mastraError);
+        this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+      }
 
       return {
         ...(omitPriorSuspensionFields(stepInfo) as typeof stepInfo),

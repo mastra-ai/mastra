@@ -3,6 +3,7 @@ import { SettingsContainer, SettingsRow } from './index';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import { Input } from '@/ds/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/ds/components/InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -28,7 +29,7 @@ const meta = {
   decorators: [
     Story => (
       <ThemeProvider defaultTheme="dark" storageKey="storybook-new-settings-row">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-160">
           <SettingsContainer>
             <Story />
           </SettingsContainer>
@@ -98,6 +99,69 @@ export const CompactOverride: Story = {
         </Button>
       </div>
     </SettingsRow>
+  ),
+};
+
+/**
+ * Several controls go straight in the row, with no wrapper or width: the row lines them up on its right edge, the
+ * same edge as every other row. A select hugs its value; an input group next to it takes the rest of the column.
+ */
+export const SeveralControls: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Deploy key" description="Adds a Gateway API key to each deploy">
+        <Switch aria-label="Deploy key" defaultChecked />
+      </SettingsRow>
+      <SettingsRow label="Models">
+        <Combobox options={models} value="openai/gpt-6-luna" />
+      </SettingsRow>
+      <SettingsRow label="Spend limit">
+        <Select defaultValue="monthly">
+          <SelectTrigger aria-label="Period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No limit</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+        <InputGroup>
+          <InputGroupAddon>
+            <InputGroupText>$</InputGroupText>
+          </InputGroupAddon>
+          <InputGroupInput aria-label="Limit" defaultValue="50" />
+        </InputGroup>
+      </SettingsRow>
+      <SettingsRow label="Spend limit" description="With no limit, only the select">
+        <Select defaultValue="none">
+          <SelectTrigger aria-label="Period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No limit</SelectItem>
+            <SelectItem value="monthly">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+    </>
+  ),
+};
+
+/**
+ * Controls too wide to sit beside their label (keeping the label at least 16rem) wrap under it, still on the right
+ * edge: here an inline edit with its field and actions. Narrower controls in the same card stay beside their label.
+ */
+export const WideControl: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Webhook" description="Receives an event when a deploy finishes.">
+        <Input className="w-80" defaultValue="https://hooks.example.com/deploys/acme-production" />
+        <Button>Send test</Button>
+      </SettingsRow>
+      <SettingsRow label="Notifications" description="Notify when a run finishes">
+        <Switch defaultChecked />
+      </SettingsRow>
+    </>
   ),
 };
 

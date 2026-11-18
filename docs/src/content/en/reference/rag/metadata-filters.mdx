@@ -206,12 +206,12 @@ const results = await store.query({
 1. Values must be:
    - Valid JSON types (string, number, boolean, object, array)
    - Not undefined
-   - Properly typed for the operator (e.g., numbers for numeric comparisons)
+   - Typed for the operator (e.g., numbers for numeric comparisons)
 
 1. Logical operators:
    - Must contain valid conditions
    - Can't be empty
-   - Must be properly nested
+   - Must be nested correctly
    - Can only be used at top level or nested within other logical operators
    - Can't be used at field level or nested inside a field
    - Can't be used inside an operator
@@ -257,7 +257,7 @@ const results = await store.query({
 - Field names can't contain dots (.) or start with $
 - Field names limited to 512 characters
 - Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
-- Range queries may have reduced accuracy with very large datasets (\~10M+ vectors)
+- Range queries may have reduced accuracy with large datasets (\~10M+ vectors)
 
 ### libSQL
 
@@ -350,7 +350,7 @@ await store.createIndex({
 
 - Currently doesn't have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
-### Amazon S3 Vectors
+### Amazon S3 vectors
 
 - Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date aren't allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
 - `$in`/`$nin` require **non-empty arrays of primitives**. Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.

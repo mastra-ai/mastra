@@ -1,5 +1,52 @@
 # @mastra/core
 
+## 1.85.0-alpha.2
+
+### Patch Changes
+
+- Fixed background tasks on durable agents with memory failing with "could not verify that this execution still owns the run" or "lost its execution lease" when they suspend after the agent's run has finished. The task is now marked suspended and can be resumed with `backgroundTaskManager.resume()`. This covers tools that call `suspend()` and sub-agents that reach a tool needing approval, including when another evented worker finished the run. A background task's result that arrives while the finished run is still cleaning up is now saved to memory instead of the "Background task started" placeholder. ([#30553](https://github.com/mastra-ai/mastra/pull/30553))
+
+  The fix applies when your storage adapter tracks run ownership, as the in-memory, LibSQL and Postgres stores do. When run ownership lives only in the pubsub lease, a background task that suspends after its run finished still fails as before, because the lease can't show whether another execution took over and finished the run in the meantime. On the evented engine, a background task that suspends after its run was resumed from an approval in the same turn still fails, because the resume's claim counts as another execution. Fixes [#30182](https://github.com/mastra-ai/mastra/issues/30182).
+
+## 1.85.0-alpha.1
+
+### Patch Changes
+
+- - Preserved durable and evented agent behavior while reorganizing execution lifecycle internals. Existing durable replay records remain readable after upgrading. ([#30472](https://github.com/mastra-ai/mastra/pull/30472))
+  - Fixed stream cleanup so older readers preserve resumed runs and current readers can release completed runs.
+  - Prevented duplicate completion callbacks when terminal events arrive concurrently.
+  - Kept idle timeouts active after ignoring terminal events from an earlier execution.
+
+- Fixed agents losing token usage and reporting an extra step when a stream error is retried. When the model stream failed mid-reply and an error processor retried it, the default agent loop reported the failed attempt as its own step, and the run's `usage` lost its input, output and total token counts. The retry now happens inside the same step, the same as on durable and evented agents: the run reports one step, `onStepFinish` and `step-finish` fire once, and usage holds the successful attempt's token counts. Tool calls, sources and files from the failed attempt no longer show up on the recovered step. ([#30696](https://github.com/mastra-ai/mastra/pull/30696))
+
+- Fixed `resume()` streaming nothing and never finishing after a durable agent run suspended. With observational memory on, the resumed run also failed its memory step with "lost its execution lease". Fixes [#30206](https://github.com/mastra-ai/mastra/issues/30206). ([#30548](https://github.com/mastra-ai/mastra/pull/30548))
+
+  This happened with storage that tracks which execution owns a run, most often when storage is slow to open new connections. A lease renewal sent just before the run suspended reached storage after the run had let go of it, and the run was reported as lost. Evented agent runs were affected too, including when the worker runs in a different process from the API. A late renewal is now ignored when storage shows the run's own suspension or finish caused it to fail. A renewal rejected because another execution took over the run still stops the run.
+
+  **Behaviour changes**
+
+  - With storage that does not track run ownership, a late renewal after a run suspends still reports the run as lost, as before.
+  - With storage that tracks run ownership, when an evented worker finished or suspended a run but the result never reached the caller, the caller now gets the loss error: the first failed lease renewal after the release is excused and the next one reports the loss, so it arrives within about two lease-renewal intervals (10s by default). Before, it never got one when the worker and caller shared a process, and got it up to one interval (5s by default) earlier when the worker ran in another process. A run abandoned by a worker in another process is also reported up to one interval later. A run abandoned in this process is reported as before.
+  - With storage that tracks run ownership, an execution that outlives its claim's release (for example a worker still running after the run suspended) keeps publishing for up to one lease-renewal interval longer before its events are dropped.
+
+## 1.85.0-alpha.0
+
+### Minor Changes
+
+- Session streams opened with `displayState=false` now start with the session's current state as ordinary events (the reply in flight as `message_start`, the latest memory status as `om_status`, and the thread's token total) instead of starting empty. Clients that keep display-state snapshots are unaffected. ([#30727](https://github.com/mastra-ai/mastra/pull/30727))
+
+  `Session.initialStateEvents()` returns those events for any other transport that needs the same catch-up. `usage_update` events now also carry `total`, the running token total after the step, so clients no longer have to add up per-step usage.
+
+### Patch Changes
+
+- Agents with input or output processors make fewer storage reads per call. ([#30720](https://github.com/mastra-ai/mastra/pull/30720))
+
+  Each `generate()` or `stream()` call runs short internal workflows to prepare the call and to run processors. These workflows are never stored, but they still read a cancellation status from storage before and between their steps. Those reads always came back empty. With two input processors and one output processor on PostgreSQL, a call made 25 status reads, and 14 of them were these empty reads. These workflows no longer read the status. Canceling the call still stops them.
+
+  Your own workflows keep their checks, including workflows you pass as processors. They still stop when another server cancels the run.
+
+- `Agent.generate()` and `Agent.stream()` now raise an error when a model step stops at its output-token limit before writing any text or tool calls, for example when a reasoning model spends its whole budget thinking. Previously the run finished with empty text and no error. The error says the model reached its maximum output length, the same message AgentController shows. Truncated text that ends at the limit is still returned as before. ([#30595](https://github.com/mastra-ai/mastra/pull/30595))
+
 ## 1.84.0
 
 ### Minor Changes

@@ -26,7 +26,7 @@ export function GlobalSearchSessionResults({
   onSelect,
 }: {
   title: 'Work Sessions' | 'Review Sessions' | 'User Sessions';
-  results: SessionSearchResult[];
+  results: readonly SessionSearchResult[];
   onSelect: GlobalSearchSelectHandler;
 }) {
   if (results.length === 0) return null;

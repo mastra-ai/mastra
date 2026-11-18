@@ -1,5 +1,23 @@
 # @mastra/platform
 
+## 0.1.1-alpha.1
+
+### Patch Changes
+
+- `PlatformKnowledge` now registers under the stable id `platform-knowledge-<instanceId>` (was random per boot), so two instances with different instance IDs still register side by side, and a missing instance ID now fails at construction with its own error naming `MASTRA_KNOWLEDGE_INSTANCE_ID`. ([#30757](https://github.com/mastra-ai/mastra/pull/30757))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- `PlatformKnowledge` now reads `MASTRA_KNOWLEDGE_ACCESS_TOKEN` when it is set, ahead of `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PLATFORM_SECRET_KEY`. An explicit `accessToken` option still wins, and an empty value is ignored. This is a Knowledge-only credential, so an app can authenticate to Knowledge without the general Platform token. ([#30765](https://github.com/mastra-ai/mastra/pull/30765))
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+
 ## 0.1.0
 
 ### Minor Changes

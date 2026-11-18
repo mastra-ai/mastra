@@ -136,8 +136,9 @@ function ChatTranscriptValueProvider({
     tasks: connection.state?.tasks ?? transcript.tasks,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;
-  const historyInitializing = Boolean(messagesThreadId) && !messagesError && !initialHistoryReady;
-  const initializing = sandboxPreparing || messagesInitializing || historyInitializing;
+  const historyMerging = Boolean(messagesThreadId) && !messagesError && !initialHistoryReady;
+  const loadingHistory = messagesInitializing || historyMerging;
+  const initializing = sandboxPreparing || loadingHistory;
   const phase = chatSessionPhase({
     sessionError: Boolean(sessionError),
     threadError: messagesError || connection.status === 'error',
@@ -152,7 +153,7 @@ function ChatTranscriptValueProvider({
     busy,
     phase,
     initializing,
-    historyInitializing,
+    loadingHistory,
     initialHistoryReady,
     localUser,
     failLocalUser,

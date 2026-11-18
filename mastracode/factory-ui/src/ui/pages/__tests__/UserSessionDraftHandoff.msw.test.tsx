@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../api/keys';
 import { createQueryClient } from '../../../query-client';
 import { createAppRouter, createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
@@ -49,33 +50,67 @@ describe('a user session draft on the real thread route', () => {
     expect(route.posted).toEqual(['fix the login bug']);
   });
 
-  it('reads a session reopened before its thread exists as empty, then loads it once the session boots', async () => {
-    const route = stubDraftRoute({
-      persistedMessages: [
-        {
-          id: 'persisted-prompt',
-          role: 'user',
-          createdAt: '2026-08-07T09:00:01.000Z',
-          content: { format: 2, parts: [{ type: 'text', text: 'resume after reload' }] },
-        },
-      ],
-    });
-    // A reload lands straight on the thread route, with none of the draft handoff's client state.
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`],
-    });
-    renderWithProviders(<RouterProvider router={router} />);
+  // The route loader starts the read before the page mounts, so the page may join that read in flight.
+  it.each([
+    ['without route loaders', false],
+    ['with route loaders', true],
+  ])(
+    'reads a session reopened before its thread exists as empty, then loads it once the session boots (%s)',
+    async (_, withLoaders) => {
+      const route = stubDraftRoute({
+        persistedMessages: [
+          {
+            id: 'persisted-prompt',
+            role: 'user',
+            createdAt: '2026-08-07T09:00:01.000Z',
+            content: { format: 2, parts: [{ type: 'text', text: 'resume after reload' }] },
+          },
+        ],
+      });
+      // The history read answers after the session's, so the page joins a read the loader already started.
+      let historyReads = 0;
+      let answerFirstHistoryRead = () => {};
+      const firstHistoryRead = new Promise<void>(resolve => {
+        answerFirstHistoryRead = resolve;
+      });
+      server.use(
+        http.get(
+          `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/threads/:threadId/messages`,
+          async () => {
+            if (historyReads++ === 0) await firstHistoryRead;
+            // Falls through to the fixture's answer: a 404 until the session boots.
+          },
+        ),
+      );
+      // A reload lands straight on the thread route, with none of the draft handoff's client state.
+      const loaderClient = withLoaders ? createQueryClient() : undefined;
+      const router = createMemoryRouter(createAppRoutes(loaderClient && { queryClient: loaderClient, api: TEST_API }), {
+        initialEntries: [`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`],
+      });
+      const { client } = renderWithProviders(<RouterProvider router={router} />, loaderClient);
 
-    await screen.findByRole('textbox', { name: 'Message' });
-    // Give the messages read time to land: before the fix it surfaced the 404.
-    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
+      await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(client.getQueryData(queryKeys.userSession(DRAFT_SESSION_ID))).toBeDefined());
+      answerFirstHistoryRead();
+      await waitFor(() =>
+        expect(
+          client.getQueryData(
+            queryKeys.agentControllerThreadMessages(
+              'code',
+              DRAFT_SESSION_ID,
+              DRAFT_SESSION_ID,
+              INITIAL_THREAD_MESSAGE_LIMIT,
+            ),
+          ),
+        ).toEqual([]),
+      );
+      expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
-    route.finishWorkspace();
-    expect(await screen.findByText('resume after reload', undefined, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
-  });
+      route.finishWorkspace();
+      expect(await screen.findByText('resume after reload', undefined, { timeout: 5000 })).toBeInTheDocument();
+      expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
+    },
+  );
 
   it('does not switch models when the draft already uses the personal default', async () => {
     const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });

@@ -1,5 +1,56 @@
 # @mastra/factory
 
+## 0.30.0-alpha.3
+
+### Minor Changes
+
+- `knowledge` now also accepts a `Knowledge` instance directly (`knowledge: new PlatformKnowledge()`), registered under its `id`. The `{ key, instance }` form still works and registers under `key`. The Knowledge page now reads with the same scopes as the project's sessions. ([#30757](https://github.com/mastra-ai/mastra/pull/30757))
+
+- Added `scopes`, the same option as an Agent's `scopes`, passed to every session. With an `org:` scope there, sessions and the Knowledge page act as that org instead of their own `org:` and `project:` scopes, so a Knowledge instance that declares only one org works and all projects share it. A `resource:` or `thread:` scope, or a `project:` beside an `org:`, throws. ([#30757](https://github.com/mastra-ai/mastra/pull/30757))
+
+  ```ts
+  new MastraFactory({ knowledge: new PlatformKnowledge({ tools: true }), scopes: ['org:acme'] });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`129c53c`](https://github.com/mastra-ai/mastra/commit/129c53c5ca73e5778703a45948bb5145fb06138b), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/code-sdk@1.20.0-alpha.2
+  - @mastra/core@1.85.0-alpha.2
+
+## 0.29.1-alpha.2
+
+### Patch Changes
+
+- Fixed Stop on a card's run being undone a few seconds later. The Factory used to restart the run and post the stage-move message again, such as "This work was moved from the intake stage to the pr-review stage." A stopped run now stays stopped, even when the Stop request reaches a different server than the one running it, and it is not reported as a failure: no error on the card, no failed review status, no failure report to the lead. Runs that end for other reasons, such as a server restart, still retry on their own. ([#30745](https://github.com/mastra-ai/mastra/pull/30745))
+
+- Added a `source` filter to `GET /web/factory/projects/:id/session-rows`. It keeps the sessions from one place: `board:<board id>` for a board's cards, `user` for sessions a person started, or `slack` for sessions started from Slack. These are the same keys that `groupBy=board` groups by. ([#30764](https://github.com/mastra-ai/mastra/pull/30764))
+
+  ```
+  GET /web/factory/projects/:id/session-rows?source=slack
+  ```
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/code-sdk@1.19.2-alpha.1
+
+## 0.29.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3574553`](https://github.com/mastra-ai/mastra/commit/3574553720831bcd1fbab1ed9284576441e524ca)]:
+  - @mastra/auth-studio@1.4.1-alpha.0
+
+## 0.29.1-alpha.0
+
+### Patch Changes
+
+- Factory chat tabs no longer rebuild the full display state on every streamed chunk, which cuts main-thread time on long runs. Reloading or switching back to a thread mid-reply still shows the text so far and keeps streaming. ([#30727](https://github.com/mastra-ai/mastra/pull/30727))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/code-sdk@1.19.2-alpha.0
+
 ## 0.29.0
 
 ### Minor Changes

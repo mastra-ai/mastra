@@ -5,16 +5,17 @@
  * Every endpoint is a GET; this module never writes Knowledge.
  *
  * Scoping is fail-closed and server-side. The caller must be signed in to an org that owns the `:id`
- * project, and reads are limited to what the Knowledge's own declarations give the principals
- * `org:<orgId>` and `project:<projectId>`: the scopes a run in that project holds at org and project
- * level. Session (`resource:`/`thread:`) scopes are not principals here, so no member browses another
- * member's session pages. The host must declare `project:$projectId` (as its session runs need); without
- * it reads fail with 500 `knowledge_misconfigured`.
+ * project, and reads are limited to what the Knowledge's own declarations give the principals a run in
+ * that project holds, from the same resolver sessions use: `org:<orgId>` and `project:<projectId>`, or,
+ * when the host's `scopes` name an `org:`, those scopes alone, shared by every org and project on the
+ * Factory. Session (`resource:`/`thread:`) scopes are not principals here, so no member browses
+ * another member's session pages. The host's Knowledge must declare the principals; without them reads
+ * fail with 500 `knowledge_misconfigured`.
  */
 
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import type { Knowledge, KnowledgeChangeEvent } from '@mastra/core/knowledge';
 import {
-  encodeKnowledgeScopeId,
   KnowledgeDeclarationError,
   listKnowledgeTreeChildren,
   readKnowledgePage,
@@ -54,6 +55,8 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   knowledge: (key: string) => Promise<Knowledge | undefined>;
   /** Host-selected Knowledge key. Requests cannot override it. */
   defaultKnowledgeKey?: string;
+  /** The host's `scopes`; passed to the session resolver so the page reads what sessions hold. */
+  hostScopes?: readonly string[];
 }
 
 interface ResolvedView {
@@ -146,14 +149,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
     try {
-      // The same canonical addresses a Factory session's runs hold (see the SDK's resolveKnowledgeSessionScopes).
-      const principals = [
-        `org:${encodeKnowledgeScopeId(tenant.orgId)}`,
-        `project:${encodeKnowledgeScopeId(projectId)}`,
-      ];
-      return { knowledge, store, read: await knowledge.readScopeFor(principals) };
+      // The same resolver a Factory session's runs use, so the page reads exactly what an agent there holds.
+      const session = resolveKnowledgeSessionScopes(
+        { factoryOrgId: tenant.orgId, factoryProjectId: projectId },
+        this.deps.hostScopes,
+      );
+      if (!session.resolved) {
+        return { response: c.json({ error: 'organization_required', message: session.reason }, 403) };
+      }
+      return { knowledge, store, read: await knowledge.readScopeFor(session.scopes) };
     } catch (error) {
-      // The host's Knowledge does not declare the scopes a Factory run holds (`org:` and `project:`): a
+      // The host's Knowledge does not declare the scopes a Factory run holds: a
       // deployment misconfiguration, which its session runs hit too. Never fall back to a guessed scope.
       if (error instanceof KnowledgeDeclarationError) {
         return { response: c.json({ error: 'knowledge_misconfigured', message: error.message }, 500) };

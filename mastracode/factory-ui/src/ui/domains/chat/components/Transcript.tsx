@@ -93,7 +93,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
       <TranscriptEntries
         entries={entries}
         restoredHistory
-        isSubmitting={approving || responding}
+        isSubmitting={approving || responding || !sessionEnabled}
         onApprove={onApprove}
         onRespond={onRespond}
         running={busy}
