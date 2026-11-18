@@ -137,6 +137,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   autoModels?: ObservationalMemoryConfig['autoModels'];
   canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
+  maxConcurrentModelCalls?: ObservationalMemoryConfig['maxConcurrentModelCalls'];
   /** @deprecated Subconscious was removed; attach `Knowledge` to the agent instead. Setting it throws. */
   experimental_subconscious?: unknown;
 };
@@ -2299,6 +2300,7 @@ ${workingMemory}`;
       onIndexObservations,
       onDebugEvent: omConfig.onDebugEvent,
       hooks: omConfig.hooks,
+      maxConcurrentModelCalls: omConfig.maxConcurrentModelCalls,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,

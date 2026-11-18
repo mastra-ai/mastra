@@ -13,6 +13,8 @@ import {
   getUnobservedParts,
   stripThreadTags,
 } from '../message-utils';
+import { runOMModelCall } from '../model-call-limiter';
+import type { OMModelCallPriority } from '../model-call-limiter';
 import { generateAnchorId, parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -98,6 +100,8 @@ export interface StrategyDeps {
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
+  /** Process-wide cap on active Observer/Reflector runs (`model-call-limiter.ts`). */
+  maxConcurrentModelCalls: number;
   onIndexObservations?: (observation: ObservationIndexWrite) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
   /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
@@ -174,7 +178,15 @@ export abstract class ObservationStrategy {
       await this.emitStartMarkers(cycleId);
       // The Observer sees the budgeted context; composition below still builds on the full text.
       const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
-      const output = await this.observe(observerContext.context ?? '', messages, observerContext.wasTruncated);
+      const output = await runOMModelCall(
+        {
+          key: getOMLockKey(this.scope, threadId, this.opts.resourceId),
+          priority: this.modelCallPriority,
+          limit: this.deps.maxConcurrentModelCalls,
+          abortSignal,
+        },
+        () => this.observe(observerContext.context ?? '', messages, observerContext.wasTruncated),
+      );
       abortSignal?.throwIfAborted();
       let processed = await this.process(output, existingObservations);
       abortSignal?.throwIfAborted();
@@ -821,6 +833,10 @@ export abstract class ObservationStrategy {
   abstract get needsLock(): boolean;
   abstract get needsReflection(): boolean;
   abstract get rethrowOnFailure(): boolean;
+  /** Whether an agent step waits on this cycle's Observer run. */
+  protected get modelCallPriority(): OMModelCallPriority {
+    return 'blocking';
+  }
   /** `contextRecord`: the record `existingObservations` was read from, when fresher than `opts.record`. */
   abstract prepare(): Promise<{
     messages: MastraDBMessage[];

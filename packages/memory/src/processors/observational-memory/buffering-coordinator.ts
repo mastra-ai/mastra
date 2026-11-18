@@ -2,6 +2,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
+import { markOMModelCallsUrgent } from './model-call-limiter';
 import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
 import { waitWithAbort } from './wait-with-abort';
@@ -217,6 +218,8 @@ export class BufferingCoordinator {
     }
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    // The caller now waits on these ops, so their model runs must not queue behind other threads' buffering.
+    const clearUrgent = markOMModelCallsUrgent(lockKey);
     try {
       await waitWithAbort(
         Promise.race([
@@ -231,6 +234,7 @@ export class BufferingCoordinator {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
       }
+      clearUrgent();
     }
   }
 }

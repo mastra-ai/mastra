@@ -1163,6 +1163,22 @@ export interface ObservationalMemoryConfig {
    */
   hookExecution?: 'non-blocking' | 'await';
 
+  /**
+   * Maximum number of Observer and Reflector runs active at once in the process, across all
+   * threads, resources, and Memory instances. Runs beyond the limit wait for a free slot.
+   *
+   * Runs an agent step is waiting for (synchronous observation and reflection, or a background
+   * buffer the step needs before it can continue) start ahead of background buffering. Agent
+   * steps in the async buffering band never wait for a slot.
+   *
+   * Each run builds a large prompt and streams a long reply on the shared event loop, so many
+   * threads crossing their thresholds together can stall every agent in the process. Set
+   * `Infinity` to remove the limit.
+   *
+   * @default 3
+   */
+  maxConcurrentModelCalls?: number;
+
   obscureThreadIds?: boolean;
 
   /**

@@ -14,6 +14,7 @@ import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from './constants';
 import { omDebug, omError } from './debug';
 import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import {
@@ -39,6 +40,7 @@ import {
 } from './markers';
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import { runOMModelCall } from './model-call-limiter';
 import { didProviderChange } from './model-context';
 import { alignLineCutToObservationGroups } from './observation-groups';
 import { describeDegenerateOutput } from './observer-agent';
@@ -274,6 +276,8 @@ export class ReflectorRunner {
 
   private readonly trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
 
+  private readonly maxConcurrentModelCalls: number;
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -302,7 +306,11 @@ export class ReflectorRunner {
     hooks?: ObserveTransformHooks;
     /** Registers background work so `settled()` can join it. */
     trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
+    /** Process-wide cap on active Observer/Reflector runs (`model-call-limiter.ts`). */
+    maxConcurrentModelCalls?: number;
   }) {
+    this.maxConcurrentModelCalls =
+      opts.maxConcurrentModelCalls ?? OBSERVATIONAL_MEMORY_DEFAULTS.maxConcurrentModelCalls;
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
     this.tokenCounter = opts.tokenCounter;
@@ -901,21 +909,29 @@ export class ReflectorRunner {
     }
 
     const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
-    const reflectResult = await this.call(
-      activeObservations,
-      undefined,
-      undefined,
-      compressionTarget,
-      undefined,
-      true,
-      compressionStartLevel,
-      requestContext,
-      priorExtractedValues,
-      observabilityContext,
-      undefined,
-      mainAgent,
-      sendSignal,
-      currentModel,
+    const reflectResult = await runOMModelCall(
+      {
+        key: this.buffering.getLockKey(currentRecord.threadId, currentRecord.resourceId),
+        priority: 'background',
+        limit: this.maxConcurrentModelCalls,
+      },
+      () =>
+        this.call(
+          activeObservations,
+          undefined,
+          undefined,
+          compressionTarget,
+          undefined,
+          true,
+          compressionStartLevel,
+          requestContext,
+          priorExtractedValues,
+          observabilityContext,
+          undefined,
+          mainAgent,
+          sendSignal,
+          currentModel,
+        ),
     );
     reflectResult.observations = await applyTextTransform(
       this.hooks,
@@ -1446,21 +1462,36 @@ export class ReflectorRunner {
         resourceId: record.resourceId ?? undefined,
         trigger,
       };
-      const reflectResult = await this.call(
-        await applyTextTransform(this.hooks, 'beforeReflection', record.activeObservations, hookContext),
-        undefined,
-        streamContext,
-        reflectThreshold,
-        abortSignal,
-        undefined,
-        compressionStartLevel,
-        requestContext,
-        priorExtractedValues,
-        observabilityContext,
-        undefined,
-        mainAgent,
-        sendSignal,
-        currentModel,
+      const reflectionInput = await applyTextTransform(
+        this.hooks,
+        'beforeReflection',
+        record.activeObservations,
+        hookContext,
+      );
+      const reflectResult = await runOMModelCall(
+        {
+          key: this.buffering.getLockKey(record.threadId, record.resourceId),
+          priority: 'blocking',
+          limit: this.maxConcurrentModelCalls,
+          abortSignal,
+        },
+        () =>
+          this.call(
+            reflectionInput,
+            undefined,
+            streamContext,
+            reflectThreshold,
+            abortSignal,
+            undefined,
+            compressionStartLevel,
+            requestContext,
+            priorExtractedValues,
+            observabilityContext,
+            undefined,
+            mainAgent,
+            sendSignal,
+            currentModel,
+          ),
       );
       reflectResult.observations = await applyTextTransform(
         this.hooks,

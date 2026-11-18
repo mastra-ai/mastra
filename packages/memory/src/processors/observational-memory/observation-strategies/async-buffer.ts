@@ -42,6 +42,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   get rethrowOnFailure() {
     return false;
   }
+  protected override get modelCallPriority() {
+    return 'background' as const;
+  }
 
   protected override generateCycleId(): string {
     return this.cycleId;

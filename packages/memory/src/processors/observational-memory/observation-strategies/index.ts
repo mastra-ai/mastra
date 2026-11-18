@@ -30,6 +30,7 @@ ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts
     reflector: om.reflector,
     observedMessageIds: om.observedMessageIds,
     obscureThreadIds: om.getObscureThreadIds(),
+    maxConcurrentModelCalls: om.maxConcurrentModelCalls,
     onIndexObservations: om.onIndexObservations,
     emitDebugEvent: e => om.emitDebugEvent(e),
     prepareObserverContext: (observations, record) => om.prepareObserverContext(observations, record),

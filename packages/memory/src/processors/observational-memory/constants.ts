@@ -39,6 +39,8 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
     // Async reflection buffering (enabled by default)
     bufferActivation: 0.5 as number | undefined, // Start buffering at 50% of observationTokens
   },
+  // Observer + Reflector runs active at once in the process; more wait their turn.
+  maxConcurrentModelCalls: 3 as number,
 } as const;
 
 /**

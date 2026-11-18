@@ -127,6 +127,12 @@ On `main` no OM-level lock makes observation activation and reflection rollover 
 - **In one process (PR 2, D2):** the OM commit queue (`commit-queue.ts`, process-wide, keyed by `thread:<id>` / `resource:<id>`) serializes OM storage commits per key across every `ObservationalMemory` and `Memory` instance in the process, reflection first among waiters. Model calls, indexing, and title work stay outside it.
 - The `BufferingCoordinator` maps, operation registry, and durable flags keep their roles above; correctness no longer depends on them.
 
+### Model-call limit
+
+`model-call-limiter.ts` caps the Observer and Reflector runs active at once in the process (`maxConcurrentModelCalls`, default 3), across every key and instance; state lives on `globalThis` like the commit queue. Observation runs take a slot in `ObservationStrategy.run()` around `observe()`; reflections take one at each `reflector.call` site. A run holds its slot only for its model calls and never takes a second one, so the limiter can't deadlock, and it sits outside the commit queue, so a queued run never holds a commit slot.
+
+Waiters are ordered `blocking` (sync observation, sync and manual reflection) before `background` (async buffering). `awaitBuffering` and the threshold activation wait mark their key urgent while they wait, which promotes that key's background runs, so a step that has to wait on a buffer op doesn't also wait behind other threads' buffering. Steps in the async buffering band don't wait on buffer ops, so they never wait on the limiter either.
+
 ## Invariants we want
 
 1. **Coverage:** at every step, each message reaches the actor exactly once: raw, or through an observation or reflection that covers it.

@@ -323,6 +323,7 @@ import {
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
+import { markOMModelCallsUrgent, runOMModelCall } from './model-call-limiter';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
@@ -448,6 +449,9 @@ export class ObservationalMemory {
 
   /** Execution policy for config-level hooks on manual and turn-synchronous cycles. */
   readonly hookExecution: 'non-blocking' | 'await';
+
+  /** Max Observer and Reflector runs active in the process before this instance's runs wait. */
+  readonly maxConcurrentModelCalls: number;
 
   /** Observer agent runner — handles LLM calls for extracting observations. */
   readonly observer: ObserverRunner;
@@ -610,6 +614,20 @@ export class ObservationalMemory {
         'Cannot set both `model` and `reflection.model`. Use `model` to set both agents, or set each individually.',
       );
     }
+
+    const maxConcurrentModelCalls =
+      config.maxConcurrentModelCalls ?? OBSERVATIONAL_MEMORY_DEFAULTS.maxConcurrentModelCalls;
+    if (
+      !(
+        maxConcurrentModelCalls === Infinity ||
+        (Number.isInteger(maxConcurrentModelCalls) && maxConcurrentModelCalls >= 1)
+      )
+    ) {
+      throw new Error(
+        `\`maxConcurrentModelCalls\` must be a positive integer or Infinity, got ${String(config.maxConcurrentModelCalls)}.`,
+      );
+    }
+    this.maxConcurrentModelCalls = maxConcurrentModelCalls;
 
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
@@ -876,6 +894,7 @@ export class ObservationalMemory {
       memory: this.memory,
       hooks: this.hooks,
       trackBackgroundWork: (work, lockKey) => this.trackBackgroundWork(work, lockKey),
+      maxConcurrentModelCalls: this.maxConcurrentModelCalls,
     });
 
     // Validate buffer configuration
@@ -3989,6 +4008,8 @@ ${formattedMessages}
         livePendingTokens < blockAfter;
       if (activationTriggeredBy === 'threshold' && !inBand) {
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        // This step now waits on the buffer op, so its Observer run must not queue behind other threads' buffering.
+        const clearUrgent = markOMModelCallsUrgent(this.buffering.getLockKey(threadId, resourceId));
         try {
           await waitWithAbort(
             Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]),
@@ -3996,6 +4017,7 @@ ${formattedMessages}
           );
         } finally {
           clearTimeout(timeoutId);
+          clearUrgent();
         }
       }
     }
@@ -4457,18 +4479,32 @@ ${formattedMessages}
       const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
       const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
-      const reflectResult = await this.reflector.call(
-        await applyTextTransform(this.hooks, 'beforeReflection', record.activeObservations, hookContext),
-        prompt,
-        undefined,
-        reflectThreshold,
-        undefined,
-        undefined,
-        undefined,
-        requestContext,
-        priorExtractedValues,
-        observabilityContext,
-        undefined,
+      const reflectionInput = await applyTextTransform(
+        this.hooks,
+        'beforeReflection',
+        record.activeObservations,
+        hookContext,
+      );
+      const reflectResult = await runOMModelCall(
+        {
+          key: this.buffering.getLockKey(threadId, resourceId),
+          priority: 'blocking',
+          limit: this.maxConcurrentModelCalls,
+        },
+        () =>
+          this.reflector.call(
+            reflectionInput,
+            prompt,
+            undefined,
+            reflectThreshold,
+            undefined,
+            undefined,
+            undefined,
+            requestContext,
+            priorExtractedValues,
+            observabilityContext,
+            undefined,
+          ),
       );
       reflectResult.observations = await applyTextTransform(
         this.hooks,
