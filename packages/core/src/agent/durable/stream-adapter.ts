@@ -115,6 +115,30 @@ export function createSupersededEventFilter(history: AgentStreamEvent[]): (event
     );
 }
 
+/**
+ * Keep only the suspension the run is still parked at. A reader that replays a
+ * run from its start also replays suspensions that were approved and resumed
+ * since; a `closeOnSuspend` reader that stopped at one of those would drop the
+ * output the resume produced. The newest frame in the log is the run's current
+ * position, so a suspension older than it has already been moved past. Order is
+ * kept, and a log with no indexed frames keeps everything (live-tail transport).
+ */
+export function createCurrentSuspensionFilter(history: AgentStreamEvent[]): (event: AgentStreamEvent) => boolean {
+  let newestIndex: number | undefined;
+  for (const event of history) {
+    if (typeof event.index !== 'number' || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) continue;
+    if (newestIndex === undefined || event.index > newestIndex) newestIndex = event.index;
+  }
+  if (newestIndex === undefined) return () => true;
+  // `>=` keeps a suspension published after this snapshot, which is live and
+  // therefore the run's current position.
+  const currentIndex = newestIndex;
+  return event => {
+    if (event.type !== AgentStreamEventTypes.SUSPENDED || typeof event.index !== 'number') return true;
+    return event.index >= currentIndex;
+  };
+}
+
 function callbackToolCalls(records: unknown[], runId: string): ToolCallChunk[] {
   return records.map(record => {
     if ((record as ToolCallChunk).type === 'tool-call') return record as ToolCallChunk;
@@ -1011,6 +1035,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             } finally {
               safeClose(controller);
             }
+            // Closing ends this reader only, and queued chunks stay readable. But
+            // a consumer that never drains the closed stream (`output.text`,
+            // `getFullOutput()`) would leave the subscription live forever, so
+            // tear it down once the frames already published have been delivered.
+            void waitForEventDelivery()
+              .catch(() => {})
+              .then(cleanup);
           } else {
             // Settlement must precede resumed events, but a callback may await those events itself.
             if (releaseSettlement) {

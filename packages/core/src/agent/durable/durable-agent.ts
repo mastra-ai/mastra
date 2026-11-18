@@ -128,6 +128,7 @@ import {
 import { carrySegmentSpans, openedSegment } from './segment-spans';
 import type { SegmentSpanData } from './segment-spans';
 import {
+  createCurrentSuspensionFilter,
   createDurableAgentStream,
   createRunGenerationFilter,
   createSupersededEventFilter,
@@ -5541,10 +5542,15 @@ export class DurableAgent<
    * Runs fenced by a pubsub lease have no generation and are unaffected.
    * The floor only adds protection, so a failed read must not fail the reconnect;
    * the reader reads the claim again before an event can end its stream.
+   *
+   * A reader that closes on suspension (`closeOnSuspend`) additionally drops
+   * suspensions the run has already moved past, so a replay from the start of a
+   * run cannot end the stream at an approval that was given long ago.
    */
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
+    closeOnSuspend = false,
   ): Promise<
     Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
       refreshReplayFilter?: () => Promise<unknown>;
@@ -5552,7 +5558,13 @@ export class DurableAgent<
   > {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
-      const initialFilter = createSupersededEventFilter(history);
+      const buildFilter = (entries: AgentStreamEvent[]): ((event: AgentStreamEvent) => boolean) => {
+        const superseded = createSupersededEventFilter(entries);
+        if (!closeOnSuspend) return superseded;
+        const currentSuspension = createCurrentSuspensionFilter(entries);
+        return event => superseded(event) && currentSuspension(event);
+      };
+      const initialFilter = buildFilter(history);
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
       let currentFilter: typeof initialFilter | undefined;
       // Subscription can replay a newer claim than the snapshot above. Refresh
@@ -5560,7 +5572,7 @@ export class DurableAgent<
       const refreshReplayFilter = () => {
         refreshedFilter ??= this.pubsub
           .getHistory(AGENT_STREAM_TOPIC(runId), 0)
-          .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
+          .then(entries => (currentFilter = buildFilter(entries as AgentStreamEvent[])))
           .catch(() => (currentFilter = initialFilter));
         return refreshedFilter;
       };
@@ -6142,7 +6154,7 @@ export class DurableAgent<
       await options?.onChunk?.(chunk);
     };
 
-    const replayFloor = await this.#readReplayFloor(runId, options?.offset);
+    const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,

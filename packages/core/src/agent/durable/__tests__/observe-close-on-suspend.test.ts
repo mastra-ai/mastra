@@ -35,12 +35,6 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-async function drain(stream: ReadableStream<any>) {
-  const chunks: any[] = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  return chunks;
-}
-
 /**
  * Read `stream` to completion, but never wait longer than `ms`. A `'timeout'`
  * outcome means the stream hung — the anti-hang guard that turns the #29692
@@ -56,6 +50,38 @@ async function collectWithin(stream: ReadableStream<any>, ms: number) {
   void reading.catch(() => {});
   await Promise.race([reading, delay(ms)]);
   return { outcome, chunks };
+}
+
+/** Read `stream` in the background so a test can act on the run while it streams. */
+function startCollecting(stream: ReadableStream<any>) {
+  const chunks: any[] = [];
+  const done = (async () => {
+    for await (const chunk of stream) chunks.push(chunk);
+  })();
+  void done.catch(() => {});
+  return { chunks, done };
+}
+
+/** Resolve once `chunks` holds a chunk of `type`, so nothing depends on a fixed sleep. */
+async function waitForChunk(chunks: any[], type: string, ms = 5_000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const found = chunks.find(chunk => chunk.type === type);
+    if (found) return found;
+    await delay(10);
+  }
+  throw new Error(`timed out waiting for a "${type}" chunk`);
+}
+
+/** `true` when `p` settles within `ms`, `false` while it is still pending. */
+function settledWithin(p: Promise<unknown>, ms: number) {
+  return Promise.race([
+    p.then(
+      () => true,
+      () => true,
+    ),
+    delay(ms).then(() => false),
+  ]);
 }
 
 /**
@@ -158,15 +184,45 @@ describe('DurableAgent.observe() closeOnSuspend (#29692)', () => {
     observed.detach();
   }, 30_000);
 
-  it('keeps the observed stream open by default so a resume can continue on it', async () => {
+  it('keeps the observed stream open by default so a resume continues on it', async () => {
     const runId = await suspendRun();
 
     const observed = await durableAgent.observe(runId);
-    const { outcome, chunks } = await collectWithin(observed.fullStream, 500);
+    const reader = startCollecting(observed.fullStream);
 
-    expect(outcome).toBe('timeout');
-    expect(chunks.some(chunk => chunk.type === 'tool-call-approval')).toBe(true);
-    expect(chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+    await waitForChunk(reader.chunks, 'tool-call-approval');
+    // Still open at the suspension boundary, with no terminal frame yet...
+    expect(await settledWithin(reader.done, 300)).toBe(false);
+    expect(reader.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+
+    // ...and the resume streams the rest of the run to that same reader.
+    const resumed = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'tc-1', maxSteps: 3 });
+    expect(await settledWithin(reader.done, 5_000)).toBe(true);
+    expect(
+      reader.chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'approved and done'),
+    ).toBe(true);
+    expect(reader.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+
+    resumed.cleanup();
+    observed.detach();
+  }, 30_000);
+
+  it('does not close on a suspension the run has already been approved past', async () => {
+    const runId = await suspendRun();
+
+    // Approve the gate and let the run finish, so the log now holds that
+    // suspension followed by the output the resume produced. The stream keeps its
+    // run log until cleanup(), which is what the observer below reads.
+    const resumed = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'tc-1', maxSteps: 3 });
+    expect((await collectWithin(resumed.fullStream, 5_000)).outcome).toBe('done');
+
+    // A reader replaying the run from its start must not stop at a suspension
+    // the run has moved past: it is no longer where the run is parked.
+    const observed = await durableAgent.observe(runId, { closeOnSuspend: true });
+    const { outcome, chunks } = await collectWithin(observed.fullStream, 2_000);
+
+    expect(outcome).toBe('done');
+    expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'approved and done')).toBe(true);
     observed.detach();
   }, 30_000);
 
