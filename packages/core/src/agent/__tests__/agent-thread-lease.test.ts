@@ -430,6 +430,37 @@ describe('taking a thread for a new run across processes', () => {
         );
         return finish;
       },
+      // Registers a run that streams until `park` is called, then waits on a tool approval.
+      runUntilParked: async (replica: AgentThreadStreamRuntime, runId: string) => {
+        let settle!: () => void;
+        const settled = new Promise<void>(resolve => {
+          settle = resolve;
+        });
+        let stream!: ReadableStreamDefaultController;
+        const output = {
+          runId,
+          status: 'running',
+          fullStream: new ReadableStream({
+            start(controller) {
+              stream = controller;
+              controller.enqueue({ type: 'start', runId });
+            },
+          }),
+          _waitUntilFinished: () => settled,
+        };
+        await replica.registerRun(agent, output as any, { memory } as any, pubsub);
+        return async () => {
+          stream.enqueue({
+            type: 'tool-call-approval',
+            runId,
+            payload: { toolCallId: 'approval-1', toolName: 'approveAction' },
+          });
+          stream.close();
+          output.status = 'suspended';
+          settle();
+          await waitForCondition(() => pubsub.publishedTypes.includes('run-suspended'));
+        };
+      },
     };
   }
 
@@ -486,6 +517,41 @@ describe('taking a thread for a new run across processes', () => {
     expect(pubsub.owners.get(key)).toBe('next-run');
     replica.releaseThreadRunReservation('next-run', pubsub);
     await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  // A run waiting on a person keeps the thread lease, and may wait for hours. A new message must not wait with it.
+  it('starts a run beside a run that is parked on another replica', async () => {
+    const { pubsub, key, take, runUntilParked } = setup('replica-parked');
+    const replicaA = new AgentThreadStreamRuntime();
+    const replicaB = new AgentThreadStreamRuntime();
+
+    await take(replicaA, 'parked-run');
+    const park = await runUntilParked(replicaA, 'parked-run');
+    await park();
+    let started = false;
+    void take(replicaB, 'next-run').then(() => (started = true));
+    await waitForCondition(() => started);
+
+    expect(pubsub.owners.get(key)).toBe('parked-run');
+    replicaB.releaseThreadRunReservation('next-run', pubsub);
+  });
+
+  it('stops waiting for a run on another replica once that run parks', async () => {
+    const { pubsub, askedForLease, take, runUntilParked } = setup('replica-parks-later');
+    const replicaA = new AgentThreadStreamRuntime();
+    const replicaB = new AgentThreadStreamRuntime();
+    const order: string[] = [];
+
+    await take(replicaA, 'first-run');
+    const park = await runUntilParked(replicaA, 'first-run');
+    const second = take(replicaB, 'second-run').then(() => order.push('second run took the thread'));
+    await Promise.race([second, waitForCondition(() => askedForLease('second-run'))]);
+    order.push('first run parked');
+    await park();
+    await second;
+
+    expect(order).toEqual(['first run parked', 'second run took the thread']);
+    replicaB.releaseThreadRunReservation('second-run', pubsub);
   });
 
   it('does not wait on its own run when a resume lands on another replica', async () => {
