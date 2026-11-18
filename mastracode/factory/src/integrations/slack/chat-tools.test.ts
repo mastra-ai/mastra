@@ -59,8 +59,11 @@ function answer(method: string, args: Record<string, string>): Record<string, un
   switch (method) {
     case 'auth.test':
       return { team_id: TEAM, user_id: 'UBOT', bot_id: 'BBOT', url: 'https://mastra.slack.com/' };
-    case 'conversations.replies':
-      return { messages: workspace.history[args.channel!]?.filter(message => message.ts === args.oldest) ?? [] };
+    case 'conversations.replies': {
+      const messages = workspace.history[args.channel!] ?? [];
+      if (!args.ts || !messages.some(message => message.ts === args.ts)) return { messages: [] };
+      return { messages: messages.filter(message => message.ts === args.oldest) };
+    }
     case 'conversations.history': {
       const channel = workspace.channels.find(c => c.id === args.channel);
       if (!channel?.is_member) return { ok: false, error: 'not_in_channel' };
@@ -130,7 +133,7 @@ type Tool = { execute: (input: Record<string, unknown>, options: Record<string, 
  * message (as web prompts, GitHub events and schedules are), so the tools find
  * their thread through the session's stored channel coordinates.
  */
-async function slackSession(settings?: Partial<SlackToolSettings>) {
+async function slackSession(settings?: Partial<SlackToolSettings>, externalThreadId = 'slack:C1:171.1') {
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, logger: false });
   const memory = await storage.getStore('memory');
@@ -141,14 +144,19 @@ async function slackSession(settings?: Partial<SlackToolSettings>) {
       title: 'session',
       createdAt: new Date(),
       updatedAt: new Date(),
-      metadata: { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' },
+      metadata: { channel_platform: 'slack', channel_externalThreadId: externalThreadId },
     },
   });
   const adapter = createSlackAdapter({
     botToken: 'xoxb-test', signingSecret: 'secret', apiUrl,
-    fileTransport: (_url, _signal, headers) => new Promise((resolve, reject) => {
-      get(`${apiUrl}files/wallpaper`, { headers }, resolve).on('error', reject);
-    }),
+    fileTransport: (url, _signal, headers) => {
+      if (String(url) !== 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg') {
+        throw new Error(`Unexpected attachment URL: ${url}`);
+      }
+      return new Promise((resolve, reject) => {
+        get(`${apiUrl}files/wallpaper`, { headers }, resolve).on('error', reject);
+      });
+    },
   });
   const channels = new AgentControllerChannels({ adapters: { slack: { adapter } } });
   channels.__setController({ id: 'mastra-code', getMastra: () => mastra } as any);
@@ -219,6 +227,69 @@ describe('Slack tools on a Factory session, by default', () => {
         threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
       })).rejects.toThrow('exceeds 8 MiB');
       expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('inspects images from its own top-level DM without leaking access to another DM', async () => {
+    workspace.history.D1 = [{
+      ts: '1700000400.000400', user: 'USAM', text: 'Look at this', files: [{
+        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 20,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+      }],
+    }];
+    try {
+      const { run } = await slackSession(undefined, 'slack:D1:');
+      const result = await run('downloadSlackAttachment', {
+        threadId: 'slack:D1:', messageId: '1700000400.000400', attachmentIndex: 0,
+      });
+      expect(Buffer.from(result.base64, 'base64').toString()).toBe('original image bytes');
+      expect(sent('conversations.replies')[0]).toMatchObject({ channel: 'D1', ts: '1700000400.000400' });
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:DOTHER:', messageId: '1700000400.000400', attachmentIndex: 0,
+      })).rejects.toThrow("someone else's direct message");
+    } finally {
+      delete workspace.history.D1;
+    }
+  });
+
+  it('rejects images without a reported size before downloading', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg',
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Attachment size is unavailable');
+      expect(sent('file.download')).toHaveLength(0);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects image formats the model cannot inspect and oversized encoded images before downloading', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'diagram.svg', mimetype: 'image/svg+xml', size: 20,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/diagram.svg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Unsupported image format');
+      expect(sent('file.download')).toHaveLength(0);
+
+      workspace.history.C1![0]!.files = [{
+        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 3_750_001,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+      }];
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('5 MB encoded model input limit');
+      expect(sent('file.download')).toHaveLength(0);
     } finally {
       delete workspace.history.C1![0]!.files;
     }
