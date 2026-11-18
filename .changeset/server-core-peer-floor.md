@@ -22,4 +22,4 @@
 'mastra': patch
 ---
 
-Raised the @mastra/core peer floor to 1.85.0, the first release that exports the turn markup helpers these packages use or depend on.
+Raised the @mastra/core peer floor to 1.85.1, the first release that exports the turn markup helpers these packages use or depend on.
