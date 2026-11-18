@@ -31,7 +31,12 @@ on:
     branches:
       - main
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+# Stable and enter-prerelease both push to main and change its prerelease mode, so
+# they share one group whatever ref they were dispatched on: an overlapping stable
+# run could otherwise reopen main while the other has taken it out of alpha mode.
+# Other publish types keep one group per ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ (inputs.publish_type == 'stable' || inputs.publish_type == 'enter-prerelease') && 'main-release' || github.ref }}
 
 jobs:
   # ===========================================

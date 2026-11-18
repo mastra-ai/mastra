@@ -632,3 +632,12 @@ test('the stable publish unfreezes only once main is confirmed back in alpha mod
   assert.ok(alpha, 'after_stable has no alpha-mode check');
   assert.match(alpha, /contents\/\.changeset\/pre\.json\?ref=main/);
 });
+
+test('stable and enter-prerelease dispatches share one release group whatever ref they run on', () => {
+  const text = readFileSync(new URL('../workflows/npm-publish.yml', import.meta.url), 'utf8');
+  const group = text.match(/^concurrency:\n {2}group: (.+)\n/m)?.[1];
+  assert.ok(group, 'npm-publish.yml has no workflow-level concurrency group');
+  // Two overlapping stable runs could reopen main while the other has left alpha mode.
+  for (const type of ['stable', 'enter-prerelease']) assert.match(group, new RegExp(`'${type}'`));
+  assert.match(group, /github\.ref/, 'other publish types keep their per-ref group');
+});
