@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import type { FieldProps } from '@/ds/components/Field';
-import { SettingsRowControl } from '@/ds/new/settings/settings-row';
 import { cn } from '@/lib/utils';
 
 export type SectionRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -32,7 +31,7 @@ function SectionRowBase({
     <Field
       orientation="responsive"
       invalid={Boolean(errorMsg)}
-      disabled={disabled || viewOnly}
+      disabled={disabled}
       data-slot="section-row"
       className={cn(
         'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6',
@@ -52,14 +51,8 @@ function SectionRowBase({
         <FieldError className="mt-1">{errorMsg}</FieldError>
       </div>
       {children != null && (
-        <div
-          data-slot="section-control"
-          className={cn(
-            'min-w-0 sm:justify-self-end',
-            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
-          )}
-        >
-          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
+        <div data-slot="section-control" className={cn('min-w-0 sm:justify-self-end', viewOnly && 'text-body-sm')}>
+          {children}
         </div>
       )}
     </Field>

@@ -159,15 +159,15 @@ describe('Settings', () => {
   });
 
   describe('when a setting is inherited', () => {
-    it('identifies its value as view only', () => {
+    it('shows its value as plain text', () => {
       render(
         <SettingsRow label="Project access" viewOnly>
           Viewer
         </SettingsRow>,
       );
 
-      expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
+      expect(screen.queryByText(/view only/i)).toBeNull();
       expect(screen.queryByRole('textbox')).toBeNull();
     });
   });

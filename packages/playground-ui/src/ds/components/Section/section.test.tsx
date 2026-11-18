@@ -46,7 +46,7 @@ describe('Section', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 
-  it('renders the view-only prefix', () => {
+  it('renders the view-only value as plain text', () => {
     render(
       <Section variant="factory">
         <Section.Content>
@@ -59,7 +59,8 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByText('View only:')).toBeTruthy();
+    expect(screen.getByText('Viewer')).toBeTruthy();
+    expect(screen.queryByText(/view only/i)).toBeNull();
   });
 
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {
