@@ -10,7 +10,7 @@ npm install @mastra/platform
 
 ## Usage
 
-Set `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`). `PlatformMemory` also needs `MASTRA_MEMORY_INSTANCE_ID`. `PlatformKnowledge` uses `MASTRA_KNOWLEDGE_INSTANCE_ID` when set; otherwise it finds your project's Knowledge instance on first use, from a project access token or from `MASTRA_PROJECT_ID` with an organization secret key. Obtain your instance IDs and credentials from Mastra Platform.
+Set `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`). `PlatformMemory` also needs `MASTRA_MEMORY_INSTANCE_ID` and `PlatformKnowledge` needs `MASTRA_KNOWLEDGE_INSTANCE_ID`; the example below uses both, so set both IDs. Obtain your instance IDs and credentials from Mastra Platform.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
@@ -53,9 +53,7 @@ const browser = new PlatformBrowser({ projectId: 'your-project-id' });
 ### Knowledge transport contract
 
 - `POST {apiUrl}/v1/knowledge/{instanceId}/operations/{operation}` with `Authorization: Bearer {accessToken}` and JSON body `{ input }`; returns `{ result }`.
-- `instanceId` and `apiUrl` come from options or `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_API_URL`; `apiUrl` defaults to `https://knowledge-api.mastra.ai`.
-- Without `instanceId`, the first operation calls `GET {apiUrl}/v1/knowledge` (with `?projectId={projectId}` when `projectId` or `MASTRA_PROJECT_ID` is set) to find the project's one Knowledge instance; a project token names its own project. An error answer (for example 404 with no instance, or 409 with several) fails the operation without guessing an instance. A host rejects two discovered `PlatformKnowledge` with the same API URL and `projectId`, or, without `projectId`, the same token; it can't tell that a `projectId` lookup and a project token reach the same instance, or that a lookup reaches an explicit `instanceId`.
-- With an explicit `instanceId`, the service derives the authorized project from the instance and credential, and `projectId` is not sent.
+- `instanceId` and `apiUrl` come from options or `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_API_URL`; `apiUrl` defaults to `https://knowledge-api.mastra.ai`. The service derives the authorized project from the instance and credential; `projectId` is accepted for compatibility but is not sent.
 - `renameScopeDeclaration` is not forwarded and rejects with `KnowledgeUnsupportedCapabilityError`: its `check` callback cannot be sent to the hosted store.
 - Credential priority: option `accessToken`, `MASTRA_KNOWLEDGE_ACCESS_TOKEN` (a Knowledge-only token, used when set and non-empty), `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PLATFORM_SECRET_KEY`.
 - The server checks that the instance belongs to the credential's organization and, for project-bound tokens, its project; it allowlists page-store operations and never accepts a connection string from the caller.

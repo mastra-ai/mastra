@@ -1,5 +1,4 @@
 import { createServer } from 'node:http';
-import { Mastra } from '@mastra/core/mastra';
 import {
   InMemoryStore,
   KnowledgeConflictError,
@@ -286,141 +285,18 @@ it("authenticates with the deploy's Knowledge-only token before the general Plat
   ]);
 });
 
-it("finds the project's instance on first use when no instance ID is given, then uses it", async () => {
+it('names the env var when no Knowledge instance ID is given', () => {
   vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
-  const requests: { method?: string; url?: string; authorization?: string }[] = [];
-  const server = createServer(async (req, res) => {
-    for await (const _chunk of req);
-    requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
-    res.setHeader('content-type', 'application/json');
-    res.end(
-      JSON.stringify(
-        req.url!.startsWith('/v1/knowledge?')
-          ? { id: 'kn_1', projectId: 'p1', basePath: '/v1/knowledge/kn_1' }
-          : { result: { pages: [] } },
-      ),
-    );
-  });
-  servers.push(server);
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
-  try {
-    const knowledge = new PlatformKnowledge({
-      apiUrl: `http://127.0.0.1:${address.port}`,
-      projectId: 'p1',
-      accessToken: 'sk_org',
-    });
-    expect(requests).toEqual([]);
-    const store = (await knowledge.getStorage())!;
-    await store.listPages({ read: 'all' });
-    await store.listPages({ read: 'all' });
-    expect(requests).toEqual([
-      { method: 'GET', url: '/v1/knowledge?projectId=p1', authorization: 'Bearer sk_org' },
-      { method: 'POST', url: '/v1/knowledge/kn_1/operations/listPages', authorization: 'Bearer sk_org' },
-      { method: 'POST', url: '/v1/knowledge/kn_1/operations/listPages', authorization: 'Bearer sk_org' },
-    ]);
-  } finally {
-    vi.unstubAllEnvs();
-  }
-});
-
-it.each([
-  [404, 'Knowledge instance not found'],
-  [409, 'Project has more than one Knowledge instance; pass an instanceId'],
-])(
-  'fails every operation when the project instance lookup answers %i, without guessing an instance',
-  async (status, detail) => {
-    vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
-    vi.stubEnv('MASTRA_PROJECT_ID', '');
-    const urls: string[] = [];
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
-      urls.push(String(input));
-      return new Response(JSON.stringify({ title: 'error', status, detail }), {
-        status,
-        headers: { 'content-type': 'application/problem+json' },
-      });
-    });
-    try {
-      const store = (await new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'jwt' }).getStorage())!;
-      const failure = {
-        message: `PlatformKnowledge could not find the project's Knowledge instance (${status}): ${detail}`,
-        status,
-      };
-      await expect(store.listPages({ read: 'all' })).rejects.toMatchObject(failure);
-      // Not cached: the next operation asks again, and still never reaches an instance route.
-      await expect(store.getScopeDeclarations()).rejects.toMatchObject(failure);
-      expect(urls).toEqual(['http://localhost/v1/knowledge', 'http://localhost/v1/knowledge']);
-    } finally {
-      vi.restoreAllMocks();
-      vi.unstubAllEnvs();
-    }
-  },
-);
-
-it('registers under the same id on every boot when no id is given', () => {
-  const options = { apiUrl: 'http://localhost', accessToken: 'jwt' };
-  expect(new PlatformKnowledge(options).id).toBe('platform-knowledge');
-  expect(new PlatformKnowledge(options).id).toBe(new PlatformKnowledge(options).id);
-  expect(new PlatformKnowledge({ ...options, id: 'team' }).id).toBe('team');
-});
-
-it('looks the instance up once when the first operations run in parallel', async () => {
-  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
-  vi.stubEnv('MASTRA_PROJECT_ID', '');
-  const urls: string[] = [];
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
-    urls.push(String(input));
-    return new Response(
-      JSON.stringify(String(input).endsWith('/v1/knowledge') ? { id: 'kn_1' } : { result: { pages: [] } }),
-    );
-  });
-  try {
-    const store = (await new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'jwt' }).getStorage())!;
-    await Promise.all([store.listPages({ read: 'all' }), store.listPages({ read: 'all' })]);
-    expect(urls.filter(url => url === 'http://localhost/v1/knowledge')).toHaveLength(1);
-    expect(urls).toHaveLength(3);
-  } finally {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-  }
-});
-
-it('keeps a non-JSON lookup failure body out of the error beyond a short snippet', async () => {
-  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
-  vi.stubEnv('MASTRA_PROJECT_ID', '');
-  const page = `<html>${'x'.repeat(5000)}</html>`;
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(page, { status: 502 }));
-  try {
-    const store = (await new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'jwt' }).getStorage())!;
-    const error = (await store.listPages({ read: 'all' }).catch(e => e)) as Error & { status?: number };
-    expect(error.status).toBe(502);
-    expect(error.message).toBe(
-      `PlatformKnowledge could not find the project's Knowledge instance (502): ${page.slice(0, 200)}…`,
-    );
-  } finally {
-    vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-  }
-});
-
-it.each([
-  ['explicit instances', { instanceId: 'kn_1' }, { instanceId: 'kn_1' }, true],
-  ['discovered instances of one project', { projectId: 'project-1' }, { projectId: 'project-1' }, true],
-  ['discovered instances of one project token', {}, {}, true],
-  ['discovered instances of different projects', { projectId: 'project-1' }, { projectId: 'project-2' }, false],
-  ['discovered instances of different project tokens', {}, { accessToken: 'other-token' }, false],
-  // Not detectable without a lookup: the token may name the same project.
-  ['a projectId lookup and a project token lookup', { projectId: 'project-1' }, {}, false],
-])('shared-backend guard on two PlatformKnowledge: %s', (_name, first, second, rejected) => {
-  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', '');
-  vi.stubEnv('MASTRA_PROJECT_ID', '');
   onTestFinished(() => vi.unstubAllEnvs());
-  const mastra = new Mastra({ logger: false });
-  const make = (id: string, options: object) =>
-    new PlatformKnowledge({ id, apiUrl: 'http://localhost', accessToken: 'token', ...options });
-  mastra.addKnowledge(make('first', first));
-  const register = () => mastra.addKnowledge(make('second', second));
-  if (rejected) expect(register).toThrow(/cannot share a storage backend/);
-  else expect(register).not.toThrow();
+  expect(() => new PlatformKnowledge({ apiUrl: 'http://localhost', accessToken: 'token' })).toThrow(
+    'PlatformKnowledge requires a Knowledge instance ID: set MASTRA_KNOWLEDGE_INSTANCE_ID or pass instanceId',
+  );
+});
+
+it('takes the instance ID from MASTRA_KNOWLEDGE_INSTANCE_ID and registers under the same id on every boot', () => {
+  vi.stubEnv('MASTRA_KNOWLEDGE_INSTANCE_ID', 'kn_env');
+  onTestFinished(() => vi.unstubAllEnvs());
+  const options = { apiUrl: 'http://localhost', accessToken: 'token' };
+  expect(new PlatformKnowledge(options).id).toBe('platform-knowledge');
+  expect(new PlatformKnowledge({ ...options, id: 'team' }).id).toBe('team');
 });
