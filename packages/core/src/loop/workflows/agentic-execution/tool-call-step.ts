@@ -18,7 +18,12 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getToolTitle } from '../../../tools/tool-title';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
-import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
+import {
+  getModelFacingValidationError,
+  resolveToolOutputValidationSchema,
+  validateToolOutput,
+} from '../../../tools/validation';
+import type { ModelFacingValidationError } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -55,6 +60,7 @@ import {
   applyBackgroundToolResult,
 } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
+import { withAgentWorkflowToolMarker } from '../../shared/steps/tool-result-commit-core';
 import { ownToolCallSuspendData, resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
@@ -843,7 +849,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               logger,
             });
             if (rejection) {
-              return { result: rejection.output, ...inputData };
+              // A failed input check here is Mastra's own validation error: carry it so mapping skips the mapper.
+              return {
+                result: rejection.output,
+                ...inputData,
+                validationError: getModelFacingValidationError(rejection.output),
+              };
             }
           }
           if (!approvalDecision) {
@@ -1163,10 +1174,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // been reconciled into the message list (or reconciliation threw).
         // Lives outside `taskContext` because the `awaited` disposition below
         // must block the turn on it after the ladder returns.
-        let resolveReconciliation!: (outcome: { error?: unknown }) => void;
-        const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
-          resolveReconciliation = resolve;
-        });
+        // `validationError` is read from the result in `onResult`, in the process that ran the
+        // task, so an awaited call can carry it past the step boundary.
+        let resolveReconciliation!: (outcome: {
+          error?: unknown;
+          validationError?: ModelFacingValidationError;
+        }) => void;
+        const reconciliationComplete = new Promise<{ error?: unknown; validationError?: ModelFacingValidationError }>(
+          resolve => {
+            resolveReconciliation = resolve;
+          },
+        );
         const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
           ...inputData.providerMetadata,
           mastra: {
@@ -1430,6 +1448,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // the research was still running.
               onResult: async params => {
                 try {
+                  // Marked so a result recovery appends still reads as a workflow result (#30219).
+                  const baseProviderMetadata = withAgentWorkflowToolMarker(
+                    inputData.providerMetadata as ProviderMetadata | undefined,
+                    resolvedTool,
+                  ) as ProviderMetadata | undefined;
                   await applyBackgroundToolResult({
                     params,
                     currentRunId: runId,
@@ -1437,7 +1460,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args,
                     messageList,
                     approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                    baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                    baseProviderMetadata,
                     transformForTranscript: async result => {
                       const transformCarrier = await applyToolPayloadTransformToChunk(
                         {
@@ -1477,7 +1500,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           ? transcriptResultTransform.transformed
                           : result,
                         providerMetadata: withToolPayloadTransformProviderMetadata(
-                          inputData.providerMetadata as ProviderMetadata | undefined,
+                          baseProviderMetadata,
                           transformCarrier.metadata,
                         ) as ProviderMetadata | undefined,
                       };
@@ -1489,7 +1512,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     flush: flushBackgroundMessages,
                   });
 
-                  resolveReconciliation({});
+                  resolveReconciliation({
+                    validationError:
+                      params.status === 'completed' ? getModelFacingValidationError(params.result) : undefined,
+                  });
                   void notifyBackgroundWorkTerminal(mastra, {
                     originRunId: runId,
                     originToolCallId: params.toolCallId,
@@ -1558,11 +1584,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (bgOutcome.disposition === 'awaited') {
             const completedTask = await bgOutcome.waitForCompletion({ abortSignal });
             // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+            let reconciledValidationError: ModelFacingValidationError | undefined;
             if (completedTask.status !== 'cancelled') {
               const reconciliation = await reconciliationComplete;
               if (reconciliation.error) {
                 throw reconciliation.error;
               }
+              reconciledValidationError = reconciliation.validationError;
             }
 
             if (completedTask.status !== 'completed') {
@@ -1580,6 +1608,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ...inputData,
               providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),
+              // The stored task result is a copy without the marker; onResult read it from the original.
+              validationError: reconciledValidationError,
             };
           }
           if (bgOutcome.status === 'started') {
@@ -1639,7 +1669,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           return { error: serializeToolError(outcome.error), ...inputData };
         }
 
-        return { result: outcome.result, ...inputData, ...(approvalGrant ?? {}) };
+        return {
+          result: outcome.result,
+          ...inputData,
+          ...(approvalGrant ?? {}),
+          // Read here, in the process that ran the tool: the marker does not survive serialization.
+          // Read the marker from the live value: ensureSerializable may return a JSON copy without it.
+          validationError: getModelFacingValidationError(outcome.rawResult),
+        };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {

@@ -443,7 +443,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/observability',
+          href: '/docs/mastra-platform/observability/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
@@ -689,7 +689,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/deploy',
+          href: '/docs/mastra-platform/deploy/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {

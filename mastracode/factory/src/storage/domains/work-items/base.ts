@@ -123,6 +123,8 @@ export interface ExternalWorkItemSource {
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
 export const FACTORY_RULE_MATERIALIZATION_KEY = 'factoryRuleMaterializationKey';
 export const FACTORY_PULL_REQUEST_RECONCILIATION_KEY = 'factoryPullRequestReconciliation';
+/** Reason of the `stale` rejection a transition commit gets when the card's revision moved on. */
+export const REVISION_CONFLICT_REASON = 'The work item changed before this transition committed.';
 
 export interface WorkItemStageEntry {
   stage: WorkItemStage;
@@ -2430,7 +2432,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             item = existing;
             if (existing.revision !== input.expectedRevision) {
               code = 'stale';
-              reason = 'The work item changed before this transition committed.';
+              reason = REVISION_CONFLICT_REASON;
               return null;
             }
             if (input.evaluation.outcome === 'rejected') {
