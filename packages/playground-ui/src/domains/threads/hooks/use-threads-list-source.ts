@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQueryThreads } from '@mastra/react/hooks/traces';
 import type { ThreadQueryArgs, ThreadRow } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
-import { slideWindow, useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
+import { useListAnchor, useListHeadPoll, windowEndingAt } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
 import { OBSERVABILITY_LIST_HEAD_LIMIT } from '@/domains/observability/list-polling';
 import { mergeHeadRows } from '@/domains/observability/merge-head-rows';
@@ -11,6 +11,8 @@ export type UseThreadsListSourceArgs = {
   query: ThreadQueryArgs;
   /** The window ends at "now" (a preset rather than a custom range): only then can threads still change. */
   rolling: boolean;
+  /** The user picked the start (a custom range with no end): polls and reloads keep it rather than sliding it. */
+  fixedStart?: boolean;
   /** Polls for threads that started or got a new trace since the list loaded. Defaults to true. */
   autoRefetch?: boolean;
   limit?: number;
@@ -55,12 +57,13 @@ function compareThreads(orderBy: ThreadQueryArgs['orderBy']) {
 export function useThreadsListSource({
   query,
   rolling,
+  fixedStart = false,
   autoRefetch = true,
   limit,
   enabled = true,
 }: UseThreadsListSourceArgs) {
   const client = useMastraClient();
-  const { anchorWindow, reanchor } = useListAnchor(query);
+  const { anchorWindow, reanchor } = useListAnchor(query, fixedStart);
 
   const listQuery = useMemo<ThreadQueryArgs>(
     () => (anchorWindow ? { ...query, timeRange: withWindow(query.timeRange, anchorWindow) } : query),
@@ -73,7 +76,7 @@ export function useThreadsListSource({
     fetchHead: async to => {
       const result = await client.queryTraceThreads({
         ...query,
-        timeRange: withWindow(query.timeRange, slideWindow(windowOf(query.timeRange), to)),
+        timeRange: withWindow(query.timeRange, windowEndingAt(windowOf(query.timeRange), to, fixedStart)),
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });
