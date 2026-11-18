@@ -737,6 +737,20 @@ describe('MastraFactory.prepare', () => {
     );
   });
 
+  it('still mounts the { key, instance } form and serves its reads under that key', async () => {
+    const instance = new Knowledge({ id: 'shared', description: 'Factory knowledge', scopes: {} });
+    const knowledge = { key: 'legacy', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+    assembleFactoryApiRoutesSpy.mockClear();
+    (config.buildApiRoutes as (deps: object) => ApiRoute[])({ controller: sessionNotifierStub, authStorage: {} });
+
+    expect(config.knowledge).toBe(knowledge);
+    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ knowledgeEnabled: true, knowledgeKey: 'legacy' }),
+    );
+  });
+
   it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
 

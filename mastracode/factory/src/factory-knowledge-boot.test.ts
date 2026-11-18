@@ -12,7 +12,10 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-it("boots with a bare Knowledge instance and serves the Knowledge page from that instance's storage", async () => {
+it.each([
+  { form: 'a bare Knowledge instance', key: 'shared', wrap: (k: Knowledge) => k },
+  { form: 'the { key, instance } form', key: 'legacy', wrap: (k: Knowledge) => ({ key: 'legacy', instance: k }) },
+])("boots with $form and serves the Knowledge page from that instance's storage", async ({ key, wrap }) => {
   vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
   onTestFinished(() => {
     vi.unstubAllEnvs();
@@ -31,7 +34,7 @@ it("boots with a bare Knowledge instance and serves the Knowledge page from that
     storage,
     auth: null,
     mcp: false,
-    knowledge,
+    knowledge: wrap(knowledge),
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
   onTestFinished(async () => {
@@ -39,7 +42,7 @@ it("boots with a bare Knowledge instance and serves the Knowledge page from that
     await storage.close();
   });
   const mastra = new Mastra(await factory.prepare());
-  expect(mastra.getKnowledge('shared')).toBe(knowledge);
+  expect(mastra.getKnowledge(key)).toBe(knowledge);
   const app = new Hono();
   app.use('*', async (context, next) => {
     context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);

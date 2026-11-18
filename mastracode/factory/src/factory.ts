@@ -32,7 +32,7 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -303,9 +303,10 @@ export interface MastraFactoryConfig {
   vector?: MastraVector;
   /**
    * Host-owned Knowledge runtime. Factory registers this exact instance under its `id` and uses that
-   * key for its read surfaces. Omitted, Knowledge stays off.
+   * key for its read surfaces; pass `{ key, instance }` to register it under another key. Omitted,
+   * Knowledge stays off.
    */
-  knowledge?: Knowledge;
+  knowledge?: Knowledge | { key: string; instance: Knowledge };
   /**
    * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `['org:acme']`. With an
    * `org:` here, every project's sessions and Knowledge page act with these alone instead of their own
@@ -2354,7 +2355,10 @@ export class MastraFactory {
             mcpEnabled,
             deploymentModelProviders,
             skills: this.#skills,
-            knowledgeKey: this.#config.knowledge?.id,
+            knowledgeKey:
+              this.#config.knowledge instanceof Knowledge
+                ? this.#config.knowledge.id
+                : this.#config.knowledge?.key.trim(),
             knowledgeScopes: this.#config.scopes,
             configVersion,
             boardRegistry: boards,
