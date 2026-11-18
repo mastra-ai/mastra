@@ -240,3 +240,40 @@ it('keeps page and listing pins apart on the same page through the hosted operat
   await store.removePinAudience({ pageId: page.id, kind: 'list', audience: ['org:acme'], removedBy: 'agent' });
   expect(await pins()).toEqual([{ kind: 'page', depth: undefined }]);
 });
+
+it("authenticates with the deploy's Knowledge-only token before the general Platform token", async () => {
+  const authorizations: (string | null)[] = [];
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    authorizations.push(new Headers(init?.headers).get('authorization'));
+    return new Response(JSON.stringify({ result: { pages: [] } }), { headers: { 'content-type': 'application/json' } });
+  });
+  const keys = ['MASTRA_KNOWLEDGE_ACCESS_TOKEN', 'MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    for (const key of keys) delete process.env[key];
+    const list = async (options = {}) =>
+      (await new PlatformKnowledge({ instanceId: 'kn_1', ...options }).getStorage()).listPages({ read: 'all' });
+    // A deploy with Platform observability off gets only the Knowledge token.
+    process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN = 'knowledge-token';
+    await list();
+    // With observability on it gets both; the narrower one is used.
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'platform-token';
+    await list();
+    // An explicit token still wins.
+    await list({ accessToken: 'explicit' });
+    delete process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN;
+    await list();
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+    fetchSpy.mockRestore();
+  }
+  expect(authorizations).toEqual([
+    'Bearer knowledge-token',
+    'Bearer knowledge-token',
+    'Bearer explicit',
+    'Bearer platform-token',
+  ]);
+});
