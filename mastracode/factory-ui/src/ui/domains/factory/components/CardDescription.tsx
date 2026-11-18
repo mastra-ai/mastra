@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useId, useState } from 'react';
@@ -24,18 +23,6 @@ function markClamped(content: HTMLDivElement) {
   });
   observer.observe(content);
   return () => observer.disconnect();
-}
-
-const PLACEHOLDER_LINES = ['w-full', 'w-11/12', 'w-full', 'w-4/5', 'w-2/3'];
-
-export function CardDescriptionSkeleton() {
-  return (
-    <div aria-hidden className="h-(--clamp) overflow-hidden px-2" style={clampStyle}>
-      {PLACEHOLDER_LINES.map((width, line) => (
-        <SkeletonText key={line} line="text-caption" className={cn(width, 'motion-reduce:before:animate-none')} />
-      ))}
-    </div>
-  );
 }
 
 export function CardDescription({
