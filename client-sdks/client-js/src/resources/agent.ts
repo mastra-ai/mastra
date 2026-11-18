@@ -118,6 +118,13 @@ type SignalRuntimeOptionsEntry = {
   timeout: ReturnType<typeof setTimeout>;
 };
 
+/**
+ * A streamed response whose request can be stopped on its own. Stopping the request is not
+ * the same as cancelling the stream: cancelling detaches the observer, which also ends a
+ * run-abort retry still waiting for the server's acknowledgement (#30788 review).
+ */
+type StreamedResponse = Response & { stopSource?: (reason?: unknown) => void };
+
 const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
 const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
 
@@ -2339,6 +2346,10 @@ export class Agent extends BaseResource {
     const callerSignal: AbortSignal | undefined = processedParams.abortSignal;
     callerSignal?.throwIfAborted();
     const transportAbort = new AbortController();
+    // Stops the request without detaching the stream. A failed chunk handler must not
+    // cancel a stream the consumer owns: that detach also drops a pending run-abort
+    // retry still waiting for the server's acknowledgement (#30788 review).
+    const producerAbort = new AbortController();
     const cancellationAbort = new AbortController();
     const detachSignal = signal;
     signal = mergeAbortSignals(detachSignal, transportAbort.signal);
@@ -2388,8 +2399,11 @@ export class Agent extends BaseResource {
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
       detachSignal?.removeEventListener('abort', stopCancellation);
-      clearTimeout(cancellationTimer);
-      stopCancellation();
+      // A run-abort retry belongs to the caller's abort, not to this stream: it keeps
+      // retrying until the server acknowledges it or the 10s cap fires. Tearing the
+      // stream down must not drop it, or a failed chunk handler would leave the run
+      // running with no acknowledgement (#30788 review). A consumer detaching the
+      // stream still stops it through the detach listener above.
     };
     detachSignal?.addEventListener('abort', stopCancellation, { once: true });
     if (detachSignal?.aborted) stopCancellation();
@@ -2418,7 +2432,9 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: requestBody,
       stream: true,
-      signal,
+      // The producer abort stops this request only; the merged `signal` stays the
+      // detach signal that also ends a pending run-abort retry.
+      signal: mergeAbortSignals(signal, producerAbort.signal),
     }).catch(error => {
       cleanupCancellation();
       throw error;
@@ -2840,6 +2856,9 @@ export class Agent extends BaseResource {
       }
     }
 
+    // Let the caller stop the request that feeds this stream. Doing that instead of
+    // cancelling the returned stream keeps a pending run-abort retry alive (#30788 review).
+    (response as StreamedResponse).stopSource = reason => producerAbort.abort(reason);
     return response;
   }
 
@@ -3108,6 +3127,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 
@@ -3225,6 +3247,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 
@@ -3325,6 +3350,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 
@@ -3419,6 +3447,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 
@@ -3561,6 +3592,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 
@@ -3692,6 +3726,9 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        // Stop the request itself: cancelling a stream a consumer owns detaches
+        // the observer and can drop a pending run-abort retry (#30788 review).
+        stopSource: (response as StreamedResponse).stopSource,
       });
     };
 

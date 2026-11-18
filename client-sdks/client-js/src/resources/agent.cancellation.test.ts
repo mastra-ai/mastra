@@ -186,4 +186,25 @@ describe('stream execution cancellation over HTTP', () => {
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(aborts).toHaveLength(count);
   });
+
+  it('keeps an unacknowledged run abort retrying when a chunk handler fails (#30788)', async () => {
+    attemptsBeforeAck = Infinity;
+    firstChunk = true;
+    const ac = new AbortController();
+    const response = await start('stream', ac.signal);
+    const reading = response.processDataStream({
+      onChunk: async () => {
+        // A caller aborts while this handler is still running, so a run-abort retry is
+        // pending when the handler fails.
+        ac.abort();
+        await expect.poll(() => aborts.length).toBeGreaterThan(0);
+        throw new Error('handler failed');
+      },
+    });
+    await expect(reading).rejects.toThrow('handler failed');
+
+    // The retry belongs to the caller's abort, so a failed handler must not drop it.
+    const count = aborts.length;
+    await expect.poll(() => aborts.length, { timeout: 2_000 }).toBeGreaterThan(count);
+  });
 });

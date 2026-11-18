@@ -156,6 +156,31 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       ).rejects.toBe(failure);
       expect(stream.locked).toBe(false);
     });
+
+    it('returns the onChunk error while the source is still cancelling (#30788)', async () => {
+      let cancelCalled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\n`));
+        },
+        cancel() {
+          cancelCalled = true;
+          // Cancelling a stream whose sibling is still open never settles.
+          return new Promise<void>(() => {});
+        },
+      });
+      const failure = new Error('handler failed');
+      await expect(
+        process({
+          stream,
+          onChunk: () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
+      expect(cancelCalled).toBe(true);
+      expect(stream.locked).toBe(false);
+    });
   });
 }
 
@@ -241,6 +266,25 @@ describe('MastraClient agent.stream SSE readers', () => {
       }),
     ).rejects.toThrow('handler failed');
     await disconnected;
+  });
+
+  it('returns the onChunk error while a clone of the response is open (#30788)', async () => {
+    const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel').stream('hi');
+    if (!result.body) throw new Error('Expected a response body');
+    // The clone keeps the response open, so cancelling through it cannot settle. A hang
+    // here fails the test, and with it the handler error never reaches the caller.
+    const clone = result.clone();
+    try {
+      await expect(
+        result.processDataStream({
+          onChunk: () => {
+            throw new Error('handler failed');
+          },
+        }),
+      ).rejects.toThrow('handler failed');
+    } finally {
+      await clone.body?.cancel().catch(() => {});
+    }
   });
 
   it('flushes an unterminated final event on the returned stream and removes DONE', async () => {
