@@ -2,7 +2,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -29,6 +28,11 @@ export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 export { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
 
 const BODY_TOO_LARGE = Symbol('mastra.elysia.bodyTooLarge');
+const EMPTY_JSON_BODY = Symbol('mastra.elysia.emptyJsonBody');
+
+class InvalidJsonBody {
+  constructor(readonly message: string) {}
+}
 
 async function readBodyWithLimit(body: ReadableStream<Uint8Array>, maxSize: number): Promise<Uint8Array | null> {
   const reader = body.getReader();
@@ -54,22 +58,44 @@ async function readBodyWithLimit(body: ReadableStream<Uint8Array>, maxSize: numb
 }
 
 /**
- * Route-level Elysia parse hook that enforces the body limit before Elysia's
- * default parsers buffer the request. Oversized bodies are marked with
- * BODY_TOO_LARGE (rejected with 413 by the route handler) without being read in full.
+ * Route-level Elysia parse hook for body methods.
+ *
+ * Parses JSON bodies itself: under `@elysiajs/node` an empty request still has a body stream, so Elysia's default
+ * JSON parser throws on it and the request fails with 400 before the route runs. An empty JSON body comes back as
+ * EMPTY_JSON_BODY and malformed JSON as InvalidJsonBody, both resolved by the route handler.
+ *
+ * With a `maxSize`, also enforces the body limit before anything buffers the request. Oversized bodies are marked
+ * with BODY_TOO_LARGE (rejected with 413 by the route handler) without being read in full.
  */
-function createBodyLimitParser(maxSize: number) {
+function createBodyParser(maxSize: number | undefined) {
   return async (ctx: any) => {
     const request: Request = ctx.request;
     const contentLength = request.headers.get('content-length');
     // Reject a declared oversized body without reading it. A declared size within
     // the limit is still read with the cap, since app.handle() accepts a Request
     // whose stream need not match its Content-Length header.
-    if (contentLength !== null && parseInt(contentLength, 10) > maxSize) return BODY_TOO_LARGE;
-    if (!request.body) return undefined;
+    if (maxSize !== undefined && contentLength !== null && parseInt(contentLength, 10) > maxSize) {
+      return BODY_TOO_LARGE;
+    }
 
-    const bytes = await readBodyWithLimit(request.body, maxSize);
+    const isJson = (request.headers.get('content-type') ?? '').includes('application/json');
+    if (!request.body || (!isJson && maxSize === undefined)) return undefined;
+
+    const bytes =
+      maxSize === undefined
+        ? new Uint8Array(await request.arrayBuffer())
+        : await readBodyWithLimit(request.body, maxSize);
     if (!bytes) return BODY_TOO_LARGE;
+
+    if (isJson) {
+      const text = new TextDecoder().decode(bytes);
+      if (text.trim().length === 0) return EMPTY_JSON_BODY;
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return new InvalidJsonBody(error instanceof Error ? error.message : 'Invalid JSON in request body');
+      }
+    }
 
     // Hand the bounded body back to Elysia's default parsers.
     ctx.request = new Request(request.url, {
@@ -279,22 +305,6 @@ function createDatastreamBody(
   });
 }
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/elysia] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
-
 // Export type definitions for Elysia app configuration
 export interface ElysiaContext {
   mastra: Mastra;
@@ -476,7 +486,9 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          controller.error(error);
+          // Close instead of erroring: @elysiajs/node destroys the socket on an errored body, dropping the frames
+          // already enqueued and, for an early error, the status line too.
+          controller.close();
         }
       },
       cancel: reason => {
@@ -595,6 +607,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     return result;
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, response: Response, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -632,7 +649,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
 
-      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
       // `toReqRes` builds a fresh IncomingMessage, so bridge the principal auth resolved.
       await applyMcpRequestAuth({ req, requestContext: request.requestContext, setRequestAuth });
@@ -675,7 +692,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       await applyMcpRequestAuth({
         req,
         requestContext: request.requestContext,
-        setRequestAuth: this.mcpOptions?.setRequestAuth,
+        setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
       });
 
       server
@@ -748,20 +765,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         });
       }
 
-      // Check if any auth is configured (studio or server) for RBAC
-      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-      if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
-          if (permissionError) {
-            return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
-              status: permissionError.status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-        }
+      // Check route permission (RBAC). Elysia checks it before schema validation.
+      const permissionError = this.checkRouteRBAC(route, ctx.requestContext);
+      if (permissionError) {
+        return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+          status: permissionError.status,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Extract params - remap from normalized param names back to original
@@ -790,25 +800,15 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             };
           }
         } else if (contentType.includes('application/json')) {
-          // Elysia pre-parses JSON body
-          body = ctx.body;
-
-          // Validate that body is valid JSON if provided
-          if (body === undefined && contentType.includes('application/json')) {
-            const bodyText = await ctx.request.clone().text();
-            if (bodyText && bodyText.trim().length > 0) {
-              try {
-                body = JSON.parse(bodyText);
-              } catch (error) {
-                this.mastra.getLogger()?.error('Failed to parse JSON body', {
-                  error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-                });
-                bodyParseError = {
-                  message: error instanceof Error ? error.message : 'Invalid JSON in request body',
-                };
-              }
-            }
+          // Parsed by the route's parse hook (createBodyParser)
+          if (ctx.body instanceof InvalidJsonBody) {
+            this.mastra.getLogger()?.error('Failed to parse JSON body', { error: { message: ctx.body.message } });
+            bodyParseError = { message: ctx.body.message };
+          } else if (ctx.body !== EMPTY_JSON_BODY) {
+            body = ctx.body;
           }
+          // createForwardRequest (MCP routes) reads ctx.body later and must not see the parse hook's markers.
+          ctx.body = body;
         }
       }
 
@@ -970,8 +970,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
     const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method);
-    if (isBodyMethod && maxSize !== undefined) {
-      app[method](normalizedPath, handler, { parse: createBodyLimitParser(maxSize) });
+    if (isBodyMethod) {
+      app[method](normalizedPath, handler, { parse: createBodyParser(maxSize) });
     } else {
       app[method](normalizedPath, handler);
     }
@@ -987,25 +987,17 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       (this.app as ElysiaApp)[method](customNormalizedPath, async (ctx: any) => {
         const path = new URL(ctx.request.url).pathname;
         const requestMethod = ctx.request.method;
-        const matchedRoute = findMatchingCustomRoute(
-          path,
-          requestMethod,
-          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-        );
-        const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, requestMethod, this.customRouteAuthConfig);
+        // Check auth against the custom route the custom-route app will actually run for
+        // this URL, which can differ from the route Elysia matched.
+        const {
+          match: matchedRoute,
+          requiresAuth: shouldRunCustomRouteAuth,
+          serverRoute,
+          customRouteAuthConfig,
+        } = this.resolveCustomRouteAuth(ctx.request.url, requestMethod, path, route);
         const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
         if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-          const serverRoute: ServerRoute = {
-            method: (matchedRoute?.route.method ?? requestMethod) as any,
-            path: matchedRoute?.route.path ?? path,
-            responseType: 'json',
-            handler: async () => {},
-            requiresAuth: matchedRoute?.route.requiresAuth,
-            requiresPermission: matchedRoute?.route.requiresPermission,
-            fga: matchedRoute?.route.fga,
-          };
-
           if (shouldRunCustomRouteAuth) {
             const authError = await this.checkRouteAuth(serverRoute, {
               path,
@@ -1015,6 +1007,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               requestContext: ctx.requestContext,
               request: ctx.request,
               buildAuthorizeContext: () => ctx,
+              customRouteAuthConfig,
             });
 
             if (authError) {
@@ -1024,28 +1017,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               });
             }
 
-            // Check if any auth is configured (studio or server) for RBAC
-            const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-            if (hasAuth) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
-                const permissionError = this.checkRoutePermission(
-                  serverRoute,
-                  userPermissions,
-                  hasPermission,
-                  ctx.requestContext,
-                );
-                if (permissionError) {
-                  return new Response(
-                    JSON.stringify({ error: permissionError.error, message: permissionError.message }),
-                    {
-                      status: permissionError.status,
-                      headers: { 'Content-Type': 'application/json' },
-                    },
-                  );
-                }
-              }
+            const permissionError = this.checkRouteRBAC(serverRoute, ctx.requestContext);
+            if (permissionError) {
+              return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+                status: permissionError.status,
+                headers: { 'Content-Type': 'application/json' },
+              });
             }
           }
 

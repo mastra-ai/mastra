@@ -99,6 +99,22 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     }
   });
 
+  it('keeps consumeStream working after the destructured fullStream is fully read', async () => {
+    const { llm, result, output } = await streamHello();
+    const { fullStream, consumeStream, text } = output;
+
+    try {
+      for await (const _chunk of fullStream as AsyncIterable<unknown>) {
+        // drain
+      }
+      await expect(consumeStream()).resolves.toBeUndefined();
+      expect(await text).toBe('Hello there!');
+      expect(llm.getRequests()).toHaveLength(1);
+    } finally {
+      result.cleanup?.();
+    }
+  });
+
   it('exposes the provider request after destructuring', async () => {
     const { result, output } = await streamHello();
     const { request } = output;
@@ -496,6 +512,21 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
       // Drain through the output itself so a failed destructured call does
       // not leave the run hitting the mock after it shuts down.
       await output.consumeStream();
+      result.cleanup?.();
+    }
+  });
+
+  it('keeps consumeStream working after the whole stream was already read', async () => {
+    const { result, output } = await streamHello();
+    const { fullStream, consumeStream } = output;
+
+    try {
+      for await (const _chunk of fullStream as AsyncIterable<unknown>) {
+        // drain
+      }
+      await expect(consumeStream()).resolves.toBeUndefined();
+      expect(await output.text).toBe('Hello there!');
+    } finally {
       result.cleanup?.();
     }
   });

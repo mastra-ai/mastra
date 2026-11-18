@@ -477,7 +477,7 @@ The `.map()` method provides additional helper functions for more complex mappin
 - [`getInitData<any>()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
 - [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
-### Parallel and Branch outputs
+### Parallel and branch outputs
 
 Both `.parallel()` and `.branch()` return an object keyed by child step `id`. Use `.map()` to reshape that output for the next operation. This example maps two parallel results into the shared input required by `.branch()`:
 
@@ -556,7 +556,7 @@ Workflows support different looping methods that let you repeat steps until or w
 
 ### Looping with `.dountil()`
 
-Use `.dountil()` to run a step repeatedly until a condition becomes true.
+Use `.dountil()` to run a step until a condition becomes true.
 
 ```mermaid
 flowchart LR
@@ -592,7 +592,7 @@ export const testWorkflow = createWorkflow({})
 
 ### Looping with `.dowhile()`
 
-Use `.dowhile()` to run a step repeatedly while a condition remains true.
+Use `.dowhile()` to run a step while a condition remains true.
 
 ```mermaid
 flowchart LR
@@ -1056,7 +1056,7 @@ workflow.parallel([pipelineA, pipelineB])
 
 | Pattern | What happens | Common use case |
 | - | - | - |
-| `.then().then()` | Sequential steps | Simple pipelines |
+| `.then().then()` | Sequential steps | Short pipelines |
 | `.parallel().then()` | Run in parallel, then combine | Fan-out/fan-in |
 | `.foreach().then()` | Process all items, then aggregate | Map-reduce |
 | `.foreach().foreach()` | Creates array of arrays | Avoid - use nested workflow or `.map()` with `.flat()` |

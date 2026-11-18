@@ -20,7 +20,7 @@ export function MetricsCardTotal({
   className?: string;
 }) {
   return (
-    <span className={cn('order-last shrink-0 text-body font-medium text-foreground tabular-nums', className)}>
+    <span className={cn('order-last shrink-0 text-subheading text-foreground tabular-nums', className)}>
       <TotalValue value={value} isLoading={isLoading} />
     </span>
   );

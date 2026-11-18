@@ -106,12 +106,14 @@ export async function runResumeStreamUntilIdle<OUTPUT>(
   resumeData: any,
   streamOptions: (Record<string, any> & { maxIdleMs?: number; runId?: string; toolCallId?: string }) | undefined,
   deps: StreamUntilIdleDeps,
+  // Replaces the initial resume, for resumes that are not a plain `resumeStream()` call.
+  resume?: (opts: Record<string, any>) => Promise<MastraModelOutput<OUTPUT>>,
 ): Promise<MastraModelOutput<OUTPUT>> {
   return runIdleLoop<typeof agent, MastraModelOutput<OUTPUT>, MastraModelOutput<OUTPUT>>(
     agent,
     streamOptions,
     deps,
-    opts => agent.resumeStream(resumeData, opts as any) as Promise<MastraModelOutput<OUTPUT>>,
+    opts => resume?.(opts) ?? (agent.resumeStream(resumeData, opts as any) as Promise<MastraModelOutput<OUTPUT>>),
     opts => (agent.stream as any)([], opts) as Promise<{ fullStream: ReadableStream<any> }>,
     (first, ctx) => {
       if (!ctx) return first;

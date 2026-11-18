@@ -1,6 +1,7 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { Ajv } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
@@ -208,13 +209,23 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
     if (!this.#ajvValidateCache) {
       const is2020 = typeof this.#schema.$schema === 'string' && this.#schema.$schema.includes('2020-12');
       const AjvClass = is2020 ? Ajv2020 : Ajv;
-      this.#ajvInstance = new AjvClass({
+      const ajv: Ajv = new AjvClass({
         allErrors: true,
         strict: false,
         ...this.#options.ajvOptions,
       });
 
-      this.#ajvValidateCache = this.#ajvInstance.compile(this.#schema);
+      // Ajv ignores `format` (email, uri, date-time, ...) unless the formats are registered,
+      // so an invalid value passes validation and Ajv warns about the unknown format.
+      addFormats(ajv);
+
+      // addFormats overwrites same-named formats, so reapply the caller's definitions on top.
+      for (const [name, format] of Object.entries(this.#options.ajvOptions?.formats ?? {})) {
+        if (format !== undefined) ajv.addFormat(name, format);
+      }
+
+      this.#ajvInstance = ajv;
+      this.#ajvValidateCache = ajv.compile(this.#schema);
     }
     return this.#ajvValidateCache;
   }

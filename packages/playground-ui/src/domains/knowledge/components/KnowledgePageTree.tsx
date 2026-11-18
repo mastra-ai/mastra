@@ -1,14 +1,16 @@
-import { FileText, Folder, Pin } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { scopeTitle } from '../lib/pageAddress';
+import { scopeSource, scopeTitle } from '../lib/pageAddress';
 import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
 import { prefersMotion } from '../lib/useLeavingNodes';
 import type { KnowledgePagePayload } from '../pageTypes';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
 
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconPin } from '@/ds/icons/central/IconPin';
 import { cn } from '@/utils/cn';
 
 /**
@@ -257,13 +259,13 @@ export function KnowledgePageTree({
               ) : (
                 <span className="size-3 shrink-0" aria-hidden />
               )}
-              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-3.5" aria-hidden>
-                {row.page.isScope && scopeTitle(row.page) !== row.page.name ? (
+              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-icon-sm" aria-hidden>
+                {scopeSource(row.page)?.icon ? (
                   <KnowledgeSourceIcon page={row.page} />
                 ) : row.hasChildren ? (
-                  <Folder />
+                  <IconFolder1 />
                 ) : (
-                  <FileText />
+                  <IconFileText />
                 )}
               </span>
               <span className={cn('min-w-0 flex-1 truncate', row.page.isScope && 'font-medium')}>
@@ -279,7 +281,7 @@ export function KnowledgePageTree({
                 </span>
               ) : null}
               {pinned.has(row.page.id) ? (
-                <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
+                <IconPin className="size-icon-xs shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
               ) : null}
               {row.page.isScope && row.page.address && row.page.address !== row.page.name ? (
                 <span

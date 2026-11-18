@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -9,10 +9,10 @@ function routesPath(factoryProjectId: string, suffix = '') {
   return `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes${suffix}`;
 }
 
-async function sendRouteRequest<T>(
+export async function sendRouteRequest<T>(
   baseUrl: string,
   path: string,
-  init?: { method: 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
+  init?: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown },
 ): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     method: init?.method ?? 'GET',
@@ -36,18 +36,48 @@ async function sendRouteRequest<T>(
 /** The project's intake routes in the order they are tried, and whether the caller may change them. */
 export function useIntakeRoutesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  return useQuery({ ...intakeRoutesQueryOptions(baseUrl, factoryProjectId ?? ''), enabled: !!factoryProjectId });
+}
+
+/** The read behind `useIntakeRoutesQuery`, also used to load the routes ahead of the page. */
+export function intakeRoutesQueryOptions(baseUrl: string, factoryProjectId: string) {
+  return queryOptions({
     queryKey: queryKeys.intakeRoutes(factoryProjectId),
-    enabled: !!factoryProjectId,
-    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId!)),
+    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId)),
   });
 }
 
-type RouteWrite =
+/** One board's rules, in the order its lanes check them. */
+export function useBoardRulesQuery(factoryProjectId: string | undefined, boardKey: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: [...queryKeys.intakeRoutes(factoryProjectId), 'board', boardKey ?? null],
+    queryFn:
+      factoryProjectId && boardKey
+        ? () =>
+            sendRouteRequest<IntakeRouteListResponse>(
+              baseUrl,
+              routesPath(factoryProjectId, `?${new URLSearchParams({ boardKey })}`),
+            )
+        : skipToken,
+  });
+}
+
+/**
+ * Whether the caller may create, edit and delete this project's boards (an organization admin).
+ * Read off the intake routes, which answer for the project whatever boards it has: a project
+ * need not have a Work board. The server enforces it on every write.
+ */
+export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
+  return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
+}
+
+export type RouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch }
   | { kind: 'delete'; id: string; expectedRevision: number }
-  | { kind: 'reorder'; ids: string[] };
+  /** With `boardKey`, `ids` name every rule of that board and only they trade places. */
+  | { kind: 'reorder'; ids: string[]; boardKey?: string };
 
 /**
  * Changes the project's intake routes, one request after another, then reloads them. A change
@@ -56,12 +86,17 @@ type RouteWrite =
 export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<void, BoardRequestError, RouteWrite[]>({
+  return useMutation<IntakeRouteInfo[], BoardRequestError, RouteWrite[]>({
     mutationFn: async writes => {
       const project = factoryProjectId!;
+      const created: IntakeRouteInfo[] = [];
       for (const write of writes) {
         if (write.kind === 'create') {
-          await sendRouteRequest(baseUrl, routesPath(project), { method: 'POST', body: write.route });
+          const response = await sendRouteRequest<{ intakeRoute: IntakeRouteInfo }>(baseUrl, routesPath(project), {
+            method: 'POST',
+            body: write.route,
+          });
+          created.push(response.intakeRoute);
         } else if (write.kind === 'update') {
           await sendRouteRequest(baseUrl, routesPath(project, `/${encodeURIComponent(write.id)}`), {
             method: 'PATCH',
@@ -75,11 +110,17 @@ export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
         } else {
           await sendRouteRequest(baseUrl, routesPath(project, '/reorder'), {
             method: 'POST',
-            body: { ids: write.ids },
+            body: write.boardKey === undefined ? { ids: write.ids } : { ids: write.ids, boardKey: write.boardKey },
           });
         }
       }
+      return created;
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
+        // The intake order lists each board's rule count.
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeOrder(factoryProjectId) }),
+      ]),
   });
 }

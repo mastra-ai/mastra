@@ -130,7 +130,7 @@ export function createDestructurableOutput<OUTPUT = undefined>(
 export function persistProcessorDataChunk(
   messageList: MessageList,
   messageId: string,
-  chunk: { type: string; data?: unknown; transient?: boolean },
+  chunk: { type: string; data?: unknown; id?: string; transient?: boolean },
 ): void {
   if (!isDataChunk(chunk) || chunk.transient) return;
 
@@ -139,7 +139,9 @@ export function persistProcessorDataChunk(
     role: 'assistant',
     content: {
       format: 2,
-      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
+      parts: [
+        { type: chunk.type as `data-${string}`, data: chunk.data, ...(chunk.id !== undefined ? { id: chunk.id } : {}) },
+      ],
     },
     createdAt: new Date(),
   };
@@ -279,7 +281,7 @@ export function resolveOutputMessageSkippingCompletionChecks(messageList: Messag
  * A failed completion check moves the answer to a new message, but this output keeps the id it
  * was built with. Resolve at write time so processor data lands on the answer that is returned.
  */
-function resolveProcessorWriterMessageId(
+export function resolveProcessorWriterMessageId(
   messageList: MessageList,
   fallbackMessageId: string,
   explicitMessageId?: string,
@@ -628,6 +630,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
   };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
+  /** Run-level sources, files and tool calls as of the last `step-start` that has no `step-finish` yet. */
+  #runOutputAtStepStart?: { sources: number; files: number; toolCalls: number };
   // Records keyed by provider-supplied tool call IDs have no prototype, so IDs like "__proto__"
   // or "constructor" are plain keys.
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = Object.create(null);
@@ -1173,6 +1177,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#bufferedByStep.text = '';
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
+              // So does whatever else the unfinished request streamed: it belongs to no step. Its
+              // sources and files leave the run too. Its tool calls stay, since an eager tool may
+              // already have run and been carried into the next request, but a call the next
+              // request makes under the same id replaces the recorded one.
+              if (self.#runOutputAtStepStart) {
+                self.#bufferedSources.length = self.#runOutputAtStepStart.sources;
+                self.#bufferedFiles.length = self.#runOutputAtStepStart.files;
+                for (const call of self.#toolCalls.slice(self.#runOutputAtStepStart.toolCalls)) {
+                  self.#replaceableToolCallIds.add(call.payload.toolCallId);
+                }
+              }
+              self.#runOutputAtStepStart = {
+                sources: self.#bufferedSources.length,
+                files: self.#bufferedFiles.length,
+                toolCalls: self.#toolCalls.length,
+              };
+              Object.assign(self.#bufferedByStep, { sources: [], files: [], toolCalls: [], toolResults: [] });
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
@@ -1347,7 +1368,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#attemptToolCallIds.delete(chunk.payload.toolCallId);
                 for (const calls of [self.#toolCalls, self.#bufferedByStep.toolCalls]) {
                   const index = calls.findLastIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
-                  if (index !== -1) calls.splice(index, 1);
+                  if (index === -1) continue;
+                  calls.splice(index, 1);
+                  // Keep the step-start boundary on the same call, so a later retry can still replace this one.
+                  if (
+                    calls === self.#toolCalls &&
+                    self.#runOutputAtStepStart &&
+                    index < self.#runOutputAtStepStart.toolCalls
+                  ) {
+                    self.#runOutputAtStepStart.toolCalls--;
+                  }
                 }
               }
               // A call already recorded under this id in this step (a repeated tool-call) is not emitted twice.
@@ -1524,6 +1554,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
               self.#bufferedByStepReasoningDetails = {};
               self.#reasoningAtStepStart = undefined;
+              self.#runOutputAtStepStart = undefined;
               self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
@@ -1929,8 +1960,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
                   // A step rejected by a tripwire keeps its empty text, so durable runs don't
                   // return a rejected reply (#26048).
+                  let rewrittenText: string | undefined;
+                  if (chunk.payload.textRewritten === true && self.#status !== 'canceled') {
+                    // Durable producers run processOutputResult after the last step-finish was
+                    // streamed. When it changed the reply, they write the result onto the run's
+                    // last step; otherwise the buffered text stands (a failed step's record is
+                    // empty while the stream already delivered its partial text). Like the
+                    // processed path above, the rewritten reply is the run's text, also after
+                    // a resume, where the buffered aggregate still holds pre-approval text.
+                    const finalizedText = chunk.payload.output?.steps?.at(-1)?.text;
+                    const lastStep = self.#bufferedSteps.at(-1);
+                    if (lastStep && typeof finalizedText === 'string') {
+                      lastStep.text = finalizedText;
+                      rewrittenText = finalizedText;
+                    }
+                  }
                   this.resolvePromises({
-                    text: self.#producedText(),
+                    text: rewrittenText ?? self.#producedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -3093,6 +3139,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedReasoning.length = 0;
     this.#bufferedReasoningDetails = {};
     this.#reasoningAtStepStart = undefined;
+    this.#runOutputAtStepStart = undefined;
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;

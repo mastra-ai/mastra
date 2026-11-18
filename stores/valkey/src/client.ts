@@ -143,7 +143,10 @@ export class GlideValkeyClient implements ValkeyClient {
 
   private getClient(): Promise<GlideClient> {
     if (this.suppliedClient) return Promise.resolve(this.suppliedClient);
-    this.clientPromise ??= GlideClient.createClient(this.config!);
+    this.clientPromise ??= GlideClient.createClient({
+      ...this.config!,
+      clientInfoTag: this.config?.clientInfoTag ?? 'mastra',
+    });
     return this.clientPromise;
   }
 

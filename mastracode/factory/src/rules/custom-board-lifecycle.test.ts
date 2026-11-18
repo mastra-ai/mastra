@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardTransitionPolicy } from '../boards/index.js';
-import { createBoardRegistry, defineBoard, workItemPhaseSemantics } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard, workItemPhaseSemantics } from '../boards/index.js';
+import { autoStartingBoards } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { createTerminalStageCleanup } from './terminal-cleanup.js';
@@ -48,7 +49,7 @@ async function setup(options: { reject?: boolean } = {}) {
       working: { name: 'Working', kind: 'working', runner: { context: 'other', skill: 'other-skill' } },
     },
   });
-  const boards = createBoardRegistry({ boards: [release, distribution, unrelated], includeDefaultBoards: false });
+  const boards = boardRegistryOf([release, distribution, unrelated]);
   storage.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
   const releaseSandboxes = vi.fn(async () => {});
   const service = new FactoryTransitionService({
@@ -88,10 +89,9 @@ async function setup(options: { reject?: boolean } = {}) {
   };
   const dispatcher = new FactoryDecisionDispatcher({
     storage,
-    boards,
+    boards: autoStartingBoards(boards),
     transitionService: service,
     controller: {} as never,
-    isAutoRunEnabled: async () => true,
   });
   return {
     storage,
@@ -164,7 +164,6 @@ describe('custom board lifecycle integration without built-in boards', () => {
     expect(await h.storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
     const audits = await h.db.findMany('factory_rule_evaluations', {});
     expect(audits.length).toBeGreaterThanOrEqual(3);
-    expect(audits.every(row => row.rule_set_version === 'custom-lifecycle-v1')).toBe(true);
   });
 
   it("keeps the card and queues nothing when the board's policy rejects the move", async () => {

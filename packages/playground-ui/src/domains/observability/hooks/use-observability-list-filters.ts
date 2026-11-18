@@ -54,8 +54,9 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
   {
     sortFields,
+    withTokenSearch = false,
     defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
-  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
+  }: { sortFields?: readonly F[]; withTokenSearch?: boolean; defaultDatePreset?: TraceDatePreset } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
@@ -68,9 +69,14 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     [datesKey],
   );
   const { tokens, groups } = useMemo(
-    () => readObservabilityListFilters(searchParams),
+    () => {
+      const filters = readObservabilityListFilters(searchParams);
+      return withTokenSearch
+        ? filters
+        : { ...filters, tokens: filters.tokens.filter(token => token.operatorId !== 'hasAllTokens') };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the filter params change
-    [filtersKey],
+    [filtersKey, withTokenSearch],
   );
   const urlSort = readObservabilityListSort<F | 'startedAt'>(
     searchParams,

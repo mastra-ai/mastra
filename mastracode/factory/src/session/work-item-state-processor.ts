@@ -5,11 +5,10 @@ import { boardForWorkItem, pullRequestSourceNumber, workItemPhaseSemantics } fro
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { cardBoardFlow, hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
+import { hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.js';
 import type { ReviewedChangeRequest } from '../boards/semantics.js';
 import { getFactorySessionCoordinates } from '../rules/binding-context.js';
 import { authorTrusted, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { Card, FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import {
@@ -25,8 +24,6 @@ const STATE_ID = 'factory-work-item';
 export interface FactoryWorkItemStateProcessorOptions {
   storage: WorkItemsStorage;
   boards: BoardRegistry | ProjectBoardSource;
-  /** Reads the project's self-review setting; without it the signal leaves self-review out. */
-  projects?: FactoryProjectsStorage;
 }
 
 function escapeText(value: string): string {
@@ -117,7 +114,7 @@ function cacheKeyOf(input: unknown): string {
  * Tells the agent about the card its session works: where it sits on the board, its sources and
  * what Factory recorded about it (plan approval, self-review and review verdicts, the open change
  * request). Kickoffs only name the card; this snapshot carries the detail and re-renders when the
- * card, its sources or the project's self-review setting change. No comment threads: the agent
+ * card or its sources change. No comment threads: the agent
  * fetches those with the source's tool.
  */
 export class FactoryWorkItemStateProcessor implements Processor<'factory-work-item'> {
@@ -138,22 +135,22 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
     if (!item) return;
     const boards = await this.#boards.load(binding);
     if (!workItemPhaseSemantics(boards, item)) return;
-    // The setting means nothing to a card whose board has no self-review phase.
-    const selfReview =
-      cardBoardFlow(boards, item).selfReview === undefined ? undefined : await this.#selfReviewEnabled(binding);
+    // Part of the key so a later run is sent the card again: the copy the session last saw says
+    // its pass is complete, and a re-requested review changes nothing on the card.
+    const verdictRecordedThisRun = recordedVerdict(args.steps);
     const cacheKey = cacheKeyOf([
       item.id,
       item.revision,
       item.workItem.revision,
       (item.workItem.sources ?? []).map(source => [source.id, source.revision]),
       binding.id,
-      selfReview ?? null,
+      verdictRecordedThisRun,
     ]);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 
-    const contents = renderWorkItem({ item, binding, boards, selfReview });
+    const contents = renderWorkItem({ item, binding, boards, verdictRecordedThisRun });
     const stage = item.stages[0]!;
     return {
       id: STATE_ID,
@@ -166,23 +163,48 @@ export class FactoryWorkItemStateProcessor implements Processor<'factory-work-it
       metadata: { value: { workItem: { id: item.id, revision: item.revision, stage } } },
     };
   }
+}
 
-  async #selfReviewEnabled(binding: FactoryRunBindingRecord): Promise<boolean | undefined> {
-    const projects = this.options.projects;
-    if (!projects) return undefined;
-    await projects.ensureReady();
-    const project = await projects.get({ orgId: binding.orgId, id: binding.factoryProjectId });
-    return project?.selfReviewEnabled;
-  }
+const VERDICT_TOOL = 'factory_record_review_verdict';
+
+type RunStep = ComputeStateSignalArgs['steps'][number];
+type RunStepPart = RunStep['content'][number];
+
+function isVerdictToolPart(part: RunStepPart): part is Extract<RunStepPart, { toolName: string }> {
+  return 'toolName' in part && part.toolName === VERDICT_TOOL;
+}
+
+/**
+ * A failed call reaches a step as a result whose output is an error, or as a `tool-error` part.
+ * The step types a result's output as the tool's own value; here it is the stored model output.
+ */
+function isFailedToolCallPart(part: RunStepPart): boolean {
+  if (part.type === 'tool-error') return true;
+  if (part.type !== 'tool-result') return false;
+  const output = (part.output as { type?: unknown } | null | undefined)?.type;
+  return output === 'error-text' || output === 'error-json';
+}
+
+/**
+ * Whether the run in progress has already recorded a review verdict. Only the steps of this run
+ * count: a later turn (a re-requested review, or a person disputing a finding) starts with none.
+ * A step can reach here without its tool results, so the call counts too, unless it failed.
+ */
+function recordedVerdict(steps: RunStep[]): boolean {
+  return steps.some(step => {
+    const parts = step.content.filter(isVerdictToolPart);
+    const failed = new Set(parts.filter(isFailedToolCallPart).map(part => part.toolCallId));
+    return parts.some(part => !failed.has(part.toolCallId));
+  });
 }
 
 function renderWorkItem(input: {
   item: Card;
   binding: FactoryRunBindingRecord;
   boards: BoardRegistry;
-  selfReview: boolean | undefined;
+  verdictRecordedThisRun: boolean;
 }): string {
-  const { item, binding, boards, selfReview } = input;
+  const { item, binding, boards } = input;
   const metadata = item.metadata ?? {};
   const boardId = boardForWorkItem(item);
   const board = boards.get(boardId);
@@ -214,7 +236,6 @@ function renderWorkItem(input: {
   const state: string[] = [];
   const planApprovedAt = text(metadata.planApprovedAt);
   state.push(`Plan approved: ${planApprovedAt ? `yes, ${planApprovedAt}` : 'no'}`);
-  if (selfReview !== undefined) state.push(`Self-review: ${selfReview ? 'on' : 'off'}`);
   const rounds = count(metadata.selfReviewRounds) ?? 0;
   const selfReviewVerdict = text(metadata.selfReviewVerdict);
   if (selfReviewVerdict || rounds > 0) {
@@ -237,7 +258,7 @@ function renderWorkItem(input: {
     lines.join('\n'),
     sourceText,
     `Factory state:\n${state.map(escapeText).join('\n')}`,
-    reviewBlock(item),
+    reviewBlock(item, input.verdictRecordedThisRun),
   ];
   const findings = text(metadata.selfReviewFindings);
   if (findings) {
@@ -315,11 +336,26 @@ function checkoutHint(card: ReviewCard, change: ReviewedChangeRequest): string {
  * Names the head this pass covers. Without it every pass on a pull request reads the same, so a
  * reviewer in the session that recorded the last verdict can take a new pass for a repeat and
  * restate that verdict instead of reviewing what was pushed since.
+ *
+ * A verdict changes the card, so the reviewer is sent this again in the middle of the run that
+ * recorded it. Reading its own verdict as "the previous pass" there would start it on another pass
+ * over the same head, and every verdict it records would do the same again. A later run is a new
+ * pass: a re-requested review or a person's reply must be able to end in a different verdict.
  */
-function headLine(metadata: Record<string, unknown>, reReview: boolean): string | undefined {
+function headLine(
+  metadata: Record<string, unknown>,
+  reReview: boolean,
+  verdictRecordedThisRun: boolean,
+): string | undefined {
   const head = commitSha(metadata.pullRequestHeadSha)?.toLowerCase();
   const reviewed = reReview ? commitSha(metadata.reviewedHeadSha)?.toLowerCase() : undefined;
   const recorded = metadata.reviewVerdict;
+  if (verdictRecordedThisRun && reviewed && (!head || head === reviewed)) {
+    return (
+      `Your verdict for this review pass is recorded: ${typeof recorded === 'string' ? `"${recorded}"` : 'a verdict'} on \`${reviewed}\`. ` +
+      `The pass is complete; do not record the same verdict again. Record another only if the head moved past \`${reviewed}\` or a person asks you to reconsider.`
+    );
+  }
   const priorPass = recorded === 'approve' || recorded === 'request changes' ? `recorded "${recorded}"` : 'reviewed';
   if (head && reviewed && head !== reviewed) {
     return (
@@ -333,7 +369,7 @@ function headLine(metadata: Record<string, unknown>, reReview: boolean): string 
     return (
       `This is a new review pass. The previous pass ${priorPass} on \`${reviewed}\`, which is also the last recorded head. ` +
       `Read the current head first: if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head; ` +
-      `otherwise check the change request for anything new and record a verdict for \`${head}\`.`
+      `otherwise read the newest comments and reviews on the change request before deciding whether that verdict still stands, and record a verdict for \`${head}\`.`
     );
   }
   if (head) return `This review pass covers head \`${head}\`. Record your verdict for that head.`;
@@ -352,7 +388,7 @@ function headLine(metadata: Record<string, unknown>, reReview: boolean): string 
  * which head the pass covers. Empty for a card with no change request. Not escaped: every value
  * in it is a number, a commit SHA or a validated branch name, and its commands must stay runnable.
  */
-function reviewBlock(item: Card): string {
+function reviewBlock(item: Card, verdictRecordedThisRun: boolean): string {
   const card: ReviewCard = { ...item, source: workItemBranchSource(item.externalSource) };
   const change = reviewedChangeRequest(card);
   if (!change) return '';
@@ -367,7 +403,7 @@ function reviewBlock(item: Card): string {
     `Covers: ${noun}${number}${head ? `, head ${head}` : ''}`,
     `Procedure: ${procedure} (${reReview ? 're-review after the verdict recorded on it' : 'first pass on it'})`,
     `Checkout: ${checkoutHint(card, change)}`,
-    headLine(item.metadata ?? {}, reReview),
+    headLine(item.metadata ?? {}, reReview, verdictRecordedThisRun),
   ]
     .filter(Boolean)
     .join('\n');

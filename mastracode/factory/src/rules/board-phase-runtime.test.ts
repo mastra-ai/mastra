@@ -206,7 +206,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
     app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
   const { project } = await (await send('POST', '/web/factory/projects', { name: 'Phase project' })).json();
-  // Project auto-run stays off: only the phase's own start rule may start runs.
+  // No project setting starts runs: only the phase's own start rule may.
   expect(
     (await send('PATCH', `/web/factory/projects/${project.id}`, { defaultModelId: 'openai/gpt-5.6-sol' })).status,
   ).toBe(200);
@@ -230,9 +230,6 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
     orgId: ORG,
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'phase-user',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/tmp/phase-runtime',
   });
 
   // The project's intake route files new cards straight into the phase the test exercises.

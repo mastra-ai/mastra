@@ -110,6 +110,9 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
                   if (storageV2) applyStateDelta(executionContext.state, state ?? {});
                   else executionContext.state = state;
                 },
+                updateState: async (changes: any) => {
+                  applyStateDelta(executionContext.state, changes ?? {});
+                },
                 retryCount: -1,
                 ...createObservabilityContext({ currentSpan: sleepSpan }),
                 getInitData: () => stepResults?.input as any,
@@ -263,6 +266,9 @@ export async function executeSleepUntil(
                   setState: async (state: any) => {
                     if (storageV2) applyStateDelta(executionContext.state, state ?? {});
                     else executionContext.state = state;
+                  },
+                  updateState: async (changes: any) => {
+                    applyStateDelta(executionContext.state, changes ?? {});
                   },
                   retryCount: -1,
                   ...createObservabilityContext({ currentSpan: sleepUntilSpan }),

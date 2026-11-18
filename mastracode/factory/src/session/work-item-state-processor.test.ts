@@ -12,6 +12,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
+import { createFactoryTransitionTools } from '../rules/tools.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
@@ -75,13 +76,13 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-item signal on %s', backend => {
   /** `storedWithSelfReview`: the project's Work row was stored while Work still had its self-review phase. */
-  async function setup(options: { trusted: boolean; selfReviewEnabled?: boolean; storedWithSelfReview?: boolean }) {
+  async function setup(options: { trusted: boolean; storedWithSelfReview?: boolean }) {
     const storage =
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `work-item-signal-${randomUUID()}`, url: ':memory:' });
     if (backend === 'libsql') onTestFinished(() => storage.close());
-    const { workItems, projects, comments, boards } = await createFactoryStorageForTests(storage);
+    const { workItems, projects, boards } = await createFactoryStorageForTests(storage);
     const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Acme' } });
     if (options.storedWithSelfReview) {
       await boards.insertIfMissing(
@@ -89,13 +90,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         workSeedWithSelfReview(),
         'factory',
       );
-    }
-    if (options.selfReviewEnabled !== undefined) {
-      await projects.update({
-        orgId: 'org-1',
-        id: project.id,
-        input: { selfReviewEnabled: options.selfReviewEnabled },
-      });
     }
     const { item, binding } = await workItems.prepareRunStart({
       orgId: 'org-1',
@@ -141,27 +135,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       source: pullRequest35,
       metadata: { state: 'closed', githubPullRequestNumber: 35, headBranch: 'evil..$(curl x)' },
     });
-    await comments.create({
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      workItemId: item.id,
-      author: { kind: 'user', id: 'user-2', displayName: 'Commenter' },
-      body: 'A comment thread the signal must not carry.',
-    });
     const processor = new FactoryWorkItemStateProcessor({
       storage: workItems,
       boards: new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: boards, recheckMs: 0 }),
-      projects,
     });
     return { processor, workItems, projects, project, item, binding, context: requestContext(project.id) };
   }
 
   it("renders the bound card's board position, sources and Factory state", async () => {
-    const { processor, context, item } = await setup({
-      trusted: true,
-      selfReviewEnabled: true,
-      storedWithSelfReview: true,
-    });
+    const { processor, context, item } = await setup({ trusted: true, storedWithSelfReview: true });
 
     const signal = await processor.computeStateSignal(stateArgs(context));
 
@@ -179,7 +161,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       `github pull request #34, key acme/app#34, https://github.com/acme/app/pull/34, state open, head branch factory/issue-12, head ${HEAD}, details: gh pr view 34`,
     );
     expect(contents).toContain('Plan approved: yes, 2026-11-06T10:00:00.000Z');
-    expect(contents).toContain('Self-review: on');
     expect(contents).toContain('Self-review rounds used: 1 of 3');
     expect(contents).toContain(`Last self-review: request changes on ${SELF_REVIEWED}`);
     expect(contents).toContain('Open change request: #34');
@@ -190,7 +171,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     expect(contents).not.toContain('<untrusted-source-description>');
   });
 
-  it('fences an untrusted author description, omits an unsafe head branch and carries no comments', async () => {
+  it('fences an untrusted author description, omits an unsafe head branch', async () => {
     const { processor, context } = await setup({ trusted: false });
 
     const contents = (await processor.computeStateSignal(stateArgs(context)))!.contents;
@@ -206,17 +187,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
     );
     expect(contents).not.toContain('evil');
     expect(contents).not.toContain('curl');
-    expect(contents).not.toContain('A comment thread the signal must not carry.');
   });
 
-  it("says whether self-review is on only where the card's board has a self-review phase", async () => {
-    const stored = await setup({ trusted: true, selfReviewEnabled: false, storedWithSelfReview: true });
-    expect((await stored.processor.computeStateSignal(stateArgs(stored.context)))!.contents).toContain(
-      'Self-review: off',
-    );
+  it("leaves self-review to the card's board, with no project switch in the signal", async () => {
+    // A board with a self-review phase names it as where the card goes next.
+    const stored = await setup({ trusted: true, storedWithSelfReview: true });
+    const storedContents = (await stored.processor.computeStateSignal(stateArgs(stored.context)))!.contents;
+    expect(storedContents).toContain('Next phases: Review (review)');
+    expect(storedContents).not.toContain('Self-review:');
 
-    // A new project's Work has no self-review phase: the setting means nothing to its cards.
-    const fresh = await setup({ trusted: true, selfReviewEnabled: true });
+    // A new project's Work has no self-review phase: its cards go on to PR review.
+    const fresh = await setup({ trusted: true });
     const contents = (await fresh.processor.computeStateSignal(stateArgs(fresh.context)))!.contents;
     expect(contents).not.toContain('Self-review:');
     expect(contents).toContain('Next phases: Review (pr-review)');
@@ -297,8 +278,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
         await workItems.attachSource({ orgId: 'org-1', id: item.id, ...attached });
       }
       const processor = new FactoryWorkItemStateProcessor({ storage: workItems, boards: createBoardRegistry() });
-      const signal = await processor.computeStateSignal(stateArgs(requestContext(project.id)));
-      return { item, contents: signal!.contents };
+      const context = requestContext(project.id);
+      const signal = await processor.computeStateSignal(stateArgs(context));
+      return { item, contents: signal!.contents, cacheKey: signal!.cacheKey, processor, workItems, context };
     }
 
     const pullRequest23029: ExternalWorkItemSource = {
@@ -458,6 +440,90 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       const firstPass = (await githubCard({ pullRequestHeadSha: NEW })).contents;
       expect(firstPass).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
       expect(new Set([pushed, unmoved, unknownHead, firstPass]).size).toBe(4);
+    });
+
+    it('tells the reviewer its pass is complete in the run that recorded the verdict, and only there', async () => {
+      const card = await githubCard({ pullRequestHeadSha: NEW });
+      expect(card.contents).toContain(`This review pass covers head \`${NEW}\`. Record your verdict for that head.`);
+
+      const tools = await createFactoryTransitionTools({
+        requestContext: card.context,
+        storage: card.workItems,
+        transitionService: { transition: async () => ({ status: 'rejected' }) } as never,
+        boards: createBoardRegistry(),
+      });
+      const verdictTool = tools.factory_record_review_verdict as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      };
+      await verdictTool.execute(
+        { verdict: 'approve', reviewedHeadSha: NEW },
+        { requestContext: card.context, agent: { toolCallId: 'verdict-1' } },
+      );
+
+      const resend = (steps: unknown[]) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey: card.cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+
+      // The verdict changed the card, so the session is sent the card again before its next step.
+      const call = { type: 'tool-call', toolCallId: 'verdict-1', toolName: 'factory_record_review_verdict' };
+      const result = {
+        type: 'tool-result',
+        toolCallId: 'verdict-1',
+        toolName: 'factory_record_review_verdict',
+        output: { type: 'json', value: { status: 'recorded' } },
+      };
+      const sameRun = await resend([{ content: [call, result], toolCalls: [call], toolResults: [result] }]);
+      expect(sameRun?.contents).toContain(`Last PR review: approve on #23029 at ${NEW}`);
+      expect(sameRun?.contents).toContain(`Your verdict for this review pass is recorded: "approve" on \`${NEW}\`.`);
+      expect(sameRun?.contents).not.toContain('new review pass');
+
+      // A step can arrive without its tool results; the call alone still marks the pass complete.
+      expect((await resend([{ content: [call], toolCalls: [call], toolResults: [] }]))?.contents).toContain(
+        'Your verdict for this review pass is recorded',
+      );
+      // A verdict call that failed recorded nothing, so the reviewer is still asked for one.
+      // This is how a failed call reads once the step's content is rebuilt from the thread.
+      const failed = { ...result, output: { type: 'error-text', value: 'The Review card changed' } };
+      expect(
+        (await resend([{ content: [call, failed], toolCalls: [call], toolResults: [failed] }]))?.contents,
+      ).not.toContain('Your verdict for this review pass is recorded');
+      // One call failing does not undo another that recorded a verdict in the same step.
+      const lost = { ...call, toolCallId: 'verdict-2' };
+      const lostResult = { ...failed, toolCallId: 'verdict-2' };
+      expect(
+        (
+          await resend([
+            { content: [call, result, lost, lostResult], toolCalls: [call, lost], toolResults: [result, lostResult] },
+          ])
+        )?.contents,
+      ).toContain('Your verdict for this review pass is recorded');
+
+      // A later run is a new pass: a re-requested review, or a person disputing a finding, on
+      // the same head must still be able to end in a verdict.
+      const laterRun = await resend([]);
+      expect(laterRun?.contents).toContain('This is a new review pass.');
+      expect(laterRun?.contents).toContain(`record a verdict for \`${NEW}\``);
+      expect(laterRun?.contents).not.toContain('Your verdict for this review pass is recorded');
+
+      // A re-requested review changes nothing on the card, and the copy the session last saw
+      // says its pass is complete. The next run must be sent the card again, and only once.
+      const after = (steps: unknown[], cacheKey: string | undefined) =>
+        card.processor.computeStateSignal(
+          stateArgs(card.context, {
+            steps,
+            lastSnapshot: { metadata: { state: { cacheKey } } },
+            contextWindow: { hasSnapshot: true },
+          }),
+        );
+      const reRequested = await after([], sameRun?.cacheKey);
+      expect(reRequested?.contents).toContain('This is a new review pass.');
+      expect(reRequested?.contents).toContain('read the newest comments and reviews on the change request');
+      expect(await after([], reRequested?.cacheKey)).toBeUndefined();
     });
 
     it('keeps malformed head metadata out of the review guidance', async () => {

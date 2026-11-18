@@ -803,7 +803,7 @@ describe('storageVersion per run', () => {
     expect((result as any).error.message).toMatch(/Use `await getState\(\)` instead/);
   });
 
-  it('merges setState into the v2 state, deleting keys set to undefined', async () => {
+  it('merges updateState into the v2 state, deleting keys set to undefined', async () => {
     const storage = new MockStore();
     const workflow = createWorkflow({
       id: 'merge-state',
@@ -816,9 +816,9 @@ describe('storageVersion per run', () => {
           id: 'write',
           inputSchema: z.object({}),
           outputSchema: z.any(),
-          execute: async ({ getState, setState }) => {
-            await setState({ a: 10, b: undefined });
-            await setState({ d: 4 });
+          execute: async ({ getState, updateState }) => {
+            await updateState({ a: 10, b: undefined });
+            await updateState({ d: 4 });
             return { ...(await getState()) };
           },
         }),
@@ -872,8 +872,8 @@ describe('storageVersion per run', () => {
             inputSchema: z.object({}),
             outputSchema: z.any(),
             stateSchema,
-            execute: async ({ setState }) => {
-              await setState(update as any);
+            execute: async ({ updateState }) => {
+              await updateState(update as any);
               return {};
             },
           }),
@@ -2157,7 +2157,13 @@ describe('storage v2 nested runs', () => {
       await vi.waitFor(() => expect(died).toBe(true));
       await expireRunLeases(storage);
 
-      await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+      // A zero grace restarts the crashed runs, written just now, at once.
+      await new Mastra({
+        logger: false,
+        storage,
+        workflows: build(),
+        recovery: { workflowGraceMs: 0 },
+      }).restartAllActiveWorkflowRuns();
 
       expect(innerBRuns).toBe(1);
       const state = { items: [PAD, 'before:0', 'inner-a:1', 'inner-b:2'] };

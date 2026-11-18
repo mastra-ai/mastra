@@ -436,6 +436,19 @@ export interface WorkflowRunState {
    */
   resumeLeasedClaimAt?: number;
   /**
+   * What the agent resume that claimed this run resumes it with, written in the same update as
+   * `resumeClaimedAt`. A later process replays it to finish a resume whose claimant died. Only
+   * describes the current claim while `claimedAt === resumeClaimedAt`.
+   * @internal
+   */
+  resumeClaimIntent?: {
+    claimedAt: number;
+    /** The suspended tool call the resume targets. Absent when the resume targeted none. */
+    toolCallId?: string;
+    /** The approval decision or `resumeSchema` data the resume passes to the suspended tool call. */
+    resumeData?: unknown;
+  };
+  /**
    * @internal Snapshot stored only because evented step guards or storage v2 need it while the run
    * runs; the workflow's `shouldPersistSnapshot` declined it.
    */
@@ -611,6 +624,15 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * @internal Set by durable agent loops, whose suspended-run listing reads the stored status.
    */
   persistResumeClaim?: boolean;
+
+  /**
+   * Only this process cancels runs of this workflow (`run.cancel()` or an aborted signal), so
+   * the default engine does not read a stored `canceled` status before or between steps.
+   *
+   * @internal Set by workflows the framework creates for each agent call (stream preparation
+   * and combined processors). Their runs are never stored, so a status read can only miss.
+   */
+  localCancellationOnly?: boolean;
 
   /**
    * Identifies step errors raised because this execution lost, or could not

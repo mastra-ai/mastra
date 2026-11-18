@@ -8,6 +8,8 @@ const memorySettledMock = vi.fn(async (): Promise<void> => {});
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const embedInSubprocessMock = vi.fn();
+const fastembedDoEmbedMock = vi.fn();
 
 vi.mock('@mastra/memory', async () => ({
   resolveAutoModelId: (await vi.importActual<typeof import('@mastra/memory')>('@mastra/memory')).resolveAutoModelId,
@@ -26,7 +28,11 @@ vi.mock('@mastra/memory', async () => ({
 }));
 
 vi.mock('@mastra/fastembed', () => ({
-  fastembed: { small: 'fastembed-small' },
+  fastembed: { small: { doEmbed: fastembedDoEmbedMock } },
+}));
+
+vi.mock('./fastembed-subprocess.js', () => ({
+  embedInSubprocess: embedInSubprocessMock,
 }));
 
 vi.mock('../utils/project.js', () => ({
@@ -158,6 +164,17 @@ describe('getDynamicMemory', () => {
     delete process.env.MASTRACODE_DISABLE_TITLE_GENERATION;
     vi.unstubAllEnvs();
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+  });
+
+  it('embeds observations in the worker process, never in this one', async () => {
+    embedInSubprocessMock.mockReset().mockResolvedValue({ embeddings: [[1]], warnings: [] });
+    fastembedDoEmbedMock.mockReset();
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+    const embedder = config.embedder as { doEmbed: (options: { values: string[] }) => Promise<unknown> };
+
+    await expect(embedder.doEmbed({ values: ['a'] })).resolves.toEqual({ embeddings: [[1]], warnings: [] });
+    expect(embedInSubprocessMock).toHaveBeenCalledWith({ values: ['a'] });
+    expect(fastembedDoEmbedMock).not.toHaveBeenCalled();
   });
 
   it('wires Mastra Code observational memory activation defaults into core memory', async () => {

@@ -88,7 +88,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                       : undefined
                   }
                   className={cn(
-                    'state-layer flex items-start gap-3 rounded-md px-3 py-2.5',
+                    'flex items-start gap-3 rounded-md state-layer px-3 py-2.5',
                     onToggle && 'cursor-pointer',
                     isSelected && 'bg-fill-hover',
                   )}

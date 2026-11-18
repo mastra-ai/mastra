@@ -23,7 +23,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
-import { commitDecisions, createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { autoStartingBoards, commitDecisions, createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -157,7 +157,7 @@ async function mountFactory() {
 
   const dispatcher = new FactoryDecisionDispatcher({
     controller,
-    isAutoRunEnabled: async () => true,
+    boards: autoStartingBoards(),
     transitionService,
     storage,
     ownerId: 'worker-1',

@@ -76,7 +76,7 @@ export const reviewItem: Card = {
   triageType: null,
   autonomyArmedAt: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 1,
   createdBy: 'user-1',
   createdAt: new Date(reviewCandidate.createdAt),

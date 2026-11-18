@@ -4,8 +4,8 @@ import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListPa
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { GripVertical } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 
@@ -153,12 +153,12 @@ const AgentMetadataModelListItem = ({
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
   return (
-    <div className="state-layer rounded-lg bg-sidebar">
+    <div className="rounded-lg bg-sidebar state-layer">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
           <div {...dragHandleProps} className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing">
             <Icon>
-              <GripVertical />
+              <IconDotGrid2x3 />
             </Icon>
           </div>
         )}

@@ -4,7 +4,7 @@ import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/t
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { phaseRunDecision } from './phase-runner.js';
-import { selfReviewWorkBoard } from './test-utils.js';
+import { selfReviewWorkBoard, triageWorkBoard } from './test-utils.js';
 import { BUILD_OBJECTIVE, workBoard } from './work.js';
 
 function entering(
@@ -56,22 +56,15 @@ describe('the Work board seed', () => {
           : [],
       ),
     );
+    // New projects' Work has no Triage: cards go from Intake straight to Planning.
     expect(working).toEqual({
-      triage: {
-        runner: { agentId: 'code-agent', skill: 'factory-triage', context: 'triage' },
-        exitTool: undefined,
-        tools: undefined,
-        autoStart: undefined,
-        autoStartWhen: undefined,
-        nextPhases: ['intake', 'planning', 'done', 'canceled'],
-      },
       planning: {
         runner: { agentId: 'code-agent', skill: 'factory-plan', context: 'work' },
         exitTool: { id: 'submit_plan', autoApprove: false },
         tools: undefined,
         autoStart: undefined,
         autoStartWhen: undefined,
-        nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
+        nextPhases: ['execute', 'intake', 'done', 'canceled'],
       },
       execute: {
         runner: {
@@ -146,9 +139,9 @@ describe('Work phase runs', () => {
     });
   });
 
-  it('starts the triage runner for an incident.io follow-up, whose fetch reference the signal carries', () => {
+  it("starts the triage runner for an incident.io follow-up, in a project's Work that kept Triage", () => {
     expect(
-      phaseRunDecision(workBoard, 'triage', {
+      phaseRunDecision(triageWorkBoard, 'triage', {
         ...entering('incidentio-follow-up', 'intake', 'triage'),
       }),
     ).toMatchObject({ role: 'triage', skillName: 'factory-triage', idempotencyKey: 'ingress-1:triage:factory-triage' });

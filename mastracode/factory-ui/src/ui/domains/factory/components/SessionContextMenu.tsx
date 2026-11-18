@@ -1,32 +1,29 @@
+import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import type { CardContextSession } from '../boardItems';
+import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { threadPath } from '../../workspaces/services/factoryPaths';
+import type { WorkItemSessionRef } from '../services/workItems';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
-export function cardSessionPath(factoryId: string, session: CardContextSession): string {
-  return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
-}
-
-/** Switches between the card's sessions, one per context, from the breadcrumb. */
 export function SessionContextMenu({
   factoryId,
   sessions,
   openSessionId,
 }: {
   factoryId: string;
-  sessions: readonly CardContextSession[];
+  sessions: readonly CardContextSession<WorkItemSessionRef>[];
   openSessionId: string;
 }) {
-  const running = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
+  const running = new Set(useSessionActivityQuery(factoryId).data?.runningSessionIds);
 
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label="Switch session">
-        <ChevronDown aria-hidden />
+        <IconChevronDownMedium aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-48">
         {sessions.map(session => {
@@ -39,7 +36,7 @@ export function SessionContextMenu({
             <DropdownMenu.Item
               key={session.context}
               aria-label={name}
-              render={<Link to={cardSessionPath(factoryId, session)} />}
+              render={<Link to={threadPath(factoryId, session.ref)} />}
             >
               <span
                 aria-hidden
@@ -51,7 +48,7 @@ export function SessionContextMenu({
                   current
                 </Txt>
               )}
-              {open ? <Check aria-hidden /> : null}
+              {open ? <IconCheckmark2Medium aria-hidden /> : null}
             </DropdownMenu.Item>
           );
         })}

@@ -8,7 +8,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '@mastra/core/error';
-import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import type { WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -796,7 +795,12 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     // NOTE: This test is opt-in (skipped by default) because the execution engine's
     // logger is not automatically updated when the Mastra logger is set via __registerPrimitives.
     it.skipIf(skipTests.errorLogger ?? true)('should log step execution errors via the Mastra logger', async () => {
-      const { createWorkflow: createWf, createStep: createSt } = ctx;
+      const { createWorkflow: createWf, createStep: createSt, Mastra } = ctx;
+
+      // Opt-in test: an engine that turns it on has to provide the Mastra class to host with.
+      if (!Mastra) {
+        throw new Error('errorLogger test is enabled but the engine factory does not provide Mastra');
+      }
 
       const mockLogger = {
         debug: vi.fn(),

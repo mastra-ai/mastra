@@ -2,9 +2,11 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { DispatchAdapterHandle } from '@mastra/server/server-adapter';
 import {
   cancelReaderOnResponseClose,
   getCustomRouteHTTPExceptionResponse,
+  registerDispatchAdapter,
   writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
@@ -38,6 +40,8 @@ export class CustomRouteService {
   private readonly routes: HonoApiRoute[];
   private readonly authConfig: Map<string, boolean>;
   private fetchPromise?: Promise<CustomRouteFetch>;
+  /** Recorded on each request this module serves, so `dispatchRoute` applies this module's paths. */
+  readonly dispatchAdapter: DispatchAdapterHandle;
 
   constructor(
     @Inject(MASTRA) private readonly mastra: Mastra,
@@ -53,6 +57,13 @@ export class CustomRouteService {
         this.authConfig.set(key, route.requiresAuth !== false);
       }
     }
+
+    // NestMastraServer is not built on @mastra/server's MastraServer, so tell dispatchRoute where routes are served.
+    this.dispatchAdapter = registerDispatchAdapter(mastra, {
+      prefix: options.prefix ?? '',
+      getCustomRouteAuthConfig: () => this.authConfig,
+      getCustomApiRoutes: () => mastra.getServer()?.apiRoutes ?? [],
+    });
   }
 
   /** Auth config for custom routes, keyed by `METHOD:path`. */

@@ -469,6 +469,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/mcp',
+              label: 'Built-in MCP Server',
+            },
+            {
+              type: 'doc',
               id: 'server/pubsub',
               label: 'PubSub',
             },
@@ -815,9 +820,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/connect',
       label: 'Connect',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

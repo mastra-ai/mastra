@@ -85,10 +85,11 @@ export function keysetSortBounds(
   direction: 'asc' | 'desc',
   sortValue: string | number | null,
   values: unknown[],
+  stringSort = false,
 ): { past: string[]; level: string } {
   if (sortValue === null) return { past: [], level: `${field} IS NULL` };
   values.push(sortValue);
-  const parameter = `$${values.length}::${typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
+  const parameter = `$${values.length}::${stringSort ? 'text COLLATE "C"' : typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
   return {
     past: [`${field} ${direction === 'asc' ? '>' : '<'} ${parameter}`, `${field} IS NULL`],
     level: `${field} = ${parameter}`,
@@ -293,6 +294,8 @@ function compileScalarPredicate<TField extends string>(
   parameterOffset: number,
   allowMetadata = false,
 ): SqlFragment {
+  if (predicate.type === 'tokens')
+    throw new coreStorage.TraceQueryUnsupportedError('Indexed token search is not supported by this store');
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
@@ -487,7 +490,7 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
 ]);
 
 function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
-  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'relation' || predicate.type === 'tokens') return false;
   if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
   if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
   return ROOT_PUSHDOWN_FIELDS.has(predicate.field);

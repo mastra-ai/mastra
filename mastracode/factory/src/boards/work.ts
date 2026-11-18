@@ -24,7 +24,7 @@ export const BUILD_OBJECTIVE =
   ' Continue while any of that is missing. Waiting only when the agent asked a person a question it cannot ' +
   'answer from the repository.';
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'pr-review' | 'done' | 'canceled';
+export type WorkBoardPhase = 'intake' | 'planning' | 'execute' | 'pr-review' | 'done' | 'canceled';
 
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: DEFAULT_BOARD_ID,
@@ -36,22 +36,16 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       name: 'Intake',
       kind: 'resting',
       // Never straight to Building: a plan comes first. Review takes a pull request's own card;
-      // Done is where a completed source closes it.
-      nextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
-    },
-    triage: {
-      name: 'Triage',
-      kind: 'working',
-      runner: { skill: 'factory-triage', context: 'triage' },
-      // A confirmed bug goes to Planning; any other open issue waits in Intake for a person.
-      nextPhases: ['intake', 'planning', 'done', 'canceled'],
+      // Done is where a completed source closes it. New projects' Work has no Triage; projects
+      // stored before keep theirs (workSeedWithTriage).
+      nextPhases: ['planning', 'pr-review', 'done', 'canceled'],
     },
     planning: {
       name: 'Planning',
       kind: 'working',
       // Planning and Building share one session, so the builder keeps the plan's context.
       runner: { skill: 'factory-plan', context: 'work' },
-      nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
+      nextPhases: ['execute', 'intake', 'done', 'canceled'],
       // The card stays in Planning until submit_plan comes back approved; then factory-plan moves it.
       exitTool: { id: 'submit_plan', autoApprove: false },
     },

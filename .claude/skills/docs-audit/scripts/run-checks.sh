@@ -151,7 +151,11 @@ for (const f of report.findings) {
   const target = targetFor(f)
   const where = f.file ? `${f.file}${f.line ? `:${f.line}${f.column ? `:${f.column}` : ''}` : ''}` : '(no file)'
   const line = `${where} ${f.severity} ${f.ruleId}: ${f.message}${f.suggestion ? ` (${f.suggestion})` : ''}`
-  if (f.file && targetSet.has(f.file)) {
+  // Vale didn't run at all, so no audited page was prose-checked.
+  if (f.ruleId === 'mastra/vale-unavailable') {
+    raise('vale', 'fail')
+    diagnostics.vale.push(line)
+  } else if (f.file && targetSet.has(f.file)) {
     raise(target, f.severity === 'error' ? 'fail' : 'warn')
     diagnostics[target].push(line)
   } else if (f.severity === 'error') {
@@ -166,13 +170,8 @@ for (const f of report.findings) {
 }
 
 for (const skipped of report.summary.skipped) {
-  if (skipped.check.startsWith('mastra/vale')) {
-    raise('vale', 'warn')
-    diagnostics.vale.push(`Vale skipped: ${skipped.reason}`)
-  } else {
-    raise('validate', 'warn')
-    diagnostics.validate.push(`${skipped.check} skipped: ${skipped.reason}`)
-  }
+  raise('validate', 'warn')
+  diagnostics.validate.push(`${skipped.check} skipped: ${skipped.reason}`)
 }
 
 for (const [target, lines] of Object.entries(diagnostics)) {

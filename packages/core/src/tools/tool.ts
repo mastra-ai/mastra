@@ -568,7 +568,8 @@ export class Tool<
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, suspendPayload, ...rest } = baseContext;
+            const { workflowId, runId, state, setState, updateState, suspend, resumeData, suspendPayload, ...rest } =
+              baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -576,6 +577,7 @@ export class Tool<
                 runId,
                 state,
                 setState,
+                updateState,
                 suspend,
                 resumeData,
                 suspendPayload,

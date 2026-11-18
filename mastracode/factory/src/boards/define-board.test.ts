@@ -7,6 +7,7 @@ import {
 } from '../rules/types.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
+import { triageWorkBoard } from './test-utils.js';
 import { workBoard } from './work.js';
 
 describe('defineBoard', () => {
@@ -227,19 +228,34 @@ describe('defineBoard', () => {
 
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
+    // New projects' Work has no Triage.
     const flow: Record<string, string[]> = {
-      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
-      triage: ['intake', 'planning', 'done', 'canceled'],
-      planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
+      intake: ['planning', 'pr-review', 'done', 'canceled'],
+      planning: ['execute', 'intake', 'done', 'canceled'],
       execute: ['pr-review', 'planning', 'done', 'canceled'],
       'pr-review': ['intake', 'planning', 'execute', 'done', 'canceled'],
       done: ['pr-review'],
       canceled: ['intake', 'pr-review'],
     };
-    for (const from of Object.keys(flow)) {
-      for (const to of Object.keys(flow)) {
-        // Staying put is always allowed.
-        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(from === to || flow[from]!.includes(to));
+    // Projects stored before keep Triage, and the moves into and out of it.
+    const withTriage: Record<string, string[]> = {
+      ...flow,
+      intake: ['triage', ...flow.intake!],
+      triage: ['intake', 'planning', 'done', 'canceled'],
+      planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
+    };
+    for (const [board, moves] of [
+      [workBoard, flow],
+      [triageWorkBoard, withTriage],
+    ] as const) {
+      expect(Object.keys(board.phases).sort()).toEqual(Object.keys(moves).sort());
+      for (const from of Object.keys(moves)) {
+        for (const to of Object.keys(moves)) {
+          // Staying put is always allowed.
+          expect(board.allowsTransition(from, to), `${board === workBoard ? 'new' : 'older'}: ${from} -> ${to}`).toBe(
+            from === to || moves[from]!.includes(to),
+          );
+        }
       }
     }
     // Each working phase starts its stored runner's skill, for every source; Intake and Done run nothing.
@@ -251,7 +267,6 @@ describe('defineBoard', () => {
     );
     expect(skills).toEqual({
       intake: null,
-      triage: 'factory-triage',
       planning: 'factory-plan',
       execute: 'factory-build',
       'pr-review': 'factory-review',
@@ -259,7 +274,7 @@ describe('defineBoard', () => {
       canceled: null,
     });
     expect(workBoard.phaseKind('intake')).toBe('resting');
-    expect(workBoard.roleForPhase('triage')).toBe('triage');
+    expect(triageWorkBoard.phases.triage).toMatchObject({ runner: { skill: 'factory-triage', context: 'triage' } });
     expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
     // The independent reviewer works the card in Review.
@@ -271,12 +286,14 @@ describe('defineBoard', () => {
   });
 
   it('declares a working lane for each Work role, and Planning in the work context', () => {
-    expect(['triage', 'planning', 'execute', 'pr-review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
-      'triage',
+    expect(['planning', 'execute', 'pr-review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
       'work',
       'work',
       'review',
     ]);
+    // Only projects whose Work kept Triage have a triage lane.
+    expect(workBoard.roleForPhase('triage')).toBeUndefined();
+    expect(triageWorkBoard.roleForPhase('triage')).toBe('triage');
   });
 
   it('rejects inherited property names as phases', () => {

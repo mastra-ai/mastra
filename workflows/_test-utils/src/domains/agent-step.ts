@@ -3,13 +3,13 @@
  * Note: These tests require mock language models for full functionality
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, onTestFinished } from 'vitest';
 import { z } from 'zod';
 // @ts-ignore
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
 import { createTextStreamModel } from '../mock-models';
+import { stepsOf } from '../steps';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
@@ -589,13 +589,15 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
 
     it.skipIf(skipTests.agentStepMastraInstance)(
       'should be able to use an agent as a step via mastra instance',
-      async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+      async ({ skip }) => {
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          // Skip if Agent class not provided
-          return;
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
+
+        const agent1Prompts: string[] = [];
+        const agent2Prompts: string[] = [];
 
         const workflow = createWorkflow({
           id: 'agent-mastra-instance-workflow',
@@ -611,12 +613,15 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Paris',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent1Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Paris',
+              };
+            },
           }),
         });
 
@@ -625,12 +630,15 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'London',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent2Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'London',
+              };
+            },
           }),
         });
 
@@ -649,11 +657,14 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           },
         });
 
-        new Mastra({
+        const host = new Mastra({
           logger: false,
           workflows: { 'agent-mastra-instance-workflow': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         workflow
           .then(startStep)
@@ -700,37 +711,41 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
         });
 
-        expect(result.steps['agent-step-1']).toEqual({
+        const steps = await stepsOf(result);
+        // Engines may omit a step's payload from the result when it repeats the previous
+        // step's output (the default engine does since #11755), so assert the prompt the
+        // agent actually received instead.
+        expect(steps['agent-step-1']).toMatchObject({
           status: 'success',
           output: { text: 'Paris' },
-          payload: {
-            prompt: 'Capital of France, just the name',
-          },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-
-        expect(result.steps['agent-step-2']).toEqual({
+        expect(steps['agent-step-2']).toMatchObject({
           status: 'success',
           output: { text: 'London' },
-          payload: {
-            prompt: 'Capital of UK, just the name',
-          },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        // Each agent received the prompt its preceding .map() selected.
+        expect(agent1Prompts).toHaveLength(1);
+        expect(agent1Prompts[0]).toContain('Capital of France, just the name');
+        expect(agent2Prompts).toHaveLength(1);
+        expect(agent2Prompts[0]).toContain('Capital of UK, just the name');
       },
     );
 
     it.skipIf(skipTests.agentStepNestedMastraInstance)(
       'should be able to use an agent as a step in nested workflow via mastra instance',
-      async () => {
-        const { createWorkflow, createStep, cloneStep, Agent } = ctx;
+      async ({ skip }) => {
+        const { createWorkflow, createStep, cloneStep, Agent, Mastra } = ctx;
 
-        if (!Agent || !cloneStep) {
-          // Skip if Agent class or cloneStep not provided
-          return;
+        if (!Agent || !Mastra || !cloneStep) {
+          return skip('engine factory does not provide Agent, Mastra or cloneStep');
         }
+
+        const agent1Prompts: string[] = [];
+        const agent2Prompts: string[] = [];
 
         const workflow = createWorkflow({
           id: 'agent-nested-mastra-instance-workflow',
@@ -746,12 +761,15 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'Paris',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent1Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Paris',
+              };
+            },
           }),
         });
 
@@ -760,20 +778,26 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: 'London',
-            }),
+            doGenerate: async ({ prompt }) => {
+              agent2Prompts.push(JSON.stringify(prompt));
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'London',
+              };
+            },
           }),
         });
 
-        new Mastra({
+        const host = new Mastra({
           logger: false,
           workflows: { 'agent-nested-mastra-instance-workflow': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         });
+        // Event-driven engines execute steps through the host's workers, so start them.
+        await host.startWorkers();
+        onTestFinished(() => host.stopWorkers());
 
         const agentStep = createStep({
           id: 'agent-step',
@@ -838,16 +862,21 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
         });
 
-        expect(result.steps['nested-workflow']).toEqual({
+        const steps = await stepsOf(result);
+        // Engines may omit a step's payload from the result when it repeats the previous
+        // step's output (the default engine does since #11755; here it is the workflow
+        // input), so assert the prompt each agent actually received instead.
+        expect(steps['nested-workflow']).toMatchObject({
           status: 'success',
           output: { text: 'Paris London' },
-          payload: {
-            prompt1: 'Capital of France, just the name',
-            prompt2: 'Capital of UK, just the name',
-          },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
+        // Each agent received the prompt the nested workflow's .map() selected.
+        expect(agent1Prompts).toHaveLength(1);
+        expect(agent1Prompts[0]).toContain('Capital of France, just the name');
+        expect(agent2Prompts).toHaveLength(1);
+        expect(agent2Prompts[0]).toContain('Capital of UK, just the name');
       },
     );
 

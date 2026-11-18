@@ -28,17 +28,123 @@ export interface KnowledgeAccessExplanation {
   reason?: 'missing' | 'hidden' | 'no-rule';
 }
 
+type ScopeMatch = NonNullable<ReturnType<CompiledKnowledgeScopes['match']>>;
+type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch['params'] }>>;
+/** The addresses a write-run start looked up, and the scope pages it found or wrote since. */
+type KnownScopes = { looked: Set<string>; byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage> };
+type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
+
+/** How long the store's scope declarations are reused before {@link KnowledgeScopeRuntime.resolve} reads them again. */
+export const KNOWLEDGE_STORE_DECLARATIONS_TTL_MS = 30_000;
+
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
-  readonly compiled: CompiledKnowledgeScopes;
+  readonly #config: KnowledgeScopeDeclarations;
+  readonly #configCompiled: CompiledKnowledgeScopes;
+  /** The last resolved declarations, keyed by what the store supplied. */
+  #resolved: { stored: string; compiled: CompiledKnowledgeScopes; skipped: Map<string, string> };
   #declarationsChecked?: Promise<void>;
+  /** The store's declarations as last read, shared by concurrent calls until they expire. */
+  #stored?: { readAt: number; declarations: Promise<KnowledgeScopeDeclarations> };
 
   constructor(
     declarations: KnowledgeScopeDeclarations,
     private readonly getStorage: () => Promise<KnowledgeStorage>,
     private readonly warn: (message: string) => void,
   ) {
-    this.compiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#config = structuredClone(declarations);
+    this.#configCompiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#resolved = { stored: '{}', compiled: this.#configCompiled, skipped: new Map() };
+  }
+
+  /** The declarations as last resolved: the config's, plus the store's from the latest {@link resolve}. */
+  get compiled(): CompiledKnowledgeScopes {
+    return this.#resolved.compiled;
+  }
+
+  /**
+   * Reads the store's scope declarations and merges them under the config's: a key the config
+   * declares keeps the config's declaration. Called once at the start of every call. The store's
+   * answer is reused for {@link KNOWLEDGE_STORE_DECLARATIONS_TTL_MS}, so a declaration the store adds
+   * or changes applies within that window, and right away after {@link invalidate}. A store
+   * declaration that doesn't compile next to the others is skipped with a warning. Recompiles only
+   * when the store's answer changes.
+   */
+  async resolve(): Promise<CompiledKnowledgeScopes> {
+    const entry = this.#readStored();
+    const stored = await entry.declarations;
+    // Replaced while this read was in flight, by invalidate() or a newer read once the window
+    // passed: its answer may predate the change, so take the current one instead.
+    if (this.#stored !== entry) return this.resolve();
+    const key = JSON.stringify(stored);
+    if (key === this.#resolved.stored) return this.#resolved.compiled;
+    let merged = this.#config;
+    let compiled = this.#configCompiled;
+    // Declarations can name types declared after them, or each other, so the whole record is tried
+    // first. When that fails, ones that compile on their own are added until a pass adds none, then
+    // the rest without each one in turn, which keeps a group that only compiles together next to one
+    // that doesn't compile.
+    let pending = Object.entries(stored).filter(([name]) => !Object.hasOwn(this.#config, name));
+    const failures = new Map<string, unknown>();
+    const skippedReasons = new Map<string, string>();
+    const add = (entries: typeof pending, failed?: string) => {
+      const next = { ...merged, ...Object.fromEntries(entries) };
+      try {
+        compiled = compileKnowledgeScopes(structuredClone(next));
+        merged = next;
+        return true;
+      } catch (error) {
+        if (failed) failures.set(failed, error);
+        return false;
+      }
+    };
+    if (!add(pending)) {
+      while (pending.length) {
+        const skipped = pending.filter(entry => !add([entry], entry[0]));
+        if (skipped.length < pending.length) {
+          pending = skipped;
+          continue;
+        }
+        const left = skipped.findIndex((_, i) => skipped.length > 1 && add(skipped.filter((__, j) => j !== i)));
+        if (left !== -1) {
+          pending = [skipped[left]!];
+          continue;
+        }
+        for (const [name] of skipped) {
+          const error = failures.get(name);
+          const reason = error instanceof Error ? error.message : String(error);
+          skippedReasons.set(name, reason);
+          this.warn(`Knowledge skipped the store's scope declaration "${name}": ${reason}`);
+        }
+        break;
+      }
+    }
+    this.#resolved = { stored: key, compiled, skipped: skippedReasons };
+    this.#declarationsChecked = undefined;
+    return compiled;
+  }
+
+  /** Makes the next {@link resolve} read the store's declarations again. */
+  invalidate(): void {
+    this.#stored = undefined;
+  }
+
+  #readStored(): { readAt: number; declarations: Promise<KnowledgeScopeDeclarations> } {
+    const now = Date.now();
+    // `now >= readAt` keeps a clock that moved backwards from extending the window.
+    if (this.#stored && now >= this.#stored.readAt && now - this.#stored.readAt < KNOWLEDGE_STORE_DECLARATIONS_TTL_MS) {
+      return this.#stored;
+    }
+    const entry = {
+      readAt: now,
+      declarations: this.getStorage().then(storage => storage.getScopeDeclarations()),
+    };
+    this.#stored = entry;
+    // A failed read isn't kept, so the next call tries again.
+    entry.declarations.catch(() => {
+      if (this.#stored === entry) this.#stored = undefined;
+    });
+    return entry;
   }
 
   validatePrincipals(principals: readonly string[]): void {
@@ -50,9 +156,10 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
-   * Fails when stored scope pages carry declaration keys this config doesn't declare: a renamed or
-   * removed key would otherwise silently cut those scopes off from prefix and `belongsTo` reach.
-   * Checked once per instance; only a pass is remembered, so a store error is retried next time.
+   * Fails when stored scope pages carry declaration keys neither the config nor the store declares: a
+   * renamed or removed key would otherwise silently cut those scopes off from prefix and `belongsTo`
+   * reach. Checked once per set of resolved declarations; only a pass is remembered, so a store error
+   * is retried next time.
    */
   checkDeclarations(): Promise<void> {
     if (!this.#declarationsChecked) {
@@ -71,14 +178,33 @@ export class KnowledgeScopeRuntime {
       ({ declaration }) => !this.compiled.declarations.has(declaration),
     );
     if (orphans.length === 0) return;
-    const listed = orphans
-      .map(({ declaration, scopes }) => `"${declaration}" (${scopes} scope${scopes === 1 ? '' : 's'})`)
-      .join(', ');
-    throw new KnowledgeDeclarationError(
-      `Knowledge storage has scopes created from declarations this config doesn't declare: ${listed}. ` +
-        'Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), ' +
-        'or keep the key with no access rules to retire it.',
-    );
+    const list = (entries: typeof orphans) =>
+      entries
+        .map(({ declaration, scopes }) => `"${declaration}" (${scopes} scope${scopes === 1 ? '' : 's'})`)
+        .join(', ');
+    // A store declaration that didn't compile leaves its stored scopes, its children's included,
+    // without a declaration too. Name it and why, since the fix is in the store, not the config.
+    const skippedKey = (declaration: string) => {
+      const key = declaration.split('/')[0]!;
+      return this.#resolved.skipped.has(key) ? key : undefined;
+    };
+    const undeclared = orphans.filter(({ declaration }) => !skippedKey(declaration));
+    const messages: string[] = [];
+    if (undeclared.length) {
+      messages.push(
+        `Knowledge storage has scopes created from declarations this config doesn't declare: ${list(undeclared)}. ` +
+          'Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), ' +
+          'or keep the key with no access rules to retire it.',
+      );
+    }
+    for (const key of new Set(orphans.map(({ declaration }) => skippedKey(declaration)).filter(k => k !== undefined))) {
+      const stranded = orphans.filter(({ declaration }) => skippedKey(declaration) === key);
+      messages.push(
+        `Knowledge skipped the store's scope declaration "${key}", so its stored scopes have none: ${list(stranded)}. ` +
+          `${this.#resolved.skipped.get(key)} Fix that declaration in the store, or declare the key, with its children, in scopes to override it.`,
+      );
+    }
+    throw new KnowledgeDeclarationError(messages.join(' '));
   }
 
   /** Re-keys stored scopes from declaration `from` to `to`. See {@link Knowledge.renameScopeDeclaration}. */
@@ -110,22 +236,61 @@ export class KnowledgeScopeRuntime {
       },
     });
     this.#declarationsChecked = undefined;
+    this.invalidate();
     return renamed;
   }
 
-  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  /**
+   * Whether a stored scope row belongs to the declaration its address matches today. Rows written
+   * before scope params matched exactly one segment can carry another (`org:acme:viewer` stored
+   * under `org:$orgId`); they must not pick up the rules of the declaration that now matches them.
+   */
+  #isCurrent(scope: KnowledgePage): boolean {
+    return !scope.declaration || this.compiled.match(scope.address!)?.declaration === scope.declaration;
+  }
+
+  #assertCurrent(scope: KnowledgePage): void {
+    if (this.#isCurrent(scope)) return;
+    throw new KnowledgeDeclarationError(
+      `Knowledge scope "${scope.address}" was created from "${scope.declaration}", which no longer matches it ` +
+        `(scope params match one segment; encode colons in ids as %3A). It can't be used as a scope of ` +
+        `"${this.compiled.match(scope.address!)?.declaration}".`,
+    );
+  }
+
+  async readScopeFor(principals: readonly string[]): Promise<Exclude<KnowledgeReadScope, 'all'>> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
+    // belongsTo parents resolve through current rows only, so a stale row can't parent new children.
+    const read = await knowledgeReadScopeFor(this.compiled, principals, async addresses =>
+      (await storage.getScopesByAddress(addresses)).filter(scope => this.#isCurrent(scope)),
+    );
+    if (read.addresses.length === 0) return read;
+    const stale = new Set(
+      (await storage.getScopesByAddress(read.addresses))
+        .filter(scope => !this.#isCurrent(scope))
+        .map(scope => scope.address!),
+    );
+    return stale.size ? { ...read, addresses: read.addresses.filter(address => !stale.has(address)) } : read;
   }
 
   async roleOn(principals: readonly string[], scope: KnowledgePage): Promise<KnowledgeRole | null> {
     this.validatePrincipals(principals);
     if (!scope.isScope || !scope.address) throw new Error('Knowledge roles require a scope page.');
+    if (!this.#isCurrent(scope)) return null;
     const storage = await this.getStorage();
-    const parent = scope.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    return knowledgeRoleOn(this.compiled, principals, { address: scope.address, parentAddress: parent?.address });
+    return knowledgeRoleOn(this.compiled, principals, {
+      address: scope.address,
+      parentAddress: await this.#currentParentAddress(storage, scope),
+    });
+  }
+
+  // A stale parent row (its address now matches another declaration) must not bind belongsTo rules.
+  async #currentParentAddress(storage: KnowledgeStorage, scope: KnowledgePage): Promise<string | undefined> {
+    if (!scope.parentId) return undefined;
+    const parent = await storage.getPage({ id: scope.parentId, read: 'all' });
+    return parent && this.#isCurrent(parent) ? (parent.address ?? undefined) : undefined;
   }
 
   async explainAccess(
@@ -162,8 +327,13 @@ export class KnowledgeScopeRuntime {
     }
 
     const address = scope?.address ?? (target as { scope: string }).scope;
-    const parent = scope?.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    const reasons = knowledgeAccessGrants(this.compiled, principals, { address, parentAddress: parent?.address });
+    const reasons =
+      scope && !this.#isCurrent(scope)
+        ? []
+        : knowledgeAccessGrants(this.compiled, principals, {
+            address,
+            parentAddress: scope ? await this.#currentParentAddress(storage, scope) : undefined,
+          });
     let role: KnowledgeRole | null = null;
     for (const reason of reasons) role = strongerKnowledgeRole(role, reason.role);
     return {
@@ -202,49 +372,115 @@ export class KnowledgeScopeRuntime {
     address: string,
     principals: readonly string[],
     provenance: KnowledgeProvenance,
-    ancestors: readonly string[] = [],
   ): Promise<KnowledgePage> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
+    return this.#materialize(address, principals, provenance, [], { held: this.#held(principals) });
+  }
+
+  /**
+   * {@link materializeScope} for each address in turn (a write-run start's principals), reading
+   * scopes from one lookup. `#materialize` skips the store call for a scope that exists, needs no new
+   * `belongsTo` link, has its child scopes and declares no template pages; warnings fire as before.
+   */
+  async materializeScopes(
+    addresses: readonly string[],
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+  ): Promise<void> {
+    this.validatePrincipals(principals);
+    await this.checkDeclarations();
+    const storage = await this.getStorage();
+    const wanted = new Set<string>();
+    for (const address of addresses) {
+      wanted.add(address);
+      const match = this.compiled.match(address);
+      if (match?.compiled.child) wanted.add(address.slice(0, address.lastIndexOf('/')));
+      else for (const child of match?.compiled.children ?? []) wanted.add(`${address}/${child.child!.name}`);
+    }
+    const known: KnownScopes = { looked: wanted, byAddress: new Map(), byId: new Map() };
+    for (const row of await storage.getScopesByAddress([...wanted])) {
+      known.byAddress.set(row.address!, row);
+      known.byId.set(row.id, row);
+    }
+    const run = { held: this.#held(principals), known };
+    for (const address of addresses) await this.#materialize(address, principals, provenance, [], run);
+  }
+
+  /** The run's distinct principals grouped by declaration key, matched once. */
+  #held(principals: readonly string[]): HeldPrincipals {
+    const held: HeldPrincipals = new Map();
+    for (const principal of new Set(principals)) {
+      const match = this.compiled.match(principal);
+      if (!match) continue;
+      const group = held.get(match.compiled.key) ?? [];
+      group.push({ principal, params: match.params });
+      held.set(match.compiled.key, group);
+    }
+    return held;
+  }
+
+  #belongsToCandidates(match: ScopeMatch, held: HeldPrincipals): string[] {
+    const belongsTo = match.compiled.belongsTo!;
+    return (held.get(belongsTo.key) ?? [])
+      .filter(candidate =>
+        belongsTo.params.every(
+          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
+        ),
+      )
+      .map(candidate => candidate.principal);
+  }
+
+  async #materialize(
+    address: string,
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+    ancestors: readonly string[],
+    run: MaterializeRun,
+  ): Promise<KnowledgePage> {
     const match = this.compiled.match(address);
     if (!match)
       throw new KnowledgeDeclarationError(`Knowledge scope "${address}" does not match a declared scope type.`);
     if (ancestors.includes(address))
       throw new KnowledgeDeclarationError(`Knowledge scope placement cycle at "${address}".`);
     const storage = await this.getStorage();
+    const known = run.known;
+    const lookUp = async (scope: string) =>
+      known?.looked.has(scope) || known?.byAddress.has(scope)
+        ? known.byAddress.get(scope)
+        : (await storage.getScopesByAddress([scope]))[0];
     if (match.compiled.child) {
       const parentAddress = address.slice(0, address.lastIndexOf('/'));
-      await this.materializeScope(parentAddress, principals, provenance, [...ancestors, address]);
-      const [child] = await storage.getScopesByAddress([address]);
+      await this.#materialize(parentAddress, principals, provenance, [...ancestors, address], run);
+      const child = known?.byAddress.get(address) ?? (await storage.getScopesByAddress([address]))[0];
       if (!child) throw new Error(`Knowledge template child "${address}" was not materialized.`);
       return child;
     }
 
-    const [existing] = await storage.getScopesByAddress([address]);
+    const existing = await lookUp(address);
+    if (existing) this.#assertCurrent(existing);
     let parentId = existing?.parentId;
     const belongsTo = match.compiled.belongsTo;
     if (belongsTo) {
-      const candidates = [...new Set(principals)].filter(principal => {
-        const candidate = this.compiled.match(principal);
-        if (!candidate || candidate.compiled.key !== belongsTo.key) return false;
-        return belongsTo.params.every(
-          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
-        );
-      });
+      const candidates = this.#belongsToCandidates(match, run.held);
       if (candidates.length > 1) {
         this.warn(
           `Knowledge scope "${address}" has ambiguous belongsTo placement: ${candidates.join(', ')}. Keeping its existing placement.`,
         );
       } else if (candidates[0]) {
         if (existing?.parentId) {
-          const parent = await storage.getPage({ id: existing.parentId, read: 'all' });
+          let parent = known?.byId.get(existing.parentId) ?? null;
+          if (!parent) {
+            parent = await storage.getPage({ id: existing.parentId, read: 'all' });
+            if (parent) known?.byId.set(parent.id, parent);
+          }
           if (parent?.address !== candidates[0]) {
             this.warn(
               `Knowledge scope "${address}" already belongs to "${parent?.address}"; ignoring requested parent "${candidates[0]}".`,
             );
           }
         } else if (!ancestors.includes(candidates[0]) && candidates[0] !== address) {
-          parentId = (await this.materializeScope(candidates[0], principals, provenance, [...ancestors, address])).id;
+          parentId = (await this.#materialize(candidates[0], principals, provenance, [...ancestors, address], run)).id;
         } else {
           this.warn(
             `Knowledge scope "${address}" cannot be placed under "${candidates[0]}" because that would form a cycle.`,
@@ -253,6 +489,16 @@ export class KnowledgeScopeRuntime {
       }
     }
     const declaration = match.compiled.declaration;
+    // Placed already: nothing to link, and no template pages to restore or child scopes to create.
+    if (
+      known &&
+      existing &&
+      parentId === existing.parentId &&
+      !declaration.pages?.length &&
+      match.compiled.children.every(child => known.byAddress.has(`${address}/${child.child!.name}`))
+    ) {
+      return existing;
+    }
     const result = await storage.materializeScope({
       address,
       declaration: match.declaration,
@@ -268,6 +514,7 @@ export class KnowledgeScopeRuntime {
       pages: declaration.pages,
       provenance,
     });
+    this.#assertCurrent(result.scope);
     if (result.created) {
       // A new scope (and its config pages) can resolve body links written before it existed.
       await updateKnowledgeLinks(this.warn, () =>
@@ -276,6 +523,10 @@ export class KnowledgeScopeRuntime {
     }
     if (result.parentConflict) {
       this.warn(`Knowledge scope "${address}" was already linked by another run; keeping its persisted parent.`);
+    }
+    if (run.known) {
+      run.known.byAddress.set(address, result.scope);
+      run.known.byId.set(result.scope.id, result.scope);
     }
     return result.scope;
   }

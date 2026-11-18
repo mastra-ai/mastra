@@ -213,12 +213,16 @@ export function createBaseIterationStateUpdate(
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,
+    deadlineTimeout: executionOutput.deadlineTimeout ?? currentState.deadlineTimeout,
+    runAborted: executionOutput.runAborted ?? currentState.runAborted,
     // Preserve the two-phase stop flag set by the dowhile predicate's
     // onIterationComplete handler.  The predicate mutates state on the
     // *output* of the previous iteration; createBaseIterationStateUpdate
     // rebuilds the state for the next iteration, so we must carry the
     // flag forward explicitly.
     pendingFeedbackStop: currentState.pendingFeedbackStop,
+    // Set by the predicate after it publishes a step-finish, like pendingFeedbackStop.
+    responseMessagesCursor: currentState.responseMessagesCursor,
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,

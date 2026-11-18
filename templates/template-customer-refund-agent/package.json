@@ -79,10 +79,10 @@
     "@hono/node-server": "2.1.6",
     "nanoid": "5.1.16",
     "shadcn": {
-      "undici": "8.12.2"
+      "undici": "8.12.4"
     },
     "@dotenvx/dotenvx": {
-      "undici": "8.12.2"
+      "undici": "8.12.4"
     },
     "oxfmt": {
       "tinypool": "2.1.2"
@@ -90,6 +90,12 @@
     "@modelcontextprotocol/server": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
     "vite": "8.3.4",
-    "wsl-utils": "1.0.1"
+    "wsl-utils": "1.0.1",
+    "@ts-morph/common": {
+      "minimatch": "11.0.5"
+    },
+    "readdir-glob": {
+      "minimatch": "11.0.5"
+    }
   }
 }

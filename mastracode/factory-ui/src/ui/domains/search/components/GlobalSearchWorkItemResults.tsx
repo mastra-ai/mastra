@@ -1,15 +1,14 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Ticket } from 'lucide-react';
-
 import type { WorkItemSearchResult } from '../services/searchResults';
+import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
 
 export function GlobalSearchWorkItemResults({
   results,
   onSelect,
 }: {
-  results: WorkItemSearchResult[];
+  results: readonly WorkItemSearchResult[];
   onSelect: (result: WorkItemSearchResult) => void;
 }) {
   if (results.length === 0) return null;
@@ -19,7 +18,7 @@ export function GlobalSearchWorkItemResults({
       {results.map(result => (
         <CommandPaletteItem
           key={result.id}
-          icon={<Ticket />}
+          icon={<IconTicket />}
           title={result.title}
           subtitle={
             <Metadata singleLine>

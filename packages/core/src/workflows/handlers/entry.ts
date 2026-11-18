@@ -205,6 +205,8 @@ export async function isWorkflowRunCanceled(
   workflowId: string,
   runId: string,
 ): Promise<boolean> {
+  // These runs are never stored, so the read could only miss.
+  if (engine.options?.localCancellationOnly) return false;
   try {
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: workflowId, runId });

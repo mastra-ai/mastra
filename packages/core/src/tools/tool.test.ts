@@ -107,6 +107,30 @@ describe('createTool in a workflow', () => {
 
     expect(output).toStrictEqual({ state: { count: 1 }, runId: 'run-1' });
   });
+
+  it('hands a flat workflow context its updateState', async () => {
+    const updateState = vi.fn(async (_update: Record<string, unknown>) => {});
+    const tool = createTool({
+      id: 'update-state',
+      description: 'Updates workflow state',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context.workflow?.updateState({ count: 2 });
+        return {};
+      },
+    });
+
+    await tool.execute?.({}, {
+      workflowId: 'wf',
+      runId: 'run-1',
+      state: { count: 1 },
+      setState: vi.fn(),
+      updateState,
+      suspend: async () => {},
+    } as any);
+
+    expect(updateState).toHaveBeenCalledWith({ count: 2 });
+  });
 });
 
 describe('createTool with providerOptions', () => {

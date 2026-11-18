@@ -301,11 +301,23 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
 
     const resumed = await inngestAgent.resume(first.runId, { approved: true });
     const resumedResult = await drain(resumed.output.fullStream, 60_000, false);
+    const resumedSteps = await resumed.output.steps;
     resumed.cleanup();
 
     expect(resumedResult.errors).toEqual([]);
     expect(resumedResult.types).toContain('finish');
     await vi.waitFor(() => expect(approvals).toEqual([true]), { timeout: 30_000, interval: 250 });
+
+    // Step-finish events carry only the response messages that changed. The resumed stream, which
+    // starts mid-log, and an observer replaying the whole run both report the run's full list.
+    const observed: any[] = [];
+    const observation = await inngestAgent.observe(first.runId, {
+      onStepFinish: (step: any) => void observed.push(step),
+    });
+    await drain(observation.fullStream, 60_000, false);
+    const lastMessages = JSON.parse(JSON.stringify(resumedSteps.at(-1)!.response.messages));
+    expect(JSON.stringify(lastMessages)).toContain('shipped');
+    expect(observed.at(-1).response.messages).toEqual(lastMessages);
   });
 
   it('resumes repeated later-iteration suspensions in one run', async () => {

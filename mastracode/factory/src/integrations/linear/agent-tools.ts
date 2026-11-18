@@ -64,7 +64,9 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       'Post a comment on a Linear issue (e.g. to report investigation findings, link a PR, or ask a clarifying question). The comment is posted as the connected Linear integration, so make clear it comes from the agent.',
     inputSchema: z.object({
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
-      body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
+      body: z.string().min(1).describe(
+          'The comment body, as Linear-flavored markdown. Linear does not render HTML (no <details>, <summary> or <!-- comments -->); for a collapsible section, open it with a "+++ Section title" line and close it with a lone "+++" line.',
+        ),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
       const connection = await linear.loadConnection(orgId);

@@ -23,22 +23,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandl
 export { createAuthMiddleware } from './auth-middleware';
 export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
-
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
  */
@@ -372,6 +356,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     });
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(
     route: ServerRoute,
     reply: FastifyReply,
@@ -475,7 +464,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
         await applyMcpRequestAuth({ req: rawReq, requestContext: request.requestContext, setRequestAuth });
 
@@ -523,7 +512,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         await applyMcpRequestAuth({
           req: rawReq,
           requestContext: request.requestContext,
-          setRequestAuth: this.mcpOptions?.setRequestAuth,
+          setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
         });
 
         await server.startSSE({
@@ -663,35 +652,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         request: toWebRequest(request),
       };
 
-      // Check route permission requirement (EE feature)
-      // Uses convention-based permission derivation: permissions are auto-derived
-      // from route path/method unless explicitly set or route is public
-      const requestContext = request.requestContext;
-      // Check if any auth is configured (studio or server) for RBAC
-      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-      if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-
-          if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
-          }
-        }
-      }
-
-      // Check FGA authorization (EE feature)
-      const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
-        ...params.urlParams,
-        ...params.queryParams,
-        ...(typeof params.body === 'object' ? params.body : {}),
-      });
-      if (fgaError) {
-        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+      // Check route permission (RBAC) and FGA authorization (EE features)
+      const authzError = await this.authorizeRoute(
+        route,
+        {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        },
+        request.requestContext,
+      );
+      if (authzError) {
+        return reply.status(authzError.status).send({ error: authzError.error, message: authzError.message });
       }
 
       try {
@@ -779,27 +751,30 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
-      // Create pseudo ServerRoute for auth checking
-      const serverRoute: ServerRoute = {
-        method: route.method as any,
-        path: route.path,
-        responseType: 'json',
-        handler: async () => {},
-        requiresAuth: route.requiresAuth,
-        requiresPermission: route.requiresPermission,
-        fga: route.fga,
-      };
-
       const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        // Fastify prefers static paths, but the custom-route app may dispatch the request
+        // to a different route. Check auth against the route that will actually run for
+        // the URL it's forwarded.
+        const requestPath = String(request.url.split('?')[0] || '/');
+        const requestMethod = String(request.method || 'GET');
+        const dispatchUrl = `http://${request.headers.host}${request.url}`;
+        const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
+          dispatchUrl,
+          requestMethod,
+          requestPath,
+          route,
+        );
+
         // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
-          path: String(request.url.split('?')[0] || '/'),
-          method: String(request.method || 'GET'),
+          path: requestPath,
+          method: requestMethod,
           getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => (request.query as Record<string, string>)[name],
           requestContext: request.requestContext,
           request: toWebRequest(request),
           buildAuthorizeContext: () => toWebRequest(request),
+          customRouteAuthConfig,
         });
 
         if (authError) {
@@ -814,33 +789,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         const requestContext = request.requestContext;
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
-          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-          try {
-            ({ hasPermission } = await import('@mastra/core/auth/ee'));
-          } catch {
-            console.error(
-              '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
-          }
-
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              serverRoute,
-              userPermissions,
-              hasPermission,
-              requestContext,
-            );
-            if (permissionError) {
-              return reply.status(permissionError.status).send({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
-          }
+        const permissionError = this.checkRouteRBAC(serverRoute, requestContext);
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
+          });
         }
 
         // Check FGA authorization (EE feature)
@@ -851,14 +805,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
-          ...(request.params as Record<string, string>),
+          // Use the dispatched route's params; Fastify's may belong to a different route.
+          ...(match ? match.params : (request.params as Record<string, string>)),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
         }
 
         const response = await this.handleCustomRouteRequest(
-          `http://${request.headers.host}${request.url}`,
+          dispatchUrl,
           request.method,
           request.headers as Record<string, string | string[] | undefined>,
           request.body,

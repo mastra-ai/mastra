@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { DayPicker, getDefaultClassNames } from 'react-day-picker';
 import type { ChevronProps, DayButton } from 'react-day-picker';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
@@ -32,7 +33,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
         button_previous: cn(navButton, defaults.button_previous),
         button_next: cn(navButton, defaults.button_next),
         month_caption: cn('flex h-(--cell-size) items-center justify-center', defaults.month_caption),
-        caption_label: cn('text-label font-medium text-foreground select-none', defaults.caption_label),
+        caption_label: cn('text-label text-foreground select-none', defaults.caption_label),
         month_grid: cn('w-full border-collapse', defaults.month_grid),
         weekdays: cn('flex', defaults.weekdays),
         weekday: cn(
@@ -80,7 +81,7 @@ const navButton = cn(
 );
 
 function CalendarChevron({ orientation, className }: ChevronProps) {
-  const Icon = orientation === 'left' ? ChevronLeft : ChevronRight;
+  const Icon = orientation === 'left' ? IconChevronLeftMedium : IconChevronRightMedium;
   return <Icon className={cn('size-4', className)} />;
 }
 

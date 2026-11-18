@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
-import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
+import type { IntegrationContext } from '../../base.js';
+import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID, INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.js';
+import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
 import { decodeScopedSourceId, encodeScopedSourceId, PlatformIncidentioIntegration } from './integration.js';
 
 const incident = {
@@ -389,6 +392,58 @@ describe('PlatformIncidentioIntegration', () => {
         sourceIds: [INCIDENTIO_INCIDENTS_SOURCE_ID],
       }),
     ).rejects.toThrow(/identify a connection/);
+  });
+
+  it('files a connection-scoped follow-up on the sweep without listing the incidents bound beside it', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const followUp = {
+      id: 'follow-up-1',
+      incident_id: 'incident-1',
+      title: 'Add database failover alert',
+      status: 'outstanding',
+      creator: { user: { id: 'user-1', name: 'Ada Lovelace' } },
+      created_at: '2026-09-02T10:00:00Z',
+      updated_at: '2026-09-02T12:00:00Z',
+    };
+    const fetchImpl = fetchRouter([
+      {
+        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        respond: () => json({ connections: [connection('connection-a', 'acme')] }),
+      },
+      {
+        match: url => url.includes('/connection-a/proxy/v3/follow_ups'),
+        respond: () => json({ follow_ups: [followUp] }),
+      },
+    ]);
+    const integration = new PlatformIncidentioIntegration({
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+    });
+    const sourceIds = [INCIDENTIO_INCIDENTS_SOURCE_ID, INCIDENTIO_FOLLOW_UPS_SOURCE_ID].map(sourceId =>
+      encodeScopedSourceId('connection-a', sourceId),
+    );
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { incidentio: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'incidentio',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    const sweep = attachIncidentioIssueReconciler(integration, {
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext);
+
+    // The router throws on any unlisted request, so an incidents listing would fail the sweep.
+    await expect(sweep?.()).resolves.toMatchObject({ observed: 1, failed: 0 });
+    expect(
+      (await seeded.workItems.listDeferredDecisions('org-1', project.id)).map(
+        entry => (entry.decision as { sourceKey?: string }).sourceKey,
+      ),
+    ).toEqual(['incidentio:follow-up:follow-up-1']);
   });
 
   it('does not require a deploy-time connection ID', () => {

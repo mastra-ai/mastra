@@ -31,7 +31,12 @@ export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
 export { loadAccumulatedSteps, readAccumulatedSteps, storeAccumulatedSteps } from './accumulated-steps';
 
-export { buildDeferredStepFinishChunk, buildDurableStepContent, expandDurableSteps } from '@internal/core/durable';
+export {
+  buildDeferredStepFinishChunk,
+  buildDurableStepContent,
+  durableStopConditionSteps,
+  expandDurableSteps,
+} from '@internal/core/durable';
 
 export {
   dehydrateMessageListState,

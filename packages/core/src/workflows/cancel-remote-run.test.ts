@@ -193,3 +193,141 @@ describe.each([1, 2] as const)(
     });
   },
 );
+
+// Agents' per-call stream-preparation and processor workflows set `localCancellationOnly`, so
+// they skip stored-cancellation reads. A user workflow keeps them whatever its snapshot policy,
+// type or id, because another server can still store and cancel the same run.
+describe.each([1, 2] as const)('cancellation of runs that store no snapshot (storage v%s)', storageVersion => {
+  const neverPersist = () => false;
+
+  function build(
+    id: string,
+    hooks: { first?: () => Promise<void>; second?: () => void } = {},
+    extra: { type?: 'processor'; localCancellationOnly?: boolean } = {},
+  ) {
+    return createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      type: extra.type,
+      options: {
+        storageVersion,
+        shouldPersistSnapshot: neverPersist,
+        localCancellationOnly: extra.localCancellationOnly,
+      },
+    })
+      .then(
+        createStep({
+          id: 'first',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => {
+            await hooks.first?.();
+            return {};
+          },
+        }),
+      )
+      .then(
+        createStep({
+          id: 'second',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => {
+            hooks.second?.();
+            return {};
+          },
+        }),
+      )
+      .commit();
+  }
+
+  function gate() {
+    let release!: () => void;
+    const promise = new Promise<void>(resolve => (release = resolve));
+    return { promise, release };
+  }
+
+  it.each([
+    { name: 'a user workflow', id: 'user-transient-workflow' },
+    // Same id and type as an agent's internal workflow: only the option opts out, not the name.
+    { name: 'a user processor workflow with an internal-looking id', id: 'execution-workflow', type: 'processor' },
+  ] as const)('$name stops when another server stores and cancels its run', async ({ id, ...extra }) => {
+    const storage = new MockStore();
+    const started = gate();
+    const blocked = gate();
+    let secondRan = false;
+    const owner = new Mastra({
+      logger: false,
+      storage,
+      workflows: {
+        [id]: build(
+          id,
+          {
+            first: async () => {
+              started.release();
+              await blocked.promise;
+            },
+            second: () => {
+              secondRan = true;
+            },
+          },
+          extra,
+        ),
+      },
+    });
+    const other = new Mastra({ logger: false, storage, workflows: { [id]: build(id, {}, extra) } });
+
+    const run = await owner.getWorkflow(id).createRun();
+    const pending = run.start({ inputData: {} });
+    await started.promise;
+    // The other server stores this run (its own policy for the run) and cancels it there.
+    const remoteRun = await other.getWorkflow(id).createRun({ runId: run.runId, shouldPersistSnapshot: () => true });
+    await remoteRun.cancel();
+    const store = await storage.getStore('workflows');
+    expect((await store!.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('canceled');
+    blocked.release();
+
+    expect((await pending).status).toBe('canceled');
+    expect(secondRan).toBe(false);
+  });
+
+  it.each(['before start', 'during the first step'] as const)(
+    'a local-only workflow still stops on run.cancel() %s, without reading storage',
+    async when => {
+      const id = 'local-only-workflow';
+      const storage = new MockStore();
+      const started = gate();
+      const blocked = gate();
+      let secondRan = false;
+      const workflow = build(
+        id,
+        {
+          first: async () => {
+            started.release();
+            await blocked.promise;
+          },
+          second: () => {
+            secondRan = true;
+          },
+        },
+        { localCancellationOnly: true },
+      );
+      new Mastra({ logger: false, storage, workflows: { [id]: workflow } });
+      const store = await storage.getStore('workflows');
+      const statusReads = vi.spyOn(store!, 'loadWorkflowRunStatus');
+
+      const run = await workflow.createRun();
+      if (when === 'before start') await run.cancel();
+      const pending = run.start({ inputData: {} });
+      if (when === 'during the first step') {
+        await started.promise;
+        await run.cancel();
+      }
+      blocked.release();
+
+      expect((await pending).status).toBe('canceled');
+      expect(secondRan).toBe(false);
+      expect(statusReads).not.toHaveBeenCalled();
+    },
+  );
+});

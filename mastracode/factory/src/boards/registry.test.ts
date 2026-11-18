@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from './define-board.js';
-import { createBoardRegistry } from './registry.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import { createTestBoard } from './test-utils.js';
 import { workBoard } from './work.js';
 
@@ -15,17 +15,17 @@ describe('createBoardRegistry', () => {
     expect(Object.isFrozen(registry)).toBe(true);
   });
 
-  it('supports custom-only and boardless Factory instances', () => {
-    expect([...createBoardRegistry({ boards: [customBoard], includeDefaultBoards: false }).keys()]).toEqual([
-      'release',
-    ]);
-    expect(createBoardRegistry({ includeDefaultBoards: false }).size).toBe(0);
+  it('builds an exact registry, custom-only or empty, the way a project compiles its stored boards', () => {
+    expect([...boardRegistryOf([customBoard]).keys()]).toEqual(['release']);
+    expect(boardRegistryOf([]).size).toBe(0);
+  });
+
+  it('installs the exported Work board passed in boards once', () => {
+    expect([...createBoardRegistry({ boards: [workBoard, customBoard] }).keys()]).toEqual(['work', 'release']);
   });
 
   it('rejects duplicate custom ids', () => {
-    expect(() => createBoardRegistry({ boards: [customBoard, customBoard], includeDefaultBoards: false })).toThrow(
-      "duplicate board id 'release'",
-    );
+    expect(() => boardRegistryOf([customBoard, customBoard])).toThrow("duplicate board id 'release'");
   });
 
   it('rejects an id already used by an installed built-in', () => {
@@ -36,10 +36,12 @@ describe('createBoardRegistry', () => {
       phases: { start: { title: 'Start', kind: 'resting' } },
     });
 
-    expect(() => createBoardRegistry({ boards: [replacement] })).toThrow("duplicate board id 'work'");
+    expect(() => createBoardRegistry({ boards: [replacement] })).toThrow(
+      "board id 'work' is Factory's Work board, which every project has. To run your own, store it under 'work' with factory.upsertBoard(board, { projects: 'all' }).",
+    );
   });
 
-  it('allows replacing a built-in id when default boards are disabled', () => {
+  it('lets an exact registry hold another board under a built-in id, as a project that stored its own Work does', () => {
     const replacement = defineBoard({
       id: 'work',
       title: 'Replacement',
@@ -47,20 +49,20 @@ describe('createBoardRegistry', () => {
       phases: { start: { title: 'Start', kind: 'resting' } },
     });
 
-    const registry = createBoardRegistry({ boards: [replacement], includeDefaultBoards: false });
+    const registry = boardRegistryOf([replacement]);
 
     expect([...registry.keys()]).toEqual(['work']);
     expect(registry.get('work')).toBe(replacement);
   });
 
-  it('allows reinstalling the exported built-in boards when defaults are disabled', () => {
-    const registry = createBoardRegistry({ boards: [workBoard], includeDefaultBoards: false });
+  it('lets an exact registry hold the exported built-in boards', () => {
+    const registry = boardRegistryOf([workBoard]);
 
     expect([...registry.keys()]).toEqual(['work']);
     expect(registry.get('work')).toBe(workBoard);
   });
 
-  it('rejects duplicate replacement ids when default boards are disabled', () => {
+  it('rejects duplicate ids in an exact registry', () => {
     const first = defineBoard({
       id: 'work',
       title: 'First replacement',
@@ -74,8 +76,6 @@ describe('createBoardRegistry', () => {
       phases: { start: { title: 'Start', kind: 'resting' } },
     });
 
-    expect(() => createBoardRegistry({ boards: [first, second], includeDefaultBoards: false })).toThrow(
-      "duplicate board id 'work'",
-    );
+    expect(() => boardRegistryOf([first, second])).toThrow("duplicate board id 'work'");
   });
 });

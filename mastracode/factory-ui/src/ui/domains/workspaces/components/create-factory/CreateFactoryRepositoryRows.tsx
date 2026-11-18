@@ -4,8 +4,6 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Settings2 } from 'lucide-react';
-
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
@@ -18,6 +16,7 @@ import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export interface CreateFactoryRepositoryRowsProps {
   query: string;
@@ -90,7 +89,7 @@ export function CreateFactoryRepositoryRows({
       <GithubRepositoryResults query={query} onSelectRepository={onSelectRepository} />
       <CommandGroup heading="GitHub">
         <CommandPaletteItem
-          icon={<Settings2 />}
+          icon={<IconSettingsSliderHor />}
           title="Manage GitHub connection"
           subtitle="Add installations or grant access to more repositories"
           value="manage-github"

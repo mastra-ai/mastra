@@ -5,6 +5,7 @@ import {
   planSpanQuery,
   spanQueryRequestSchema,
   TraceQueryCursorError,
+  TraceQueryUnsupportedError,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -335,7 +336,7 @@ describe('QUERY_SPANS', () => {
 
     const unknownSort = strictValidationError({
       timeRange: TIME_RANGE,
-      orderBy: [{ field: 'durationMs', direction: 'desc' }],
+      orderBy: [{ field: 'runtimeDurationMs', direction: 'desc' }],
     });
     expect(getDeclaredErrorSchema(422).parse(unknownSort?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
@@ -617,5 +618,36 @@ describe('QUERY_SPANS', () => {
     expect(responses['504'].content['application/json'].schema.properties.code.const).toBe(
       'TRACE_QUERY_EXECUTION_TIMEOUT',
     );
+  });
+});
+
+it.each(['durationMs', 'model', 'provider'] as const)(
+  'rejects %s ordering before executing an older store',
+  async field => {
+    const { mastra, observabilityStore } = createHarness();
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          orderBy: [{ field, direction: 'desc' }],
+        }),
+      ),
+    );
+    expect(error.status).toBe(501);
+    expect(await error.getResponse().json()).toMatchObject({ code: 'SPAN_QUERY_UNSUPPORTED' });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  },
+);
+
+it('maps a typed store unsupported error to the route-specific 501', async () => {
+  const { mastra, observabilityStore } = createHarness();
+  observabilityStore.querySpans.mockRejectedValue(
+    new TraceQueryUnsupportedError('Indexed token search is not supported by this store'),
+  );
+  const error = await captureHttpException(QUERY_SPANS.handler(params(mastra, { timeRange: TIME_RANGE })));
+  expect(error.status).toBe(501);
+  expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+    code: 'SPAN_QUERY_UNSUPPORTED',
+    message: 'Indexed token search is not supported by this store',
   });
 });
