@@ -85,6 +85,29 @@ const nextTick = () =>
     await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
   });
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const windowLength = (body: Body) => Date.parse(body.timeRange.to) - Date.parse(body.timeRange.from);
+
+/** Like the hosted API's word search cap: a window over 7 days and 75 minutes is refused with a 422. */
+function setCappedHandlers() {
+  const listBodies: Body[] = [];
+  const headBodies: Body[] = [];
+  server.use(
+    http.post(SPANS_QUERY_URL, async ({ request }) => {
+      const body = (await request.json()) as Body;
+      (isHeadRequest(body) ? headBodies : listBodies).push(body);
+      if (windowLength(body) > SEVEN_DAYS_MS + 75 * 60_000) {
+        return HttpResponse.json(
+          { code: 'TRACE_QUERY_INVALID', issues: [{ code: 'time_range_too_large', path: ['timeRange'] }] },
+          { status: 422 },
+        );
+      }
+      return HttpResponse.json(isHeadRequest(body) ? spanHeadPage : spanRowsPage);
+    }),
+  );
+  return { listBodies, headBodies };
+}
+
 const spanIds = (spans: QuerySpansResult['spans'] | undefined) => spans?.map(span => span.spanId);
 
 describe('useSpansListSource', () => {
@@ -146,7 +169,7 @@ describe('useSpansListSource', () => {
   });
 
   describe('when more spans ended than one poll can bring', () => {
-    it('reloads the first page with a window ending now and drops the polled spans', async () => {
+    it('reloads the first page with a window of the same length ending now and drops the polled spans', async () => {
       const { listBodies } = setHandlers([fullSpanHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, spanTimeRange.to)]);
       const { result } = renderSource({ query: rollingQuery, rolling: true });
       await waitFor(() => expect(result.current.spans).toHaveLength(2));
@@ -155,17 +178,45 @@ describe('useSpansListSource', () => {
       await nextTick();
 
       await waitFor(() => expect(listBodies).toHaveLength(2));
-      expect(listBodies[1].timeRange.from).toBe(spanTimeRange.from);
       expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThanOrEqual(reloadedAfter);
+      expect(windowLength(listBodies[1])).toBe(windowLength(listBodies[0]));
       expect(listBodies[1].page.after).toBeUndefined();
       await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-1', 'span-2']));
     });
   });
 
-  describe('when the server rejects the poll', () => {
-    it('stops polling', async () => {
-      const { headBodies } = setHandlers([{ status: 422 }]);
+  describe('when the server caps the window and the poll has outgrown it', () => {
+    it('reloads the list as the preset ending now and keeps polling', async () => {
+      const { listBodies, headBodies } = setCappedHandlers();
+      // The fixture window is 7 days that ended weeks ago, as on a page left open: the first poll's
+      // window (fixed `from`, `to` now) is far longer than the cap.
       const { result } = renderSource({ query: rollingQuery, rolling: true });
+      await waitFor(() => expect(result.current.spans).toHaveLength(2));
+      const reloadedAfter = Date.now();
+
+      await nextTick();
+
+      await waitFor(() => expect(listBodies).toHaveLength(2));
+      expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThanOrEqual(reloadedAfter);
+      expect(windowLength(listBodies[1])).toBe(windowLength(listBodies[0]));
+
+      await nextTick();
+
+      await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-9', 'span-1', 'span-2']));
+      expect(headBodies.at(-1)?.timeRange.from).toBe(listBodies[1].timeRange.from);
+      expect(result.current.liveUpdatesError).toBeNull();
+    });
+  });
+
+  describe('when the server refuses a poll whose window has not grown', () => {
+    it('stops polling and reports the refusal', async () => {
+      const { listBodies, headBodies } = setHandlers([{ status: 422 }]);
+      const to = new Date();
+      const query: SpanQueryArgs = {
+        ...rollingQuery,
+        timeRange: { from: new Date(to.getTime() - SEVEN_DAYS_MS).toISOString(), to: to.toISOString() },
+      };
+      const { result } = renderSource({ query, rolling: true });
       await waitFor(() => expect(result.current.spans).toHaveLength(2));
 
       await nextTick();
@@ -174,7 +225,9 @@ describe('useSpansListSource', () => {
       await nextTick();
 
       expect(headBodies).toHaveLength(1);
+      expect(listBodies).toHaveLength(1);
       expect(spanIds(result.current.spans)).toEqual(['span-1', 'span-2']);
+      await waitFor(() => expect(result.current.liveUpdatesError).toMatchObject({ status: 422 }));
     });
   });
 

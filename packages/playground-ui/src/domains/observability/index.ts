@@ -41,6 +41,7 @@ export type {
   SavedViewsProviderProps,
   SavedViewsSource,
 } from './saved-views';
+export { LiveUpdatesPausedNote } from './components/live-updates-paused-note';
 export { SearchNarrowedNote } from './components/search-narrowed-note';
 export type { SearchNarrowedNoteProps } from './components/search-narrowed-note';
 export { SEARCH_MAX_DAYS, narrowDatesForSearch, searchNarrowedNote, searchRangeLimit } from './lib/search-range-limit';

@@ -4,7 +4,10 @@ import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import { useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
-import { OBSERVABILITY_LIST_HEAD_LIMIT } from '@/domains/observability/list-polling';
+import {
+  OBSERVABILITY_LIST_HEAD_LIMIT,
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+} from '@/domains/observability/list-polling';
 import { mergeHeadRows } from '@/domains/observability/merge-head-rows';
 
 export type UseSpansListSourceArgs = {
@@ -49,22 +52,27 @@ export function useSpansListSource({
   enabled = true,
 }: UseSpansListSourceArgs) {
   const client = useMastraClient();
-  const { anchorTo, reanchor } = useListAnchor(query);
+  const { anchorFrom, anchorTo, slide } = useListAnchor(query);
 
   const listQuery = useMemo<SpanQueryArgs>(
-    () => (anchorTo ? { ...query, timeRange: { ...query.timeRange, to: anchorTo } } : query),
-    [query, anchorTo],
+    () =>
+      anchorTo
+        ? { ...query, timeRange: { ...query.timeRange, from: anchorFrom ?? query.timeRange.from, to: anchorTo } }
+        : query,
+    [query, anchorFrom, anchorTo],
   );
   const list = useQuerySpans({ query: listQuery, limit, enabled, queryOptions: observabilityListQueryOptions });
+  const listWindow = listQuery.timeRange;
+  const listEnd = Date.parse(listWindow.to);
 
-  const { headRows } = useListHeadPoll<SpanRow>({
+  const { headRows, error: liveUpdatesError } = useListHeadPoll<SpanRow>({
     queryKey: ['spans', query],
     fetchHead: async to => {
       // The server filters spans on startedAt in [from, to), whatever their endedAt,
       // so a long-running span started inside the window is caught once it ends.
       const result = await client.querySpans({
         ...query,
-        timeRange: { from: query.timeRange.from, to },
+        timeRange: { from: listWindow.from, to },
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });
@@ -72,9 +80,19 @@ export function useSpansListSource({
     },
     getId: spanRowId,
     getEndedAt: span => span.endedAt,
-    since: Date.parse(listQuery.timeRange.to),
+    since: listEnd,
     enabled: enabled && rolling && autoRefetch && list.spans !== undefined && !list.isFetching && !list.isError,
-    onOverflow: reanchor,
+    // Moving the whole window keeps a rolling preset at its length (a server cap, such as word
+    // search's 7 days, may refuse a longer one).
+    onOverflow: () => slide(listWindow),
+    // Polls keep `from` while `to` moves to now, so the window grows until the server may refuse
+    // it. Once it has grown by more than a couple of polls, reload the list as the preset ends now;
+    // a refusal right after that is not about the window, and is surfaced instead.
+    onRejected: () => {
+      if (Date.now() - listEnd <= 2 * OBSERVABILITY_LIST_POLL_INTERVAL_MS) return false;
+      slide(listWindow);
+      return true;
+    },
   });
 
   const { orderBy } = query;
@@ -90,5 +108,5 @@ export function useSpansListSource({
     [listSpans, headRows, orderBy, list.hasNextPage],
   );
 
-  return { ...list, spans };
+  return { ...list, spans, liveUpdatesError };
 }

@@ -575,6 +575,30 @@ describe('SpansExplorerBody', () => {
 
       expect(await screen.findByText(endedSpan.name)).toBeTruthy();
     });
+
+    it('says live updates paused when the server refuses the poll', async () => {
+      setHandlers(spanRowsPage);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          const body = (await request.json()) as { orderBy?: Array<{ field: string }> };
+          return body.orderBy?.[0]?.field === 'endedAt'
+            ? HttpResponse.json({ message: 'Forbidden' }, { status: 403 })
+            : HttpResponse.json(spanRowsPage);
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+
+      renderBody();
+      await screen.findByText('agent run: weather');
+      expect(screen.queryByText(/Live updates paused/)).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
+      });
+
+      expect(await screen.findByText(/Live updates paused/)).toBeTruthy();
+      expect(screen.getByText('agent run: weather')).toBeTruthy();
+    });
   });
 
   describe('when a span row is clicked', () => {

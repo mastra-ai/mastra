@@ -26,6 +26,12 @@ export type UseListHeadPollArgs<Row> = {
   interval?: number;
   /** Called when head polls can no longer keep the list complete; the list should reload its first page. */
   onOverflow?: () => void;
+  /**
+   * Called when the server refuses a head poll. Return true once the list has moved its window
+   * (e.g. a rolling window outgrew a server cap) so polling carries on; otherwise polling stops and
+   * the refusal is returned as `error`.
+   */
+  onRejected?: (error: unknown) => boolean;
 };
 
 export function listHeadQueryKey(queryKey: readonly unknown[]) {
@@ -38,10 +44,16 @@ export function listHeadQueryKey(queryKey: readonly unknown[]) {
  */
 export function useListAnchor(selection: unknown) {
   const selectionHash = hashKey([selection]);
-  const [anchor, setAnchor] = useState<{ selectionHash: string; to: string }>();
-  const anchorTo = anchor?.selectionHash === selectionHash ? anchor.to : undefined;
+  const [anchor, setAnchor] = useState<{ selectionHash: string; from?: string; to: string }>();
+  const current = anchor?.selectionHash === selectionHash ? anchor : undefined;
   const reanchor = () => setAnchor({ selectionHash, to: new Date().toISOString() });
-  return { anchorTo, reanchor };
+  /** Moves the whole window to end now, keeping its length, as a rolling preset resolved again would. */
+  const slide = (window: { from: string; to: string }) => {
+    const now = Date.now();
+    const length = Date.parse(window.to) - Date.parse(window.from);
+    setAnchor({ selectionHash, from: new Date(now - length).toISOString(), to: new Date(now).toISOString() });
+  };
+  return { anchorFrom: current?.from, anchorTo: current?.to, reanchor, slide };
 }
 
 const emptyStore = <Row>(): ListHeadStore<Row> => ({ rows: [], watermark: undefined });
@@ -50,7 +62,8 @@ const emptyStore = <Row>(): ListHeadStore<Row> => ({ rows: [], watermark: undefi
  * Polls the newest rows of a list that has no server-side delta mode. Rows accumulate by id across
  * polls (the latest version wins) in their own cache entry, so the list's pages and cursors are never
  * touched: callers merge `headRows` into the rendered rows. Nothing is fetched on mount; the first
- * poll runs after one interval. Polling stops once the server rejects the request.
+ * poll runs after one interval. Polling stops once the server rejects the request, unless `onRejected`
+ * recovers the list.
  */
 export function useListHeadPoll<Row>({
   queryKey,
@@ -63,15 +76,22 @@ export function useListHeadPoll<Row>({
   maxRows = OBSERVABILITY_LIST_HEAD_MAX_ROWS,
   interval = OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   onOverflow,
+  onRejected,
 }: UseListHeadPollArgs<Row>) {
   const queryClient = useQueryClient();
   const key = listHeadQueryKey(queryKey);
 
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: key,
     queryFn: async (): Promise<ListHeadStore<Row>> => {
       const previous = queryClient.getQueryData<ListHeadStore<Row>>(key) ?? emptyStore<Row>();
-      const fetched = await fetchHead(new Date().toISOString());
+      let fetched: Row[];
+      try {
+        fetched = await fetchHead(new Date().toISOString());
+      } catch (error) {
+        if (isRejectedListRequest(error) && onRejected?.(error)) return emptyStore<Row>();
+        throw error;
+      }
 
       const endedAts = fetched.map(row => Date.parse(getEndedAt(row) ?? '')).filter(Number.isFinite);
       const rows = new Map(previous.rows.map(row => [getId(row), row]));
@@ -99,5 +119,5 @@ export function useListHeadPoll<Row>({
     retry: false,
   });
 
-  return { headRows: data.rows };
+  return { headRows: data.rows, error: isRejectedListRequest(error) ? error : null };
 }

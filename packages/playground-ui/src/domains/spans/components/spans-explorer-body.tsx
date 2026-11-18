@@ -8,6 +8,7 @@ import type { SpanSelection } from './span-detail-panel';
 import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
+import { LiveUpdatesPausedNote } from '@/domains/observability/components/live-updates-paused-note';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { SearchNarrowedNote } from '@/domains/observability/components/search-narrowed-note';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
@@ -133,13 +134,12 @@ export function SpansExplorerBody({
     [timeRange, sortField, sortDirection, where],
   );
 
-  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
-    {
+  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error, liveUpdatesError } =
+    useSpansListSource({
       query,
       enabled: !isCapabilitiesLoading,
       rolling: filters.rolling,
-    },
-  );
+    });
 
   const rows = useMemo(() => (spans ?? []).map(spanToListRow), [spans]);
   const panelSpans = useMemo(
@@ -188,6 +188,7 @@ export function SpansExplorerBody({
               </ActionRow.End>
             </ActionRow>
             {filters.searchNarrowed && <SearchNarrowedNote maxDays={searchMaxDays} />}
+            {liveUpdatesError && <LiveUpdatesPausedNote />}
           </>
         }
         chart={
