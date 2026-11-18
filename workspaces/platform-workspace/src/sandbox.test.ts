@@ -144,6 +144,61 @@ describe('PlatformSandbox', () => {
     expect(init.data).toEqual({ command: commandInCwd('echo ok', '/workspace', undefined), env: { A: '1' } });
   });
 
+  it('drops GitHub credentials from a call whose own VM acquisition lands on a vault VM', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    // Built by a caller that has not seen the VM yet; executeCommand provisions a vault VM.
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: {
+        GH_TOKEN: 'ghs_real',
+        GH_TOKEN_2: 'ghs_real_2',
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_TERMINAL_PROMPT: '0',
+        GITLAB_HOST_TOKEN: 'glpat_kept',
+      },
+    });
+
+    expect(sandbox.vault).toBe(true);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GIT_TERMINAL_PROMPT: '0', GITLAB_HOST_TOKEN: 'glpat_kept' });
+  });
+
+  it('keeps per-call GitHub credentials for a VM that is not vault', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real' } });
+
+    expect(sandbox.vault).toBe(false);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
+  });
+
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
@@ -488,6 +543,31 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBeUndefined();
       await expect(sandbox.refreshVault()).resolves.toBe(false);
       expect(sandbox.vault).toBe(false);
+    });
+
+    it('ignores a refreshVault answer for a sandbox that was replaced while it was in flight', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      let answer!: (response: Response) => void;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_old', destroyedAt: null }))
+        .mockReturnValueOnce(new Promise<Response>(resolve => (answer = resolve)));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_old',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      const refresh = sandbox.refreshVault();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      // A replacement vault sandbox is provisioned while the read for the old one is pending.
+      (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_new';
+      sandbox.vault = true;
+      answer(json({ id: 'sbx_old', vault: false }));
+      await expect(refresh).resolves.toBe(true);
+      expect(sandbox.vault).toBe(true);
     });
 
     it('takes the mode from a reattach that reports it', async () => {
@@ -1389,6 +1469,8 @@ describe('PlatformSandbox', () => {
       // Status must reset too: the next `ensureRunning()` re-runs the full
       // start lifecycle (acquisition + onStart hook), not just a new lease.
       expect(sandbox.status).toBe('stopped');
+      // The destroyed VM's credential-vault mode must not carry over to its replacement.
+      expect(sandbox.vault).toBeUndefined();
     });
 
     it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {

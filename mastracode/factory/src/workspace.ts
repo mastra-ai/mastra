@@ -965,9 +965,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       pat: boolean,
       installed: boolean,
     ) => {
-      registration.ghToken = installed ? token : '';
-      registration.patInstalled = installed && pat;
-      registration.tokenIssuedAt = installed ? Date.now() : 0;
+      // An empty install (withheld, or a failed mint's fallback) stays stale so the next command re-mints.
+      const live = installed && token !== '';
+      registration.ghToken = live ? token : '';
+      registration.patInstalled = live && pat;
+      registration.tokenIssuedAt = live ? Date.now() : 0;
     };
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
@@ -1125,9 +1127,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // A registration made while the sandbox withheld tokens (vault or
         // unknown mode) holds no credential; when the new sandbox accepts
         // one, install the org PAT if configured, before falling back to a mint.
-        const withheldPat =
+        const { generation: patGeneration } = existingRegistration;
+        const lookedUpPat =
           githubProvider && !existingRegistration.ghToken && sandboxAcceptsGithubToken(target)
             ? await getGithubPat(() => githubProvider.integrationStorage, session.orgId, existingRegistration.patKind)
+            : undefined;
+        // Discard a lookup a concurrent role change or install overtook.
+        const withheldPat =
+          lookedUpPat &&
+          githubTokenInjectors.get(workspaceId) === existingRegistration &&
+          existingRegistration.generation === patGeneration &&
+          existingRegistration.target === target &&
+          !existingRegistration.ghToken &&
+          sandboxAcceptsGithubToken(target)
+            ? lookedUpPat
             : undefined;
         if (withheldPat) existingRegistration.inject(withheldPat, true);
         const refreshed = withheldPat ? true : await refreshStaleGithubToken().catch(() => false);
