@@ -98,6 +98,7 @@ function standardRoutes({ role = 'admin', enforcement = 'disabled' } = {}) {
         state.enforcement = body.enforcement;
         return freezeDetail(state.enforcement);
       },
+      'GET /apps/dane-ai-mastra': () => ({ id: DANE_APP_ID, slug: 'dane-ai-mastra' }),
       'GET /repos/mastra-ai/mastra/branches/changeset-release%2Fmain': () => ({
         name: 'changeset-release/main',
         commit: { sha: VERSIONING_HEAD },
@@ -121,6 +122,7 @@ function run(t, api, args, env = {}) {
     GITHUB_TOKEN: 'test-token',
     GITHUB_STEP_SUMMARY: summary,
     GITHUB_OUTPUT: output,
+    APP_SLUG: 'dane-ai-mastra',
     ...env,
   };
   return new Promise((resolve, reject) => {
@@ -270,6 +272,12 @@ for (const [label, overrides] of [
   ['has another rule besides the required check', { rules: [statusRule(), { type: 'update' }] }],
   ['requires a different check', { rules: [statusRule([{ context: 'Lint', integration_id: DANE_APP_ID }])] }],
   ['lets any app post the check', { rules: [statusRule([{ context: 'Release freeze' }])] }],
+  [
+    'pins the check to a different app',
+    { rules: [statusRule([{ context: 'Release freeze', integration_id: 424243 }])] },
+  ],
+  ['pins the check to app id 0', { rules: [statusRule([{ context: 'Release freeze', integration_id: 0 }])] }],
+  ['pins the check to app id -1', { rules: [statusRule([{ context: 'Release freeze', integration_id: -1 }])] }],
   [
     'requires a second check',
     {
@@ -499,4 +507,38 @@ test('check fails, rather than guessing, when the ruleset list errors', async t 
   const result = await run(t, api, ['--action', 'check']);
   assert.equal(result.status, 1);
   assert.doesNotMatch(result.output, /frozen=/);
+});
+
+for (const action of ['freeze', 'unfreeze']) {
+  test(`${action} refuses without APP_SLUG, before any write`, async t => {
+    const { routes } = standardRoutes({ enforcement: action === 'freeze' ? 'disabled' : 'active' });
+    const api = await startApi(t, routes);
+    const result = await run(t, api, ['--action', action, '--actor', 'tyler'], { APP_SLUG: '' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /APP_SLUG/);
+    assert.equal(puts(api).length, 0);
+    assert.equal(statusPosts(api).length, 0);
+  });
+
+  test(`${action} refuses when the token's app can't be looked up`, async t => {
+    const { routes } = standardRoutes({ enforcement: action === 'freeze' ? 'disabled' : 'active' });
+    routes['GET /apps/dane-ai-mastra'] = () => ({ status: 404, body: {} });
+    const api = await startApi(t, routes);
+    const result = await run(t, api, ['--action', action, '--actor', 'tyler']);
+    assert.equal(result.status, 1);
+    assert.equal(puts(api).length, 0);
+    assert.equal(statusPosts(api).length, 0);
+  });
+}
+
+test('the check pin is compared with the app that runs the freeze, not a fixed id', async t => {
+  const { routes } = standardRoutes();
+  routes['GET /apps/dane-ai-mastra'] = () => ({ id: 424243, slug: 'dane-ai-mastra' });
+  const api = await startApi(t, routes);
+  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /424242/);
+  assert.match(result.stderr, /424243/);
+  assert.equal(puts(api).length, 0);
+  assert.equal(statusPosts(api).length, 0);
 });

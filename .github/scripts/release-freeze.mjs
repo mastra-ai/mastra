@@ -23,7 +23,8 @@
 // Env: GITHUB_TOKEN (administration: write and statuses: write for freeze,
 // administration: write for unfreeze, statuses: write for mark, read for
 // check), GITHUB_REPOSITORY, GITHUB_API_URL (default https://api.github.com),
-// GITHUB_STEP_SUMMARY and GITHUB_OUTPUT (optional). Outputs: frozen=true|false
+// APP_SLUG (freeze, unfreeze: the token's GitHub App, whose id the ruleset's
+// check must be pinned to), GITHUB_STEP_SUMMARY and GITHUB_OUTPUT (optional). Outputs: frozen=true|false
 // (all but mark) and changed=true|false (freeze, unfreeze).
 //
 // Exit codes: 0 = done (or would be, on a dry run)
@@ -114,10 +115,11 @@ function makeApi({ baseUrl, token }) {
 
 // A ruleset this script may flip: branch target, default branch only with no
 // exclusions (an exclude could drop main, and we'd report a freeze that isn't
-// one), and nothing but one required check, "Release freeze", pinned to one app
-// (so nobody else can post it) and not requiring PRs to be up to date (so the
-// versioning PR isn't held up when main moves).
-function isFreezeRuleset(ruleset) {
+// one), and nothing but one required check, "Release freeze", pinned to the app
+// this run's token belongs to (Dane: so nobody else can post it, and we can) and
+// not requiring PRs to be up to date (so the versioning PR isn't held up when
+// main moves).
+function isFreezeRuleset(ruleset, appId) {
   const include = ruleset.conditions?.ref_name?.include ?? [];
   const exclude = ruleset.conditions?.ref_name?.exclude;
   const rules = ruleset.rules ?? [];
@@ -134,7 +136,7 @@ function isFreezeRuleset(ruleset) {
     params.strict_required_status_checks_policy === false &&
     checks.length === 1 &&
     checks[0].context === CHECK_NAME &&
-    Number.isInteger(checks[0].integration_id)
+    checks[0].integration_id === appId
   );
 }
 
@@ -230,16 +232,22 @@ async function main() {
   const id = matches[0].id;
   const path = `/repos/${repo}/rulesets/${id}`;
 
-  // 3. Make sure it is what we think it is before changing it.
+  // 3. Make sure it is what we think it is before changing it, including that
+  // the check is pinned to the app this token belongs to.
+  const appSlug = process.env.APP_SLUG;
+  if (!appSlug) throw new Error('APP_SLUG is not set; it names the app the "Release freeze" check must be pinned to.');
+  const app = await api.get(`/apps/${encodeURIComponent(appSlug)}`);
+  if (!Number.isInteger(app?.id) || app.id <= 0) throw new Error(`Could not read the id of app ${appSlug}.`);
   const current = await api.get(path);
-  if (!isFreezeRuleset(current)) {
+  if (!isFreezeRuleset(current, app.id)) {
     const rules = current.rules ?? [];
     throw new Error(
       `Ruleset ${id} "${RULESET_NAME}" is not a main-only "${CHECK_NAME}" required-check ruleset ` +
         `(target ${current.target}, include ${JSON.stringify(current.conditions?.ref_name?.include)}, ` +
         `exclude ${JSON.stringify(current.conditions?.ref_name?.exclude)}, ` +
         `rules ${JSON.stringify(rules.map(r => r.type))}, ` +
-        `checks ${JSON.stringify(rules[0]?.parameters?.required_status_checks)}); refusing to change it.`,
+        `checks ${JSON.stringify(rules[0]?.parameters?.required_status_checks)}, ` +
+        `expected the check pinned to ${appSlug} (app id ${app.id})); refusing to change it.`,
     );
   }
 

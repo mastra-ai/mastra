@@ -95,6 +95,7 @@ jobs:
         id: freeze
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          APP_SLUG: ${{ steps.app-auth.outputs.app-slug }}
           ACTION: ${{ inputs.action }}
           # triggering_actor, not actor: a re-run keeps the original actor but
           # is started by whoever clicked re-run, and that person is checked.

@@ -88,6 +88,11 @@ jobs:
   alpha-version:
     needs: test
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
+    # Shares release-freeze.yml's group, so a freeze never runs while this job is about to
+    # push, and the check before the push below sees any freeze that finished first.
+    concurrency:
+      group: release-merge-freeze
+      cancel-in-progress: false
     runs-on: starsling-ubuntu-26.04
     steps:
       - name: Initial checkout
@@ -169,8 +174,21 @@ jobs:
           pnpm version prerelease --preid alpha --no-git-checks --no-git-tag-version
           cd ../..
 
+      # The tests above take a while; main may have been frozen since freeze-check ran.
+      - name: Is main frozen now?
+        id: freeze-recheck
+        if: github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/release-freeze.mjs --action check
+
+      - name: Say why the alpha is skipped
+        if: steps.freeze-recheck.outputs.frozen == 'true'
+        run: |
+          echo "Skipped the scheduled alpha: main was frozen for a release while it ran." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Commit and push version changes
-        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
+        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true' && steps.freeze-recheck.outputs.frozen != 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           HUSKY: 0

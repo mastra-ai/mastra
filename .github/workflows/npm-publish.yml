@@ -469,6 +469,7 @@ jobs:
         if: steps.check.outputs.frozen == 'true' && needs.enter_prerelease.result == 'success'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          APP_SLUG: ${{ steps.app-auth.outputs.app-slug }}
           ACTOR: ${{ github.triggering_actor }}
         run: node .github/scripts/release-freeze.mjs --action unfreeze --actor "$ACTOR"
 
@@ -478,6 +479,7 @@ jobs:
         env:
           VERSION: ${{ needs.stable.outputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECK: ${{ steps.check.outcome }}
           FROZEN: ${{ steps.check.outputs.frozen }}
           PRERELEASE: ${{ needs.enter_prerelease.result }}
           UNFREEZE: ${{ steps.unfreeze.outcome }}
@@ -486,9 +488,11 @@ jobs:
           text=":package: Stable release published: mastra@${VERSION}. <${RUN_URL}|Run>"
           if [ "$UNFROZE" = "true" ]; then
             text+=$'\n:sunny: main is unfrozen; merges are open again.'
+          elif [ "$CHECK" != "success" ]; then
+            text+=$'\n:warning: Could not tell whether main is frozen, so it was not unfrozen. If it is, unfreeze with the Release merge freeze workflow.'
           elif [ "$FROZEN" = "true" ] && [ "$PRERELEASE" != "success" ]; then
             text+=$'\n:warning: Entering prerelease mode failed, so main stays frozen. Fix it, then unfreeze with the Release merge freeze workflow.'
-          elif [ "$UNFREEZE" = "failure" ]; then
+          elif [ "$FROZEN" = "true" ]; then
             text+=$'\n:warning: Unfreezing main failed, so it stays frozen. Unfreeze with the Release merge freeze workflow.'
           fi
           {
