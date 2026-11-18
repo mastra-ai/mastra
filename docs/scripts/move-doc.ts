@@ -349,7 +349,12 @@ const updateMdxLinks = async (
       const quotedRouteRegex = new RegExp(`(['"\`])(?:${escapeRegExp(oldBasePath)})(#[^'"\`\\s]*)?\\1`, 'g')
       updatedContent = updatedContent.replace(quotedRouteRegex, (_match, quote, linkHash = '') => {
         const finalHash = newHash || linkHash
-        return `${quote}${newBasePath}${finalHash}${quote}`
+        // Percent-encode quote characters so an external replacement URL cannot end the string early.
+        const safePath = `${newBasePath}${finalHash}`.replace(
+          /['"`]/g,
+          char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+        )
+        return `${quote}${safePath}${quote}`
       })
     })
 
