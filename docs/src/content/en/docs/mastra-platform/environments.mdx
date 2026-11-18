@@ -78,7 +78,7 @@ Each environment-scoped variable is either a secret or config:
 New variables are secrets by default, except a few non-sensitive names the platform itself defines. Use the **Secret** toggle in the dashboard, or [`mastra env vars set`](/reference/cli/mastra#mastra-env-vars-set) with `--secret` or `--config`, to choose how a variable is stored:
 
 ```bash
-mastra env vars set staging LOG_LEVEL=debug --config LOG_LEVEL
+mastra env vars set staging LOG_LEVEL=debug --config
 ```
 
 To turn a secret into config, enter its value again, because the platform can't read the stored secret back.
