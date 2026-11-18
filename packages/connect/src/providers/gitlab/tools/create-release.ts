@@ -23,7 +23,20 @@ const AssetLinkInputSchema = z.object({
 
 export const createReleaseInputSchema = z.object({
   project_id: z
-    .union([z.number(), z.string()])
+    .union([
+      z.number().int().positive(),
+      z
+        .string()
+        .min(1)
+        .refine(value => {
+          try {
+            encodeURIComponent(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'must not contain unpaired surrogate characters'),
+    ])
     .describe(
       'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
     ),
@@ -33,7 +46,15 @@ export const createReleaseInputSchema = z.object({
   description: z.string().optional(),
   ref: z.string().optional().describe('Commit SHA, branch name, or tag name. Required if tag_name does not exist.'),
   milestones: z.array(z.string()).optional(),
-  assets_links: z.array(AssetLinkInputSchema).optional(),
+  assets_links: z
+    .array(AssetLinkInputSchema)
+    .refine(
+      links =>
+        new Set(links.map(link => link.name)).size === links.length &&
+        new Set(links.map(link => link.url)).size === links.length,
+      'asset link names and URLs must be unique',
+    )
+    .optional(),
   released_at: z.string().optional().describe('ISO 8601 datetime. Example: "2019-03-15T08:00:00Z"'),
 });
 

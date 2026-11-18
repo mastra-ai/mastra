@@ -23,8 +23,9 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  * synthetic id.
  */
 
-const SYNTHETIC_GROUP_ID = 999_999_999;
 const LEAK_SEARCH_MAX_PAGES = 5;
+const LEAK_SEARCH_ATTEMPTS = 3;
+const LEAK_SEARCH_INTERVAL_MS = 5_000;
 const GROUP_REREAD_ATTEMPTS = 3;
 const GROUP_REREAD_INTERVAL_MS = 5_000;
 const CI_JOB_NAME = 'mastra-smoke';
@@ -157,20 +158,11 @@ export const gitlabScenario: Scenario = {
     /** When create_project failed after GitLab may have created the project, finds it so it can still be deleted. */
     async function findLeakedProject(): Promise<number | undefined> {
       try {
-        // `search` matches substrings, so the run's project can be on a later page.
-        let cursor: string | undefined;
-        for (let page = 0; page < LEAK_SEARCH_MAX_PAGES; page++) {
-          const found = await call<{
-            items: Array<{ id: number; path: string; description?: string | null }>;
-            next_cursor?: string;
-          }>('gitlab_list_projects', { search: runId, owned: true, per_page: 100, ...(cursor && { cursor }) });
-          const leaked = found.items.find(item => item.path === runId && item.description?.includes(createMarker));
-          if (leaked) {
-            log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
-            return leaked.id;
-          }
-          cursor = found.next_cursor;
-          if (!cursor) return undefined;
+        // GitLab may still be creating the project, so retry from page one a few times.
+        for (let attempt = 0; attempt < LEAK_SEARCH_ATTEMPTS; attempt++) {
+          if (attempt > 0) await new Promise(resolve => setTimeout(resolve, LEAK_SEARCH_INTERVAL_MS));
+          const found = await searchLeakedProject();
+          if (found !== undefined) return found;
         }
         log.error(`gitlab: could not confirm whether a ${runId} project was created; check manually`);
         return undefined;
@@ -178,6 +170,26 @@ export const gitlabScenario: Scenario = {
         log.error(`gitlab: could not check for a leaked ${runId} project; check manually`, errorMessage(error));
         return undefined;
       }
+    }
+
+    /** One pass over the owned-project search; undefined when no page matched. */
+    async function searchLeakedProject(): Promise<number | undefined> {
+      // `search` matches substrings, so the run's project can be on a later page.
+      let cursor: string | undefined;
+      for (let page = 0; page < LEAK_SEARCH_MAX_PAGES; page++) {
+        const found = await call<{
+          items: Array<{ id: number; path: string; description?: string | null }>;
+          next_cursor?: string;
+        }>('gitlab_list_projects', { search: runId, owned: true, per_page: 100, ...(cursor && { cursor }) });
+        const leaked = found.items.find(item => item.path === runId && item.description?.includes(createMarker));
+        if (leaked) {
+          log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
+          return leaked.id;
+        }
+        cursor = found.next_cursor;
+        if (!cursor) return undefined;
+      }
+      return undefined;
     }
 
     async function runGroupLifecycle(existingGroupId: number | undefined) {
@@ -230,20 +242,21 @@ export const gitlabScenario: Scenario = {
       }
 
       if (!group) {
+        // Probe the write tools with a random group path nobody can own. A
+        // numeric id could belong to a real group the connection maintains.
+        const absentGroup = `mastra-smoke-absent-${randomUUID()}`;
         if (existingGroupId !== undefined) {
           await step('get group', 'gitlab_get_group', { id: existingGroupId });
         } else {
-          steps.push(await probeTool(call, tools, 'get group', 'gitlab_get_group', { id: SYNTHETIC_GROUP_ID }));
+          steps.push(await probeTool(call, tools, 'get group', 'gitlab_get_group', { id: absentGroup }));
         }
         steps.push(
           await probeTool(call, tools, 'update group', 'gitlab_update_group', {
-            id: SYNTHETIC_GROUP_ID,
+            id: absentGroup,
             description: `${runId} probe`,
           }),
         );
-        steps.push(
-          await probeTool(call, tools, 'delete group', 'gitlab_delete_group', { group_id: SYNTHETIC_GROUP_ID }),
-        );
+        steps.push(await probeTool(call, tools, 'delete group', 'gitlab_delete_group', { group_id: absentGroup }));
         return;
       }
 
@@ -325,9 +338,17 @@ export const gitlabScenario: Scenario = {
         shared_runners_enabled: false,
       });
 
-      const empty = await step<{ default_branch?: string | null }>('get project', 'gitlab_get_project', {
-        project_id: projectId,
-      });
+      const empty = await step<{ default_branch?: string | null; shared_runners_enabled?: boolean }>(
+        'get project',
+        'gitlab_get_project',
+        { project_id: projectId },
+      );
+      if (empty?.shared_runners_enabled !== false) {
+        // Without isolation, a commit could start CI on shared runners; stop before writing.
+        log.error(`gitlab: shared runners not confirmed off on project ${projectId}; skipping repository writes`);
+        steps.push(makeStep('isolate runners', 'gitlab_get_project', 'fail', 'shared_runners_enabled is not false'));
+        return;
+      }
       const defaultBranch = empty?.default_branch ?? 'main';
       const seeded = await step('create README', 'gitlab_create_file', {
         project_id: projectId,

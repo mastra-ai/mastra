@@ -17,7 +17,20 @@ function gitlabPathSegment(value: string | number): string {
 export const updateMergeRequestInputSchema = z
   .object({
     project_id: z
-      .union([z.number(), z.string()])
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
       .describe(
         'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
       ),
@@ -43,6 +56,10 @@ export const updateMergeRequestInputSchema = z
   })
   .refine(data => Object.keys(data).some(key => key !== 'project_id' && key !== 'merge_request_iid'), {
     message: 'At least one update field must be provided.',
+  })
+  .refine(data => data.milestone_id === undefined || data.milestone === undefined, {
+    message: 'Pass milestone_id or milestone, not both.',
+    path: ['milestone'],
   });
 
 export const updateMergeRequestOutputSchema = z

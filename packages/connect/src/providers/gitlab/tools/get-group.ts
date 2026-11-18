@@ -15,7 +15,22 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const getGroupInputSchema = z.object({
-  id: z.union([z.string(), z.number()]).describe('The ID or URL-encoded path of the group. Example: "133159324"'),
+  id: z
+    .union([
+      z.number().int().positive(),
+      z
+        .string()
+        .min(1)
+        .refine(value => {
+          try {
+            encodeURIComponent(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'must not contain unpaired surrogate characters'),
+    ])
+    .describe('The ID or URL-encoded path of the group. Example: "133159324"'),
 });
 
 const ProviderGroupSchema = z

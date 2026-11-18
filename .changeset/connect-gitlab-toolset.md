@@ -20,3 +20,5 @@ const gitlabAgent = new Agent({
 ```
 
 Project and group paths work raw (`team/app`) or URL-encoded (`team%2Fapp`). Branch names, file paths, and tag names are sent as given, so `release%2Fnext` and `release/next` stay distinct. Project results never include the project's runner registration token.
+
+Tools refuse ambiguous or no-op input before calling GitLab: an update with nothing to change, a commit action missing the field it needs, a release with duplicate asset links, or a merge request update naming the milestone both by id and by title.

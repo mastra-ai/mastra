@@ -14,24 +14,43 @@ function gitlabPathSegment(value: string | number): string {
   }
 }
 
-export const updateReleaseInputSchema = z.object({
-  project_id: z
-    .union([z.number(), z.string()])
-    .describe(
-      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
-    ),
-  tag_name: z.string().describe('The Git tag the release is associated with. Example: "v1.0.0"'),
-  name: z.string().optional().describe('The release name.'),
-  description: z.string().optional().describe('The description of the release. You can use Markdown.'),
-  milestones: z
-    .array(z.string())
-    .optional()
-    .describe('The title of each milestone to associate with the release. To remove all milestones, specify [].'),
-  released_at: z
-    .string()
-    .optional()
-    .describe('The date when the release is/was ready. Expected in ISO 8601 format (e.g. 2019-03-15T08:00:00Z).'),
-});
+export const updateReleaseInputSchema = z
+  .object({
+    project_id: z
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
+      .describe(
+        'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+      ),
+    tag_name: z.string().describe('The Git tag the release is associated with. Example: "v1.0.0"'),
+    name: z.string().optional().describe('The release name.'),
+    description: z.string().optional().describe('The description of the release. You can use Markdown.'),
+    milestones: z
+      .array(z.string())
+      .optional()
+      .describe('The title of each milestone to associate with the release. To remove all milestones, specify [].'),
+    released_at: z
+      .string()
+      .optional()
+      .describe('The date when the release is/was ready. Expected in ISO 8601 format (e.g. 2019-03-15T08:00:00Z).'),
+  })
+  .refine(
+    data =>
+      Object.entries(data).some(([key, value]) => !['project_id', 'tag_name'].includes(key) && value !== undefined),
+    { message: 'Provide at least one field to update.' },
+  );
 
 const ProviderReleaseSchema = z
   .object({
