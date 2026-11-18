@@ -380,16 +380,16 @@ describe('source-control session routes', () => {
     expect(isThreadTitlePinned(thread?.metadata)).toBe(true);
   });
 
-  it('keeps a typed title when a regeneration asked for earlier finishes after it', async () => {
+  /** A session whose title model answers only when released, so title writes can be raced against it. */
+  async function sessionWithHeldTitleModel(sessionId: string) {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
-    const sessionId = 'factory-rename-vs-regenerate';
     await sourceControl.sessions.create({
       sessionId,
       projectRepositoryId: projectRepository.id,
       factoryProjectId: project.id,
       orgId: 'org-1',
       userId: 'user-1',
-      branch: 'user/rename-vs-regenerate',
+      branch: `user/${sessionId}`,
       baseBranch: 'main',
       visibility: 'org',
       title: 'First prompt',
@@ -408,49 +408,103 @@ describe('source-control session routes', () => {
     });
     const pin = (threadId: string, title: string, pinned: boolean) =>
       memory.patchThread({ id: threadId, title, metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: pinned } });
-    // The model answers only when released; like the real call, its title lands on the thread unpinned.
-    let releaseModel = () => {};
-    const modelAnswered = new Promise<void>(resolve => {
-      releaseModel = resolve;
-    });
-    let markAsked = () => {};
-    const asked = new Promise<void>(resolve => {
-      markAsked = resolve;
-    });
-    vi.spyOn(controller, 'generateThreadTitle').mockImplementation(async ({ threadId }) => {
-      markAsked();
-      await modelAnswered;
-      await pin(threadId, 'Generated title', false);
-      return 'Generated title';
+    // Each ask waits to be released; like the real call, its title lands on the thread unpinned.
+    const releases: Array<() => void> = [];
+    const generate = vi.spyOn(controller, 'generateThreadTitle').mockImplementation(async ({ threadId }) => {
+      const title = `Generated title ${releases.length + 1}`;
+      await new Promise<void>(resolve => releases.push(resolve));
+      await pin(threadId, title, false);
+      return title;
     });
     const renameThread = vi.fn<NonNullable<RouteOptions['renameThread']>>(({ threadId, title }) =>
       pin(threadId, title, true),
     );
     const app = buildApp([sourceControl], seed, controller, noRuns, user, undefined, renameThread);
-    const typed = (title: string) =>
-      app.request(`/web/user-sessions/${sessionId}/title`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title }),
-      });
+    const path = `/web/user-sessions/${sessionId}/title`;
+    return {
+      sourceControl,
+      controller,
+      renameThread,
+      /** Resolves once the model has been asked `count` times. */
+      asked: (count: number) => vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(count)),
+      release: (ask: number) => releases[ask - 1]!(),
+      regenerate: () => app.request(path, { method: 'POST' }),
+      typed: (title: string) =>
+        app.request(path, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title }),
+        }),
+      /** Long enough for a request to have written, had it not waited its turn behind the model. */
+      settle: () => new Promise(resolve => setTimeout(resolve, 100)),
+    };
+  }
 
-    const regenerated = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
-    await asked;
+  it('keeps a typed title when a regeneration asked for earlier finishes after it', async () => {
+    const sessionId = 'factory-rename-vs-regenerate';
+    const session = await sessionWithHeldTitleModel(sessionId);
+
+    const regenerated = session.regenerate();
+    await session.asked(1);
     // Two typed titles while the model is still thinking: the later one must be the one kept.
-    const first = typed('Typed first');
-    const second = typed('Typed second');
-    // Long enough for both to have written, had they not waited their turn behind the model.
-    await new Promise(resolve => setTimeout(resolve, 100));
-    expect(renameThread).not.toHaveBeenCalled();
-    releaseModel();
+    const first = session.typed('Typed first');
+    const second = session.typed('Typed second');
+    await session.settle();
+    expect(session.renameThread).not.toHaveBeenCalled();
+    session.release(1);
     expect((await regenerated).status).toBe(200);
     expect((await first).status).toBe(200);
     expect((await second).status).toBe(200);
 
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ title: 'Typed second' });
-    const thread = await controller.queryThreadById({ threadId: sessionId });
+    await expect(session.sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      title: 'Typed second',
+    });
+    const thread = await session.controller.queryThreadById({ threadId: sessionId });
     expect(thread?.title).toBe('Typed second');
     expect(isThreadTitlePinned(thread?.metadata)).toBe(true);
+  });
+
+  it('asks the model again for a regeneration requested after a typed title', async () => {
+    const sessionId = 'factory-regenerate-after-rename';
+    const session = await sessionWithHeldTitleModel(sessionId);
+
+    const before = session.regenerate();
+    await session.asked(1);
+    const typed = session.typed('Typed title');
+    await session.settle();
+    // Asked for after the typed title, so it must replace it, not report the answer still pending from before.
+    const after = session.regenerate();
+    await session.settle();
+    session.release(1);
+    await session.asked(2);
+    session.release(2);
+
+    await expect((await before).json()).resolves.toEqual({ title: 'Generated title 1' });
+    expect((await typed).status).toBe(200);
+    await expect((await after).json()).resolves.toEqual({ title: 'Generated title 2' });
+    await expect(session.sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      title: 'Generated title 2',
+    });
+  });
+
+  it('drops a typed title when the session changed hands while it waited its turn', async () => {
+    const sessionId = 'factory-rename-after-handover';
+    const session = await sessionWithHeldTitleModel(sessionId);
+
+    const regenerated = session.regenerate();
+    await session.asked(1);
+    const typed = session.typed('Typed by the old owner');
+    await session.settle();
+    await session.sourceControl.sessions.transferOwner({ sessionId, expectedUserId: 'user-1', toUserId: 'user-2' });
+    session.release(1);
+    await regenerated;
+
+    expect((await typed).status).toBe(404);
+    expect(session.renameThread).not.toHaveBeenCalled();
+    await expect(session.sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-2',
+      title: 'Generated title 1',
+    });
   });
 
   it('refuses a typed title for a session with no conversation yet', async () => {

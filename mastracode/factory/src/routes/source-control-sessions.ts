@@ -351,12 +351,18 @@ function createSessionNaming() {
     generate(sessionId: string, run: () => Promise<string | null>) {
       const pending = inFlight.get(sessionId);
       if (pending) return pending;
-      const started = inTurn(sessionId, run).finally(() => inFlight.delete(sessionId));
+      const started: Promise<string | null> = inTurn(sessionId, run).finally(() => {
+        if (inFlight.get(sessionId) === started) inFlight.delete(sessionId);
+      });
       inFlight.set(sessionId, started);
       return started;
     },
     /** Store a typed title after every title write asked for before it. */
-    rename: inTurn,
+    rename<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+      // A regeneration asked for after this must run after it, not share the answer of one before it.
+      inFlight.delete(sessionId);
+      return inTurn(sessionId, run);
+    },
   };
 }
 
@@ -928,11 +934,16 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // The first reply names a new conversation, which would replace a title set before it.
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
         const renameThread = options.renameThread;
-        await nameSession.rename(sessionId, async () => {
+        const renamed = await nameSession.rename(sessionId, async () => {
+          // Waiting behind an earlier title write can outlast the owner check above.
+          const current = await match.sourceControl.sessions.getBySessionId(sessionId);
+          if (current?.userId !== resolved.tenant.userId) return false;
           // The thread goes first: its pin is what keeps the next automatic title off the row.
           await renameThread({ threadId: thread.id, title });
           await match.sourceControl.sessions.rename({ sessionId, title });
+          return true;
         });
+        if (!renamed) return c.json({ error: 'Session not found' }, 404);
         return c.json({ title });
       },
     }),
