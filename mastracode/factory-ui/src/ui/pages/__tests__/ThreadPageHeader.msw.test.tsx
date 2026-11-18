@@ -383,12 +383,14 @@ describe('ThreadPage header', () => {
     const { sessionGate } = stubThreadRoute({ gateSession: true });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
 
-    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
+    const user = userEvent.setup();
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
+    await user.type(within(composer).getByRole('textbox', { name: 'Message' }), 'Draft while the session resolves');
+    expect(within(composer).getByRole('button', { name: 'Send message' })).toBeDisabled();
 
     sessionGate.resolve();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(composer).getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
   });
 });
