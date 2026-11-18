@@ -296,6 +296,15 @@ describe('Tab', () => {
       expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
     });
 
+    it('keeps every tab when they fit exactly, with no room left for a menu', () => {
+      // Three 100px tabs, two 4px gaps and the track's 4px inset.
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(312);
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+      render(pills());
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+
     it('keeps every tab in the row when they all fit', () => {
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
       render(pills());

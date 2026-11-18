@@ -107,16 +107,17 @@ export const TabList = ({
     return () => observer.disconnect();
   }, [folds]);
   // Space between tabs, and around them, that folding has to count: the inset frame's, a pill
-  // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Outside contained tabs the
-  // "+N" menu also sits `gap-1` after the list.
+  // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Once some fold, the "+N"
+  // menu takes 48px, plus the `gap-1` before it outside contained tabs.
   const gap = contained || pillTrack ? 4 : resolvedVariant === 'pill-ghost' ? 2 : 0;
-  const frameReserve = contained ? 30 : (pillTrack ? 4 : 0) + (folds ? 4 : 0);
+  const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
+  const menuReserve = contained ? 48 : 52;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!folds || available === null) return hidden;
     const tabTotal = measurements.reduce((sum, tab) => sum + tab.width, 0) + gap * Math.max(measurements.length - 1, 0);
     if (tabTotal + frameReserve <= available) return hidden;
-    let remaining = available - frameReserve - 48;
+    let remaining = available - frameReserve - menuReserve;
     const active = measurements.find(tab => tab.value === tabs?.value);
     if (active) remaining -= active.width + gap;
     let full = false;
@@ -128,7 +129,7 @@ export const TabList = ({
       } else remaining -= tab.width + gap;
     }
     return hidden;
-  }, [folds, available, measurements, gap, frameReserve, tabs?.value]);
+  }, [folds, available, measurements, gap, frameReserve, menuReserve, tabs?.value]);
   const hiddenTabs = measurements.filter(tab => hiddenValues.has(tab.value));
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))
