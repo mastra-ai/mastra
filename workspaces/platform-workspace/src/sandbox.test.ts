@@ -199,6 +199,56 @@ describe('PlatformSandbox', () => {
     expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
   });
 
+  it('drops GitHub credentials from a call on a VM whose mode is unknown', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', destroyedAt: null }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'sbx_existing',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+
+    expect(sandbox.vault).toBeUndefined();
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ A: '1' });
+  });
+
+  it('drops GitHub credentials when the VM is replaced between acquisition and dispatch', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let sandbox!: PlatformSandbox;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockImplementationOnce(async () => {
+        // Another call replaced the VM while this one was waiting for a lease.
+        (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_2';
+        return leaseResponse();
+      });
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+
+    expect(sandbox.vault).toBe(false);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ A: '1' });
+  });
+
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');

@@ -377,7 +377,7 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
  * a `GIT_CONFIG_*` block that scopes a header to github.com. Other hosts'
  * credentials (GitLab) are left alone.
  */
-function withoutGithubCredentials(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
   const githubConfig = Object.entries(env).some(
     ([name, value]) => /^GIT_CONFIG_KEY_\d+$/.test(name) && !!value?.startsWith('http.https://github.com/'),
   );
@@ -386,7 +386,7 @@ function withoutGithubCredentials(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
       ([name]) =>
         !/^GH_TOKEN(_\d+)?$/.test(name) && !(githubConfig && /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name)),
     ),
-  );
+  ) as T;
 }
 
 function buildCommand(command: string, args?: string[]): string {
@@ -1513,6 +1513,7 @@ export class PlatformSandbox extends MastraSandbox {
   ): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
@@ -1526,10 +1527,6 @@ export class PlatformSandbox extends MastraSandbox {
     // these options, and none of them route through the process manager.
     const sandboxEnv = this.getEnv();
     const { cwd, ...restOptions } = options ?? {};
-    // The caller built its env before this call acquired the VM. A vault VM
-    // authenticates GitHub through the vault, so it never gets a real GitHub
-    // credential, even one built while the previous VM was not vault.
-    if (this.vault === true && restOptions.env) restOptions.env = withoutGithubCredentials(restOptions.env);
     const execCommand = commandInCwd(fullCommand, cwd, this.workingDirectory);
     const execCallOptions: ExecuteCommandOptions =
       Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...restOptions.env } } : restOptions;
@@ -1559,6 +1556,7 @@ export class PlatformSandbox extends MastraSandbox {
         execCommand,
         effectiveTimeout,
         execCallOptions,
+        sandboxId,
       );
       if (privateNet) {
         const privateExit = privateNet.exitCode ?? 124;
@@ -1584,7 +1582,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
+    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, sandboxId, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1629,11 +1627,17 @@ export class PlatformSandbox extends MastraSandbox {
    * NodeJS.ProcessEnv). The sandbox's own env is already merged in by
    * `executeCommand` before a transport sees these options. Returns undefined
    * when there is nothing to send.
+   *
+   * GitHub credentials are dropped unless the VM is known not to be vault and
+   * is still the one the command was started for (`sandboxId`). This runs
+   * right before each dispatch, after the VM is acquired, because the caller
+   * built its env before then.
    */
-  private _execEnv(options: ExecuteCommandOptions | undefined): Record<string, string> | undefined {
+  private _execEnv(options: ExecuteCommandOptions | undefined, sandboxId: string): Record<string, string> | undefined {
     if (!options?.env) return undefined;
+    const env = this._acceptsGithubCredentials(sandboxId) ? options.env : withoutGithubCredentials(options.env);
     const filtered = Object.fromEntries(
-      Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
     return Object.keys(filtered).length > 0 ? filtered : undefined;
   }
@@ -1642,10 +1646,9 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
     attempts = 2,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
-    const filteredEnv = this._execEnv(options);
-
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
     let attemptsMade = 0;
@@ -1689,6 +1692,7 @@ export class PlatformSandbox extends MastraSandbox {
       lastLease = lease;
       attemptsMade = attempt + 1;
       const leaseCwd = options?.cwd ?? this.workingDirectory;
+      const filteredEnv = this._execEnv(options, sandboxId);
       const execOptions = {
         command: fullCommand,
         ...(leaseCwd !== undefined && { cwd: leaseCwd }),
@@ -1755,8 +1759,9 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    sandboxId: string,
   ): Promise<PrivateNetExecResult | undefined> {
-    const filteredEnv = this._execEnv(options);
+    const filteredEnv = this._execEnv(options, sandboxId);
 
     const privateNetCwd = options?.cwd ?? this.workingDirectory;
     const execOptions: PrivateNetExecOptions = {
@@ -1961,6 +1966,7 @@ export class PlatformSandbox extends MastraSandbox {
   async [withCommands]<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const sandboxId = this._sandboxId;
     let current = await this._commandsHandle(operation, 1);
     const call = async <R>(invoke: (commands: CommandsApi) => Promise<R>): Promise<R> => {
       try {
@@ -1981,12 +1987,31 @@ export class PlatformSandbox extends MastraSandbox {
       }
     };
     return fn({
-      run: (command, opts) => call(commands => commands.run(command, opts)),
+      // Settled at dispatch, after the lease is in hand: a vault VM, or one whose
+      // mode is unknown, never gets a real GitHub credential.
+      run: (command, opts) =>
+        call(commands =>
+          commands.run(
+            command,
+            opts.envs && !this._acceptsGithubCredentials(sandboxId)
+              ? { ...opts, envs: withoutGithubCredentials(opts.envs) }
+              : opts,
+          ),
+        ),
       connect: (pid, opts) => call(commands => commands.connect(pid, opts)),
       list: () => call(commands => commands.list()),
       kill: pid => call(commands => commands.kill(pid)),
       sendStdin: (pid, data) => call(commands => commands.sendStdin(pid, data)),
     });
+  }
+
+  /**
+   * Whether a command started for `sandboxId` may carry GitHub credentials:
+   * only when that VM is still the current one and is known not to be vault.
+   * Unknown mode fails closed.
+   */
+  private _acceptsGithubCredentials(sandboxId: string): boolean {
+    return this.vault === false && this._sandboxId === sandboxId;
   }
 
   /** The commands handle for the current lease, rebuilt only when the lease changes. */
