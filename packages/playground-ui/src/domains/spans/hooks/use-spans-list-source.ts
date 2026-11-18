@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
-import { slideWindow, useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
+import { useListAnchor, useListHeadPoll, windowEndingAt } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
 import { OBSERVABILITY_LIST_HEAD_LIMIT } from '@/domains/observability/list-polling';
 import { mergeHeadRows } from '@/domains/observability/merge-head-rows';
@@ -11,6 +11,8 @@ export type UseSpansListSourceArgs = {
   query: SpanQueryArgs;
   /** The window ends at "now" (a preset rather than a custom range): only then can new spans show up. */
   rolling: boolean;
+  /** The user picked the start (a custom range with no end): polls and reloads keep it rather than sliding it. */
+  fixedStart?: boolean;
   /** Polls for spans that ended since the list loaded. Defaults to true. */
   autoRefetch?: boolean;
   limit?: number;
@@ -44,12 +46,13 @@ function compareSpans(orderBy: SpanQueryArgs['orderBy']) {
 export function useSpansListSource({
   query,
   rolling,
+  fixedStart = false,
   autoRefetch = true,
   limit,
   enabled = true,
 }: UseSpansListSourceArgs) {
   const client = useMastraClient();
-  const { anchorWindow, reanchor } = useListAnchor(query);
+  const { anchorWindow, reanchor } = useListAnchor(query, fixedStart);
 
   const listQuery = useMemo<SpanQueryArgs>(
     () => (anchorWindow ? { ...query, timeRange: { ...query.timeRange, ...anchorWindow } } : query),
@@ -60,11 +63,13 @@ export function useSpansListSource({
   const { headRows } = useListHeadPoll<SpanRow>({
     queryKey: ['spans', query],
     fetchHead: async to => {
-      // The server filters spans on startedAt in [from, to), whatever their endedAt,
-      // so a long-running span started inside the window is caught once it ends.
+      // The server filters spans on startedAt in [from, to), whatever their endedAt, so a long-running
+      // span is caught once it ends if it started inside the polled window. A preset window slides with
+      // each poll, so a span that ran longer than the whole window is missed: the price of staying under
+      // the server's cap on the window length.
       const result = await client.querySpans({
         ...query,
-        timeRange: { ...query.timeRange, ...slideWindow(query.timeRange, to) },
+        timeRange: { ...query.timeRange, ...windowEndingAt(query.timeRange, to, fixedStart) },
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });

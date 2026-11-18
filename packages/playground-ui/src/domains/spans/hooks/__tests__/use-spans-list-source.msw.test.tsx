@@ -167,6 +167,26 @@ describe('useSpansListSource', () => {
     });
   });
 
+  describe('when the user picked a custom start with no end', () => {
+    it('keeps that start on every poll and on the reload after an overflow', async () => {
+      const { listBodies, headBodies } = setHandlers([
+        spanHeadPage,
+        fullSpanHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, spanTimeRange.to),
+      ]);
+      const { result } = renderSource({ query: rollingQuery, rolling: true, fixedStart: true });
+      await waitFor(() => expect(result.current.spans).toHaveLength(2));
+
+      await nextTick();
+      await waitFor(() => expect(spanIds(result.current.spans)).toContain(endedSpan.spanId));
+      await nextTick();
+      await waitFor(() => expect(listBodies).toHaveLength(2));
+
+      expect(headBodies.map(body => body.timeRange.from)).toEqual([spanTimeRange.from, spanTimeRange.from]);
+      expect(listBodies[1].timeRange.from).toBe(spanTimeRange.from);
+      expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThan(Date.parse(spanTimeRange.to));
+    });
+  });
+
   describe('when the window is a custom range', () => {
     it('never polls', async () => {
       const { headBodies } = setHandlers([spanHeadPage]);
