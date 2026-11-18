@@ -989,7 +989,7 @@ const GITLAB_DESCRIPTIONS: Readonly<Record<string, string>> = {
   'delete-branch': 'Delete a branch in GitLab.',
   'delete-issue': 'Delete an issue in GitLab.',
   'delete-group':
-    'Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
+    'Schedule a group for deletion in GitLab. Pass the numeric group id: GitLab renames the group when it schedules deletion, so a path stops working. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
   'list-jobs': 'List jobs from GitLab, newest first.',
 };
 
@@ -1063,12 +1063,16 @@ const GITLAB_INPUT_FIXES: Readonly<Record<string, readonly StatementRewrite[]>> 
  * so an id or path one tool returns can be rejected by the next. Every GitLab
  * input accepts both; `gitlabPathSegment` turns either into one path segment.
  */
+const GITLAB_PROJECT_ID_DESCRIPTION =
+  'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"';
+
 function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
   const moduleStatements = action.moduleStatements.map(statement =>
     /export const \w+InputSchema = z\b/.test(statement)
       ? statement.replace(
-          /project_id: z(\s*)\.(?:number|string)\(\)/g,
-          'project_id: z$1.union([z.number(), z.string()])',
+          /project_id: z(\s*)\.(?:number\(\)|string\(\)|union\(\[[^\]]*\]\))(?:(\s*)\.describe\((['"])(?:\\.|(?!\3).)*\3\))?/g,
+          (_match, space: string, describeSpace: string | undefined) =>
+            `project_id: z${space}.union([z.number(), z.string()])${describeSpace ?? ''}.describe(${JSON.stringify(GITLAB_PROJECT_ID_DESCRIPTION)})`,
         )
       : statement,
   );

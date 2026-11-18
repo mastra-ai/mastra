@@ -15,7 +15,11 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const listBranchesInputSchema = z.object({
-  project_id: z.union([z.string(), z.number()]).describe('Project ID or URL-encoded path. Example: 82599306'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
   per_page: z.number().optional().describe('Number of results per page. Default: 20, max: 100.'),
   search: z.string().optional().describe('Search string to filter branches.'),

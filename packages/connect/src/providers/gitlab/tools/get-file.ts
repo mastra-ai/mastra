@@ -15,7 +15,11 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const getFileInputSchema = z.object({
-  project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   file_path: z
     .string()
     .describe('Full path to the file, not URL-encoded (a %2F stays literally in the name). Example: "src/app.ts"'),

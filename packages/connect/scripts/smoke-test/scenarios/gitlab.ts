@@ -24,6 +24,7 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  */
 
 const SYNTHETIC_GROUP_ID = 999_999_999;
+const LEAK_SEARCH_MAX_PAGES = 5;
 const GROUP_REREAD_ATTEMPTS = 3;
 const GROUP_REREAD_INTERVAL_MS = 5_000;
 const CI_JOB_NAME = 'mastra-smoke';
@@ -156,17 +157,23 @@ export const gitlabScenario: Scenario = {
     /** When create_project failed after GitLab may have created the project, finds it so it can still be deleted. */
     async function findLeakedProject(): Promise<number | undefined> {
       try {
-        const found = await call<{ items: Array<{ id: number; path: string; description?: string | null }> }>(
-          'gitlab_list_projects',
-          {
-            search: runId,
-            owned: true,
-            per_page: 20,
-          },
-        );
-        const leaked = found.items.find(item => item.path === runId && item.description?.includes(createMarker));
-        if (leaked) log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
-        return leaked?.id;
+        // `search` matches substrings, so the run's project can be on a later page.
+        let cursor: string | undefined;
+        for (let page = 0; page < LEAK_SEARCH_MAX_PAGES; page++) {
+          const found = await call<{
+            items: Array<{ id: number; path: string; description?: string | null }>;
+            next_cursor?: string;
+          }>('gitlab_list_projects', { search: runId, owned: true, per_page: 100, ...(cursor && { cursor }) });
+          const leaked = found.items.find(item => item.path === runId && item.description?.includes(createMarker));
+          if (leaked) {
+            log.warn(`gitlab: create_project failed but project ${leaked.id} (${runId}) exists; deleting it`);
+            return leaked.id;
+          }
+          cursor = found.next_cursor;
+          if (!cursor) return undefined;
+        }
+        log.error(`gitlab: could not confirm whether a ${runId} project was created; check manually`);
+        return undefined;
       } catch (error) {
         log.error(`gitlab: could not check for a leaked ${runId} project; check manually`, errorMessage(error));
         return undefined;
@@ -268,10 +275,19 @@ export const gitlabScenario: Scenario = {
         if (attempt > 0) await new Promise(resolve => setTimeout(resolve, GROUP_REREAD_INTERVAL_MS));
         try {
           const marked = await call<{ full_path?: string }>('gitlab_get_group', { id: group.id });
-          markedPath = marked.full_path ?? group.full_path;
+          // Without the renamed path, permanent removal would be rejected; keep polling.
+          if (marked.full_path) markedPath = marked.full_path;
+          else lastError = new Error('gitlab_get_group returned no full_path');
         } catch (error) {
           if (/status=404/.test(errorMessage(error))) {
-            steps.push(makeStep('delete group', 'gitlab_delete_group', 'pass', 'deleted'));
+            // A 404 can also mean the connection lost read access while the group sits in retention.
+            log.error(
+              `gitlab: subgroup ${group.id} returned 404 after scheduling deletion; confirm it was removed`,
+              errorMessage(error),
+            );
+            steps.push(
+              makeStep('delete group', 'gitlab_delete_group', 'fail', 'scheduled; removal unverified (group read 404)'),
+            );
             return;
           }
           lastError = error;

@@ -15,7 +15,11 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createMergeRequestInputSchema = z.object({
-  project_id: z.union([z.number(), z.string()]),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   source_branch: z.string(),
   target_branch: z.string(),
   title: z.string(),

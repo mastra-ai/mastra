@@ -16,8 +16,10 @@ function gitlabPathSegment(value: string | number): string {
 
 export const getCommitInputSchema = z.object({
   project_id: z
-    .union([z.string(), z.number()])
-    .describe('The ID or URL-encoded path of the project. Example: 82599306'),
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   sha: z.string().describe('The commit hash or name of a repository branch or tag. Example: abc123def456'),
 });
 

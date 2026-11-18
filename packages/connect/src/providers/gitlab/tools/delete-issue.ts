@@ -17,7 +17,9 @@ function gitlabPathSegment(value: string | number): string {
 export const deleteIssueInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
-    .describe('The global ID or URL-encoded path of the project. Example: 82599306'),
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   issue_iid: z.number().describe('The internal ID of a project issue. Example: 1'),
 });
 
