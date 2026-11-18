@@ -1103,7 +1103,7 @@ export class Agent<
 
   /**
    * True when this instance is a fork produced by resolving a stored agent
-   * version (see Mastra#resolveVersionedAgent). Prevents #execute from
+   * version (see Mastra#resolveVersionedAgent). Prevents #prepareAndStartPlainWorkflow from
    * re-resolving the version and recursing.
    * @internal
    */
@@ -9342,7 +9342,7 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({
+  async #prepareAndStartPlainWorkflow<OUTPUT>({
     methodType,
     resumeContext,
     _threadStreamPubSub,
@@ -9395,7 +9395,7 @@ export class Agent<
             // Cast: reassembled options are exactly this method's input. The
             // `unknown` annotation breaks the circular return-type inference
             // of the self-recursion (TS7023).
-            const delegated: unknown = (resolved as unknown as this).#execute<OUTPUT>({
+            const delegated: unknown = (resolved as unknown as this).#prepareAndStartPlainWorkflow<OUTPUT>({
               methodType,
               resumeContext,
               _threadStreamPubSub,
@@ -10350,7 +10350,7 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
-  async #resolveInvocationOptions<OUTPUT>(
+  async #resolvePlainRunOptions<OUTPUT>(
     options?: AgentExecutionOptionsBase<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
   ) {
     await this.#validateRequestContext(options?.requestContext);
@@ -10363,10 +10363,162 @@ export class Agent<
       { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
     );
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
+    return { mergedOptions, resolvedScopes };
+  }
+
+  async #startPlainRun<OUTPUT>(
+    messages: MessageListInput,
+    mergedOptions: AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
+    resolvedScopes: ResolvedAgentScopes,
+    methodType: 'generate',
+  ): Promise<FullOutput<OUTPUT>>;
+  async #startPlainRun<OUTPUT>(
+    messages: MessageListInput,
+    mergedOptions: AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
+    resolvedScopes: ResolvedAgentScopes,
+    methodType: 'stream',
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async #startPlainRun<OUTPUT>(
+    messages: MessageListInput,
+    mergedOptions: AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> },
+    resolvedScopes: ResolvedAgentScopes,
+    methodType: 'generate' | 'stream',
+  ): Promise<FullOutput<OUTPUT> | MastraModelOutput<OUTPUT>> {
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
-    return { mergedOptions, resolvedScopes, loopOptions, actor };
+
+    await this.requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
+
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    });
+
+    const modelInfo = llm.getModel();
+
+    if (!isSupportedLanguageModel(modelInfo)) {
+      const modelId = modelInfo.modelId || 'unknown';
+      const provider = modelInfo.provider || 'unknown';
+      const specVersion = modelInfo.specificationVersion;
+
+      throw new MastraError({
+        id: methodType === 'generate' ? 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED' : 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          specVersion === 'v1'
+            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with ${methodType}(). Please use AI SDK v5+ models or call the ${methodType}Legacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+        details: {
+          agentName: this.name,
+          modelId,
+          provider,
+          specificationVersion: specVersion,
+        },
+      });
+    }
+
+    // Reserve the thread before execution so concurrent invocations and signals
+    // cannot start a second run before registerRun below.
+    const threadStreamPubSub = this.getPubSub();
+    mergedOptions.runId ??= resolveRunId(undefined, () =>
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+      }),
+    );
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
+
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+    );
+
+    const executeOptions = {
+      ...preparedOptions,
+      actor,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
+      messages,
+      resolvedScopes: resolvedScopes.scopes,
+      methodType,
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      _threadStreamPubSub: threadStreamPubSub,
+    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
+
+    try {
+      const result = await this.#prepareAndStartPlainWorkflow(executeOptions);
+
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: methodType === 'generate' ? 'AGENT_GENERATE_FAILED' : 'AGENT_STREAM_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: methodType === 'generate' ? 'AGENT_GENERATE_UNKNOWN_ERROR' : 'AGENT_STREAM_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
+      }
+
+      if (methodType === 'generate' && typeof result.result?.getFullOutput !== 'function') {
+        throw new MastraError({
+          id: 'AGENT_GENERATE_MALFORMED_RESULT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: 'Execution workflow produced a result without getFullOutput',
+        });
+      }
+
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
+      return methodType === 'generate' ? await drainAgentOutput(result.result) : result.result;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed setup does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
+      throw error;
+    }
   }
 
   async generate<
@@ -10403,140 +10555,8 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    const { mergedOptions, resolvedScopes, loopOptions, actor } = await this.#resolveInvocationOptions<any>(options);
-
-    await this.requireAgentExecutionFGA({
-      requestContext: mergedOptions.requestContext,
-      memory: mergedOptions.memory,
-      runId: mergedOptions.runId,
-      actor,
-    });
-
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
-    });
-
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-
-      throw new MastraError({
-        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
-    // Register the run with the thread runtime like stream() does. Without it a thread-bound generate()
-    // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
-    // never sees this turn. The wait also reserves the thread for this runId.
-    const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??= resolveRunId(undefined, () =>
-      this.#mastra?.generateId({
-        idType: 'run',
-        source: 'agent',
-        entityId: this.id,
-      }),
-    );
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
-      threadStreamPubSub,
-    );
-
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
-      threadStreamPubSub,
-      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-    );
-
-    const executeOptions = {
-      ...preparedOptions,
-      actor,
-      structuredOutput: mergedOptions.structuredOutput
-        ? {
-            ...mergedOptions.structuredOutput,
-            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
-            // This follows the same pattern as Tool/Workflow constructors
-            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages,
-      resolvedScopes: resolvedScopes.scopes,
-      methodType: 'generate',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
-
-    try {
-      const result = await this.#execute(executeOptions);
-
-      if (result.status !== 'success') {
-        if (result.status === 'failed') {
-          throw new MastraError(
-            {
-              id: 'AGENT_GENERATE_FAILED',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-            },
-            // pass original error to preserve stack trace
-            result.error,
-          );
-        }
-        throw new MastraError({
-          id: 'AGENT_GENERATE_UNKNOWN_ERROR',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'An unknown error occurred while streaming',
-        });
-      }
-
-      if (typeof result.result?.getFullOutput !== 'function') {
-        throw new MastraError({
-          id: 'AGENT_GENERATE_MALFORMED_RESULT',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          text: 'Execution workflow produced a result without getFullOutput',
-        });
-      }
-
-      await agentThreadStreamRuntime.registerRun(
-        this as Agent<any, any, any, any>,
-        result.result,
-        preparedOptions as AgentExecutionOptions<any>,
-        threadStreamPubSub,
-      );
-
-      return await drainAgentOutput(result.result);
-    } catch (error) {
-      // Release the thread reservation taken by waitForCrossAgentThreadRun so
-      // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(
-        mergedOptions.runId,
-        threadStreamPubSub,
-        {
-          agent: this,
-          streamOptions: preparedOptions,
-        },
-        preparedOptions.abortSignal,
-      );
-      throw error;
-    }
+    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
+    return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
   }
 
   subscribeToThread<OUTPUT = TOutput>(
@@ -11377,8 +11397,7 @@ export class Agent<
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
 
-    const { mergedOptions, resolvedScopes, loopOptions, actor } =
-      await this.#resolveInvocationOptions<OUTPUT>(streamOptions);
+    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -11399,129 +11418,7 @@ export class Agent<
       );
     }
 
-    await this.requireAgentExecutionFGA({
-      requestContext: mergedOptions.requestContext,
-      memory: mergedOptions.memory,
-      runId: mergedOptions.runId,
-      actor,
-    });
-
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
-    });
-
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
-    const threadStreamPubSub = this.getPubSub();
-    mergedOptions.runId ??= resolveRunId(undefined, () =>
-      this.#mastra?.generateId({
-        idType: 'run',
-        source: 'agent',
-        entityId: this.id,
-      }),
-    );
-    // The wait also reserves the thread for this runId, so concurrent stream()
-    // calls on the same thread serialize instead of racing between this wait
-    // and registerRun below.
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-    );
-
-    const executeOptions = {
-      ...preparedOptions,
-      actor,
-      structuredOutput: mergedOptions.structuredOutput
-        ? {
-            ...mergedOptions.structuredOutput,
-            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
-            // This follows the same pattern as Tool/Workflow constructors
-            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages,
-      resolvedScopes: resolvedScopes.scopes,
-      methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-      _threadStreamPubSub: threadStreamPubSub,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
-
-    try {
-      const result = await this.#execute(executeOptions);
-
-      if (result.status !== 'success') {
-        if (result.status === 'failed') {
-          throw new MastraError(
-            {
-              id: 'AGENT_STREAM_FAILED',
-              domain: ErrorDomain.AGENT,
-              category: ErrorCategory.USER,
-            },
-            // pass original error to preserve stack trace
-            result.error,
-          );
-        }
-        throw new MastraError({
-          id: 'AGENT_STREAM_UNKNOWN_ERROR',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'An unknown error occurred while streaming',
-        });
-      }
-
-      await agentThreadStreamRuntime.registerRun(
-        this as Agent<any, any, any, any>,
-        result.result,
-        preparedOptions as AgentExecutionOptions<OUTPUT>,
-        threadStreamPubSub,
-      );
-
-      return result.result;
-    } catch (error) {
-      // Release the thread reservation taken by waitForCrossAgentThreadRun so
-      // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(
-        mergedOptions.runId,
-        threadStreamPubSub,
-        {
-          agent: this,
-          streamOptions: preparedOptions,
-        },
-        preparedOptions.abortSignal,
-      );
-      throw error;
-    }
+    return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'stream');
   }
 
   /**
@@ -11865,7 +11762,7 @@ export class Agent<
         () => this.#deleteAbortedSuspendedRun(runId),
       );
 
-      const result = await this.#execute({
+      const result = await this.#prepareAndStartPlainWorkflow({
         ...preparedOptions,
         actor,
         structuredOutput: mergedStreamOptions.structuredOutput
@@ -12068,7 +11965,7 @@ export class Agent<
       // A parked run whose thread lease lapsed must hold it again before it runs: a successor that now holds the
       // thread refuses this resume instead of running beside it, and the run stays parked.
       await agentThreadStreamRuntime.reacquireParkedRunLease(runId, this.getPubSub());
-      const result = await this.#execute({
+      const result = await this.#prepareAndStartPlainWorkflow({
         ...loopOptions,
         actor,
         structuredOutput: mergedOptions.structuredOutput
@@ -14127,7 +14024,7 @@ export class Agent<
     return { toolCalls: toolCallChunks, resumedText };
   }
 
-  async #resolveExecutionOptions(
+  async #resolveDurableRunOptions(
     options?: DurableAgentStreamOptions<TOutput>,
     snapshot?: AgentScopesSnapshot,
   ): Promise<DurableAgentStreamOptions<TOutput>> {
@@ -14357,7 +14254,7 @@ export class Agent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
+    options = await this.#resolveDurableRunOptions(applyReservedMemoryContextKeys(options));
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
     // Strip `untilIdle` before passing to the wrapper so its internal
@@ -14384,10 +14281,10 @@ export class Agent<
       );
     }
 
-    return this.#executeDurable(messages, options, 'stream');
+    return this.#startDurableRun(messages, options, 'stream');
   }
 
-  async #executeDurable(
+  async #startDurableRun(
     messages: MessageListInput,
     options: DurableAgentStreamOptions<TOutput>,
     methodType: 'stream' | 'generate',
@@ -14682,9 +14579,9 @@ export class Agent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
-    options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
+    options = await this.#resolveDurableRunOptions(applyReservedMemoryContextKeys(options));
 
-    const { output, runId, cleanup } = await this.#executeDurable(messages, options, 'generate');
+    const { output, runId, cleanup } = await this.#startDurableRun(messages, options, 'generate');
 
     let suspended = false;
     try {
@@ -14895,7 +14792,7 @@ export class Agent<
           } catch (versionError) {
             // The pinned version may have been deleted while the run sat
             // suspended — resume on the current definition rather than
-            // failing at the approver (mirrors Agent#execute's fallback).
+            // failing at the approver (mirrors Agent#prepareAndStartPlainWorkflow's fallback).
             this.logger.warn('Failed to resolve pinned agent version for durable resume, using current definition', {
               agentId: this.id,
               runId,
@@ -15034,7 +14931,7 @@ export class Agent<
     // The resumed segment always carries its own claim: without a context the
     // engine would restore the previous segment's claim from the snapshot.
     resumeRequestContext ??= new RequestContext();
-    const resolvedOptions = (await this.#resolveExecutionOptions(
+    const resolvedOptions = (await this.#resolveDurableRunOptions(
       {
         ...(options as DurableAgentStreamOptions<TOutput>),
         requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
@@ -15798,7 +15695,7 @@ export class Agent<
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
     const bus = this.__getStreamBus();
-    if (bus) return this.#observeStream(bus, runId, options);
+    if (bus) return this.#observeRun(bus, runId, options);
     throw new MastraError({
       id: 'AGENT_STREAMS_NOT_ENABLED',
       domain: ErrorDomain.AGENT,
@@ -15813,7 +15710,7 @@ export class Agent<
    * kept, then tail live events. The run keeps going when the observer stops
    * reading or detaches.
    */
-  async #observeStream(
+  async #observeRun(
     bus: AgentStreamBus,
     runId: string,
     options: Parameters<Agent<TAgentId, TTools, TOutput>['observe']>[1],
