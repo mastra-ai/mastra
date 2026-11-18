@@ -58,13 +58,13 @@ If you were already using a hosted database ("bring your own"), keep the existin
 
 If you were using Cloud Store, follow the steps below to export your data and load it into a new libSQL database that you control.
 
-### Export your Cloud Store data
+### Export your cloud store data
 
 You can export your Cloud Store data in two ways: download it from the dashboard, or create a manual dump with the Turso CLI.
 
 #### Option A: Export from the dashboard (recommended)
 
-Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Storage**. Click the **Export Database** button. The dashboard generates a full `.sql` dump of your Cloud Store and downloads it directly to your Downloads folder.
+Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Storage**. Select **Export Database**. The dashboard generates a full `.sql` dump of your Cloud Store and downloads it directly to your Downloads folder.
 
 Once the download completes, convert the dump into a SQLite database file:
 
@@ -279,7 +279,7 @@ See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
 
 ### Multiple environments
 
-A single Mastra platform project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy) command:
+A single Mastra platform project runs the same codebase across multiple [environments](/docs/mastra-platform/deploy/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy/overview) command:
 
 ```bash
 mastra deploy --env production --yes
@@ -288,7 +288,7 @@ mastra deploy --env staging --env-file .env.staging --yes
 
 Each environment has a dedicated URL and environment variables, along with a separate deploy history.
 
-## Deploy Server (optional)
+## Deploy server (optional)
 
 If you need a production API endpoint, deploy a Server:
 
@@ -296,7 +296,7 @@ If you need a production API endpoint, deploy a Server:
 mastra server deploy
 ```
 
-This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/docs/mastra-platform/server) for the full walkthrough.
+This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/docs/mastra-platform/deploy/server) for the full walkthrough.
 
 :::note
 Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically on first deploy. After that, manage env vars through the [web dashboard](https://projects.mastra.ai).
@@ -375,14 +375,14 @@ jobs:
           MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
-## Decommission old Cloud project
+## Decommission old cloud project
 
 Update any clients pointing to your old Mastra Cloud URL to the new Server or Studio URL. Verify traces appear in the new platform by checking the [Studio observability dashboard](/docs/studio/observability). Delete your old Mastra Cloud project once everything is confirmed working.
 
 ## Related
 
 - [Mastra platform overview](/docs/mastra-platform/overview)
-- [Observability overview](/docs/mastra-platform/observability)
-- [Studio deployment](/docs/mastra-platform/studio)
-- [Server deployment](/docs/mastra-platform/server)
+- [Observability overview](/docs/mastra-platform/observability/overview)
+- [Studio deployment](/docs/mastra-platform/deploy/studio)
+- [Server deployment](/docs/mastra-platform/deploy/server)
 - [CLI reference](/reference/cli/mastra)

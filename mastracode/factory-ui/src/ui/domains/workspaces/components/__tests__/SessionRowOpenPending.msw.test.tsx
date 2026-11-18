@@ -201,6 +201,7 @@ describe('Session row open', () => {
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       'Open in new tab',
       'Pin session',
+      'Rename',
       'Regenerate title',
       'Make private',
       'Delete',

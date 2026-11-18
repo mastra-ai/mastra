@@ -7,7 +7,7 @@ description: "Browse CommandCode model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/commandcode.svg" alt="CommandCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CommandCode
 
-Access 72 CommandCode models through Mastra's model router. Authentication is handled automatically using the `CMD_API_KEY` environment variable.
+Access 93 CommandCode models through Mastra's model router. Authentication is handled automatically using the `CMD_API_KEY` environment variable.
 
 Learn more in the [CommandCode documentation](https://commandcode.ai/docs/provider).
 
@@ -478,6 +478,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
+    "model": "commandcode/inclusionai/ling-3.1-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "commandcode/meituan/LongCat-2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "commandcode/meta/muse-spark-1.1",
     "imageInput": true,
     "audioInput": false,
@@ -538,6 +562,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
+    "model": "commandcode/meta/muse-spark-open",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
+  },
+  {
     "model": "commandcode/meta/muse-wonder-1.0",
     "imageInput": true,
     "audioInput": true,
@@ -548,6 +584,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 4,
     "outputCost": 20
+  },
+  {
+    "model": "commandcode/minimax/minimax-m3.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "commandcode/MiniMaxAI/MiniMax-M2.5",
@@ -598,6 +646,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.18
   },
   {
+    "model": "commandcode/moonshotai/Kimi-K2.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.6,
+    "outputCost": 3
+  },
+  {
+    "model": "commandcode/moonshotai/Kimi-K2.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.95,
+    "outputCost": 4
+  },
+  {
     "model": "commandcode/moonshotai/Kimi-K2.7-Code",
     "imageInput": true,
     "audioInput": false,
@@ -629,9 +701,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 131072,
+    "maxOutput": 1000000,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "commandcode/moonshotai/Kimi-K3.1-Pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "commandcode/nvidia/nemotron-3-ultra-550b-a55b",
@@ -644,6 +728,90 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.6,
     "outputCost": 2.4
+  },
+  {
+    "model": "commandcode/nvidia/nemotron-3.5-super-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "commandcode/ornith/ornith-1.5-122b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.16,
+    "outputCost": 0.64
+  },
+  {
+    "model": "commandcode/poolside/laguna-s-2.1-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "commandcode/Qwen/Qwen3.6-Plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
+  },
+  {
+    "model": "commandcode/Qwen/Qwen3.7-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.13
+  },
+  {
+    "model": "commandcode/Qwen/Qwen3.7-Max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 2.5,
+    "outputCost": 7.5
+  },
+  {
+    "model": "commandcode/Qwen/Qwen3.7-Plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 0.4,
+    "outputCost": 1.6
   },
   {
     "model": "commandcode/Qwen/Qwen3.8-27B",
@@ -694,6 +862,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "commandcode/Qwen/Qwen3.8-Max-Prime",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 4,
+    "outputCost": 12
+  },
+  {
     "model": "commandcode/Qwen/Qwen3.8-Omni-Flash",
     "imageInput": true,
     "audioInput": true,
@@ -706,6 +886,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.47
   },
   {
+    "model": "commandcode/reflection/beam:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "commandcode/sakana/fugu-ultra",
     "imageInput": true,
     "audioInput": false,
@@ -716,6 +908,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 5,
     "outputCost": 30
+  },
+  {
+    "model": "commandcode/stealth/glyph-cluster:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "commandcode/stepfun/Step-3.5-Flash",
@@ -838,6 +1042,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "commandcode/xiaomi/mimo-v2.6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "commandcode/xiaomi/mimo-v2.6-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.435,
+    "outputCost": 0.87
+  },
+  {
+    "model": "commandcode/xiaomi/mimo-v2.6-pro-ultraspeed",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 4.35,
+    "outputCost": 8.7
+  },
+  {
     "model": "commandcode/z-ai/glm-5.3-flash",
     "imageInput": true,
     "audioInput": false,
@@ -860,6 +1100,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.37,
     "outputCost": 1.25
+  },
+  {
+    "model": "commandcode/zai-org/GLM-5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 1,
+    "outputCost": 3.2
   },
   {
     "model": "commandcode/zai-org/GLM-5.2",

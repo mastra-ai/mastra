@@ -1,0 +1,4 @@
+{
+  "temperature": ["qwen/qwen3-coder-30b-a3b-instruct"],
+  "structuredOutput": ["qwen/qwen3-coder-30b-a3b-instruct"]
+}

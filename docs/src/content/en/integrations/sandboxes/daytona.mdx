@@ -213,13 +213,13 @@ const workspace = new Workspace({
 })
 ```
 
-Before starting the workspace, obtain credentials from your storage provider that authorize only the intended prefix. Credential issuance is provider-specific; Mastra doesn't mint or restrict credentials. A `prefix` selects a directory but doesn't enforce authorization. Authenticate each request, authorize its resource and thread, and use separate sandboxes for separate security scopes.
+Before starting the workspace, obtain credentials from your storage provider that authorize only the intended prefix. Credential issuance is provider-specific. Mastra doesn't create or restrict credentials. A `prefix` selects a directory but doesn't enforce authorization. Authenticate each request, authorize its resource and thread, and use separate sandboxes for separate security scopes.
 
-Temporary credentials are loaded when the mount starts and aren't automatically refreshed. Host-side credential provider functions don't refresh the mount. Keep runs within the credential lifetime and create a new sandbox with fresh credentials for later runs. Reconnecting to a sandbox doesn't renew its credentials.
+Temporary credentials are loaded when the mount starts and aren't automatically refreshed. Host-side credential provider functions don't refresh the mount. Keep runs within the credential lifetime, and create a new sandbox with fresh credentials for later runs, because reconnecting to a sandbox doesn't renew its credentials.
 
-Credentials are uploaded into owner-only files inside private directories. After launching s3fs, Daytona removes the temporary-credential staging file and directory. The daemon retains the credentials in its environment, which sandbox code running as the same user or root can still read. Never supply broader credentials than the sandbox needs. Mounts using long-lived credentials retain their password files while s3fs needs them. Unmount and reconnect cleanup remove those files after verifying that the daemon has exited. If a daemon is still active, including after a mount is moved aside, or its status can't be checked, the files are retained and a warning is logged. Cleanup on a later unmount of the same path retries removal; deleting the sandbox removes any remaining files.
+Credentials are uploaded into owner-only files inside private directories. After launching s3fs, Daytona removes the temporary-credential staging file and directory. The daemon retains the credentials in its environment, which sandbox code running as the same user or root can still read. Never supply broader credentials than the sandbox needs. Mounts using long-lived credentials retain their password files while s3fs needs them. Unmount and reconnect cleanup remove those files after verifying that the daemon has exited. If a daemon is still active, including after a mount is moved aside, or its status can't be checked, the files are retained and a warning is logged. Cleanup on a later unmount of the same path retries removal. Deleting the sandbox removes any remaining files.
 
-Prefixed filesystems require permission to list their prefix during initialization. With s3fs, a prefixed mount may also require a zero-byte object at the exact `<prefix>/` key. Provision that directory marker before mounting. After launching s3fs, Daytona checks the mounted directory's metadata without listing its contents, with a 15-second timeout and forced termination after another 5 seconds. A failed check reports a mount failure. Cleanup attempts to unmount the failed mount, moving a stuck mount aside if necessary to free the original path for retry. Moved stale mounts may remain until sandbox deletion. This startup check doesn't guarantee read or write access to individual files or ongoing daemon health; verify a read and write through the mounted path.
+Prefixed filesystems require permission to list their prefix during initialization. With s3fs, a prefixed mount may also require a zero-byte object at the exact `<prefix>/` key. Provision that directory marker before mounting. After launching s3fs, Daytona checks the mounted directory's metadata without listing its contents, with a 15-second timeout and forced termination after another 5 seconds. A failed check reports a mount failure. Cleanup attempts to unmount the failed mount, moving a stuck mount aside if necessary to free the original path for retry. Moved stale mounts may remain until sandbox deletion, and this startup check doesn't guarantee read or write access to individual files or ongoing daemon health. Verify a read and write through the mounted path.
 
 #### Via `sandbox.mount()`
 
@@ -319,7 +319,7 @@ const workspace = new Workspace({
 })
 ```
 
-Inside the sandbox, the environment variable holds an opaque placeholder. Daytona's egress proxy substitutes the real value into HTTPS request headers toward the Secret's allowed hosts, so the raw credential never enters the sandbox. Secrets are applied at sandbox creation and are preserved by `clone()`.
+Inside the sandbox, the environment variable holds an opaque placeholder. Daytona's egress proxy substitutes the actual value into HTTPS request headers toward the Secret's allowed hosts, so the raw credential never enters the sandbox. Secrets are applied at sandbox creation and are preserved by `clone()`.
 
 ### Computer use (desktop)
 

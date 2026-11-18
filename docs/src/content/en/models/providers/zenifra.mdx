@@ -7,12 +7,12 @@ description: "Browse Zenifra model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/zenifra.svg" alt="Zenifra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zenifra
 
-Access 1 Zenifra model through Mastra's model router. Authentication is handled automatically using the `ZENIFRA_AI_KEY` environment variable.
+Access 13 Zenifra models through Mastra's model router. Authentication is handled automatically using the `ZENIFRA_AI_API_KEY` environment variable.
 
 Learn more in the [Zenifra documentation](https://docs.zenifra.com).
 
 ```bash title=".env"
-ZENIFRA_AI_KEY=your-api-key
+ZENIFRA_AI_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "zenifra/alibaba/qwen3.6-35b-a3b"
+  model: "zenifra/zenifra/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,16 +46,160 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "zenifra/alibaba/qwen3.6-35b-a3b",
+    "model": "zenifra/zenifra/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 0.3989,
+    "outputCost": 1.1968
+  },
+  {
+    "model": "zenifra/zenifra/deepseek-v4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 1.5414,
+    "outputCost": 3.0827
+  },
+  {
+    "model": "zenifra/zenifra/glm-5.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202745,
+    "maxOutput": 131072,
+    "inputCost": 1.079,
+    "outputCost": 4.3176
+  },
+  {
+    "model": "zenifra/zenifra/glm-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.0336,
+    "outputCost": 3.6267
+  },
+  {
+    "model": "zenifra/zenifra/kimi-k2.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 229376,
+    "maxOutput": 16384,
+    "inputCost": 0.544,
+    "outputCost": 2.847
+  },
+  {
+    "model": "zenifra/zenifra/kimi-k2.7-code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 229376,
+    "maxOutput": 16384,
+    "inputCost": 0.8523,
+    "outputCost": 3.5179
+  },
+  {
+    "model": "zenifra/zenifra/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2.6657,
+    "outputCost": 13.3264
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.6-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 991808,
     "maxOutput": 65536,
-    "inputCost": 0.19,
-    "outputCost": 0.48
+    "inputCost": 0.1541,
+    "outputCost": 0.9248
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.6-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 991808,
+    "maxOutput": 65536,
+    "inputCost": 0.2593,
+    "outputCost": 1.5432
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.7-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.5414,
+    "outputCost": 4.6241
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.7-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.272,
+    "outputCost": 1.0336
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.8-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.1088,
+    "outputCost": 0.3627
+  },
+  {
+    "model": "zenifra/zenifra/qwen3.8-max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.5414,
+    "outputCost": 4.6422
   }
 ]}
 />
@@ -74,8 +218,8 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://ai.zenifra.com/v1",
-    id: "zenifra/alibaba/qwen3.6-35b-a3b",
-    apiKey: process.env.ZENIFRA_AI_KEY,
+    id: "zenifra/zenifra/deepseek-v4-flash-0731",
+    apiKey: process.env.ZENIFRA_AI_API_KEY,
     headers: {
       "X-Custom-Header": "value"
     }
@@ -94,8 +238,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zenifra/alibaba/qwen3.6-35b-a3b"
-      : "zenifra/alibaba/qwen3.6-35b-a3b";
+      ? "zenifra/zenifra/qwen3.8-max"
+      : "zenifra/zenifra/deepseek-v4-flash-0731";
   }
 });
 ```

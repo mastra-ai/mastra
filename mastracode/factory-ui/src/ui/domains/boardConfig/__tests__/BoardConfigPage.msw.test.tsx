@@ -94,7 +94,6 @@ describe('Board configuration', () => {
     await user.click(await screen.findByRole('link', { name: 'Configure board' }));
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`);
     expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
-    // The sidebar lists the board's phases in place of sessions.
     expect(await configNav().findByRole('link', { name: 'Planning' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/work/config/planning`,
@@ -162,11 +161,10 @@ describe('Board configuration', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills`));
     expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /^configure-factory-rules/ })).toBeInTheDocument();
-    // Each phase's skills stay on its own page.
+    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
     expect(screen.queryByText('factory-plan')).not.toBeInTheDocument();
     expect(configNav().getByRole('link', { name: 'Skills' })).toHaveAttribute('aria-current', 'page');
-    expect(configNav().getByRole('link', { name: 'General' })).not.toHaveAttribute('aria-current');
+    expect(configNav().getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current');
     expect(configNav().getByRole('link', { name: 'Planning' })).toBeInTheDocument();
   });
 
@@ -210,7 +208,6 @@ describe('Board configuration', () => {
     const saved = vi.fn<(body: ReplaceBoardBody) => void>();
     server.use(
       http.patch(BOARD_URL, async ({ request }) => {
-        // Read the body the way the server does.
         const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
         saved(body);
         return HttpResponse.json(storedWorkBoard({ ...body, revision: 2 }));
@@ -219,12 +216,10 @@ describe('Board configuration', () => {
     renderAt(`/factories/${FACTORY_ID}/work/config`);
 
     const user = await openPhase('Planning');
-    // Factory's code depends on Planning staying a working phase, so its kind can't change.
     expect(screen.getByRole('img', { name: /^Working\./ })).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Phase kind' })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Planning exit tool' })).toHaveValue('submit_plan');
     expect(screen.getByRole('textbox', { name: 'Planning session' })).toHaveValue('work');
-    // Factory's code moves Planning cards to Building, so that move stays on.
     const moves = within(screen.getByRole('list', { name: 'Allowed moves from Planning' }));
     const building = moves.getByRole('button', { name: 'Building (locked)', pressed: true });
     expect(building).toHaveAttribute('aria-disabled', 'true');
@@ -241,8 +236,7 @@ describe('Board configuration', () => {
     await user.click(screen.getByLabelText('Planning: approve only when JSON'));
     await user.paste(JSON.stringify(EFFORT_LOW));
 
-    // The draft covers the whole board, so moving to another of its pages keeps it.
-    await user.click(configNav().getByRole('link', { name: 'General' }));
+    await user.click(configNav().getByRole('link', { name: 'Overview' }));
     await user.clear(await screen.findByRole('textbox', { name: 'Board name' }));
     await user.type(screen.getByRole('textbox', { name: 'Board name' }), 'Delivery');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -260,7 +254,6 @@ describe('Board configuration', () => {
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument());
     expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Delivery');
-    expect(screen.getByText('Revision 2')).toBeInTheDocument();
   });
 
   it('renames a phase, changes where its cards go, and reorders the board, showing it all in the sidebar before saving', async () => {
@@ -283,18 +276,14 @@ describe('Board configuration', () => {
     expect(await configNav().findByRole('link', { name: 'Plan' })).toBeInTheDocument();
 
     const moves = () => within(screen.getByRole('list', { name: 'Allowed moves from Plan' }));
-    // Every other phase shows whether Plan's cards can go there; pressing one allows the move.
     const review = moves().getByRole('button', { name: 'Review', pressed: false });
     await user.click(review);
     expect(review).toHaveAttribute('aria-pressed', 'true');
-    // Moves Factory's code makes stay on; the one allowed here can be turned off again.
     expect(moves().getByRole('button', { name: 'Intake (locked)' })).toHaveAttribute('aria-disabled', 'true');
     expect(review).not.toHaveAttribute('aria-disabled');
-    // Triage is a stored phase, not one of Work's code phases, so its move is on but can be turned off.
     const triage = moves().getByRole('button', { name: 'Triage', pressed: true });
     expect(triage).not.toHaveAttribute('aria-disabled');
 
-    // New cards land in the first phase, so it stays put.
     configNav().getByRole('link', { name: 'Intake' }).focus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     configNav().getByRole('link', { name: 'Review' }).focus();
@@ -307,7 +296,7 @@ describe('Board configuration', () => {
     ).toEqual([
       'Skills',
       'Routing',
-      'General',
+      'Overview',
       'Rules',
       'Intake',
       'Triage',
@@ -393,7 +382,6 @@ describe('Board configuration', () => {
     await user.paste(unfinished);
     expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
 
-    // Triage starts on its own too, and still shows its own rule, not Planning's text or its error.
     await user.click(configNav().getByRole('link', { name: 'Triage' }));
     expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
     expect(screen.queryByLabelText('Triage: start only when JSON')).not.toBeInTheDocument();
@@ -401,7 +389,6 @@ describe('Board configuration', () => {
     expect(screen.getByLabelText('Triage: start only when JSON')).toHaveValue(JSON.stringify(bugs, null, 2));
     await user.click(screen.getByRole('button', { name: 'Edit as conditions' }));
 
-    // Back on Planning, the unfinished text is still there and still holds the save.
     await user.click(configNav().getByRole('link', { name: 'Planning' }));
     expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue(unfinished);
     expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
@@ -429,7 +416,6 @@ describe('Board configuration', () => {
     expect(await screen.findByText('Fix Triage to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    // Leaving the phase drops the half-filled row; the saved rule is still whole, so nothing is left to save.
     await user.click(configNav().getByRole('link', { name: 'Planning' }));
     await user.click(configNav().getByRole('link', { name: 'Triage' }));
     expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
@@ -516,15 +502,18 @@ describe('Board configuration', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Work'));
     expect(resetBodies).toEqual([{ expectedRevision: 3 }]);
-    expect(screen.getByText('Revision 4')).toBeInTheDocument();
   });
 
   it('keeps a local edit when someone else changed the board, and reloads their version on request', async () => {
     stubFactory();
     let current = storedWorkBoard();
     serveBoard(() => current);
+    const savedRevisions: unknown[] = [];
     server.use(
-      http.patch(BOARD_URL, () => {
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = (await request.json()) as { expectedRevision: number };
+        savedRevisions.push(body.expectedRevision);
+        if (body.expectedRevision === 2) return HttpResponse.json(storedWorkBoard({ name: 'Mine again', revision: 3 }));
         current = storedWorkBoard({ name: 'Renamed elsewhere', revision: 2 });
         return HttpResponse.json(
           { error: 'revision_mismatch', message: 'The board changed since you loaded it.' },
@@ -544,7 +533,11 @@ describe('Board configuration', () => {
     await user.click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Renamed elsewhere'));
     expect(screen.queryByText('Someone else changed this board')).not.toBeInTheDocument();
-    expect(screen.getByText('Revision 2')).toBeInTheDocument();
+
+    await user.clear(screen.getByRole('textbox', { name: 'Board name' }));
+    await user.type(screen.getByRole('textbox', { name: 'Board name' }), 'Mine again');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(savedRevisions).toEqual([1, 2]));
   });
 
   it('shows the board read-only to someone who is not an organization admin', async () => {
@@ -558,7 +551,7 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it("edits a phase's skill in place, without touching the board draft", async () => {
+  it("opens a phase's skill on its own page, and Back returns to the phase showing the edit saved there", async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
     let plan: FactorySkillInfo = {
@@ -583,45 +576,31 @@ describe('Board configuration', () => {
         return HttpResponse.json({ skill: plan });
       }),
     );
-    renderAt(`/factories/${FACTORY_ID}/work/config`);
+    const { router, client } = renderAt(`/factories/${FACTORY_ID}/work/config`);
 
     const user = await openPhase('Planning');
     expect(await screen.findByText('Plans the work')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Edit factory-plan' }));
-    const dialog = within(await screen.findByRole('dialog', { name: 'Edit skill' }));
-    const description = dialog.getByRole('textbox', { name: 'Description' });
+    const phasePath = router.state.location.pathname;
+    await user.click(screen.getByRole('link', { name: 'Edit factory-plan' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills/factory-plan`),
+    );
+    expect(configNav().getByRole('link', { name: 'Skills' })).toHaveAttribute('aria-current', 'page');
+    const description = await screen.findByRole('textbox', { name: 'Description' });
     await user.clear(description);
     await user.type(description, 'Plans small work');
-    await user.click(dialog.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument());
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain('description: "Plans small work"');
-    expect(await screen.findByText('Edited')).toBeInTheDocument();
-    // Skill edits save on their own, so the board has nothing to save.
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
-  });
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills/factory-plan`);
 
-  it("closes a phase's skill editor when going back to another phase", async () => {
-    stubFactory();
-    serveBoard(storedWorkBoard());
-    const plan: FactorySkillInfo = { name: 'factory-plan', description: 'Plans the work', content: '', builtIn: true };
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/skills`, () =>
-        HttpResponse.json({ skills: [plan], canEdit: true } satisfies FactorySkillsResponse),
-      ),
-    );
-    const { router } = renderAt(`/factories/${FACTORY_ID}/work/config/triage`);
-    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
-
-    const user = await openPhase('Planning');
-    await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
-    expect(await screen.findByRole('dialog', { name: 'Edit skill' })).toBeInTheDocument();
-
-    // The browser's Back button leaves the phase without closing the dialog first.
-    await router.navigate(-1);
-    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
-    expect(screen.queryByRole('dialog', { name: 'Edit skill' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(phasePath));
+    expect(await screen.findByText('Plans small work')).toBeInTheDocument();
+    expect(screen.getByText('Edited')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
   });
 
   describe('a custom board', () => {

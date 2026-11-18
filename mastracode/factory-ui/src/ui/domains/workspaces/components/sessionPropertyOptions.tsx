@@ -1,9 +1,21 @@
-import { SESSION_ROW_ALL_OWNERS, SESSION_ROW_MY_SESSIONS } from '@mastra/factory/session/session-row-query';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_ALL_SOURCES,
+  SESSION_ROW_MY_SESSIONS,
+} from '@mastra/factory/session/session-row-query';
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
+import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import type { LucideIcon } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 
-import { SESSION_STATUS_OPTIONS, SESSION_UPDATED_OPTIONS, sessionOwnerOptions } from '../services/sessionFilters';
+import {
+  SESSION_STATUS_OPTIONS,
+  SESSION_UPDATED_OPTIONS,
+  sessionOwnerOptions,
+  sessionSourceOptions,
+} from '../services/sessionFilters';
 import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
+import type { SessionGroupHeading, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionOwner } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS } from '../services/sessionSort';
 import { IconCalendarDays } from '@mastra/playground-ui/icons/central/IconCalendarDays';
@@ -67,6 +79,21 @@ const OWNER_ICONS: Partial<Record<string, LucideIcon>> = {
 export function sessionOwnerMenuOptions(owners: readonly SessionOwner[], viewerUserId: string | undefined) {
   return sessionOwnerOptions(owners, viewerUserId).map(option => {
     const Icon = OWNER_ICONS[option.value] ?? IconUser;
+    return { ...option, icon: <Icon aria-hidden /> };
+  });
+}
+
+const SOURCE_ICONS: Partial<Record<SessionGroupIcon, ComponentType<SVGProps<SVGSVGElement>>>> = {
+  board: IconKanbanView,
+  user: IconUser,
+  slack: SlackIcon,
+};
+
+export function sessionSourceMenuOptions(sources: readonly SessionGroupHeading[]) {
+  const iconOf = new Map(sources.map(source => [source.key, SOURCE_ICONS[source.icon]]));
+  return sessionSourceOptions(sources).map(option => {
+    const Icon =
+      option.value === SESSION_ROW_ALL_SOURCES ? IconListBullets : (iconOf.get(option.value) ?? IconKanbanView);
     return { ...option, icon: <Icon aria-hidden /> };
   });
 }

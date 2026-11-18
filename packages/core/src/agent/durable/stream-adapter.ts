@@ -752,6 +752,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       let keepReplay = keepReplayEvent(streamEvent);
       if (typeof keepReplay !== 'boolean') {
         keepReplay = await keepReplay;
+        while (terminalSettlement) await terminalSettlement;
         if (!controller || terminated) return;
       }
       if (!keepReplay) return;
@@ -1087,7 +1088,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       if (releaseSettlement) {
         terminalSettlement = undefined;
         releaseSettlement();
-        if (!terminated && streamEvent.type === AgentStreamEventTypes.SUSPENDED) armIdleTimer();
+        if (!terminated) armIdleTimer();
       }
     }
   };

@@ -169,7 +169,6 @@ describe('Sessions sidebar lists one row per card', () => {
   });
 
   it('renders a card row the same way as a plain user session', async () => {
-    localStorage.setItem('mastracode.sessionListView', JSON.stringify({ groupBy: 'none' }));
     renderSection();
 
     const cardRow = await screen.findByRole('link', { name: 'Write docs' });

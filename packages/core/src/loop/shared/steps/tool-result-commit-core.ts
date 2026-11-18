@@ -3,7 +3,10 @@ import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { ProviderMetadata } from '../../../stream/types';
-import { normalizeModelOutput } from '../normalize-model-output';
+import { isAgentWorkflowTool } from '../../../tools/toolchecks';
+import { isValidationError } from '../../../tools/validation';
+import type { ModelFacingValidationError } from '../../../tools/validation';
+import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
 interface MappingSpan {
@@ -22,12 +25,24 @@ export interface ToolMappingParentSpan {
  * media parts into the AI SDK's LanguageModelV2ToolResultOutput shape, and
  * merges the mapped output into `providerMetadata.mastra.modelOutput`.
  *
+ * A validation error Mastra produced for this call (`validationError`) is not
+ * the tool's output, so it skips the mapper: `toModelOutput` is typed to
+ * receive only successful output, and the model must see the error to retry.
+ * Its model-facing form, without the raw values the full error quotes, is
+ * stored as an `error-json` model output instead. A result that merely has a
+ * validation error's fields is mapped like any other result.
+ *
  * A nullish mapping result means "no special mapping needed" — the raw result
  * is already what the model should see. The key is not written in that case,
  * because MessageList keys off its presence and would otherwise override the
  * real result with `undefined`, producing a tool message with no output.
  *
  * Mapping failures propagate so a broken `toModelOutput` fails the run.
+ *
+ * A result from a tool an agent built from its `workflows` also gets
+ * `mastra.workflowTool: true`. Workflow tools can't define `toModelOutput`, so
+ * this per-call marker is how tracing knows it may show their result in the
+ * next MODEL_STEP input (#30219). The tool output the model receives is unchanged.
  *
  * Deliberately NOT consolidated with the background-task path
  * (`background-task-result-core.ts`), which always overwrites
@@ -42,6 +57,10 @@ export async function computeModelOutputProviderMetadata(deps: {
   toolName: string;
   toolCallId?: string;
   result: unknown;
+  /** Set only when Mastra's own validation rejected this call, read from the
+   * result in the process that ran the tool (`getModelFacingValidationError`).
+   * Never derived from the result's shape. */
+  validationError?: ModelFacingValidationError;
   existingProviderMetadata?: Record<string, unknown>;
   /** Parent for the MAPPING child span (main: current tracing span; durable:
    * the MODEL_STEP span rebuilt from serialized state). */
@@ -49,7 +68,9 @@ export async function computeModelOutputProviderMetadata(deps: {
 }): Promise<Record<string, unknown> | undefined> {
   const { tool, result } = deps;
   let modelOutput: unknown;
-  if (tool?.toModelOutput && result != null) {
+  if (tool?.toModelOutput && deps.validationError) {
+    modelOutput = validationErrorModelOutput(deps.validationError);
+  } else if (tool?.toModelOutput && result != null) {
     const mappingSpan = deps.parentSpan?.createChildSpan({
       type: SpanType.MAPPING,
       name: `tool output mapping: '${deps.toolName}'`,
@@ -73,11 +94,30 @@ export async function computeModelOutputProviderMetadata(deps: {
   }
 
   const existingMastra = (deps.existingProviderMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
-  const providerMetadata = {
-    ...deps.existingProviderMetadata,
-    ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
-  };
-  return Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+  const providerMetadata = withAgentWorkflowToolMarker(
+    {
+      ...deps.existingProviderMetadata,
+      ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+    },
+    tool,
+  );
+  return providerMetadata && Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+}
+
+/**
+ * Adds `mastra.workflowTool: true` to a result's provider metadata when `tool`
+ * is one an agent built from its `workflows`; otherwise returns it unchanged.
+ * Shared by every engine path that records a tool result (#30219). The stored
+ * tool-invocation part holds call and result together, so prompts carry the
+ * marker on both the tool-call and tool-result parts, under `providerOptions.mastra`,
+ * which provider adapters don't read.
+ */
+export function withAgentWorkflowToolMarker<T extends Record<string, any> | undefined>(
+  providerMetadata: T,
+  tool: unknown,
+): T | Record<string, any> {
+  if (!isAgentWorkflowTool(tool)) return providerMetadata;
+  return { ...providerMetadata, mastra: { ...providerMetadata?.mastra, workflowTool: true } };
 }
 
 /** The mapped `toModelOutput` value carried in `providerMetadata.mastra.modelOutput`, if any. */
@@ -137,6 +177,12 @@ export function latestProcessedModelOutput(messageList: MessageList, toolCallId:
  * mapped before the hook stands and `toModelOutput` is not called again. A
  * result edited in place counts as replaced when its contents differ from
  * `resultSnapshotBeforeProcessors`.
+ *
+ * When the tool resolved with Mastra's own validation error (`validationError`),
+ * a rewrite that is still a validation error (say, a redaction pass over every
+ * result) skips the mapper and sends the model-facing error, as the mapping
+ * before the hook did. A processor that replaced the error with any other value
+ * made that value the tool's output, so it is mapped.
  */
 export async function resolveModelOutputAfterToolResultProcessors(deps: {
   messageList: MessageList;
@@ -149,6 +195,11 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   resultSnapshotBeforeProcessors?: string;
   /** Metadata computed before the processors ran, including the mapped output. */
   providerMetadata: Record<string, unknown> | undefined;
+  /** Mastra's validation error for `resultBeforeProcessors`, read from the live
+   * result in the process that ran the tool (`getModelFacingValidationError`).
+   * A processor's rewrite is a copy without the marker, so it cannot be read
+   * from the processed result. */
+  validationError?: ModelFacingValidationError;
   parentSpan?: ToolMappingParentSpan;
 }): Promise<Record<string, unknown> | undefined> {
   const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
@@ -186,6 +237,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
     toolName: deps.toolName,
     toolCallId: deps.toolCallId,
     result: resultAfterProcessors,
+    validationError: isValidationError(resultAfterProcessors) ? deps.validationError : undefined,
     existingProviderMetadata: Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined,
     parentSpan: deps.parentSpan,
   });

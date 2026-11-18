@@ -1436,6 +1436,8 @@ export type ExecutionContext = {
   tracingIds?: {
     traceId: string;
     workflowSpanId: string;
+    /** The run's sampling decision. Spans started from these ids repeat it instead of sampling again. */
+    sampled?: boolean;
   };
 };
 

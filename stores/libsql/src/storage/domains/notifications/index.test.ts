@@ -1,5 +1,6 @@
 import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
+import { noopLogger } from '@mastra/core/logger';
 import { TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -427,7 +428,7 @@ describe('NotificationsLibSQL primary key', () => {
     });
 
   const createLegacyTable = () =>
-    new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 }).createTable({
+    new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10, getLogger: () => noopLogger }).createTable({
       tableName: TABLE_NOTIFICATIONS,
       schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
     });

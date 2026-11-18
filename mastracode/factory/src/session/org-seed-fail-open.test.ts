@@ -14,8 +14,8 @@ import { seedSessionOrg } from './org-seed.js';
  * the way `Session` builds it -> `seedSessionOrg` with a rejecting
  * `state.set` -> the REAL SDK session-scope resolver the code agent and the
  * /knowledge inspector share (deep import; the bare-specifier mock below does
- * not touch it). An unresolved session gives the agent only identity tags and
- * makes the inspector unavailable, so it can never write under `org:local`.
+ * not touch it). An unresolved session adds no host tags to the agent's scopes
+ * and makes the inspector unavailable, so it can never write under `org:local`.
  *
  * Without `factoryOrgUnresolved: true` in the controller's `initialState`,
  * the failed seed leaves neither marker and classification falls to `local`.

@@ -1,5 +1,131 @@
 # mastra
 
+## 1.40.1
+
+### Patch Changes
+
+- Factory board settings now show how cards move through a board. **Overview** draws the board as a map: each phase as a column with the rules that bring cards in, the agent that works them, how the work ends and where cards go next, with hover cards for the rules and the skill's instructions. Board columns show the same walkthrough from their header, where a phase can be switched to start on its own. The **Rules** page splits into new issues and pull requests, which boards take in intake order, and cards already on the board, and also lists rules on other boards that move cards here. Lanes GitLab never fires are marked GitHub only, and items no board takes now sit at the end of the intake order on **Routing**. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Added the session panel to a Factory card that has no session yet, as the card's sessions do. Before you send the first message, it lists the card's source, its pull request, its description, the pull requests it links to and the stages it has moved through. The page also drops its **New session** title, matching a card's session page. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- GitHub avatars on Factory cards and in the board's people filter now load from GitHub's avatar image host instead of github.com. Before, every avatar was a separate, uncached request to github.com, so a large board could push GitHub to rate-limit your IP and block your own github.com pages for a while. ([#30755](https://github.com/mastra-ai/mastra/pull/30755))
+
+- Improved how fast Factory responds when you open a session or a card from the board or the sidebar. The page now switches on the click instead of waiting for the session's details, card and pull requests to load first, which made clicks look like they did nothing on a slow server. The header, session panel and conversation fill in as their data arrives, and you can start typing in the composer right away. The **New session** composer now also loads with the app, so it opens without a loading screen. ([#30794](https://github.com/mastra-ai/mastra/pull/30794))
+
+- Fixed the blank header on a Factory session with no card and no title, such as one started from Slack. It now shows the session's branch as the page title, matching its name in the sidebar. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- Improved opening a Factory session: its conversation now loads alongside the session's details instead of after them, and the **Preparing session** / **Starting session** steps are gone. Switching to another session from the sidebar usually opens straight onto its conversation. Opening a session's address directly shows the conversation as soon as it loads, with a placeholder until then, while sending stays disabled until the session is ready. ([#30779](https://github.com/mastra-ai/mastra/pull/30779))
+
+- Improved starting a session from a Factory card: sending the first message no longer swaps the page for a new one. The message shows as soon as you send it, and when the session's thread opens, the conversation, composer, header, stage bar and session panel stay on screen instead of loading and animating in again. The composer keeps its focus, its model and anything typed while the session starts. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+  The same holds when a suggested action such as Review or Investigate starts the card's session: its thread opens in the same conversation and loads its history there, with the card's stage bar and session panel already filled in, instead of replacing the composer.
+
+  Switching to another session from the sidebar, or opening one from a link, keeps the current page until the next session's stage bar and panel are ready, so they appear complete instead of loading in. Opening a session's address directly still shows the page right away.
+
+  Fixed the first message from a card sometimes never being sent and landing back in the composer. A start that failed after linking the card to its session now keeps your message on the card with the error, instead of opening the thread without it.
+
+- Factory skills now open on their own page instead of a dialog. A skill's description and instructions are edited where they show, a save bar appears once something changed, and leaving or reloading with unsaved changes asks first. **New skill** sits in the Skills page header and opens its own page, **Edit** on a board phase opens the skill's page, and **Back** returns to where you came from. ([#30769](https://github.com/mastra-ai/mastra/pull/30769))
+
+- The Factory sidebar lists sessions in a single list again, ordered by activity, instead of grouping them by board. To find sessions from one place, use the new **Source** filter in the sidebar's properties menu: pick a board, **User** or **Slack**. Setting **Group** to **Board** in the same menu still splits the list by board. ([#30764](https://github.com/mastra-ai/mastra/pull/30764))
+
+- Added moving a Factory card to another board by hand. Naming another installed board in the work-item transition endpoint now moves the card there, keeping its id, history, and sessions; the board UI offers it under a card's "Move to board" menu. A busy card stays put until its run ends, and a finished card stays on its own board. ([#30694](https://github.com/mastra-ai/mastra/pull/30694))
+
+  ```http
+  POST /web/factory/projects/:projectId/work-items/:workItemId/transition
+  ```
+
+  ```json
+  {
+    "board": "oss-features",
+    "stage": "backlog",
+    "expectedRevision": 4,
+    "requestId": "7f0a2c7e-9b1d-4a53-8c43-2f5d6e8a9b01",
+    "cause": "move_to_board"
+  }
+  ```
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`0fed9c3`](https://github.com/mastra-ai/mastra/commit/0fed9c3747390d623c4e1c19698d6b730baf569d), [`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0
+  - @mastra/loggers@1.3.11
+  - @mastra/deployer@1.85.0
+
+## 1.40.1-alpha.4
+
+### Patch Changes
+
+- Improved how fast Factory responds when you open a session or a card from the board or the sidebar. The page now switches on the click instead of waiting for the session's details, card and pull requests to load first, which made clicks look like they did nothing on a slow server. The header, session panel and conversation fill in as their data arrives, and you can start typing in the composer right away. The **New session** composer now also loads with the app, so it opens without a loading screen. ([#30794](https://github.com/mastra-ai/mastra/pull/30794))
+
+- Added moving a Factory card to another board by hand. Naming another installed board in the work-item transition endpoint now moves the card there, keeping its id, history, and sessions; the board UI offers it under a card's "Move to board" menu. A busy card stays put until its run ends, and a finished card stays on its own board. ([#30694](https://github.com/mastra-ai/mastra/pull/30694))
+
+  ```http
+  POST /web/factory/projects/:projectId/work-items/:workItemId/transition
+  ```
+
+  ```json
+  {
+    "board": "oss-features",
+    "stage": "backlog",
+    "expectedRevision": 4,
+    "requestId": "7f0a2c7e-9b1d-4a53-8c43-2f5d6e8a9b01",
+    "cause": "move_to_board"
+  }
+  ```
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+  - @mastra/deployer@1.85.0-alpha.3
+
+## 1.40.1-alpha.3
+
+### Patch Changes
+
+- Factory board settings now show how cards move through a board. **Overview** draws the board as a map: each phase as a column with the rules that bring cards in, the agent that works them, how the work ends and where cards go next, with hover cards for the rules and the skill's instructions. Board columns show the same walkthrough from their header, where a phase can be switched to start on its own. The **Rules** page splits into new issues and pull requests, which boards take in intake order, and cards already on the board, and also lists rules on other boards that move cards here. Lanes GitLab never fires are marked GitHub only, and items no board takes now sit at the end of the intake order on **Routing**. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Improved opening a Factory session: its conversation now loads alongside the session's details instead of after them, and the **Preparing session** / **Starting session** steps are gone. Switching to another session from the sidebar usually opens straight onto its conversation. Opening a session's address directly shows the conversation as soon as it loads, with a placeholder until then, while sending stays disabled until the session is ready. ([#30779](https://github.com/mastra-ai/mastra/pull/30779))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+  - @mastra/deployer@1.85.0-alpha.2
+
+## 1.40.1-alpha.2
+
+### Patch Changes
+
+- Factory skills now open on their own page instead of a dialog. A skill's description and instructions are edited where they show, a save bar appears once something changed, and leaving or reloading with unsaved changes asks first. **New skill** sits in the Skills page header and opens its own page, **Edit** on a board phase opens the skill's page, and **Back** returns to where you came from. ([#30769](https://github.com/mastra-ai/mastra/pull/30769))
+
+- The Factory sidebar lists sessions in a single list again, ordered by activity, instead of grouping them by board. To find sessions from one place, use the new **Source** filter in the sidebar's properties menu: pick a board, **User** or **Slack**. Setting **Group** to **Board** in the same menu still splits the list by board. ([#30764](https://github.com/mastra-ai/mastra/pull/30764))
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/deployer@1.85.0-alpha.1
+
+## 1.40.1-alpha.1
+
+### Patch Changes
+
+- GitHub avatars on Factory cards and in the board's people filter now load from GitHub's avatar image host instead of github.com. Before, every avatar was a separate, uncached request to github.com, so a large board could push GitHub to rate-limit your IP and block your own github.com pages for a while. ([#30755](https://github.com/mastra-ai/mastra/pull/30755))
+
+## 1.40.1-alpha.0
+
+### Patch Changes
+
+- Added the session panel to a Factory card that has no session yet, as the card's sessions do. Before you send the first message, it lists the card's source, its pull request, its description, the pull requests it links to and the stages it has moved through. The page also drops its **New session** title, matching a card's session page. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- Fixed the blank header on a Factory session with no card and no title, such as one started from Slack. It now shows the session's branch as the page title, matching its name in the sidebar. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+- Improved starting a session from a Factory card: sending the first message no longer swaps the page for a new one. The message shows as soon as you send it, and when the session's thread opens, the conversation, composer, header, stage bar and session panel stay on screen instead of loading and animating in again. The composer keeps its focus, its model and anything typed while the session starts. ([#30657](https://github.com/mastra-ai/mastra/pull/30657))
+
+  The same holds when a suggested action such as Review or Investigate starts the card's session: its thread opens in the same conversation and loads its history there, with the card's stage bar and session panel already filled in, instead of replacing the composer.
+
+  Switching to another session from the sidebar, or opening one from a link, keeps the current page until the next session's stage bar and panel are ready, so they appear complete instead of loading in. Opening a session's address directly still shows the page right away.
+
+  Fixed the first message from a card sometimes never being sent and landing back in the composer. A start that failed after linking the card to its session now keeps your message on the card with the error, instead of opening the thread without it.
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0fed9c3`](https://github.com/mastra-ai/mastra/commit/0fed9c3747390d623c4e1c19698d6b730baf569d), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/loggers@1.3.11-alpha.0
+  - @mastra/deployer@1.85.0-alpha.0
+
 ## 1.40.0
 
 ### Minor Changes
