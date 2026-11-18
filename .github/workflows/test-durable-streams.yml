@@ -155,7 +155,6 @@ jobs:
       VALKEY_URL: redis://127.0.0.1:6383
       POSTGRES_CONNECTION_STRING: postgres://postgres:postgres@127.0.0.1:5436/postgres
       TOXIPROXY_URL: http://127.0.0.1:8474
-      STREAM_HARNESS_EVIDENCE_DIR: ${{ runner.temp }}/stream-harness-evidence
       NODE_OPTIONS: '--max_old_space_size=8192'
     steps:
       - name: Checkout repo
@@ -183,6 +182,8 @@ jobs:
       # Actions owns these services; do not run package pretest/posttest Compose hooks.
       - name: Run serial stream scenarios and retain evidence
         working-directory: pubsub/redis-streams
+        env:
+          STREAM_HARNESS_EVIDENCE_DIR: ${{ runner.temp }}/stream-harness-evidence
         run: pnpm run test:stream-harness:ci
       - name: Upload stream evidence including partial captures
         if: always()
