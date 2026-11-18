@@ -3,6 +3,7 @@ import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { ProviderMetadata } from '../../../stream/types';
+import { isValidationError } from '../../../tools/validation';
 import type { ModelFacingValidationError } from '../../../tools/validation';
 import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
@@ -151,6 +152,12 @@ export function latestProcessedModelOutput(messageList: MessageList, toolCallId:
  * mapped before the hook stands and `toModelOutput` is not called again. A
  * result edited in place counts as replaced when its contents differ from
  * `resultSnapshotBeforeProcessors`.
+ *
+ * When the tool resolved with Mastra's own validation error (`validationError`),
+ * a rewrite that is still a validation error (say, a redaction pass over every
+ * result) skips the mapper and sends the model-facing error, as the mapping
+ * before the hook did. A processor that replaced the error with any other value
+ * made that value the tool's output, so it is mapped.
  */
 export async function resolveModelOutputAfterToolResultProcessors(deps: {
   messageList: MessageList;
@@ -163,6 +170,11 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   resultSnapshotBeforeProcessors?: string;
   /** Metadata computed before the processors ran, including the mapped output. */
   providerMetadata: Record<string, unknown> | undefined;
+  /** Mastra's validation error for `resultBeforeProcessors`, read from the live
+   * result in the process that ran the tool (`getModelFacingValidationError`).
+   * A processor's rewrite is a copy without the marker, so it cannot be read
+   * from the processed result. */
+  validationError?: ModelFacingValidationError;
   parentSpan?: ToolMappingParentSpan;
 }): Promise<Record<string, unknown> | undefined> {
   const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
@@ -200,6 +212,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
     toolName: deps.toolName,
     toolCallId: deps.toolCallId,
     result: resultAfterProcessors,
+    validationError: isValidationError(resultAfterProcessors) ? deps.validationError : undefined,
     existingProviderMetadata: Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined,
     parentSpan: deps.parentSpan,
   });

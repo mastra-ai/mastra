@@ -5,6 +5,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import type { Processor } from '../../../../processors';
 import { RequestContext } from '../../../../request-context';
 import { createTool, isValidationError } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -34,7 +35,28 @@ type LookupToolOptions = {
   background?: boolean;
   requireTenant?: boolean;
   requestContext?: RequestContext;
+  outputProcessors?: Processor[];
 };
+
+/**
+ * A `processToolResult` hook that rewrites every tool result, the way a redaction processor
+ * does: it commits a copy with `rewrite` applied, so the committed result is a new object.
+ */
+function rewriteToolResults(rewrite: (result: unknown) => unknown): Processor {
+  return {
+    id: 'rewrite-tool-results',
+    processToolResult: ({ messageList, toolCallId, toolName, args, result }) => {
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId, toolName, args, result: rewrite(result) },
+      });
+      return messageList;
+    },
+  };
+}
+
+/** Rewrites results through JSON with the email masked, as a PII redaction processor would. */
+const redactEmails = rewriteToolResults(result => JSON.parse(JSON.stringify(result).replaceAll(EMAIL, '[redacted]')));
 
 function createLookupTool(opts: LookupToolOptions = {}) {
   const mapperCalls: unknown[] = [];
@@ -88,6 +110,7 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
       tools: { lookup: tool },
       stopWhen: stepCountIs(3),
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
+      ...(opts.outputProcessors ? { outputProcessors: opts.outputProcessors } : {}),
       fixtures: llm => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
@@ -253,6 +276,57 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     const followUp = seenByModel(requests[1]);
     expect(followUp).toContain('Request context validation failed');
     expect(followUp).not.toContain(EMAIL);
+  });
+
+  // Technical: a processToolResult rewrite re-maps the committed result after the hook. That
+  // re-mapping must skip toModelOutput for a validation error just as the first mapping does.
+  it('the model sees an output validation failure when a redaction processor rewrote the result', async () => {
+    const { mapperCalls, requests, toolResults } = await callLookup(
+      { query: 'meaning of life' },
+      { output: { answer: 42, secret: SECRET, email: EMAIL }, outputProcessors: [redactEmails] },
+    );
+
+    expect(mapperCalls).toEqual([]);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool output validation failed');
+    expect(sent.message).toContain('answer');
+
+    expect(requests).toHaveLength(2);
+    const followUp = seenByModel(requests[1]);
+    expect(followUp).toContain('Tool output validation failed');
+    expect(followUp).toContain('validationErrors');
+    expect(followUp).not.toContain(SECRET);
+  });
+
+  it('the model sees why its arguments were rejected when a redaction processor rewrote the result', async () => {
+    const { mapperCalls, requests } = await callLookup(
+      { query: '', note: EMAIL },
+      { outputProcessors: [redactEmails] },
+    );
+
+    expect(mapperCalls).toEqual([]);
+    expect(requests).toHaveLength(2);
+    const followUp = seenByModel(requests[1]);
+    expect(followUp).toContain('Tool input validation failed');
+    expect(followUp).toContain('- query:');
+  });
+
+  it('a processor that replaces a validation error with a valid result has that result mapped', async () => {
+    // The processor substitutes a fallback answer; it is the tool's output now, so the mapper
+    // keeps its secret from the model like any other output.
+    const fallback = rewriteToolResults(result =>
+      isValidationError(result) ? { answer: 'unknown', secret: SECRET } : result,
+    );
+    const { mapperCalls, requests } = await callLookup(
+      { query: 'meaning of life' },
+      { output: { answer: 42, secret: SECRET }, outputProcessors: [fallback] },
+    );
+
+    expect(mapperCalls).toEqual([{ answer: 'unknown', secret: SECRET }]);
+    expect(requests).toHaveLength(2);
+    const followUp = seenByModel(requests[1]);
+    expect(followUp).toContain('unknown');
+    expect(followUp).not.toContain('validation failed');
+    expect(followUp).not.toContain(SECRET);
   });
 
   it('an Anthropic model gets the rejected call flagged as an error, with the error text', async () => {

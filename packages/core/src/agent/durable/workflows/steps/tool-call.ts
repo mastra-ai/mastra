@@ -2617,6 +2617,8 @@ export function createDurableToolCallStep() {
                 resultBeforeProcessors,
                 resultSnapshotBeforeProcessors,
                 providerMetadata,
+                // Read from `outcome.rawResult` above, before the result was serialized.
+                validationError,
                 parentSpan: stepSpan,
               })) as typeof providerMetadata;
             } catch (mappingError) {

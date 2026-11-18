@@ -251,7 +251,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        */
       async function runToolResultProcessorsForCall(
         chunk: ChunkType<OUTPUT>,
-        toolCall: { toolName: string; toolCallId: string; providerExecuted?: boolean; aborted?: boolean },
+        toolCall: {
+          toolName: string;
+          toolCallId: string;
+          providerExecuted?: boolean;
+          aborted?: boolean;
+          validationError?: ModelFacingValidationError;
+        },
         providerMetadata: Record<string, unknown> | undefined,
         stepNumber: number,
         steps: Array<StepResult<ToolSet>>,
@@ -290,6 +296,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           resultBeforeProcessors,
           resultSnapshotBeforeProcessors,
           providerMetadata,
+          // Read from the live result by the tool-call step, beside the result.
+          validationError: toolCall.validationError,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
         });
         if (resolved !== providerMetadata) payload.providerMetadata = resolved;
