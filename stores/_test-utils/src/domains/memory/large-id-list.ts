@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
-import { createSampleThread, createSampleMessageV2 } from './data';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { createSampleMessageV2, createSampleThread } from './data';
 
 /**
  * Regression suite for issue #30858.

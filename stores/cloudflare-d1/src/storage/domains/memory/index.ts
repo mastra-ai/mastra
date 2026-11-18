@@ -42,7 +42,7 @@ import type { D1DomainConfig } from '../../db';
 import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
-import { deserializeValue, isArrayOfRecords } from '../utils';
+import { deserializeValue, inJsonArray, isArrayOfRecords } from '../utils';
 
 function addSqliteMetadataFilter(
   conditions: string[],
@@ -810,10 +810,9 @@ export class MemoryStorageD1 extends MemoryStorage {
     const targetIds = include.map(inc => inc.id).filter(Boolean);
     if (targetIds.length === 0) return null;
 
-    const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#db.executeQuery({
-      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})${resourceCondition}`,
-      params: resourceId ? [...targetIds, resourceId] : targetIds,
+      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE ${inJsonArray('id')}${resourceCondition}`,
+      params: resourceId ? [JSON.stringify(targetIds), resourceId] : [JSON.stringify(targetIds)],
     });
 
     if (!Array.isArray(targetResult) || targetResult.length === 0) return null;
@@ -915,7 +914,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       const query = createSqlBuilder()
         .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId', 'resourceId'])
         .from(fullTableName)
-        .where(`id in (${messageIds.map(() => '?').join(',')})`, ...messageIds);
+        .where(inJsonArray('id'), JSON.stringify(messageIds));
 
       query.orderBy('createdAt', 'DESC');
 
@@ -994,13 +993,12 @@ export class MemoryStorageD1 extends MemoryStorage {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const threadPlaceholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id IN (${threadPlaceholders})
+        WHERE ${inJsonArray('thread_id')}
       `;
-      const queryParams: any[] = [...threadIds];
+      const queryParams: any[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
@@ -1078,8 +1076,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id IN (${threadPlaceholders})`;
-      const countParams: any[] = [...threadIds];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE ${inJsonArray('thread_id')}`;
+      const countParams: any[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         countQuery += ` AND resourceId = ?`;
@@ -1221,9 +1219,11 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     try {
       // Get existing messages
-      const placeholders = messageIds.map(() => '?').join(',');
-      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE ${inJsonArray('id')}`;
+      const existingMessages = (await this.#db.executeQuery({
+        sql: selectQuery,
+        params: [JSON.stringify(messageIds)],
+      })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -1309,16 +1309,20 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Update thread timestamps
       if (threadIdsToUpdate.size > 0) {
-        const threadPlaceholders = Array.from(threadIdsToUpdate)
-          .map(() => '?')
-          .join(',');
-        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})${guardSql}`;
-        const threadUpdateParams = [new Date().toISOString(), ...Array.from(threadIdsToUpdate), ...guardParams];
+        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE ${inJsonArray('id')}${guardSql}`;
+        const threadUpdateParams = [
+          new Date().toISOString(),
+          JSON.stringify(Array.from(threadIdsToUpdate)),
+          ...guardParams,
+        ];
         await executeFenced(this.#db, check, { sql: threadUpdateQuery, params: threadUpdateParams });
       }
 
       // Re-fetch updated messages
-      const updatedMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const updatedMessages = (await this.#db.executeQuery({
+        sql: selectQuery,
+        params: [JSON.stringify(messageIds)],
+      })) as any[];
 
       // Parse content back to objects
       return updatedMessages.map(message => {
@@ -1355,23 +1359,22 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     try {
       // Get unique thread IDs from messages before deleting
-      const placeholders = messageIds.map(() => '?').join(',');
-      const selectQuery = `SELECT DISTINCT thread_id FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const threadResults = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const selectQuery = `SELECT DISTINCT thread_id FROM ${fullTableName} WHERE ${inJsonArray('id')}`;
+      const threadResults = (await this.#db.executeQuery({
+        sql: selectQuery,
+        params: [JSON.stringify(messageIds)],
+      })) as any[];
       const threadIds = threadResults.map((r: any) => r.thread_id).filter(Boolean);
 
       // Delete the messages
-      const deleteQuery = createSqlBuilder()
-        .delete(fullTableName)
-        .where(`id IN (${placeholders})`, ...messageIds);
+      const deleteQuery = createSqlBuilder().delete(fullTableName).where(inJsonArray('id'), JSON.stringify(messageIds));
       if (guard) deleteQuery.andWhere(guard.sql, ...guard.params);
       await executeFenced(this.#db, check, deleteQuery.build());
 
       // Update thread timestamps for affected threads
       if (threadIds.length > 0) {
-        const threadPlaceholders = threadIds.map(() => '?').join(',');
-        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})${guard ? ` AND ${guard.sql}` : ''}`;
-        const threadUpdateParams = [new Date().toISOString(), ...threadIds, ...(guard?.params ?? [])];
+        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE ${inJsonArray('id')}${guard ? ` AND ${guard.sql}` : ''}`;
+        const threadUpdateParams = [new Date().toISOString(), JSON.stringify(threadIds), ...(guard?.params ?? [])];
         await executeFenced(this.#db, check, { sql: threadUpdateQuery, params: threadUpdateParams });
       }
     } catch (error) {
