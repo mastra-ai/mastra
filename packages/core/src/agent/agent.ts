@@ -10864,22 +10864,60 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const aborted = this.#abortThreadStreamLocally(options);
+    // The synchronous API cannot report the asynchronous lease-owner lookup.
+    if (this.#resolveExecutionEngine() && !aborted && !options.localOnly) {
+      void this.#abortThreadLeaseOwner(options).catch(error => {
+        this.#mastra?.getLogger?.()?.warn?.('Failed to abort durable agent thread run on another process', {
+          agentId: this.id,
+          threadId: options.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+    return aborted;
+  }
+
+  #abortThreadStreamLocally(options: AgentAbortThreadOptions): boolean {
     const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
     const wrapperClose = getScopeStreamSlot(this.activeStreamUntilIdle, scopeKey, options.expectedRunId);
     if (wrapperClose) {
       wrapperClose();
       return true;
     }
+    // Aborting releases the lease, so resolve its run first.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
     const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
     if (aborted && parked && !options.localOnly) void this.#deleteAbortedSuspendedRun(runId);
+    if (this.#resolveExecutionEngine() && aborted && runId && !options.localOnly) {
+      this.#abortLocalController(runId);
+      void this.requestRemoteAbort(runId);
+    }
     return aborted;
   }
 
   /** @internal Abort the thread's run even when another process executes it, reporting whether one was asked to stop. */
   async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
-    return this.abortThreadStream(options);
+    if (!this.#resolveExecutionEngine()) return this.abortThreadStream(options);
+    const aborted = this.#abortThreadStreamLocally(options);
+    if (aborted || options.localOnly) return aborted;
+    return this.#abortThreadLeaseOwner(options);
+  }
+
+  /** Stop the lease owner even when this process has no thread subscription. */
+  async #abortThreadLeaseOwner(options: AgentAbortThreadOptions): Promise<boolean> {
+    const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(this.getPubSub(), options);
+    if (!runId) return false;
+    // Never stop a successor run the caller didn't mean (#24422).
+    if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
+    // Only the thread request clears queued input before the run drains it.
+    const pubsub = this.__getStreamBus(true)!.forRun(this.__usesSharedRunLog()).pubsub;
+    await Promise.all([
+      agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId),
+      options.clearPendingSignals ? undefined : publishAbortRequest(pubsub, runId),
+    ]);
+    return true;
   }
 
   abortRunStream(runId: string): boolean {
@@ -10888,18 +10926,36 @@ export class Agent<
     // A published run may be executing in another process; it listens on its
     // control topic.
     void this.requestRemoteAbort(runId);
-    return false;
+    return (
+      !!this.#resolveExecutionEngine() &&
+      (this.executionRunRegistry.has(runId) ||
+        getRunRegistryEntry(runId, this.#mastra) !== undefined ||
+        agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub()))
+    );
   }
 
   /** Abort `runId` if this process executes it or holds it parked. */
-  protected __abortLocalRun(runId: string): boolean {
+  private __abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.activeStreamUntilIdle, runId);
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
-    return aborted;
+    const engine = this.#resolveExecutionEngine();
+    if (!engine) return aborted;
+    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
+      ?.abortController;
+    this.#abortLocalController(runId);
+    // An evented caller's controller does not confirm that its executor stopped.
+    return aborted || (engine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'default' && !!controller);
+  }
+
+  /** Flip the controller this process holds for `runId`, if it holds one. */
+  #abortLocalController(runId: string): void {
+    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
+      ?.abortController;
+    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
   }
 
   /**
@@ -10911,10 +10967,38 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
+    if (this.#resolveExecutionEngine()) return this.#abortDurableRunAcknowledged(runId);
     if (this.__abortLocalRun(runId)) return true;
     const bus = this.__getStreamBus();
     if (!bus) return false;
     return requestAcknowledgedAbort(bus.pubsub, runId);
+  }
+
+  /**
+   * A registry entry alone is not confirmation: evented steps may execute elsewhere.
+   * Keep the local executor alive until its correlated abort request is answered.
+   */
+  async #abortDurableRunAcknowledged(runId: string): Promise<boolean> {
+    const wrapperClose = getRunStreamSlot(this.activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+    const engine = this.executionEngine;
+    const pubsub = this.__getStreamBus(true)!.forRun(this.__usesSharedRunLog()).pubsub;
+    if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
+      this.#abortLocalController(runId);
+      void this.requestRemoteAbort(runId);
+      if (await engine.cancelParkedRun(runId)) await engine.announceCanceledRun(runId, pubsub);
+      return true;
+    }
+    try {
+      const canceled = await engine.cancelParkedRun(runId);
+      if (canceled) await engine.announceCanceledRun(runId, pubsub);
+      return (await requestAcknowledgedAbort(pubsub, runId)) || canceled;
+    } finally {
+      this.#abortLocalController(runId);
+    }
   }
 
   /**

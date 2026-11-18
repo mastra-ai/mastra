@@ -6,7 +6,6 @@ import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
-import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
@@ -55,11 +54,10 @@ import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } fro
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import type { AgentAbortThreadOptions, AgentDurableOption, ToolsInput } from '../types';
+import type { AgentDurableOption, ToolsInput } from '../types';
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { DurableExecutionEngine } from './execution-engine';
@@ -1284,181 +1282,6 @@ export class DurableAgent<
 
   protected workflowExecutionError(workflowError: unknown, fallbackMessage: string): Error {
     return this.executionEngine.workflowExecutionError(workflowError, fallbackMessage);
-  }
-
-  /**
-   * Abort the thread's active run.
-   *
-   * The base implementation flips the run's prepared `AbortController`, which a
-   * durable run never has: its controller lives on this agent's run registry,
-   * and the steps reading it may execute in another process. Without the abort
-   * request below, aborting a thread whose active run is durable records an
-   * intent nothing reads and lets the run stream on.
-   */
-  abortThreadStream(options: AgentAbortThreadOptions): boolean {
-    const aborted = this.#abortThreadStreamLocally(options);
-    // The lookup is async, so this synchronous call can't report its outcome.
-    // Server routes use `__abortThreadStreamAcrossProcesses` for that.
-    if (!aborted && !options.localOnly) {
-      void this.#abortThreadLeaseOwner(options).catch(error => {
-        this.#mastra?.getLogger?.()?.warn?.('Failed to abort durable agent thread run on another process', {
-          agentId: this.id,
-          threadId: options.threadId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }
-    return aborted;
-  }
-
-  /** @internal Like {@link abortThreadStream}, but reports whether a run on another process was asked to stop. */
-  async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
-    const aborted = this.#abortThreadStreamLocally(options);
-    if (aborted || options.localOnly) return aborted;
-    return this.#abortThreadLeaseOwner(options);
-  }
-
-  #abortThreadStreamLocally(options: AgentAbortThreadOptions): boolean {
-    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
-    const wrapperClose = getScopeStreamSlot(this.activeStreamUntilIdle, scopeKey, options.expectedRunId);
-    if (wrapperClose) {
-      wrapperClose();
-      return true;
-    }
-
-    // Resolve the run before the base call: aborting releases the thread lease,
-    // after which the thread no longer has an active run to look up.
-    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
-    const aborted = super.abortThreadStream(options);
-    if (!aborted || !runId) return aborted;
-
-    if (!options.localOnly) {
-      this.#abortLocalController(runId);
-      void this.requestRemoteAbort(runId);
-    }
-    return true;
-  }
-
-  /**
-   * A process only knows another process's run while it subscribes to the
-   * thread, so a server answering a bare abort request usually knows none.
-   * The thread lease names the run holding the thread wherever it executes;
-   * stop that run the way {@link abortRunStream} does (#28310).
-   */
-  async #abortThreadLeaseOwner(options: AgentAbortThreadOptions): Promise<boolean> {
-    const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(this.getPubSub(), options);
-    if (!runId) return false;
-    // Never stop a successor run the caller didn't mean (#24422).
-    if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
-    // The run executes elsewhere, so success means the request was published: a
-    // failed lease lookup or publish throws rather than reading as an idle thread.
-    // The thread-topic request reaches the owner's thread runtime, which stops an
-    // executing run and also releases one parked on a suspension; a run-topic request
-    // only reaches an executing step. With clearPendingSignals the owner must clear the
-    // queued input before the run ends and drains it, so only the thread request goes.
-    await Promise.all([
-      agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId),
-      options.clearPendingSignals ? undefined : publishAbortRequest(this.pubsub, runId),
-    ]);
-    return true;
-  }
-
-  override abortRunStream(runId: string): boolean {
-    return (
-      super.abortRunStream(runId) ||
-      this.executionRunRegistry.get(runId) !== undefined ||
-      getRunRegistryEntry(runId, this.#mastra) !== undefined ||
-      agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
-    );
-  }
-
-  protected override __abortLocalRun(runId: string): boolean {
-    const wrapperClose = getRunStreamSlot(this.activeStreamUntilIdle, runId);
-    if (wrapperClose) {
-      wrapperClose();
-      return true;
-    }
-    const aborted = super.__abortLocalRun(runId);
-    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
-      ?.abortController;
-    this.#abortLocalController(runId);
-    // An evented run's registry entry can belong to a caller, not its executor.
-    // Let the base path send the request to the workers in that case.
-    return (
-      aborted ||
-      (this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'default' &&
-        controller !== undefined)
-    );
-  }
-
-  /**
-   * Abort `runId` and resolve whether the abort was confirmed.
-   *
-   * Only a close this process performs itself counts as local confirmation. A
-   * run-registry entry does not: an evented run keeps one here while another
-   * process executes its steps, possibly a dead one. Every other run gets a
-   * single correlated request, and only the executor's answer confirms it.
-   * The local controller is flipped after that answer, so an executor in this
-   * process cannot unwind and drop its listener before the request reaches it.
-   *
-   * @internal Used by the server's run abort route.
-   */
-  override async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    const wrapperClose = getRunStreamSlot(this.activeStreamUntilIdle, runId);
-    if (wrapperClose) {
-      wrapperClose();
-      return true;
-    }
-    if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
-      this.#abortLocalController(runId);
-      void this.requestRemoteAbort(runId);
-      if (await this.#cancelParkedRun(runId)) await this.#announceCanceledRun(runId);
-      return true;
-    }
-    try {
-      const canceled = await this.#cancelParkedRun(runId);
-      if (canceled) await this.#announceCanceledRun(runId);
-      return (await requestAcknowledgedAbort(this.pubsub, runId)) || canceled;
-    } finally {
-      this.#abortLocalController(runId);
-    }
-  }
-
-  /**
-   * Record the abort of a parked run in shared storage, so a resume on any server
-   * refuses it. The in-process resume fence only covers this process. The status
-   * moves from `suspended` to `canceled` with a guarded write: a resume that claimed
-   * the run first has already moved it to `running`, and that run is stopped by the
-   * abort request instead. Stores that cannot enforce the guard atomically get the
-   * same check on a best-effort basis, so a finished or running run is never marked
-   * canceled. Stores without concurrent updates (some don't implement
-   * `updateWorkflowState`) get the canceled status by rewriting the run's snapshot,
-   * which every store supports. Resolves whether this call canceled the parked run.
-   * Storage errors propagate: an abort acknowledged without this write would not stop
-   * another server from resuming the run.
-   */
-  async #cancelParkedRun(runId: string): Promise<boolean> {
-    return this.executionEngine.cancelParkedRun(runId);
-  }
-
-  /**
-   * Publish the abort terminal for a parked run this call just canceled. The bus is
-   * shared, so observers on every server close now, whichever server later refuses
-   * the approval. Only the call that won the cancel publishes. A failed publish does
-   * not undo the abort: the cancel is already stored, and a refused resume on this
-   * server retries the publish.
-   */
-  async #announceCanceledRun(runId: string): Promise<void> {
-    return this.executionEngine.announceCanceledRun(runId, this.pubsub);
-  }
-
-  /** Flip the controller this process holds for `runId`, if it holds one. */
-  #abortLocalController(runId: string): void {
-    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
-      ?.abortController;
-    if (controller && !controller.signal.aborted) {
-      controller.abort(new Error('Aborted'));
-    }
   }
 
   // ===========================================================================
