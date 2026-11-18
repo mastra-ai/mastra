@@ -5,8 +5,10 @@ import { CHART_COLORS } from '@/domains/metrics/lib/chart-colors';
 import { formatCount } from '@/domains/metrics/lib/chart-format';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 import { Txt } from '@/ds/components/Txt';
+import { X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
 import type { DragSelectionRange } from '@/ds/primitives/charts/drag-selection';
 import { cn } from '@/lib/utils';
+import './observability-histogram.css';
 
 /** A thin strip: about 34px of bars above the time axis, so the list keeps its vertical space. */
 const CHART_HEIGHT = 64;
@@ -28,6 +30,13 @@ export type ObservabilityHistogramProps = {
   isUpdating?: boolean;
   /** Dragging across bars, or clicking one, reports the first and last selected bar; turn it into a window with `zoomWindow`. */
   onZoom?: (range: DragSelectionRange) => void;
+  /**
+   * A word search that loads newest first hasn't reached the bars starting before this yet. They draw as a hatched
+   * band instead of as zero.
+   */
+  pendingBefore?: Date;
+  /** One line under the chart, e.g. when it covers less than the list's range. */
+  note?: string;
 };
 
 /**
@@ -42,11 +51,14 @@ export function ObservabilityHistogram({
   isError = false,
   isUpdating = false,
   onZoom,
+  pendingBefore,
+  note,
 }: ObservabilityHistogramProps) {
   const series = useMemo(
     () => [{ dataKey: 'ok', label: resourceLabel, color: VOLUME_COLOR }, ERRORS_SERIES],
     [resourceLabel],
   );
+  const pendingBars = pendingBefore ? buckets.filter(bucket => bucket.ts < pendingBefore.getTime()).length : 0;
   let ok = 0;
   let errors = 0;
   for (const bucket of buckets) {
@@ -68,7 +80,7 @@ export function ObservabilityHistogram({
           </Txt>
         </div>
       ) : (
-        <div className={cn('transition-opacity duration-200', isUpdating && 'opacity-50')}>
+        <div className={cn('relative transition-opacity duration-200', isUpdating && 'opacity-50')}>
           <MetricsStackedBarChart
             data={buckets}
             series={series}
@@ -82,7 +94,22 @@ export function ObservabilityHistogram({
             onBucketClick={onZoom ? (_row, index) => onZoom({ start: index, end: index }) : undefined}
             {...BUCKET_AXIS}
           />
+          {pendingBars > 0 &&
+            !isLoading && (
+              // The bars share the full width (no y-axis, no side margins), so the band covers exactly the pending ones.
+              <div
+                data-testid="histogram-pending-band"
+                aria-hidden
+                className="observability-histogram-pending pointer-events-none absolute top-0 left-0 rounded-xs text-muted-foreground"
+                style={{ width: `${(pendingBars / buckets.length) * 100}%`, bottom: X_AXIS_HEIGHT }}
+              />
+            )}
         </div>
+      )}
+      {note && (
+        <Txt variant="caption" tone="muted" className="px-4">
+          {note}
+        </Txt>
       )}
     </section>
   );

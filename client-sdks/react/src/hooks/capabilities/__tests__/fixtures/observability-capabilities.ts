@@ -134,3 +134,12 @@ export const traceQueryWithoutDiscoveryCapabilities: GetObservabilityCapabilitie
     traceQueryDiscovery: false,
   },
 };
+
+/** Store searches long word-search ranges in chunks (`progressive: true`). */
+export const progressiveSearchCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    observabilityProgressiveSearch: true,
+  },
+};

@@ -194,10 +194,13 @@ function TracesTab({
         >
           <TracesExplorer.Body
             toolbar={
-              <div className="flex items-center justify-between gap-2">
-                <TracesExplorer.FilterBar />
-                <TracesExplorer.ColumnsMenu />
-              </div>
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <TracesExplorer.FilterBar />
+                  <TracesExplorer.ColumnsMenu />
+                </div>
+                <TracesExplorer.SearchProgress />
+              </>
             }
             chart={<TracesExplorer.Histogram />}
           >

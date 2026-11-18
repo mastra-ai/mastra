@@ -109,6 +109,7 @@ describe('useTraceQuery with a progressive word search', () => {
       await waitFor(() => expect(result.current.chunkError).not.toBeNull());
       expect(result.current.data).toEqual([oldest]);
       expect(result.current.isError).toBe(false);
+      expect(result.current.error).toBeNull();
     });
   });
 

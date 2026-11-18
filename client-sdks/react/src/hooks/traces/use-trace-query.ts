@@ -319,7 +319,8 @@ export function useTraceQuery({
     isRefetching,
     fetchStatus,
     isError: progressive ? isError && !isFetchNextPageError : isError,
-    error,
+    // A failed later chunk is `chunkError`; the rows before it are still the list.
+    error: progressive && isFetchNextPageError ? null : error,
     refetch,
     setEndOfListElement,
   };
