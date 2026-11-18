@@ -198,5 +198,24 @@
     "@mastra/sprites": "0.1.2",
     "@mastra/vercel": "1.6.3"
   },
-  "changesets": []
+  "changesets": [
+    "agent-internal-runs-skip-cancel-reads",
+    "all-spies-heal",
+    "big-sloths-heal",
+    "bounded-upstash-log-reads",
+    "factory-card-draft-panel",
+    "factory-github-avatar-host",
+    "factory-session-branch-title",
+    "factory-session-layout-route",
+    "fuzzy-paths-switch",
+    "loose-worms-hear",
+    "major-kids-clean",
+    "quiet-length-errors",
+    "strict-mammals-post",
+    "strict-paths-divide",
+    "tender-poets-pump",
+    "vanta-2026-11-13",
+    "vanta-2026-11-16-otel-examples",
+    "vanta-2026-11-16"
+  ]
 }

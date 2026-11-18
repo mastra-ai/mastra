@@ -353,6 +353,8 @@ trustPolicyExclude:
   # flags it because modal stopped attaching provenance after 0.7.2.
   - 'modal@0.11.1'
 overrides:
+  # Vanta 2026-11-13: hono <4.13.16 advisories; 4.13.18 is the latest 4.x
+  hono@<4.13.18: 4.13.18
   # @mastra/server imports @mastra/mcp-apps-components only when an app installs it (an optional peer).
   # Keep the published one out of the workspace: the server's tests mock it, and @mastra/hono's resolve
   # the workspace build (see its vitest config).
@@ -569,7 +571,8 @@ overrides:
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
-  'basic-ftp@<6.2.1': 6.2.4
+  # Vanta 2026-11-13: basic-ftp <=6.2.3 advisories (fixed 6.2.4); 6.2.6 is the latest 6.x
+  'basic-ftp@<6.2.6': 6.2.6
   # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
   # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
   # fast-xml-parser 5.10.1, style-to-object 1.0.11).

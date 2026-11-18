@@ -5,8 +5,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { createAppRoutes } from '../../router';
+import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { createQueryClient } from '../../../query-client';
+import { createAppRouter, createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -194,10 +195,11 @@ describe('a user session draft on the real thread route', () => {
     });
     const route = stubDraftRoute({ createGate, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
-    });
-    const { client } = renderWithProviders(<RouterProvider router={router} />);
+    const client = createQueryClient();
+    const router = createAppRouter({ queryClient: client, api: TEST_API }, routes =>
+      createMemoryRouter(routes, { initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`] }),
+    );
+    renderWithProviders(<RouterProvider router={router} />, client);
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());

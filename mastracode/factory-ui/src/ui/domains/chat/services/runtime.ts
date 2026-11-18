@@ -175,7 +175,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       }
       return {
         ...state,
-        usage,
+        usage: event.total ?? state.usage,
         tokensPerSec,
         _decodeMessageId: undefined,
         _decodeStartedAt: 0,
@@ -197,21 +197,64 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       return { ...state, goal: event.payload };
     case 'follow_up_queued':
       return { ...state, followUpCount: event.count };
+    case 'om_status': {
+      const { active, buffered } = event.windows;
+      return replaceEqualDeep(state, {
+        ...state,
+        omProgress: {
+          pendingTokens: active.messages.tokens,
+          threshold: active.messages.threshold,
+          observationTokens: active.observations.tokens,
+          reflectionThreshold: active.observations.threshold,
+        },
+        bufferingMessages: buffered.observations.status === 'running',
+        bufferingObservations: buffered.reflection.status === 'running',
+      });
+    }
+    case 'state_changed': {
+      const { observationThreshold, reflectionThreshold } = event.state;
+      return patchOMBudgets(state, {
+        ...(event.changedKeys.includes('observationThreshold') && typeof observationThreshold === 'number'
+          ? { threshold: observationThreshold }
+          : {}),
+        ...(event.changedKeys.includes('reflectionThreshold') && typeof reflectionThreshold === 'number'
+          ? { reflectionThreshold }
+          : {}),
+      });
+    }
     case 'om_observation_start':
       return { ...state, omPhase: 'observing' };
     case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
+      return patchOMBudgets({ ...state, omPhase: 'reflecting' }, { observationTokens: event.tokensToReflect });
     case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
+      return { ...state, omPhase: 'buffering', ...bufferingFlag(event.operationType, true) };
     case 'om_observation_end':
-    case 'om_observation_failed':
+      return patchOMBudgets(
+        { ...state, omPhase: 'idle' },
+        { observationTokens: event.observationTokens, pendingTokens: 0 },
+      );
     case 'om_reflection_end':
-    case 'om_reflection_failed':
+      return patchOMBudgets({ ...state, omPhase: 'idle' }, { observationTokens: event.compressedTokens });
     case 'om_buffering_end':
     case 'om_buffering_failed':
     case 'om_activation':
+      return { ...state, omPhase: 'idle', ...bufferingFlag(event.operationType, false) };
+    case 'om_observation_failed':
+    case 'om_reflection_failed':
       return { ...state, omPhase: 'idle' };
     default:
       return state;
   }
+}
+
+/** Without a full reading yet, the view keeps showing the session snapshot rather than a partial one. */
+function patchOMBudgets(state: ChatRuntimeState, patch: Partial<OMBudgets>): ChatRuntimeState {
+  return state.omProgress ? { ...state, omProgress: { ...state.omProgress, ...patch } } : state;
+}
+
+function bufferingFlag(
+  operationType: 'observation' | 'reflection',
+  running: boolean,
+): Pick<ChatRuntimeState, 'bufferingMessages'> | Pick<ChatRuntimeState, 'bufferingObservations'> {
+  return operationType === 'observation' ? { bufferingMessages: running } : { bufferingObservations: running };
 }

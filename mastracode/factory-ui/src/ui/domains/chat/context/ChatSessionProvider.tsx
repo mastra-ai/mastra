@@ -14,8 +14,8 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
+import { opensWithPrompt } from '../services/promptHandoff';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -27,6 +27,7 @@ import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
+import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey';
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
@@ -184,6 +185,7 @@ export function ChatSessionBoundary({
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
   const location = useLocation();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
+  const transcript = useTranscriptKey({ sessionId, threadId });
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -209,27 +211,29 @@ export function ChatSessionBoundary({
   // Above the transcript so the favicon and the stepper read one pending state.
   return (
     <ChatThreadMessagesContext.Provider value={messages}>
-      <ChatTranscriptProvider
-        // No `isPending` segment: remounting on the pending -> ready flip would drop
-        // the live SSE listener. Results merge into the reducer instead.
-        key={`${sessionId}:${threadId ?? 'draft'}`}
-        threadId={threadId}
-        initialMessages={messagesQuery.data}
-        hasMoreHistory={messagesQuery.hasMore}
-        isLoadingMoreHistory={messagesQuery.isLoadingMore}
-        loadMoreHistory={messagesQuery.loadMore}
-      >
-        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
-          <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
-            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-              <ComposerImagesProvider initialImages={failedDraft?.files}>
-                {/* Below the keyed transcript, so each thread starts with no annotations. */}
-                <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
-              </ComposerImagesProvider>
-            </ChatCommandsProvider>
-          </ChatThinkingProvider>
-        </ChatModelsProvider>
-      </ChatTranscriptProvider>
+      <TranscriptContinuationContext.Provider value={transcript.continueInto}>
+        <ChatTranscriptProvider
+          // No `isPending` segment: remounting on the pending -> ready flip would drop
+          // the live SSE listener. Results merge into the reducer instead.
+          key={transcript.key}
+          threadId={threadId}
+          initialMessages={messagesQuery.data}
+          hasMoreHistory={messagesQuery.hasMore}
+          isLoadingMoreHistory={messagesQuery.isLoadingMore}
+          loadMoreHistory={messagesQuery.loadMore}
+        >
+          <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
+            <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
+              <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+                <ComposerImagesProvider initialImages={failedDraft?.files}>
+                  {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                  <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+                </ComposerImagesProvider>
+              </ChatCommandsProvider>
+            </ChatThinkingProvider>
+          </ChatModelsProvider>
+        </ChatTranscriptProvider>
+      </TranscriptContinuationContext.Provider>
     </ChatThreadMessagesContext.Provider>
   );
 }

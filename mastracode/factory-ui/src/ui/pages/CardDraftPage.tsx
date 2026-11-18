@@ -7,167 +7,115 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
-import { Link, Navigate, useParams } from 'react-router';
+import { useEffect, useEffectEvent } from 'react';
+import { Link, useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
-import { useWorkItemQuery } from '../../hooks/useWorkItems';
-import type { InstalledBoardInfo } from '../../api/types';
-import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
-import { emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
-import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
-import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
-import { DraftSessionStartContext } from '../domains/chat/context/DraftSessionStartContext';
+import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
+import { SessionView } from '../domains/chat/components/SessionView';
+import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
-import type { DraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
-import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { boardOf } from '../domains/factory/boardFlow';
 import { currentItemStage } from '../domains/factory/boardStages';
 import { CardDraftActions } from '../domains/factory/components/CardDraftActions';
-import { CardStageBar } from '../domains/factory/components/CardStageBar';
 import { useCardSessionRepository } from '../domains/factory/hooks/useCardSessionRepository';
+import { useDraftCard } from '../domains/factory/hooks/useDraftCard';
 import { useStartCardSessionFromDraft } from '../domains/factory/hooks/useStartCardSessionFromDraft';
-import type { WorkItem } from '../domains/factory/services/workItems';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
-import { factoryHomePath, threadPath } from '../domains/workspaces/services/factoryPaths';
-import type { FactoryProject } from '../domains/workspaces/services/github';
+import { factoryHomePath } from '../domains/workspaces/services/factoryPaths';
 
-const DRAFT_TITLE = 'New session';
-
-export function CardDraftPage() {
-  const {
-    factoryId = '',
-    workItemId = '',
-    draftSessionId,
-  } = useParams<{ factoryId: string; workItemId: string; draftSessionId: string }>();
+export function CardDraftPage({ workItemId }: { workItemId: string }) {
+  const { factoryId = '', workItemId: routedWorkItemId } = useParams<{ factoryId: string; workItemId?: string }>();
   const guards = useDraftModelGuards(factoryId, 'factory');
-
-  return (
-    <ChatSessionBoundary key={draftSessionId}>
-      <CardDraftContent factoryId={factoryId} workItemId={workItemId} guards={guards} />
-    </ChatSessionBoundary>
-  );
-}
-
-function CardDraftContent({
-  factoryId,
-  workItemId,
-  guards,
-}: {
-  factoryId: string;
-  workItemId: string;
-  guards: DraftModelGuards;
-}) {
-  const card = useWorkItemQuery(factoryId, workItemId);
-  const catalog = useBoardCatalog(factoryId);
+  const { card, item, board } = useDraftCard(factoryId, workItemId);
   const factory = guards.activeFactory;
+  const unconfigured = guards.missingModel || guards.missingCredential !== undefined;
+  const drafting = Boolean(routedWorkItemId && item && factory && !unconfigured);
+  const sessionRepository = useCardSessionRepository(factoryId, drafting ? item : undefined);
+  const draftStart = useStartCardSessionFromDraft(
+    factory,
+    item,
+    sessionRepository.error || sessionRepository.isPlaceholderData ? undefined : sessionRepository.data,
+  );
+  const continueIntoThread = useContinueIntoThread();
+  const cardSession = item && cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
+  const openedSession =
+    routedWorkItemId && cardSession && !draftStart.ownsSession(cardSession.sessionId) ? cardSession : undefined;
+  const openedSessionId = openedSession?.sessionId;
+  const openedThreadId = openedSession?.threadId;
+  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) =>
+    continueIntoThread(factoryId, session),
+  );
+  useEffect(() => {
+    if (openedSessionId && openedThreadId) openThread({ sessionId: openedSessionId, threadId: openedThreadId });
+  }, [openedSessionId, openedThreadId]);
 
+  const threadOpened = !routedWorkItemId;
+  if (threadOpened) return <SessionView emptyState={<EmptyThreadState />} />;
   if (card.isLoadingError) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
-        <div className={draftPageClass}>
-          <EmptyState
-            as="h2"
-            iconSlot={<IconTicket />}
-            titleSlot="Could not load this card"
-            descriptionSlot={card.error.message}
-            actionSlot={
-              <Button variant="primary" onClick={() => void card.refetch()}>
-                Try again
-              </Button>
-            }
-          />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass}>
+        <EmptyState
+          as="h2"
+          iconSlot={<IconTicket />}
+          titleSlot="Could not load this card"
+          descriptionSlot={card.error.message}
+          actionSlot={
+            <Button variant="primary" onClick={() => void card.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
     );
   }
   if (card.data === null) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
-        <div className={draftPageClass}>
-          <EmptyState
-            as="h2"
-            iconSlot={<IconTicket />}
-            titleSlot="This card no longer exists"
-            descriptionSlot="It was removed from the board."
-            actionSlot={
-              <Link to={factoryHomePath({ id: factoryId })} className={buttonVariants({ variant: 'primary' })}>
-                Back to the board
-              </Link>
-            }
-          />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass}>
+        <EmptyState
+          as="h2"
+          iconSlot={<IconTicket />}
+          titleSlot="This card no longer exists"
+          descriptionSlot="It was removed from the board."
+          actionSlot={
+            <Link to={factoryHomePath({ id: factoryId })} className={buttonVariants({ variant: 'primary' })}>
+              Back to the board
+            </Link>
+          }
+        />
+      </div>
     );
   }
-  if (!card.data || catalog.isPending || !factory) {
+  if (!item || !factory) {
     return (
-      <ChatPageLayout title={DRAFT_TITLE}>
-        <div className={draftPageClass} aria-busy="true">
-          <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
-          <Skeleton className="h-36 w-full rounded-xl" />
-        </div>
-      </ChatPageLayout>
+      <div className={draftPageClass} aria-busy="true">
+        <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
+        <Skeleton className="h-36 w-full rounded-xl" />
+      </div>
     );
   }
-
-  const item = card.data;
-  const board = boardOf(catalog.data, item);
-  // A card that gained a session, here or on the board, opens it instead of a second one.
-  const session = cardThreadSession(item, board?.phases, currentItemStage(item, board) ?? '');
-  if (session) return <Navigate replace to={threadPath(factoryId, session)} />;
+  if (unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
 
   return (
-    <ChatPageLayout
-      title={DRAFT_TITLE}
-      headerCenter={board && <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />}
-    >
-      {guards.missingModel || guards.missingCredential ? (
-        <DraftStart heading={item.title} guards={guards} />
-      ) : (
-        <CardDraft factory={factory} item={item} board={board} configurationError={guards.configurationError} />
-      )}
-    </ChatPageLayout>
-  );
-}
-
-function CardDraft({
-  factory,
-  item,
-  board,
-  configurationError,
-}: {
-  factory: FactoryProject;
-  item: WorkItem;
-  board: InstalledBoardInfo | undefined;
-  configurationError: Error | undefined;
-}) {
-  useGlobalShortcuts();
-  const sessionRepository = useCardSessionRepository(factory.id, item);
-  const draftStart = useStartCardSessionFromDraft(item, sessionRepository.error ? undefined : sessionRepository.data);
-
-  return (
-    <DraftSessionStartContext.Provider value={draftStart}>
-      <SessionChatSurface
-        composerLabel="Thread composer"
-        emptyState={
-          <section className={emptyThreadClass} aria-labelledby="card-draft-title">
-            <Logo size="md" aria-label="Mastra Code" />
-            <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
-              {item.title}
-            </Txt>
-            <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
-              No session yet. Your first message starts one.
-            </Txt>
-            <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
-              {configurationError && <ConfigurationErrorNotice error={configurationError} />}
-              <CardRepositoryNotice factoryId={factory.id} lookup={sessionRepository} />
-              {board && <CardDraftActions factory={factory} item={item} board={board} />}
-            </div>
-          </section>
-        }
-      />
-    </DraftSessionStartContext.Provider>
+    <SessionView
+      start={openedSession ? { ...draftStart, ready: false } : draftStart}
+      openingSession={Boolean(openedSession)}
+      emptyState={
+        <section className={emptyThreadClass} aria-labelledby="card-draft-title">
+          <Logo size="md" aria-label="Mastra Code" />
+          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
+            {item.title}
+          </Txt>
+          <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
+            No session yet. Your first message starts one.
+          </Txt>
+          <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
+            {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
+            <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
+            {board && <CardDraftActions factory={factory} item={item} board={board} />}
+          </div>
+        </section>
+      }
+    />
   );
 }
 
