@@ -137,7 +137,7 @@ This adds `agent_support-agent` and `workflow_refund` next to the operation tool
 
 ## Choose what to expose
 
-Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. This includes passing an excluded agent's id to the memory tools. Observability tools aren't filtered: their results can still include traces, logs, and scores from excluded primitives. The selection only affects MCP. The HTTP routes are unchanged.
+Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. This includes passing an excluded agent's id to the memory tools. An agent reached through `call_agent` still runs with all its own tools, workflows, and subagents, including ones you excluded, so to keep a tool away from MCP clients, also exclude every agent that has it. Observability tools aren't filtered: their results can still include traces, logs, and scores from excluded primitives. The selection only affects MCP. The HTTP routes are unchanged.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
