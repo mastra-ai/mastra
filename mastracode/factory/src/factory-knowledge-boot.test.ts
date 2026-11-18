@@ -76,7 +76,7 @@ it("boots with a bare Knowledge instance and serves the Knowledge page from that
   expect(((await tree.json()) as { pages: { name: string }[] }).pages.map(page => page.name)).toEqual(['Handbook']);
 });
 
-it('acts as a fixed org scope in sessions and on the Knowledge page, against an instance that declares only that org', async () => {
+it("acts with the host's org scope alone in sessions and on the Knowledge page, against an instance that declares only that org", async () => {
   vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
   onTestFinished(() => {
     vi.unstubAllEnvs();
@@ -93,7 +93,7 @@ it('acts as a fixed org scope in sessions and on the Knowledge page, against an 
     auth: null,
     mcp: false,
     knowledge,
-    knowledgeOrgScope: 'org:plat',
+    scopes: ['org:plat'],
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
   onTestFinished(async () => {
@@ -140,15 +140,15 @@ it('acts as a fixed org scope in sessions and on the Knowledge page, against an 
   expect(((await tree.json()) as { pages: { name: string }[] }).pages.map(page => page.name)).toEqual(['Handbook']);
 });
 
-it.each(['project:p1', 'resource:u1', 'org:a:b'])('refuses %s as the fixed knowledgeOrgScope', scope => {
+it.each(['project:p1', 'resource:u1', 'thread:t1'])('refuses %s beside an org: in scopes', scope => {
   expect(
     () =>
       new MastraFactory({
         storage: new LibSQLFactoryStorage({ id: 'knowledge-org-scope-bad', url: ':memory:' }),
         auth: null,
         mcp: false,
-        knowledgeOrgScope: scope,
+        scopes: ['org:plat', scope],
         secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
       }),
-  ).toThrow(`MastraFactory: 'knowledgeOrgScope' must be one org: scope address such as 'org:acme'; got '${scope}'.`);
+  ).toThrow(`MastraFactory: 'scopes': Scope ${scope} can't be held with the host's org:plat.`);
 });

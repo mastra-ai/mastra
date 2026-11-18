@@ -25,7 +25,7 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
-import { isFixedOrgScope } from '@mastra/code-sdk/knowledge-scope';
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -307,11 +307,13 @@ export interface MastraFactoryConfig {
    */
   knowledge?: Knowledge;
   /**
-   * A fixed `org:` scope address, such as `'org:acme'`, that every project's sessions and Knowledge page
-   * act as instead of their own `org:` and `project:` scopes. Set it for a Knowledge instance that
-   * declares only one org; all projects then share that org's Knowledge.
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `['org:acme']`. With an
+   * `org:` here, every project's sessions and Knowledge page act with these alone instead of their own
+   * `org:` and `project:` scopes, for a Knowledge instance that declares only that org; every org and
+   * project on this Factory then shares it. A `project:`, `resource:` or `thread:` scope beside an
+   * `org:` throws.
    */
-  knowledgeOrgScope?: string;
+  scopes?: string[];
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -691,11 +693,9 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
-    if (config.knowledgeOrgScope !== undefined && !isFixedOrgScope(config.knowledgeOrgScope)) {
-      throw new Error(
-        `MastraFactory: 'knowledgeOrgScope' must be one org: scope address such as 'org:acme'; got '${config.knowledgeOrgScope}'.`,
-      );
-    }
+    // Fail at construction on scopes every session would refuse.
+    const hostScopes = resolveKnowledgeSessionScopes({ factoryOrgId: 'factory' }, config.scopes);
+    if (!hostScopes.resolved) throw new Error(`MastraFactory: 'scopes': ${hostScopes.reason}`);
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
     this.#boards = createBoardRegistry({ boards: config.boards });
     warnDefinedBoards(this.#boards);
@@ -2037,7 +2037,7 @@ export class MastraFactory {
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
-        knowledgeOrgScope: this.#config.knowledgeOrgScope,
+        scopes: this.#config.scopes,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase and work-item signals, when work
         // items are on, come after it.
@@ -2355,7 +2355,7 @@ export class MastraFactory {
             deploymentModelProviders,
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.id,
-            knowledgeOrgScope: this.#config.knowledgeOrgScope,
+            knowledgeScopes: this.#config.scopes,
             configVersion,
             boardRegistry: boards,
             intakeEvaluator: this.#forcedIntake,

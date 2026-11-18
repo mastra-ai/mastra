@@ -1204,7 +1204,7 @@ describe('createMastraCode', () => {
     const { resolveKnowledgeSessionScopes } = await import('../knowledge-scope.js');
     const { createMastraCode } = await import('../index.js');
     const cases = [
-      // A host org that conflicts with the session's org.
+      // A host org with an identity tag beside it, which a session acting as the host org refuses.
       { host: ['org:other', 'resource:r'], state: { factoryOrgId: 'o', factoryProjectId: 'p' } },
       // A Factory session with no org, where the host org must not stand in for it.
       { host: ['org:acme'], state: { factoryProjectId: 'p', factoryOrgUnresolved: true } },

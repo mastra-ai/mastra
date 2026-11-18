@@ -10,11 +10,6 @@ export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
 
 export type KnowledgeSessionScopes = { resolved: true; scopes: string[] } | { resolved: false; reason: string };
 
-/** One `org:` address with a single non-empty segment, such as `org:acme`. */
-export function isFixedOrgScope(scope: string): boolean {
-  return /^org:[^:/#]+$/.test(scope);
-}
-
 function isIdentityTag(tag: string): boolean {
   return tag.startsWith('resource:') || tag.startsWith('thread:');
 }
@@ -25,18 +20,18 @@ function isIdentityTag(tag: string): boolean {
  * this, so what the agent writes is what the inspector reads.
  *
  * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, with each id
- *   encoded into one canonical segment, so projects stay isolated. A host tag of the same type with
- *   another value is refused. A Factory session with no org resolves to nothing (fail closed): a
+ *   encoded into one canonical segment, so projects stay isolated. A host `project:` tag with another
+ *   value is refused. A Factory session with no org resolves to nothing (fail closed): a
  *   session owner is a user id, never an org.
- * - With `fixedOrgScope` (an `org:` address the host vouches for), a Factory session acts as that org
- *   instead, without its own `org:` and `project:` tags, for a Knowledge instance that declares only
- *   that org. A host `project:` tag is refused then, so a run never holds a scope the host didn't name.
+ * - When the host's scopes name an `org:`, a Factory session acts with the host's scopes alone, without
+ *   its own `org:` and `project:` tags, for a Knowledge instance that declares only that org; every org
+ *   and project on the host shares it. A host `project:`, `resource:` or `thread:` tag is refused then,
+ *   so a run never holds a scope the host didn't name.
  * - Local sessions act with the host's scopes as given; they are canonical addresses already.
  */
 export function resolveKnowledgeSessionScopes(
   state: Pick<MastraCodeState, 'factoryOrgId' | 'factoryProjectId' | 'factoryOrgUnresolved'> | undefined,
   hostScopes: readonly string[] = [],
-  fixedOrgScope?: string,
 ): KnowledgeSessionScopes {
   const projectId = typeof state?.factoryProjectId === 'string' ? state.factoryProjectId.trim() : '';
   const orgId = typeof state?.factoryOrgId === 'string' ? state.factoryOrgId.trim() : '';
@@ -44,22 +39,19 @@ export function resolveKnowledgeSessionScopes(
 
   if (factoryOwned) {
     if (!orgId) return { resolved: false, reason: 'This Factory session has no resolved organization.' };
-    if (fixedOrgScope !== undefined && !isFixedOrgScope(fixedOrgScope)) {
-      return { resolved: false, reason: `Fixed scope ${fixedOrgScope} is not an org: scope address.` };
+    const hostOrg = hostScopes.find(tag => tag.startsWith('org:'));
+    if (hostOrg) {
+      const refused = hostScopes.find(tag => tag.startsWith('project:') || isIdentityTag(tag));
+      if (refused) return { resolved: false, reason: `Scope ${refused} can't be held with the host's ${hostOrg}.` };
+      return { resolved: true, scopes: [...hostScopes] };
     }
-    const required = fixedOrgScope
-      ? [fixedOrgScope]
-      : [
-          `org:${encodeKnowledgeScopeId(orgId)}`,
-          ...(projectId ? [`project:${encodeKnowledgeScopeId(projectId)}`] : []),
-        ];
+    const required = [
+      `org:${encodeKnowledgeScopeId(orgId)}`,
+      ...(projectId ? [`project:${encodeKnowledgeScopeId(projectId)}`] : []),
+    ];
     for (const tag of hostScopes) {
-      if (fixedOrgScope && tag.startsWith('project:')) {
-        return { resolved: false, reason: `Scope ${tag} can't be held with the fixed ${fixedOrgScope}.` };
-      }
-      const type = tag.slice(0, tag.indexOf(':') + 1);
-      const conflict = required.find(requiredTag => requiredTag.startsWith(type) && requiredTag !== tag);
-      if (type && conflict && (type === 'org:' || type === 'project:')) {
+      const conflict = required.find(requiredTag => requiredTag.startsWith('project:') && requiredTag !== tag);
+      if (tag.startsWith('project:') && conflict) {
         return { resolved: false, reason: `Scope ${tag} conflicts with this Factory session's ${conflict}.` };
       }
     }
