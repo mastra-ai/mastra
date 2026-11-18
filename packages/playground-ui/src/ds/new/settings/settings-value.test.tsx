@@ -41,6 +41,16 @@ describe('SettingsValue', () => {
     expect(screen.getByText('Build 1.32.0').getAttribute('title')).toBe('Build 1.32.0');
   });
 
+  it('adds no hover text when the value holds an element', () => {
+    render(
+      <SettingsValue>
+        <strong>Owner</strong>
+      </SettingsValue>,
+    );
+
+    expect(screen.getByText('Owner').parentElement?.hasAttribute('title')).toBe(false);
+  });
+
   it('keeps a hover text it was given', () => {
     render(<SettingsValue title="Signed in with WorkOS">WorkOS</SettingsValue>);
 
