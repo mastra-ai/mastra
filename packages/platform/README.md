@@ -55,7 +55,7 @@ const browser = new PlatformBrowser({ projectId: 'your-project-id' });
 - `POST {apiUrl}/v1/knowledge/{instanceId}/operations/{operation}` with `Authorization: Bearer {accessToken}` and JSON body `{ input }`; returns `{ result }`.
 - `instanceId` and `apiUrl` come from options or `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_API_URL`; `apiUrl` defaults to `https://knowledge-api.mastra.ai`. The service derives the authorized project from the instance and credential; `projectId` is accepted for compatibility but is not sent.
 - `renameScopeDeclaration` is not forwarded and rejects with `KnowledgeUnsupportedCapabilityError`: its `check` callback cannot be sent to the hosted store.
-- Credential priority: option `accessToken`, `MASTRA_KNOWLEDGE_ACCESS_TOKEN` (the Knowledge-only token Platform deploys get with their instance), `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PLATFORM_SECRET_KEY`.
+- Credential priority: option `accessToken`, `MASTRA_KNOWLEDGE_ACCESS_TOKEN` (a Knowledge-only token, used when set and non-empty), `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PLATFORM_SECRET_KEY`.
 - The server checks that the instance belongs to the credential's organization and, for project-bound tokens, its project; it allowlists page-store operations and never accepts a connection string from the caller.
 - Hosted Knowledge requires a core and PostgreSQL adapter release implementing the Knowledge pages-v4 contract; production release alignment remains pending.
 

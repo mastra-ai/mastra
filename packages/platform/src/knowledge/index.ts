@@ -201,8 +201,8 @@ const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
-    // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is the Knowledge-only token Platform deploys get with their
-    // instance, even with Platform observability off; it's narrower than the general token.
+    // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is a Knowledge-only credential, narrower than the general
+    // Platform token, so it's preferred when set.
     const token =
       options.accessToken ??
       (process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN?.trim() || undefined) ??

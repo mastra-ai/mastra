@@ -253,10 +253,10 @@ it("authenticates with the deploy's Knowledge-only token before the general Plat
     for (const key of keys) delete process.env[key];
     const list = async (options = {}) =>
       (await new PlatformKnowledge({ instanceId: 'kn_1', ...options }).getStorage()).listPages({ read: 'all' });
-    // A deploy with Platform observability off gets only the Knowledge token.
+    // Only the Knowledge token is set.
     process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN = 'knowledge-token';
     await list();
-    // With observability on it gets both; the narrower one is used.
+    // Both are set; the narrower one is used.
     process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'platform-token';
     await list();
     // An explicit token still wins.
