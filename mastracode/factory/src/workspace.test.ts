@@ -1405,6 +1405,16 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
   });
 
+  it('passes the session owner to the sandbox callback so the host can act as that user', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-1' }));
+  });
+
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm i' });
@@ -4536,6 +4546,7 @@ describe('factory environment sandbox context', () => {
       'sandboxId',
       'sessionId',
       'setupCommand',
+      'userId',
       'workingDirectory',
       'workspaceSetupCommand',
     ]);
@@ -4593,7 +4604,7 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
-    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand', 'userId'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });

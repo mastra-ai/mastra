@@ -654,6 +654,51 @@ describe('PlatformSandbox', () => {
   });
 
   describe('vault mode', () => {
+    it.each([
+      ['carries the acting user on every proxy request of a vault sandbox', 'user_owner', 'user_owner'],
+      ['runs a non-vault sandbox with no acting user', undefined, null],
+    ])('%s', async (_name, actingUserId, header) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const vault = actingUserId !== undefined;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_test', vault }))
+        .mockResolvedValueOnce(leaseResponse())
+        .mockResolvedValueOnce(json({ id: 'sbx_test', status: 'running', vault }))
+        .mockResolvedValueOnce(leaseResponse())
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const options = {
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        ...(actingUserId ? { actingUserId } : {}),
+        fetch: fetchMock,
+      };
+      const first = new PlatformSandbox({ ...options, webSocketFactory: fakeExecSocket({ exitCode: 0 }).factory });
+      await first._start();
+      await first.executeCommand('true');
+      const reattached = new PlatformSandbox({
+        ...options,
+        sandboxId: 'sbx_test',
+        webSocketFactory: fakeExecSocket({ exitCode: 0 }).factory,
+      });
+      await reattached._start();
+      await reattached.executeCommand('true');
+      await reattached._destroy();
+
+      const requests = fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${String(url)}`);
+      expect(requests).toEqual([
+        expect.stringMatching(/^POST .*\/sandbox$/),
+        expect.stringMatching(/^POST .*\/sandbox\/sbx_test\/exec-lease$/),
+        expect.stringMatching(/^GET .*\/sandbox\/sbx_test$/),
+        expect.stringMatching(/^POST .*\/sandbox\/sbx_test\/exec-lease$/),
+        expect.stringMatching(/^DELETE .*\/sandbox\/sbx_test$/),
+      ]);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect((init.headers as Headers).get('x-acting-user-id')).toBe(header);
+      }
+    });
+
     const create = (response: Record<string, unknown>, sandboxId?: string, ...later: Record<string, unknown>[]) => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(json(response));

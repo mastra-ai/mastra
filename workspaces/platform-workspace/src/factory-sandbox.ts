@@ -187,6 +187,9 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     return new PlatformSandbox({
       ...options,
       ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
+      // The session owner is the acting user: the proxy requires one to create
+      // and run a credential-vault sandbox, and binds the vault grant to it.
+      ...(ctx.userId ? { actingUserId: ctx.userId } : {}),
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
