@@ -170,6 +170,17 @@ describe('Settings', () => {
       expect(screen.queryByText(/view only/i)).toBeNull();
       expect(screen.queryByRole('textbox')).toBeNull();
     });
+
+    it('keeps a control inside it read-only', () => {
+      render(
+        <SettingsRow label="Project name" viewOnly>
+          <Input defaultValue="Demo Agents" />
+        </SettingsRow>,
+      );
+
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Project name' });
+      expect(input.disabled).toBe(true);
+    });
   });
 
   describe('where a row places its control', () => {

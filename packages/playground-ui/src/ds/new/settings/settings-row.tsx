@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
+import { settingsRowLabelClassName } from './settings-row-label';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
 import { cn } from '@/lib/utils';
@@ -11,7 +12,7 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   htmlFor?: string;
   children?: ReactNode;
   tone?: 'default' | 'destructive';
-  /** A setting someone can see but not change: the value shows as plain text, like any other row. */
+  /** A setting someone can see but not change: its control is disabled, but the row looks like any other. */
   viewOnly?: boolean;
   required?: boolean;
   errorMsg?: ReactNode;
@@ -33,8 +34,6 @@ const rowClassName = 'min-w-0 gap-3';
  */
 const sideRowClassName = 'sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6 sm:gap-y-3';
 const headingClassName = 'flex min-w-0 flex-col gap-px';
-/** A disabled row keeps its label color: only the control shows that it's disabled. */
-const labelClassName = 'data-disabled:text-foreground';
 /** Beside its control, the label column is as tall as a label with a one-line description, so rows with and without one match. */
 const sideHeadingClassName =
   'sm:flex-[1_1_16rem] sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
@@ -80,17 +79,13 @@ export function SettingsRow({
     <Field
       orientation={controlBelow ? 'vertical' : 'responsive'}
       invalid={Boolean(errorMsg)}
-      disabled={disabled}
+      disabled={disabled || viewOnly}
       data-slot="settings-row"
       className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldLabel
-          {...(htmlFor ? { htmlFor } : {})}
-          required={required}
-          className={cn(labelClassName, tone === 'destructive' && 'text-destructive-foreground')}
-        >
+        <FieldLabel {...(htmlFor ? { htmlFor } : {})} required={required} className={settingsRowLabelClassName(tone)}>
           {label}
         </FieldLabel>
         {description != null && (
@@ -148,7 +143,7 @@ export function SettingsFieldsetRow({
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldsetLegend className={labelClassName}>{label}</FieldsetLegend>
+        <FieldsetLegend className={settingsRowLabelClassName()}>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
             {description}

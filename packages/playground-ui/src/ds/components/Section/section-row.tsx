@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import type { FieldProps } from '@/ds/components/Field';
+import { settingsRowLabelClassName } from '@/ds/new/settings/settings-row-label';
 import { cn } from '@/lib/utils';
 
 export type SectionRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -31,7 +32,7 @@ function SectionRowBase({
     <Field
       orientation="responsive"
       invalid={Boolean(errorMsg)}
-      disabled={disabled}
+      disabled={disabled || viewOnly}
       data-slot="section-row"
       className={cn(
         'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6',
@@ -43,7 +44,7 @@ function SectionRowBase({
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
-          className={cn(destructive && 'text-destructive-foreground')}
+          className={settingsRowLabelClassName(destructive ? 'destructive' : 'default')}
         >
           {label}
         </FieldLabel>

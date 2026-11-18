@@ -63,6 +63,20 @@ describe('Section', () => {
     expect(screen.queryByText(/view only/i)).toBeNull();
   });
 
+  it('keeps a control inside a view-only row read-only', () => {
+    render(
+      <Section variant="factory">
+        <Section.Content>
+          <Section.ViewOnlyRow label="Project name">
+            <Input defaultValue="Demo Agents" />
+          </Section.ViewOnlyRow>
+        </Section.Content>
+      </Section>,
+    );
+
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Project name' }).disabled).toBe(true);
+  });
+
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {
     render(
       <div>
