@@ -118,6 +118,7 @@ class LocalProcessHandle extends ProcessHandle {
     startTime: number,
     options?: SpawnProcessOptions,
     outputEncoding = 'utf-8',
+    killGraceMs = TIMEOUT_KILL_GRACE_MS,
   ) {
     super(options);
     this.pid = String(pid);
@@ -145,8 +146,8 @@ class LocalProcessHandle extends ProcessHandle {
             releaseTimeoutId = setTimeout(() => {
               subprocess.stdout?.destroy();
               subprocess.stderr?.destroy();
-            }, TIMEOUT_KILL_GRACE_MS);
-          }, TIMEOUT_KILL_GRACE_MS);
+            }, killGraceMs);
+          }, killGraceMs);
         }, options.timeout)
       : undefined;
     const clearTimers = () => {
@@ -332,16 +333,27 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
 export interface LocalProcessManagerOptions extends ProcessManagerOptions {
   /** Encoding used to decode child stdout/stderr (any WHATWG encoding label). Default: 'utf-8'. */
   outputEncoding?: string;
+  /**
+   * Grace period, in milliseconds, a timed-out process tree gets to exit after SIGTERM
+   * before it is sent SIGKILL. Default: 2000.
+   */
+  killGraceMs?: number;
 }
 
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   private readonly outputEncoding: string;
+  private readonly killGraceMs: number;
 
-  constructor({ outputEncoding = 'utf-8', ...options }: LocalProcessManagerOptions = {}) {
+  constructor({
+    outputEncoding = 'utf-8',
+    killGraceMs = TIMEOUT_KILL_GRACE_MS,
+    ...options
+  }: LocalProcessManagerOptions = {}) {
     super(options);
     // Fail fast on unsupported labels (e.g. Node builds without full ICU).
     new TextDecoder(outputEncoding);
     this.outputEncoding = outputEncoding;
+    this.killGraceMs = killGraceMs;
   }
 
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
@@ -458,7 +470,14 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       throw new Error(result.message || 'Process failed to spawn');
     }
 
-    const handle = new LocalProcessHandle(subprocess, subprocess.pid, Date.now(), options, this.outputEncoding);
+    const handle = new LocalProcessHandle(
+      subprocess,
+      subprocess.pid,
+      Date.now(),
+      options,
+      this.outputEncoding,
+      this.killGraceMs,
+    );
     this._tracked.set(handle.pid, handle);
     return handle;
   }

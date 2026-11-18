@@ -118,6 +118,11 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    */
   timeout?: number;
   /**
+   * Grace period, in milliseconds, a timed-out process tree gets to exit after SIGTERM
+   * before it is sent SIGKILL. Default: 2000.
+   */
+  killGraceMs?: number;
+  /**
    * Isolation backend for sandboxed execution.
    * - 'none': No sandboxing (direct execution on host) - default
    * - 'seatbelt': macOS sandbox-exec (built-in on macOS)
@@ -197,6 +202,7 @@ export class LocalSandbox extends MastraSandbox<string> {
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
   private readonly _outputEncoding?: string;
+  private readonly _killGraceMs?: number;
   private readonly timeout: number;
   private _nativeSandboxConfig: NativeSandboxConfig;
   /**
@@ -250,7 +256,11 @@ export class LocalSandbox extends MastraSandbox<string> {
     super({
       ...options,
       name: 'LocalSandbox',
-      processes: new LocalProcessManager({ env: options.env ?? {}, outputEncoding: options.outputEncoding }),
+      processes: new LocalProcessManager({
+        env: options.env ?? {},
+        outputEncoding: options.outputEncoding,
+        killGraceMs: options.killGraceMs,
+      }),
     });
 
     this.timeout = options.timeout ?? 30_000;
@@ -261,6 +271,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
     this._outputEncoding = options.outputEncoding;
+    this._killGraceMs = options.killGraceMs;
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,
       readWritePaths: [...(options.nativeSandbox?.readWritePaths ?? [])],
@@ -298,6 +309,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       timeout: this.timeout,
       isolation: this.isolation,
       outputEncoding: this._outputEncoding,
+      ...(this._killGraceMs !== undefined && { killGraceMs: this._killGraceMs }),
       nativeSandbox: {
         ...this._nativeSandboxConfig,
         readWritePaths: [...this._initialReadWritePaths],

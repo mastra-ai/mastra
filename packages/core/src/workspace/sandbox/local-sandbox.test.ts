@@ -315,6 +315,14 @@ describe('LocalSandbox', () => {
       const child = template.clone({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
       expect(child.id).toBe('local-child');
     });
+
+    it('passes killGraceMs to the process manager and preserves it when cloned', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, killGraceMs: 250 });
+      expect((template.processes as unknown as { killGraceMs: number }).killGraceMs).toBe(250);
+
+      const child = template.clone();
+      expect((child.processes as unknown as { killGraceMs: number }).killGraceMs).toBe(250);
+    });
   });
 
   // ===========================================================================

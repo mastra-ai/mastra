@@ -95,6 +95,26 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
     expect(await waitForExit(Number(handle.pid))).toBe(true);
   });
 
+  it('honors a configured kill grace before escalating to SIGKILL', async () => {
+    // With the default 2000ms grace this process would take ~4s to die; a short grace
+    // must escalate well before that, so the assertion separates the two.
+    const fast = new LocalSandbox({ workingDirectory, killGraceMs: 100 });
+    try {
+      const handle = await fast.processes.spawn(
+        `exec ${script(`${IGNORE_TERM} console.log('READY'); ${STAY_ALIVE}`)}`,
+        { timeout: STARTUP_SAFE_TIMEOUT },
+      );
+
+      const result = await handle.wait();
+
+      expect(result).toMatchObject({ exitCode: 124, timedOut: true, killed: true });
+      expect(result.executionTimeMs).toBeLessThan(STARTUP_SAFE_TIMEOUT + 1_000);
+      expect(await waitForExit(Number(handle.pid))).toBe(true);
+    } finally {
+      await fast.destroy();
+    }
+  });
+
   it('kills a descendant that ignores SIGTERM and holds stdout after the shell exits', async () => {
     // The shell exits on SIGTERM; the background child keeps the stdout pipe open.
     const child = script(`${IGNORE_TERM} console.log('CHILD ' + process.pid); ${STAY_ALIVE}`);
