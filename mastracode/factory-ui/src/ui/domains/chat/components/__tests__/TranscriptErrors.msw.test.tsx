@@ -94,7 +94,7 @@ function ErrorSession({
             busy: false,
             phase: 'awaiting',
             initializing: false,
-            historyInitializing: false,
+            loadingHistory: false,
             initialHistoryReady: true,
             localUser,
             failLocalUser,

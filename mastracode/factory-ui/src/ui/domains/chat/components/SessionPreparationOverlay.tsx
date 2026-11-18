@@ -1,11 +1,10 @@
-import { SessionPrepareSteps } from './SessionPrepareSteps';
+import { TranscriptLoading } from './TranscriptLoading';
 
 interface SessionPreparationOverlayProps {
-  historyInitializing: boolean;
   preparing: boolean;
 }
 
-export function SessionPreparationOverlay({ historyInitializing, preparing }: SessionPreparationOverlayProps) {
+export function SessionPreparationOverlay({ preparing }: SessionPreparationOverlayProps) {
   return (
     <div
       aria-hidden={!preparing}
@@ -14,7 +13,8 @@ export function SessionPreparationOverlay({ historyInitializing, preparing }: Se
     >
       <div aria-hidden="true" className="session-preparation-veil absolute inset-x-0 opacity-0" />
       <div className="session-preparation-loader invisible absolute inset-0 z-1 flex -translate-y-1 bg-(--chat-surface) opacity-0">
-        <SessionPrepareSteps finishing={!preparing} historyInitializing={historyInitializing} />
+        {/* Stays mounted through the exit fade; `aria-hidden` above drops it from the accessibility tree. */}
+        <TranscriptLoading />
       </div>
     </div>
   );
