@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function ImportersScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-46,19.4Q-46,17.7 -44,16.7L24.6,-17.6Q26.5,-18.6 28.5,-17.6L67,1.7Q69,2.7 69,4.4L69,4.7Q69,6.4 67,7.4L-1.6,41.7Q-3.5,42.6 -5.5,41.7L-44,22.4Q-46,21.4 -46,19.7Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="13.7" cy="10.1" r="55.9">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-41.6,17.7C-41.3,14.4 -28,10.9 -21.1,7.4C-14.2,3.9 -7.1,-0.9 -0.5,-3.2C6.2,-5.5 12.3,-5.5 18.6,-6.5C25,-7.6 33.8,-9.1 37.6,-9.4C41.3,-9.8 39.7,-8.7 40.8,-8.4C41.9,-8 42.8,-7.9 44.1,-7.4C45.4,-6.8 47.2,-5.8 48.8,-5C50.3,-4.2 53.3,-4.7 53.4,-2.6C53.4,-0.5 50.5,4.2 49,7.7C47.5,11.1 48.8,14.6 44.6,18.1C40.3,21.6 30.7,25.2 23.7,28.7C16.7,32.2 6.7,37.4 2.7,39C-1.4,40.5 0.5,38.3 -0.6,37.9C-1.7,37.6 -0.2,38.7 -3.9,36.9C-7.6,35.1 -16.5,30.5 -22.8,27.3C-29.1,24.1 -41.9,21.1 -41.6,17.7Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M33.6,-62.2Q33.6,-64.4 35.2,-65.2L35.5,-65.4Q37.1,-66.2 38.7,-65.4L39.1,-65.2Q40.7,-64.4 40.7,-62.2L40.7,-6.6Q40.7,-4.4 39.1,-3.6L38.7,-3.5Q37.1,-2.7 35.5,-3.5L35.2,-3.6Q33.6,-4.4 33.6,-6.6Z"
         fill="var(--face)"

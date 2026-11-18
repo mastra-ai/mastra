@@ -12,6 +12,9 @@
       .card{--accent-ink:var(--accent)}
       .stage[data-theme=light] .card{--accent-ink:color-mix(in oklab,var(--accent) 72%,black)}
       .card .cart{--accent:var(--cart);--accent-ink:var(--cart)}
+      .card .brand{--accent:var(--brand);--accent-ink:var(--brand)}
+      .stage[data-theme=light] .card .brand{--accent-ink:color-mix(in oklab,var(--brand) 62%,black)}
+      .card[data-tone=error] .brand{--accent:#FF4758;--accent-ink:#FF4758}
       .stage[data-theme=light] .card .cart{--accent-ink:color-mix(in oklab,var(--cart) 62%,black)}
       .card[data-tone=error] .cart{--accent:#FF4758;--accent-ink:#FF4758}
       .stage[data-theme=light]{--background:#FAFAFA;--card:#FFFFFF;--fg:#171717;--muted:#5E5E5E;--subtle:#8A8A8A;--hairline:rgb(0 0 0/9%);--btn:#171717;--btn-ink:#FFFFFF}
@@ -380,7 +383,7 @@
         ['upgrade', 'Sorter', 'Trace Intelligence and its upgrade state', 'pink'],
         ['memory', 'Message rack', 'Memory instances, threads', 'orange'],
         ['api-keys', 'Key cabinet', 'Org and Gateway API keys', 'yellow'],
-        ['connect', 'Plug and socket', 'Connect, shared connections', 'blue'],
+        ['connect', 'Switchboard', 'Mastra Connect, shared connections', 'blue'],
         ['databases', 'Database stack', 'Databases', 'green'],
         ['alerts', 'Phone', 'Alerts and its upgrade state', 'orange'],
         ['deploys', 'Loading dock', 'Deploys', 'purple'],

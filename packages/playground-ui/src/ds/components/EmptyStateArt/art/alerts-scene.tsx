@@ -3,15 +3,25 @@ import type { SceneProps } from './scene-style';
 export function AlertsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-23,6.1Q-23,4.4 -21,3.4L3.3,-8.7Q5.3,-9.7 7.3,-8.7L44,9.6Q46,10.6 46,12.3L46,12.7Q46,14.4 44,15.3L19.6,27.5Q17.7,28.5 15.7,27.5L-21,9.2Q-23,8.2 -23,6.5Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="6.7" cy="3.9" r="40.6">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-14.2,1.2C-17,-0.4 -13.4,0.8 -13.1,0.6C-12.7,0.4 -12.6,0.4 -11.9,0C-11.2,-0.3 -10,-0.9 -9.1,-1.4C-8.1,-1.9 -7.5,-2.3 -6.2,-2.9C-4.9,-3.6 -3.1,-4.5 -1.5,-5.4C0.1,-6.2 1.9,-7.5 3.3,-7.8C4.6,-8 5.5,-7.1 6.6,-6.8C7.8,-6.5 6.4,-7.6 10,-5.8C13.7,-4.1 22.4,0.5 28.5,3.6C34.5,6.7 44.8,10.5 46.3,12.7C47.9,15 40.6,15.7 37.7,17.1C34.8,18.6 31,21 29.1,21.6C27.1,22.2 26.9,20.9 25.8,20.6C24.7,20.3 26.2,21.3 22.5,19.6C18.8,18 9.9,13.7 3.8,10.7C-2.3,7.6 -11.4,2.9 -14.2,1.2Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-5.7,-3.2Q-5.7,-6.1 -3,-7.4L0.9,-9.3Q3.5,-10.7 6.2,-9.3L30.9,3Q33.6,4.4 33.6,7.2L33.6,7.8Q33.6,10.6 30.9,11.9L27.1,13.9Q24.4,15.2 21.7,13.9L-3,1.5Q-5.7,0.2 -5.7,-2.7Z"
         fill="var(--face)"
@@ -44,6 +54,7 @@ export function AlertsScene({ id }: SceneProps) {
         fill="var(--line)"
         stroke="none"
       />
+      <circle cx="14.1" cy="-50.9" r="0.75" fill="var(--line)" />
       <path
         d="M24.2,-31.5Q24.2,-29.9 23.4,-29.5L23.3,-29.4Q22.5,-29 22.5,-30.6L22.5,-36.1Q22.5,-37.7 23.3,-38.1L23.4,-38.2Q24.2,-38.6 24.2,-37Z"
         fill="var(--face)"

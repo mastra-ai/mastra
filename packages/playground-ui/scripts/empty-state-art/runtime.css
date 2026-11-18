@@ -42,7 +42,7 @@
 [data-slot='empty-state-art'][data-state='failed'] .fail {
   display: inline;
 }
-[data-slot='empty-state-art'][data-state='failed'] .cart {
+[data-slot='empty-state-art'][data-state='failed'] :is(.cart, .brand) {
   --art-hue: var(--color-destructive-indicator) !important;
 }
 [data-slot='empty-state-art'][data-state='failed'] .okonly {
@@ -504,7 +504,9 @@
       .filein,
       .mbfly,
       .mbin,
-      .mbflag
+      .mbflag,
+      .sb-cloth,
+      .sb-mark
     ) {
     animation: none !important;
   }
@@ -518,4 +520,10 @@
 }
 .light [data-slot='empty-state-art'] .cart {
   --art-hue: color-mix(in oklab, var(--cart) 62%, black);
+}
+[data-slot='empty-state-art'] .brand {
+  --art-hue: var(--brand);
+}
+.light [data-slot='empty-state-art'] .brand {
+  --art-hue: color-mix(in oklab, var(--brand) 62%, black);
 }

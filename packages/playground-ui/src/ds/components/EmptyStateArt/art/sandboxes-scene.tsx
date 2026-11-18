@@ -1,17 +1,27 @@
 import type { SceneProps } from './scene-style';
 
-export function SandboxesScene(_props: SceneProps) {
+export function SandboxesScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-72.5,33.5Q-72.5,31.8 -70.5,30.8L-2,-3.4Q0,-4.4 2,-3.4L70.5,30.8Q72.5,31.8 72.5,33.5L72.5,33.9Q72.5,35.6 70.5,36.6L2,70.8Q0,71.8 -2,70.8L-70.5,36.6Q-72.5,35.6 -72.5,33.9Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="-7" cy="35.4" r="83.4">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-69.9,31.8C-69.9,31 -67,30.3 -65.5,29.5C-64,28.8 -66.9,30.3 -61.1,27.3C-55.3,24.4 -40.9,17 -30.7,11.9C-20.5,6.8 -5.6,-1 0.1,-3.4C5.7,-5.8 2.3,-2.8 3.4,-2.4C4.5,-2.1 0.3,-4.5 6.7,-1.4C13.1,1.7 30.1,10.4 41.7,16.3C53.3,22.1 71.4,30.5 76.4,33.8C81.5,37.1 73.5,35.3 72,36C70.5,36.8 73.3,35.3 67.6,38.3C61.8,41.2 47.4,48.5 37.3,53.6C27.1,58.7 12.3,66.6 6.7,69C1,71.5 4.5,68.4 3.4,68.1C2.3,67.7 0.9,67.4 0.1,67.1C-0.7,66.8 -1,66.5 -1.5,66.3C-2.1,66 2,68.1 -3.2,65.5C-8.3,62.9 -22.7,55.7 -32.4,50.8C-42,46 -55.5,39 -61.1,36.2C-66.6,33.4 -64,34.8 -65.5,34C-67,33.3 -69.9,32.5 -69.9,31.8Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-63.6,22.8Q-63.6,20.6 -61.7,19.6L-2,-10.3Q0,-11.3 1.4,-10.5L1.7,-10.4Q3.2,-9.7 3.2,-7.5L3.2,-0.6Q3.2,1.6 1.2,2.6L-58.5,32.4Q-60.5,33.4 -61.9,32.7L-62.2,32.5Q-63.6,31.8 -63.6,29.6Z"
         fill="var(--face)"
@@ -834,6 +844,32 @@ export function SandboxesScene(_props: SceneProps) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      <path
+        d="M-28.3,49.5L-28.3,43.9M-44.2,35.9L-44.2,30.3"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d="M37.1,45.1L37.1,39.5M19.4,48.3L19.4,42.7"
+        fill="none"
+        stroke="var(--detail)"
+        strokeWidth="1"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx="-29.5" cy="46.1" r="0.32" fill="var(--line)" />
+      <circle cx="-27.1" cy="47.3" r="0.32" fill="var(--line)" />
+      <circle cx="-45.4" cy="32.5" r="0.32" fill="var(--line)" />
+      <circle cx="-43" cy="33.7" r="0.32" fill="var(--line)" />
+      <circle cx="38.4" cy="41.7" r="0.32" fill="var(--line)" />
+      <circle cx="35.9" cy="42.9" r="0.32" fill="var(--line)" />
+      <circle cx="20.7" cy="44.9" r="0.32" fill="var(--line)" />
+      <circle cx="18.2" cy="46.1" r="0.32" fill="var(--line)" />
       <path
         d="M-65.4,19.7Q-65.4,19.1 -64.9,18.8L-60.6,16.7Q-60.1,16.4 -59.6,16.7L0.2,46.6Q0.7,46.8 0.7,47.4L0.7,47.7Q0.7,48.3 0.2,48.6L-4.1,50.7Q-4.6,51 -5.1,50.7L-64.9,20.8Q-65.4,20.6 -65.4,20Z"
         fill="var(--face)"

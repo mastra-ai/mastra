@@ -3,15 +3,25 @@ import type { SceneProps } from './scene-style';
 export function FilesystemsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-35.4,12.3Q-35.4,10.6 -33.4,9.6L-2,-6.1Q0,-7.1 2,-6.1L47.5,16.7Q49.5,17.7 49.5,19.4L49.5,19.7Q49.5,21.4 47.5,22.4L16.1,38.1Q14.1,39.1 12.2,38.1L-33.4,15.3Q-35.4,14.4 -35.4,12.7Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="9.7" cy="16.2" r="38.6">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-27.5,10.5C-28.6,7.6 -18.5,5.9 -14,3.6C-9.4,1.3 -3.2,-2.3 -0.3,-3.3C2.5,-4.3 1.9,-2.7 3,-2.4C4.1,-2 2.2,-3.3 6.3,-1.4C10.4,0.5 20.6,5.6 27.5,9.1C34.5,12.7 46.3,17.1 48.1,19.7C50,22.3 41.7,23 38.5,24.6C35.3,26.3 31.2,28.4 28.9,29.6C26.6,30.8 26.2,31 24.9,31.6C23.6,32.3 22.1,33.5 20.9,33.7C19.7,33.8 18.7,33 17.6,32.7C16.4,32.4 18.3,33.7 14.2,31.7C10.1,29.8 0,24.5 -7,21C-13.9,17.4 -26.3,13.4 -27.5,10.5Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-21.2,9.2Q-21.2,8.1 -19.4,7.2L-1.8,-1.6Q0,-2.5 1.8,-1.6L33.6,14.3Q35.4,15.2 35.4,16.3L35.4,16.5Q35.4,17.7 33.6,18.6L15.9,27.4Q14.1,28.3 12.4,27.4L-19.4,11.5Q-21.2,10.6 -21.2,9.5Z"
         fill="var(--face)"

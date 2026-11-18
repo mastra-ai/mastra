@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function VaultScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-38.9,15.8Q-38.9,14.1 -36.9,13.2L1.6,-6.1Q3.5,-7.1 5.5,-6.1L70.5,26.4Q72.5,27.4 72.5,29.1L72.5,29.4Q72.5,31.2 70.5,32.1L32,51.4Q30.1,52.4 28.1,51.4L-36.9,18.9Q-38.9,17.9 -38.9,16.2Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="28.7" cy="27.6" r="63.1">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-32.8,13.1C-33.5,9.6 -22,7.7 -16.6,5C-11.2,2.2 -3.7,-2 -0.4,-3.2C2.8,-4.5 1.7,-2.6 2.8,-2.3C3.9,-1.9 0.8,-3.2 6.1,-1.3C11.4,0.6 25,5.5 34.4,9C43.9,12.5 56.8,17.4 62.8,19.8C68.7,22.2 67.6,22.3 70,23.5C72.5,24.7 77.4,25.5 77.3,27.2C77.2,28.9 72.1,31.6 69.5,33.8C66.9,36 63.2,39.2 61.7,40.5C60.3,41.7 61.1,40.9 60.7,41.2C60.4,41.4 60.1,41.7 59.7,41.9C59.3,42.1 58.8,42.2 58.4,42.4C57.9,42.5 59.5,42.3 57,42.9C54.5,43.5 47.9,44.9 43.3,45.9C38.7,46.8 32.3,48.4 29.4,48.7C26.5,49 27.2,48.1 26.1,47.7C24.9,47.4 24.5,47.5 22.7,46.7C20.9,45.9 17.7,44.2 15.3,42.9C12.8,41.7 12.6,41.9 7.9,39.1C3.3,36.3 -5.7,30.4 -12.4,26C-19.2,21.7 -32.1,16.6 -32.8,13.1Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-3.5,1.4Q-3.5,0.4 -2.6,0L-0.9,-0.9Q0,-1.4 0.9,-0.9L2.6,0Q3.5,0.4 3.5,1.4L3.5,2.5Q3.5,3.5 2.6,4L0.9,4.9Q0,5.3 -0.9,4.9L-2.6,4Q-3.5,3.5 -3.5,2.5Z"
         fill="var(--face)"
@@ -76,6 +86,14 @@ export function VaultScene({ id }: SceneProps) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      <circle cx="-23.9" cy="9" r="0.42" fill="var(--line)" />
+      <circle cx="-19.1" cy="11.3" r="0.42" fill="var(--line)" />
+      <circle cx="-14.3" cy="13.7" r="0.42" fill="var(--line)" />
+      <circle cx="-9.5" cy="16.1" r="0.42" fill="var(--line)" />
+      <circle cx="-4.8" cy="18.5" r="0.42" fill="var(--line)" />
+      <circle cx="-23.9" cy="-31" r="0.42" fill="var(--line)" />
+      <circle cx="-19.1" cy="-28.7" r="0.42" fill="var(--line)" />
+      <circle cx="-14.3" cy="-26.3" r="0.42" fill="var(--line)" />
       <g transform="matrix(0.884,0.442,0,1.25,-16.4,-7.3)">
         <circle
           r="10.4"
@@ -184,9 +202,9 @@ export function VaultScene({ id }: SceneProps) {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
-      <g transform="matrix(0.884,0.442,0,1.25,-5,-15.3)">
+      <g transform="matrix(0.884,0.442,0,1.25,-4.8,-17)">
         <circle
-          r="6"
+          r="5.2"
           fill="var(--face)"
           stroke="var(--line)"
           strokeWidth="1"
@@ -195,7 +213,7 @@ export function VaultScene({ id }: SceneProps) {
           vectorEffect="non-scaling-stroke"
         />
         <circle
-          r="4.4"
+          r="3.6"
           fill="var(--hole)"
           stroke="var(--line)"
           strokeWidth="1"
@@ -205,9 +223,9 @@ export function VaultScene({ id }: SceneProps) {
         />
       </g>
       <g className="acc">
-        <g transform="matrix(0.884,0.442,0,1.25,-5,-15.3)">
+        <g transform="matrix(0.884,0.442,0,1.25,-4.9,-16.9)">
           <circle
-            r="2.6"
+            r="2.2"
             fill="none"
             stroke="var(--line)"
             strokeWidth="1"
@@ -215,8 +233,8 @@ export function VaultScene({ id }: SceneProps) {
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
-          <circle r="1.1" fill="var(--line)" />
-          <circle cx="1.5" cy="-1.5" r=".45" fill="var(--line)" />
+          <circle r="0.9" fill="var(--line)" />
+          <circle cx="1.2" cy="-1.2" r=".45" fill="var(--line)" />
         </g>
       </g>
       <path
@@ -345,13 +363,13 @@ export function VaultScene({ id }: SceneProps) {
           <circle r="2.6" fill="var(--packet)" />
         </g>
         <clipPath id={`${id}-vt-scan-c`}>
-          <path d="M-9,-17.2L-8.9,-18.2L-8.7,-19.2L-8.3,-19.9L-7.8,-20.5L-7.2,-20.9L-6.6,-21.1L-5.8,-21L-5.1,-20.8L-4.3,-20.3L-3.6,-19.6L-2.9,-18.8L-2.3,-17.8L-1.8,-16.7L-1.5,-15.6L-1.3,-14.4L-1.2,-13.3L-1.3,-12.3L-1.5,-11.4L-1.8,-10.6L-2.3,-10L-2.9,-9.6L-3.6,-9.4L-4.3,-9.5L-5.1,-9.8L-5.8,-10.2L-6.6,-10.9L-7.2,-11.8L-7.8,-12.7L-8.3,-13.8L-8.7,-15L-8.9,-16.1Z" />
+          <path d="M-8.1,-18.5L-8,-19.4L-7.8,-20.1L-7.6,-20.7L-7.2,-21.2L-6.7,-21.6L-6.1,-21.7L-5.5,-21.6L-4.9,-21.4L-4.3,-21L-3.7,-20.5L-3.1,-19.8L-2.7,-19L-2.3,-18.1L-2,-17.2L-1.8,-16.2L-1.7,-15.3L-1.8,-14.5L-2,-13.7L-2.3,-13.1L-2.7,-12.6L-3.1,-12.3L-3.7,-12.2L-4.3,-12.2L-4.9,-12.4L-5.5,-12.8L-6.1,-13.4L-6.7,-14.1L-7.2,-14.9L-7.6,-15.7L-7.8,-16.7L-8,-17.6Z" />
         </clipPath>
         <g clipPath={`url(#${id}-vt-scan-c)`}>
           <g className="fx fx-vt-scan">
             <g className="acc">
               <path
-                d="M-9,-22.7L-1.2,-18.8"
+                d="M-8.1,-23L-1.8,-19.8"
                 fill="none"
                 stroke="var(--line)"
                 strokeWidth="1"
@@ -500,13 +518,13 @@ export function VaultScene({ id }: SceneProps) {
           vectorEffect="non-scaling-stroke"
         />
         <clipPath id={`${id}-vt-scan2-c`}>
-          <path d="M-9,-17.2L-8.9,-18.2L-8.7,-19.2L-8.3,-19.9L-7.8,-20.5L-7.2,-20.9L-6.6,-21.1L-5.8,-21L-5.1,-20.8L-4.3,-20.3L-3.6,-19.6L-2.9,-18.8L-2.3,-17.8L-1.8,-16.7L-1.5,-15.6L-1.3,-14.4L-1.2,-13.3L-1.3,-12.3L-1.5,-11.4L-1.8,-10.6L-2.3,-10L-2.9,-9.6L-3.6,-9.4L-4.3,-9.5L-5.1,-9.8L-5.8,-10.2L-6.6,-10.9L-7.2,-11.8L-7.8,-12.7L-8.3,-13.8L-8.7,-15L-8.9,-16.1Z" />
+          <path d="M-8.1,-18.5L-8,-19.4L-7.8,-20.1L-7.6,-20.7L-7.2,-21.2L-6.7,-21.6L-6.1,-21.7L-5.5,-21.6L-4.9,-21.4L-4.3,-21L-3.7,-20.5L-3.1,-19.8L-2.7,-19L-2.3,-18.1L-2,-17.2L-1.8,-16.2L-1.7,-15.3L-1.8,-14.5L-2,-13.7L-2.3,-13.1L-2.7,-12.6L-3.1,-12.3L-3.7,-12.2L-4.3,-12.2L-4.9,-12.4L-5.5,-12.8L-6.1,-13.4L-6.7,-14.1L-7.2,-14.9L-7.6,-15.7L-7.8,-16.7L-8,-17.6Z" />
         </clipPath>
         <g clipPath={`url(#${id}-vt-scan2-c)`}>
           <g className="fx fx-vt-scan2">
             <g className="acc">
               <path
-                d="M-9,-22.7L-1.2,-18.8"
+                d="M-8.1,-23L-1.8,-19.8"
                 fill="none"
                 stroke="var(--line)"
                 strokeWidth="1"

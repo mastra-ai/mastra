@@ -3,15 +3,25 @@ import type { SceneProps } from './scene-style';
 export function LicenseScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-47.7,11.4Q-47.7,9.7 -45.8,8.7L-10.8,-8.7Q-8.8,-9.7 -6.9,-8.7L56.4,22.9Q58.3,23.9 58.3,25.6L58.3,25.9Q58.3,27.6 56.4,28.6L21.4,46.1Q19.4,47.1 17.5,46.1L-45.8,14.5Q-47.7,13.5 -47.7,11.8Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="13.7" cy="20.6" r="48.7">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-34.5,14.1C-35.1,10.9 -23.2,8.3 -17.5,5.4C-11.8,2.5 -3.8,-2 -0.3,-3.3C3.1,-4.6 1.8,-2.7 2.9,-2.3C4,-2 2.2,-3.3 6.2,-1.4C10.3,0.5 20.4,5.5 27.4,9C34.4,12.5 43.8,17 48.1,19.6C52.5,22.3 51.7,23.2 53.4,25C55.2,26.8 59.6,28.6 58.7,30.4C57.8,32.2 51.5,34.1 47.9,35.9C44.3,37.8 40.7,40.9 37,41.5C33.2,42.1 29.2,40.1 25.3,39.4C21.4,38.7 16,37.8 13.4,37.2C10.9,36.7 11.2,36.5 10.1,36.2C8.9,35.8 10.7,37.1 6.7,35.1C2.7,33.2 -7.2,28 -14,24.5C-20.9,20.9 -34,17.2 -34.5,14.1Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-28.3,6.3Q-28.3,4.1 -26.3,3.2L-2,-9Q0,-10 2,-9L33.4,6.7Q35.4,7.7 35.4,9.9L35.4,15.5Q35.4,17.7 33.4,18.7L9,30.8Q7.1,31.8 5.1,30.8L-26.3,15.1Q-28.3,14.1 -28.3,11.9Z"
         fill="var(--face)"
