@@ -15,7 +15,11 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createFileInputSchema = z.object({
-  project_id: z.union([z.number(), z.string()]).describe('Project ID or URL-encoded path. Example: 82599306'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   file_path: z.string().describe('Full path to the new file. Example: "hello.txt"'),
   branch: z.string().describe('Name of the branch to create the file in. Example: "main"'),
   commit_message: z.string().describe('Commit message for the file creation.'),

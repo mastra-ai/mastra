@@ -17,7 +17,9 @@ function gitlabPathSegment(value: string | number): string {
 export const getPipelineInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
-    .describe('The ID or URL-encoded path of the project. Example: 82599306'),
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   pipeline_id: z.number().describe('The ID of the pipeline. Example: 287'),
 });
 

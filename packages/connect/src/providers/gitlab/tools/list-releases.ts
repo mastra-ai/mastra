@@ -17,7 +17,9 @@ function gitlabPathSegment(value: string | number): string {
 export const listReleasesInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
-    .describe('The ID or URL-encoded path of the project. Example: "82599306" or "group%2Fproject"'),
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   cursor: z
     .string()
     .optional()

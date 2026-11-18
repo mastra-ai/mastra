@@ -17,7 +17,9 @@ function gitlabPathSegment(value: string | number): string {
 export const updateReleaseInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
-    .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   tag_name: z.string().describe('The Git tag the release is associated with. Example: "v1.0.0"'),
   name: z.string().optional().describe('The release name.'),
   description: z.string().optional().describe('The description of the release. You can use Markdown.'),

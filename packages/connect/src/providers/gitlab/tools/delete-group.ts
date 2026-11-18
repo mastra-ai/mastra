@@ -45,7 +45,7 @@ export function deleteGroupTool(proxy: PlatformProxy) {
   return createTool({
     id: 'gitlab_delete_group',
     description:
-      'Schedule a group for deletion in GitLab. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
+      'Schedule a group for deletion in GitLab. Pass the numeric group id: GitLab renames the group when it schedules deletion, so a path stops working. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously.',
     inputSchema: deleteGroupInputSchema,
     outputSchema: deleteGroupOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGroupOutputSchema>> => {

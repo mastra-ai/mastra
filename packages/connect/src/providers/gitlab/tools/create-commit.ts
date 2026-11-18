@@ -28,7 +28,9 @@ export const createCommitInputSchema = z
   .object({
     project_id: z
       .union([z.number(), z.string()])
-      .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+      .describe(
+        'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+      ),
     branch: z.string().describe('Name of the branch to commit into. Example: "feature/test"'),
     commit_message: z.string().describe('Commit message. Example: "Add new feature"'),
     actions: z.array(CommitActionSchema).optional().describe('Array of file actions to perform in this commit'),

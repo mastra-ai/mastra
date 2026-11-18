@@ -258,7 +258,7 @@ describe('generated GitLab tools', () => {
 
       await expect(run('gitlab_delete_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
 
-      expect(requests).toHaveLength(1);
+      expect(requests).toEqual([{ method: 'DELETE', target: '/api/v4/projects/42/repository/branches/feature' }]);
     });
 
     it('does not replay a file update after a transient 5xx', async () => {
@@ -274,7 +274,7 @@ describe('generated GitLab tools', () => {
         }),
       ).rejects.toThrow();
 
-      expect(requests).toHaveLength(1);
+      expect(requests).toEqual([{ method: 'PUT', target: '/api/v4/projects/42/repository/files/a.txt' }]);
     });
 
     it('still retries reads after a transient 5xx', async () => {

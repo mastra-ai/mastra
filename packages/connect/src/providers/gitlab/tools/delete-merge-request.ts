@@ -17,7 +17,9 @@ function gitlabPathSegment(value: string | number): string {
 export const deleteMergeRequestInputSchema = z.object({
   project_id: z
     .union([z.number(), z.string()])
-    .describe('The ID of the project containing the merge request. Example: 82599306'),
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   merge_request_iid: z.number().describe('The internal ID of the merge request. Example: 1'),
 });
 

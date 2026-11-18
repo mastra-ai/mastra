@@ -2,7 +2,7 @@
 '@mastra/connect': minor
 ---
 
-Added a GitLab toolset with 44 tools. Agents can manage projects, groups, issues, merge requests, branches, files, commits, and releases, and create, cancel, and retry pipelines and jobs.
+Added a GitLab toolset with 44 tools. Agents can manage projects, groups, issues, merge requests, branches, files, commits, and releases, create and cancel pipelines, and retry jobs.
 
 Connect a GitLab account to your project first (`mastra connect add gitlab`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
 

@@ -15,7 +15,11 @@ function gitlabPathSegment(value: string | number): string {
 }
 
 export const createIssueInputSchema = z.object({
-  project_id: z.union([z.number(), z.string()]).describe('The global ID of the project. Example: 82599306'),
+  project_id: z
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   title: z.string().describe('The title of the issue.'),
   description: z.string().optional().describe('The description of an issue.'),
   labels: z.string().optional().describe('Comma-separated label names to assign to the new issue.'),

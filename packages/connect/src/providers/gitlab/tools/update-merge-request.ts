@@ -17,8 +17,10 @@ function gitlabPathSegment(value: string | number): string {
 export const updateMergeRequestInputSchema = z
   .object({
     project_id: z
-      .union([z.string(), z.number()])
-      .describe('The ID or URL-encoded path of the project. Example: 82599306'),
+      .union([z.number(), z.string()])
+      .describe(
+        'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+      ),
     merge_request_iid: z.number().describe('The internal ID of the merge request. Example: 1'),
     add_labels: z.string().optional(),
     allow_collaboration: z.boolean().optional(),

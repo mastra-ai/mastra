@@ -16,8 +16,10 @@ function gitlabPathSegment(value: string | number): string {
 
 export const listIssuesInputSchema = z.object({
   project_id: z
-    .union([z.string(), z.number()])
-    .describe('The ID or URL-encoded path of the project. Example: "82599306"'),
+    .union([z.number(), z.string()])
+    .describe(
+      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+    ),
   state: z.enum(['opened', 'closed', 'all']).optional(),
   labels: z.string().optional(),
   milestone: z.string().optional(),
