@@ -11,11 +11,10 @@ import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { IntakeOrderSection } from '../domains/settings/components/IntakeOrderSection';
-import { NotRoutedSection } from '../domains/settings/components/NotRoutedSection';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-/** Which board takes new work: the order boards are offered a new item, and the items no board took. */
+/** Which board takes new work: the order boards are offered a new issue or pull request, and the ones no board took. */
 export function BoardIntakePage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
@@ -45,11 +44,13 @@ export function BoardIntakePage() {
           <PageHeader>
             <PageHeader.Title>Routing</PageHeader.Title>
             <PageHeader.Description>
-              The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
-              <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
-                Settings → Work Intake
-              </Link>
-              .
+              <span>
+                The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
+                <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
+                  Settings → Work Intake
+                </Link>
+                .
+              </span>
             </PageHeader.Description>
           </PageHeader>
         </div>
@@ -58,7 +59,6 @@ export function BoardIntakePage() {
     >
       <div className={cn(SETTINGS_COLUMN, 'flex flex-col gap-8')}>
         <IntakeOrderSection factoryId={factory.id} />
-        <NotRoutedSection factoryId={factory.id} />
       </div>
     </PageLayout>
   );
