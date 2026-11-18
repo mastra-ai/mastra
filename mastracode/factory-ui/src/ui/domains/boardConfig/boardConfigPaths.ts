@@ -3,7 +3,7 @@ import { boardPath } from '../factory/boardCatalog';
 export interface BoardConfigLocation {
   factoryId: string;
   boardId: string;
-  /** The phase being configured; unset on the board's General page. */
+  /** The phase being configured; unset on the board's Overview page. */
   phaseKey?: string;
   /** The factory skills page or one of its skill pages, opened from this board's settings. Skills are factory-wide; the board only keeps the sidebar in place. */
   skills?: true;
@@ -13,7 +13,7 @@ export interface BoardConfigLocation {
   intake?: true;
 }
 
-/** A board's configuration: its General page, or one phase's page. */
+/** A board's configuration: its Overview page, or one phase's page. */
 export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: string): string {
   const path = `${boardPath(factoryId, boardId)}/config`;
   return phaseKey ? `${path}/${encodeURIComponent(phaseKey)}` : path;
@@ -37,9 +37,14 @@ export function newSkillPath(factoryId: string, boardId: string): string {
 }
 
 /** The board's rules. Outside `config/` for the same reason as the skills page. */
-export function boardRulesPath(factoryId: string, boardId: string): string {
-  return `${boardPath(factoryId, boardId)}/rules`;
+export function boardRulesPath(factoryId: string, boardId: string, into?: string): string {
+  const path = `${boardPath(factoryId, boardId)}/rules`;
+  return into ? `${path}?${new URLSearchParams({ [RULES_INTO_PARAM]: into })}` : path;
 }
+
+/** Narrows the Rules page to the rules moving cards into one phase, or {@link LEAVING} for those sending them away. */
+export const RULES_INTO_PARAM = 'into';
+export const LEAVING = 'other-boards';
 
 /** The order intake asks boards to take a new item, on the intake page. */
 export const INTAKE_ORDER_ANCHOR = 'intake-order';

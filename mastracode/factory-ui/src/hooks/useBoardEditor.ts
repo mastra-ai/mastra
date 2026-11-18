@@ -16,6 +16,11 @@ export class BoardRequestError extends Error {
     super(message);
     this.name = 'BoardRequestError';
   }
+
+  /** The server's own reasons when it lists them, its message otherwise. */
+  get reasons() {
+    return this.conflicts.length > 0 ? this.conflicts.join(' ') : this.message;
+  }
 }
 
 type BoardRefusal = { board?: unknown; error?: string; message?: string; conflicts?: string[] };

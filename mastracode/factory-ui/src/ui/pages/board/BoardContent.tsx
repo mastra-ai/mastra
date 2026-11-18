@@ -1,4 +1,5 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { PhaseSetup } from '../../domains/factory/components/PhaseSetup';
 import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
 import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -23,7 +24,6 @@ import { RunQueueIndicator } from '../../domains/factory/components/RunQueueIndi
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
-import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
 import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
 import { LoadMoreSentinel } from '../../domains/factory/components/LoadMoreSentinel';
 import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
@@ -214,23 +214,24 @@ export function BoardContent({
     return {
       stage,
       phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
-      exitTool: stage.exitTool,
+      setup: (
+        <PhaseSetup factoryId={factoryProjectId} boardId={definition.id} phase={stage} phases={definition.phases} />
+      ),
       loading,
       taskCount,
       collapsed,
       groupOpen: collapsedStages.isStageOpen(stage.id),
       onGroupOpenChange: (open: boolean) => collapsedStages.setStageOpen(stage.id, open),
-      createButton: canCreate ? (
-        <BoardStageCreateButton
-          stage={stage}
-          expanded={composerOpen}
-          triggerRef={composer.registerTrigger(stage.id)}
-          onOpen={() => {
-            collapsedStages.setStageOpen(stage.id, true);
-            composer.open(stage.id);
-          }}
-        />
-      ) : undefined,
+      create: canCreate
+        ? {
+            expanded: composerOpen,
+            triggerRef: composer.registerTrigger(stage.id),
+            onOpen: () => {
+              collapsedStages.setStageOpen(stage.id, true);
+              composer.open(stage.id);
+            },
+          }
+        : undefined,
       cards: (
         <BoardStageCards
           stage={stage}

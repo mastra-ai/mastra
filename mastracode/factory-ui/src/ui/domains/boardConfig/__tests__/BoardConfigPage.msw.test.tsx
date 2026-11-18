@@ -164,7 +164,7 @@ describe('Board configuration', () => {
     expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
     expect(screen.queryByText('factory-plan')).not.toBeInTheDocument();
     expect(configNav().getByRole('link', { name: 'Skills' })).toHaveAttribute('aria-current', 'page');
-    expect(configNav().getByRole('link', { name: 'General' })).not.toHaveAttribute('aria-current');
+    expect(configNav().getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current');
     expect(configNav().getByRole('link', { name: 'Planning' })).toBeInTheDocument();
   });
 
@@ -236,7 +236,7 @@ describe('Board configuration', () => {
     await user.click(screen.getByLabelText('Planning: approve only when JSON'));
     await user.paste(JSON.stringify(EFFORT_LOW));
 
-    await user.click(configNav().getByRole('link', { name: 'General' }));
+    await user.click(configNav().getByRole('link', { name: 'Overview' }));
     await user.clear(await screen.findByRole('textbox', { name: 'Board name' }));
     await user.type(screen.getByRole('textbox', { name: 'Board name' }), 'Delivery');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -254,7 +254,6 @@ describe('Board configuration', () => {
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument());
     expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Delivery');
-    expect(screen.getByText('Revision 2')).toBeInTheDocument();
   });
 
   it('renames a phase, changes where its cards go, and reorders the board, showing it all in the sidebar before saving', async () => {
@@ -297,7 +296,7 @@ describe('Board configuration', () => {
     ).toEqual([
       'Skills',
       'Routing',
-      'General',
+      'Overview',
       'Rules',
       'Intake',
       'Triage',
@@ -503,15 +502,18 @@ describe('Board configuration', () => {
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Work'));
     expect(resetBodies).toEqual([{ expectedRevision: 3 }]);
-    expect(screen.getByText('Revision 4')).toBeInTheDocument();
   });
 
   it('keeps a local edit when someone else changed the board, and reloads their version on request', async () => {
     stubFactory();
     let current = storedWorkBoard();
     serveBoard(() => current);
+    const savedRevisions: unknown[] = [];
     server.use(
-      http.patch(BOARD_URL, () => {
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = (await request.json()) as { expectedRevision: number };
+        savedRevisions.push(body.expectedRevision);
+        if (body.expectedRevision === 2) return HttpResponse.json(storedWorkBoard({ name: 'Mine again', revision: 3 }));
         current = storedWorkBoard({ name: 'Renamed elsewhere', revision: 2 });
         return HttpResponse.json(
           { error: 'revision_mismatch', message: 'The board changed since you loaded it.' },
@@ -531,7 +533,11 @@ describe('Board configuration', () => {
     await user.click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Board name' })).toHaveValue('Renamed elsewhere'));
     expect(screen.queryByText('Someone else changed this board')).not.toBeInTheDocument();
-    expect(screen.getByText('Revision 2')).toBeInTheDocument();
+
+    await user.clear(screen.getByRole('textbox', { name: 'Board name' }));
+    await user.type(screen.getByRole('textbox', { name: 'Board name' }), 'Mine again');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(savedRevisions).toEqual([1, 2]));
   });
 
   it('shows the board read-only to someone who is not an organization admin', async () => {

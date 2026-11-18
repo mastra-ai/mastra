@@ -13,6 +13,9 @@ export type PhaseKind = StoredPhaseInfo['kind'];
 export type RuleField = 'autoStartWhen' | 'autoApproveWhen';
 type CodeBehaviour = StoredBoardInfo['codeBehaviour'];
 
+/** Runner context a phase gets when it names none. */
+export const DEFAULT_SESSION = 'work';
+
 /** Factory tools a phase can grant the session working a card there. */
 export const PHASE_TOOLS = [
   { id: 'factory_record_review_verdict', label: 'Record a review verdict' },

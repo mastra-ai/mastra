@@ -14,12 +14,12 @@ import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
+import { OVERVIEW_SURFACE, SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadErrorState } from '../ui/LoadErrorState';
 
-/** Factory › board › Configure: the board's General page, or one phase's page. The sidebar lists the pages. */
+/** Factory › board › Configure: the board's Overview page, or one phase's page. The sidebar lists the pages. */
 export function BoardConfigPage() {
   const factory = useActiveFactory();
   const route = useBoardConfigRoute();
@@ -63,7 +63,7 @@ export function BoardConfigPage() {
 
   const header =
     query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(SETTINGS_COLUMN, 'pb-8')}>
+      <div className={cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3')}>
         <BoardConfigHeader
           key={`${boardId}:${query.data.board.revision ?? 'code'}`}
           factoryId={factory.id}
@@ -75,8 +75,8 @@ export function BoardConfigPage() {
     ) : undefined;
 
   return (
-    <PageLayout variant="narrow" header={header} {...slots}>
-      <div className={SETTINGS_COLUMN}>
+    <PageLayout variant={phaseKey ? 'narrow' : 'fit'} header={header} {...slots}>
+      <div className={phaseKey || !query.isSuccess ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
         {query.isPending ? (
           <SettingsContainer>
             <SettingsSkeleton label="Loading board" rows={3} />

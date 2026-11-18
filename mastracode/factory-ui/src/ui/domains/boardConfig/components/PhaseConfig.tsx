@@ -25,6 +25,7 @@ import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import {
+  DEFAULT_SESSION,
   MAX_GOAL_RUNS,
   MAX_INSTRUCTIONS,
   MAX_OBJECTIVE,
@@ -50,9 +51,6 @@ const NO_SKILL = '__none__';
 const FIELD_WIDTH = 'sm:max-w-xs';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
-
-/** Runner context a phase gets when it names none. */
-const DEFAULT_SESSION = 'work';
 
 /**
  * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
