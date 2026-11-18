@@ -48,11 +48,7 @@ try {
       cause: result.error,
     })
   }
-  if (result.status !== 0 && !result.stdout) {
-    process.stderr.write(result.stderr)
-    process.exit(result.status ?? 1)
-  }
-
+  // Set exitCode instead of calling process.exit() so `finally` removes workDir.
   const flagged = [
     ...new Set(
       [...result.stdout.matchAll(/^.+?\.mdx:(\d+):/gm)].map(match => terms[(Number(match[1]) - firstLine) / 2]),
@@ -63,9 +59,13 @@ try {
       'Mastra.HeadingSentenceCase flags these accept.txt terms in headings. Add an exception for each to styles/Mastra/HeadingSentenceCase.yml:',
     )
     for (const term of flagged) console.error(`  - ${term}`)
-    process.exit(1)
+    process.exitCode = 1
+  } else if (result.status !== 0) {
+    process.stderr.write(result.stdout + result.stderr)
+    process.exitCode = result.status ?? 1
+  } else {
+    console.log(`Mastra.HeadingSentenceCase accepts all ${terms.length} accept.txt terms in headings.`)
   }
-  console.log(`Mastra.HeadingSentenceCase accepts all ${terms.length} accept.txt terms in headings.`)
 } finally {
   rmSync(workDir, { recursive: true, force: true })
 }
