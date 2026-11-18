@@ -55,20 +55,24 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<void>;
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void;
 
-export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
+/**
+ * Route loaders start a page's code and reads as the navigation begins, and never wait for them:
+ * the page opens on the click and shows its own loading states while the reads it shares with
+ * the loader answer.
+ */
+export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
   return function loadOnEntry(
     prefetch?: Prefetch,
-    page?: LazyPageComponent,
+    page?: Pick<LazyPageComponent, 'preload'>,
     shouldRevalidate: ShouldRevalidateFunction = () => false,
   ) {
     if (!services) return {};
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
-        const reads = prefetch?.(services, args);
-        return holdsNavigation?.() ? reads : undefined;
+        prefetch?.(services, args);
       },
       shouldRevalidate,
     };
@@ -203,39 +207,40 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
   void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
 };
 
+// The loader fills in what is missing; the page's own queries refresh what is cached.
 const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
 
-export const loadSessionFrame: Prefetch = async (services, { params, request }) => {
+/**
+ * A session's frame (its card, board and PR subscriptions) and its first message window, all
+ * read at once. The page opens before they answer: the header, panel and transcript fill in
+ * from their own loading states.
+ */
+export const prefetchSessionFrame: Prefetch = (services, { params, request }) => {
   const { queryClient, api } = services;
   const { factoryId, threadId } = params;
   const sessionId = params.sessionId ?? threadId;
   if (!factoryId || !sessionId || !threadId) return;
-  // Not awaited: the frame holds an in-app navigation, the transcript does not. A card's next step
-  // continues its conversation in place and loads the history there.
   prefetchThreadHistory(services, request, params.sessionId, sessionId, threadId);
-  const cardReads = params.sessionId
-    ? [
-        queryClient
-          .query({
-            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
-            ...CACHED_UNLESS_INVALIDATED,
-          })
-          .catch(noop),
-        queryClient
-          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
-          .catch(noop),
-      ]
-    : [];
-  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+  if (params.sessionId) {
+    void queryClient
+      .query({
+        ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+        ...CACHED_UNLESS_INVALIDATED,
+      })
+      .catch(noop);
+    void queryClient
+      .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+      .catch(noop);
+  }
+  prefetchSessionSubscriptions(services, factoryId, sessionId, threadId).catch(noop);
 };
 
 /**
  * The thread's first message window, read beside the session's own metadata
  * rather than after it: the server resolves the session's memory resource from
- * its id. It usually answers before the frame's reads, so an in-app navigation
- * opens on the transcript. A window already cached is kept (a draft seeds its
- * new thread's), and the page re-reads it on mount for whatever the live
- * stream missed.
+ * its id, so the transcript can show before the session's details answer. A
+ * window already cached is kept (a draft seeds its new thread's), and the page
+ * re-reads it on mount for whatever the live stream missed.
  */
 function prefetchThreadHistory(
   { queryClient, api }: RouteLoaderServices,
@@ -261,7 +266,7 @@ function prefetchThreadHistory(
     .catch(noop);
 }
 
-async function loadSessionSubscriptions(
+async function prefetchSessionSubscriptions(
   { queryClient, api }: RouteLoaderServices,
   factoryId: string,
   sessionId: string,

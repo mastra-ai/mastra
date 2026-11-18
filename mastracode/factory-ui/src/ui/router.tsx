@@ -15,7 +15,6 @@ import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
-import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
@@ -32,7 +31,6 @@ import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
-  loadSessionFrame,
   prefetchBoard,
   prefetchCardDraft,
   prefetchComposer,
@@ -41,6 +39,7 @@ import {
   prefetchFactoryLayout,
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
+  prefetchSessionFrame,
   prefetchSidebar,
   reloadOnAnotherThread,
   retiredReviewBoardSearch,
@@ -77,6 +76,9 @@ const NewPage = lazyPage(
     }),
   <AppPageLoader />,
 );
+// The sidebar opens a session or a new one from any page, so their code loads with the shell
+// and a click from the board only waits on data.
+const chatPages = { preload: () => Promise.all([SessionLayout.preload(), NewPage.preload()]) };
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
   <AppPageLoader />,
@@ -252,8 +254,8 @@ function CardDraftRedirect() {
   return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?: () => boolean): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services, holdsNavigation);
+export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services);
   const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch, shouldRevalidate?: ShouldRevalidateFunction) => ({
     element: <Page />,
     ...loadOnEntry(prefetch, Page, shouldRevalidate),
@@ -283,7 +285,7 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.
-                  ...loadOnEntry(prefetchSidebar, SessionLayout),
+                  ...loadOnEntry(prefetchSidebar, chatPages),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
@@ -302,11 +304,11 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                           children: [
                             {
                               path: 'workspaces/:sessionId/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'user/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'cards/:workItemId/new/:draftSessionId',
@@ -386,13 +388,5 @@ export function createAppRouter(
   services: RouteLoaderServices,
   createRouter: (routes: RouteObject[]) => DataRouter = createBrowserRouter,
 ) {
-  // The first load's loaders can run inside `createRouter`, before `router` is assigned.
-  let router: DataRouter | undefined;
-  router = createRouter(createAppRoutes(services, () => holdsNavigation(router)));
-  return router;
-}
-
-/** A prompt handoff continues the page on screen, so only other in-app navigations wait for their reads. */
-function holdsNavigation(router: DataRouter | undefined): boolean {
-  return router?.state.initialized === true && !opensWithPrompt(router.state.navigation.location?.state);
+  return createRouter(createAppRoutes(services));
 }
