@@ -120,6 +120,7 @@ import {
   startFactoryMetrics,
 } from './metrics/index.js';
 import type { FactoryMetricsOptions } from './metrics/index.js';
+import { instrumentSessionFirstOutput } from './metrics/session.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -2592,6 +2593,7 @@ export class MastraFactory {
         },
       );
       observeSessionThreadStamp(session);
+      instrumentSessionFirstOutput(session);
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

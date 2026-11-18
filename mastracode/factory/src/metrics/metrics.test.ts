@@ -54,7 +54,7 @@ describe('resolveMetricsConfig', () => {
   });
 
   it('parses all, lists and unknown names, with env winning', () => {
-    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(5);
+    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(6);
     const config = resolveMetricsConfig({ groups: ['process'] }, { FACTORY_METRICS: 'sandbox, intake,nope' })!;
     expect([...config.groups]).toEqual(['sandbox', 'intake']);
     expect(config.unknownGroups).toEqual(['nope']);
@@ -411,12 +411,12 @@ describe('review follow-ups', () => {
     return { sandbox, gate };
   }
 
-  it('times a session start, the first wait on it, and reports starts in flight', async () => {
-    const { instrumentSandboxStart, markEagerSandboxStart, sessionStartsCollector } = await import('./sandbox.js');
+  it('times a sandbox start, the first wait on it, and reports starts in flight', async () => {
+    const { instrumentSandboxStart, markEagerSandboxStart, sandboxStartsCollector } = await import('./sandbox.js');
     const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sandbox'] }, {}), 'all');
     installFactoryMetrics(metrics);
     const { records, targets } = capture();
-    metrics.start(targets, [sessionStartsCollector()]);
+    metrics.start(targets, [sandboxStartsCollector()]);
 
     const { sandbox, gate } = fakeSandbox();
     instrumentSandboxStart(sandbox, 'platform', false);
@@ -427,8 +427,8 @@ describe('review follow-ups', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     await metrics.tick();
-    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(1);
-    expect(records.find(r => r.name === 'mastra_factory_session_start_oldest_age_ms')!.value).toBeGreaterThan(0);
+    expect(records.find(r => r.name === 'mastra_factory_sandboxes_starting')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_start_oldest_age_ms')!.value).toBeGreaterThan(0);
 
     records.length = 0;
     gate.resolve();
@@ -436,13 +436,13 @@ describe('review follow-ups', () => {
     await metrics.tick();
     metrics.stop();
 
-    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms_count')).toMatchObject({
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_ready_ms_count')).toMatchObject({
       value: 1,
       labels: { kind: 'first', outcome: 'ok' },
     });
     // Only the first caller other than the eager start counts as waiting.
-    expect(records.find(r => r.name === 'mastra_factory_session_sandbox_wait_ms_count')?.value).toBe(1);
-    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(0);
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_wait_ms_count')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_sandboxes_starting')?.value).toBe(0);
     expect(sandbox.calls).toBe(1);
   });
 
@@ -461,7 +461,7 @@ describe('review follow-ups', () => {
     await metrics.tick();
     metrics.stop();
 
-    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms')?.labels).toMatchObject({
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_ready_ms')?.labels).toMatchObject({
       kind: 'resume',
       outcome: 'error',
     });
