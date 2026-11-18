@@ -233,7 +233,7 @@ To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-p
   <details>
     <summary>Why do I get <code>401</code> with a key that starts with <code>msk\_</code>?</summary>
 
-    <code>msk\_</code> keys belong to the previous Memory Gateway. Requests with these keys are routed to Memory Gateway, not the current Gateway API, so they fail against current endpoints and features. Memory Gateway will be turned off. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
+    <code>msk\_</code> keys belong to the previous Memory Gateway. Requests with these keys are routed to Memory Gateway, not the current Gateway API, so they fail against current endpoints and features. Memory Gateway shuts down on December 31, 2026. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
   </details>
 
   <details>
