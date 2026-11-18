@@ -30,18 +30,6 @@ Injected on every deploy.
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket backing the environment's [workspace](/docs/mastra-platform/workspaces). Set when workspaces are enabled |
 | `MASTRA_WORKERS` | Set to `false` on the main service when the project declares workers, so they run only in their own service |
 
-## Memory and Knowledge variables
-
-Set when the project has a ready [Memory](/docs/mastra-platform/memory) or [Knowledge](/docs/mastra-platform/knowledge) instance. The platform sets an instance ID only when exactly one ready instance is available to the environment.
-
-| Variable | Value |
-| - | - |
-| `MASTRA_MEMORY_INSTANCE_ID` | ID of the Memory instance `PlatformMemory` uses |
-| `MASTRA_MEMORY_API_URL` | URL of the Memory API |
-| `MASTRA_KNOWLEDGE_INSTANCE_ID` | ID of the Knowledge instance `PlatformKnowledge` uses |
-| `MASTRA_KNOWLEDGE_API_URL` | URL of the Knowledge API |
-| `MASTRA_KNOWLEDGE_ACCESS_TOKEN` | Token that only works for the project's Knowledge instance |
-
 ## Managed database variables
 
 Attaching a hosted database adds its connection variables to the environments the database covers. Names are fixed per provider.

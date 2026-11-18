@@ -8,7 +8,7 @@ description: "Create, use, and revoke Mastra platform access tokens for the CLI,
 An access token lets a script, CI pipeline, or app act on your Mastra platform organization without an interactive login. The dashboard calls them API keys. Use access tokens to:
 
 - Run `mastra deploy` and other CLI commands in CI. See [CI/CD](/docs/mastra-platform/deploy/server#cicd).
-- Authenticate apps that use [Memory](/docs/mastra-platform/memory), [Knowledge](/docs/mastra-platform/knowledge), or [Connect](/docs/mastra-platform/connect) outside a platform deploy, such as on your local machine.
+- Authenticate apps that use [Connect](/docs/mastra-platform/connect) or `@mastra/platform` outside a platform deploy, such as on your local machine.
 
 A token belongs to one organization. It's tied to the member who created it and stops working if that member leaves the organization. Admins and members can create tokens. Viewers can't.
 
@@ -41,7 +41,7 @@ Different tools read the token from different environment variables:
 | Variable | Read by |
 | - | - |
 | `MASTRA_API_TOKEN` | The `mastra` CLI. When it's set, commands such as `mastra deploy` run without an interactive login. |
-| `MASTRA_PLATFORM_ACCESS_TOKEN` | `@mastra/platform` (`PlatformMemory` and `PlatformKnowledge`) and `@mastra/connect`. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | `@mastra/platform` and `@mastra/connect`. |
 
 For example, to deploy from CI:
 

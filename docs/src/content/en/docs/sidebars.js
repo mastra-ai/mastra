@@ -826,8 +826,6 @@ const sidebars = {
           items: [{ type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' }],
         },
         { type: 'doc', id: 'mastra-platform/connect', label: 'Connect' },
-        { type: 'doc', id: 'mastra-platform/memory', label: 'Memory' },
-        { type: 'doc', id: 'mastra-platform/knowledge', label: 'Knowledge' },
         { type: 'doc', id: 'mastra-platform/database', label: 'Databases' },
         { type: 'doc', id: 'mastra-platform/workspaces', label: 'Workspaces' },
       ],
