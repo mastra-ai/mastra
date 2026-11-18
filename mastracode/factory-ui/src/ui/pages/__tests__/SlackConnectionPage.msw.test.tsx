@@ -38,10 +38,10 @@ function mockFactories() {
   );
 }
 
-function renderPage() {
+function renderPage(search = '') {
   mockFactories();
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
+    <MemoryRouter initialEntries={[`/factories/fp-1/settings/connections/slack${search}`]}>
       <SidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
         <OverlaysProvider>
           <Routes>
@@ -54,6 +54,23 @@ function renderPage() {
 }
 
 describe('SlackConnectionPage', () => {
+  it('confirms a finished Sign in with Slack', async () => {
+    mockAccounts([slackLink]);
+
+    renderPage('?slack=connected');
+
+    expect(await screen.findByText(/Slack is connected\. Mention the agent in Slack/)).toBeInTheDocument();
+  });
+
+  it('says when Sign in with Slack did not finish, so nothing looks connected by mistake', async () => {
+    mockAccounts([]);
+
+    renderPage('?slack=error');
+
+    expect(await screen.findByText(/Slack sign-in didn't finish, so nothing was connected/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Connect Slack/ })).toBeEnabled();
+  });
+
   it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>

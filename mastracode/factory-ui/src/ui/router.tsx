@@ -27,8 +27,8 @@ import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { AppPageLoader } from './layouts/AppPageLoader';
+import { useMemberSetupRedirect } from './domains/join/hooks/useMemberSetupRedirect';
 import { MemberSetupPage } from './domains/join/MemberSetupPage';
-import { NotAMemberPage } from './domains/join/NotAMemberPage';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
@@ -166,6 +166,9 @@ function RetiredReviewBoardRedirect() {
 
 function FactoryHomeRedirect() {
   const { factoryId } = useParams<{ factoryId: string }>();
+  const setupRedirect = useMemberSetupRedirect(factoryId);
+  if (setupRedirect === 'pending') return null;
+  if (setupRedirect === 'setup') return <Navigate to="setup" replace />;
   return <FactoryBoardLanding factoryId={factoryId} />;
 }
 
@@ -202,6 +205,7 @@ function ChannelThreadRedirect() {
  */
 function ConnectionsRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
+  const { search } = useLocation();
 
   if (isPending) return null;
 
@@ -209,7 +213,9 @@ function ConnectionsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+  // The Slack sign-in callback lands here with its outcome when it knows no Factory: show it on Slack's page.
+  const section = new URLSearchParams(search).has('slack') ? 'connections/slack' : 'connections';
+  return <Navigate to={`/factories/${firstFactory.id}/settings/${section}${search}`} replace />;
 }
 
 /**
@@ -273,7 +279,6 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
           children: [
             { index: true, element: <RootLanding /> },
             { path: 'onboarding', ...lazyRoute(OnboardingPage) },
-            { path: 'join', element: <NotAMemberPage /> },
             {
               path: 'factories/:factoryId',
               element: <FactoryLayout />,

@@ -1,5 +1,5 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,10 +10,14 @@ import { Link, useLocation } from 'react-router';
 
 import { traySurface } from '../../../ui/tray';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
-import { PersonalModelLane } from '../../join/components/PersonalModelLane';
+import { useDefaultModelQuery, useSetDefaultModel } from '../../../../hooks/use-default-model';
+import { useOrgKeyAdminQuery, useProvidersQuery } from '../../../../hooks/use-providers';
+import { PersonalModelLane, usePersonalModelLane } from '../../join/components/PersonalModelLane';
+import { personalLaneSelection } from '../../join/services/memberSetup';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
+import type { FactoryModelScope } from '../../workspaces/services/github';
 import { reservedSpaceClass } from '../../workspace-viewer/layout';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';
@@ -150,19 +154,41 @@ function MissingCredentialState({
 }
 
 function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
+  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) return <MissingFactoryModelState factoryId={factoryId} />;
+  return <MissingPersonalModelState factoryId={factoryId} anchor={anchor} />;
+}
+
+/** Runs here use the organization's keys: an admin can add one, anyone else has to ask. */
+function MissingFactoryModelState({ factoryId }: { factoryId: string }) {
+  const isAdmin = useOrgKeyAdminQuery().data === true;
+  return (
+    <EmptyState
+      as="h2"
+      iconSlot={<EmptyStateIllustration name="locked" />}
+      titleSlot={isAdmin ? 'Connect the company model' : 'Waiting on an admin'}
+      descriptionSlot={
+        isAdmin
+          ? `Chats here run on the organization's keys, and none is connected yet. Add one under ${MODEL_DEFAULTS_LABELS.factory}.`
+          : `Chats here run on the organization's keys, and none is connected yet. Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory}.`
+      }
+      actionSlot={
+        isAdmin ? (
+          <Link
+            to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)}
+            className={buttonVariants({ variant: 'primary' })}
+          >
+            Open Models settings
+          </Link>
+        ) : undefined
+      }
+    />
+  );
+}
+
+function MissingPersonalModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
   const project = useFactoryProjectQuery(factoryId);
-  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
-    return (
-      <EmptyState
-        as="h2"
-        iconSlot={<EmptyStateIllustration name="locked" />}
-        titleSlot="Waiting on an admin"
-        descriptionSlot={`Chats in this Factory run on the organization's keys, and none is connected yet. Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory}.`}
-      />
-    );
-  }
+  const providers = useProvidersQuery();
   const modelScope = project.data?.modelScope ?? 'hybrid';
-  // The same personal lane as member setup, inline: connecting here unblocks the composer in place.
   return (
     <div className="flex flex-col items-center gap-5">
       <EmptyState
@@ -176,15 +202,43 @@ function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: M
             : 'Chats in this Factory run on your own account. Connect it once and every session, here or in Slack, is ready.'
         }
       />
-      <div className={cn(traySurface, 'w-full max-w-lg p-1.5 text-start')}>
-        <PersonalModelLane modelScope={modelScope} />
-      </div>
+      {/* The lane opens on what the member already connected, so it waits for the provider list. */}
+      {!providers.isPending && <InlinePersonalModel modelScope={modelScope} />}
       <Link
         to={settingsSectionPath(factoryId, 'models', anchor)}
         className={buttonVariants({ variant: 'ghost', size: 'sm' })}
       >
         More options in Models settings
       </Link>
+    </div>
+  );
+}
+
+/**
+ * Member setup's personal lane, inline. Connecting a provider usually unblocks the composer by itself (the
+ * server then has a personal fallback model); when it doesn't, saving the picked model as the personal default
+ * does.
+ */
+function InlinePersonalModel({ modelScope }: { modelScope: FactoryModelScope }) {
+  const providers = useProvidersQuery();
+  const personalDefault = useDefaultModelQuery();
+  const lane = usePersonalModelLane(personalLaneSelection(providers.data, personalDefault.data?.modelId));
+  const setDefault = useSetDefaultModel();
+  const choice = lane.lane.choice;
+  return (
+    <div className={cn(traySurface, 'flex w-full max-w-lg flex-col gap-1.5 p-1.5 text-start')}>
+      <PersonalModelLane modelScope={modelScope} state={lane} />
+      {setDefault.isError && (
+        <Notice variant="destructive">Couldn&apos;t save your default model. {setDefault.error.message}</Notice>
+      )}
+      <Button
+        variant="primary"
+        className="self-end"
+        disabled={!choice || setDefault.isPending}
+        onClick={() => choice && setDefault.mutate(choice.modelId)}
+      >
+        {setDefault.isPending ? 'Saving…' : 'Start chatting'}
+      </Button>
     </div>
   );
 }

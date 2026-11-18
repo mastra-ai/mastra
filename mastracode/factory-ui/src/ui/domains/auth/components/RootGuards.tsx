@@ -49,10 +49,7 @@ const OnboardingGuard = () => {
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
-  // A join link (Slack card, invite) names someone else's factory: never send its holder off to create their own.
-  if (factories.length === 0 && pathname !== '/onboarding' && pathname !== '/join') {
-    return <Navigate to="/onboarding" replace />;
-  }
+  if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }

@@ -1,32 +1,43 @@
 import { useState } from 'react';
 
-import type { OnboardingDraftModel, OnboardingModelScope } from '../../workspaces/services/onboardingFlow';
 import { OnboardingAccountLane } from '../../workspaces/components/onboarding/OnboardingAccountLane';
 import { useAccountSource } from '../../workspaces/hooks/useAccountSource';
+import type { AccountSourceChoice } from '../../workspaces/hooks/useAccountSource';
 import { useOnboardingModelLane } from '../../workspaces/hooks/useOnboardingModelLane';
+import type { OnboardingModelLane } from '../../workspaces/hooks/useOnboardingModelLane';
+import type { OnboardingDraftModel, OnboardingModelScope } from '../../workspaces/services/onboardingFlow';
+
+export interface PersonalModelLaneState {
+  lane: OnboardingModelLane;
+  choice: AccountSourceChoice;
+}
 
 /**
- * The member's own account, exactly as the create-factory onboarding shows it: Mastra Gateway beside your own
- * provider when the factory bills the gateway per person, else the provider list (subscription sign-in or API key),
- * then the default model once connected. Connecting saves the personal credential right away; the picked
- * model becomes the personal default (`PUT /web/config/default-model`), so there is no Create step to wait for.
+ * The member's own account lane. Connecting a provider saves the personal credential right away (the lane's
+ * dialogs do that); picking a model only updates `lane.choice`, so a caller that wants it as the personal
+ * default saves it itself. `initial` is read once, when the lane mounts.
  */
-export function PersonalModelLane({
-  modelScope,
-  initial,
-}: {
-  modelScope: OnboardingModelScope;
-  initial?: OnboardingDraftModel;
-}) {
+export function usePersonalModelLane(initial?: OnboardingDraftModel): PersonalModelLaneState {
   const [saved, setSaved] = useState<OnboardingDraftModel | undefined>(initial);
   const lane = useOnboardingModelLane({ scope: 'user', saved, onSave: setSaved });
   const choice = useAccountSource(lane.connection);
+  return { lane, choice };
+}
+
+/** The member's own account, as the create-factory onboarding shows it. */
+export function PersonalModelLane({
+  modelScope,
+  state,
+}: {
+  modelScope: OnboardingModelScope;
+  state: PersonalModelLaneState;
+}) {
   return (
     <OnboardingAccountLane
       scope="user"
       name="Your account"
-      lane={lane}
-      choice={choice}
+      lane={state.lane}
+      choice={state.choice}
       // Hybrid bills the gateway to the company for work only; sessions use the member's own provider.
       offersGateway={modelScope !== 'hybrid'}
       creating={false}

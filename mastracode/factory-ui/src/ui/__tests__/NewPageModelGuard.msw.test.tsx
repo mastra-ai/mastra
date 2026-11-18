@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -60,12 +61,12 @@ function stubFallbackModel(catalogQuery: string, provider: Record<string, unknow
 }
 
 describe('NewPage default-model guard', () => {
-  it('replaces the composer with an empty state linking to Model settings when no key can run a model', async () => {
+  it('replaces the composer with a way to the company model when no key can run a model', async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connect the company model' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#factory-defaults',
@@ -74,17 +75,65 @@ describe('NewPage default-model guard', () => {
     expect(screen.queryByRole('heading', { name: 'What should we ship?' })).not.toBeInTheDocument();
   });
 
-  it("points personal-routed chats at Personal defaults instead of starting on the Factory's model", async () => {
+  it('tells a member who cannot add organization keys to ask an admin', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [], orgKeyAdmin: false })),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByRole('heading', { name: 'Waiting on an admin' })).toBeInTheDocument();
+    expect(screen.getByText(/Ask an org admin to add one under Factory defaults/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open Models settings' })).not.toBeInTheDocument();
+  });
+
+  it("asks a personal-routed chat for the member's own model instead of starting on the Factory's", async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-5' });
 
     renderNewPage();
 
-    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+    expect(await screen.findByRole('heading', { name: 'Connect your model to start chatting' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Choose a provider' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'More options in Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#personal-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('starts the chat in place once the member saves a model on the provider they already connected', async () => {
+    let personalDefault: string | null = null;
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: personalDefault, thinkingLevel: null }),
+      ),
+      http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
+        personalDefault = (await request.json()).modelId;
+        return HttpResponse.json({ ok: true, modelId: personalDefault });
+      }),
+      // Connected, but the server has no personal fallback to start on, so the chat waits for a pick.
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [{ id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true }],
+          fallbackModelId: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }] }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderNewPage();
+
+    const start = await screen.findByRole('button', { name: 'Start chatting' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await user.click(start);
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(personalDefault).toBe('openai/gpt-5.5');
   });
 
   it.each([
@@ -149,7 +198,7 @@ describe('NewPage default-model guard', () => {
 
     releaseProject();
 
-    expect(await screen.findByRole('heading', { name: 'No model available' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connect the company model' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 
