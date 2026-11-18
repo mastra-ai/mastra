@@ -1,5 +1,7 @@
 import { cardContextSessions } from '@mastra/factory/work-items/card-context-sessions';
 import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+import { matchesSearch, searchableCard, searchTerms } from '@mastra/factory/work-items/search-terms';
+import type { SearchTerm } from '@mastra/factory/work-items/search-terms';
 
 import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
@@ -51,12 +53,35 @@ function joinValue(parts: (string | undefined | null)[]): string {
   return parts.filter(part => part !== undefined && part !== null).join(' ');
 }
 
+/** The links in a typed search: the words the palette's filter can't match against a row's text. */
+function pastedLinks(query: string): SearchTerm[] {
+  return searchTerms(query).filter(term => term.kind !== 'word');
+}
+
+/**
+ * The pasted links that name the card, as typed. The palette keeps a row whose `value` holds every
+ * typed word, and no row holds a link to a page of a pull request (`/files`), or one in another
+ * case. So the row of a card a link names holds that link, read as the server's search reads it.
+ */
+function linkWords(item: WorkItem | undefined, links: readonly SearchTerm[]): string[] {
+  if (item === undefined || links.length === 0) return [];
+  const sources = item.workItem?.sources ?? [];
+  const card = searchableCard({
+    words: [],
+    ids: [item.id],
+    sourceKeys: [item.workItem?.key, ...sources.map(source => source.key)],
+    links: [item.url, item.workItem?.url, ...sources.map(source => source.url)],
+  });
+  return links.filter(link => matchesSearch(card, [link])).map(link => link.word);
+}
+
 function buildValue(
   session: FactoryUserSession,
   kind: SessionSearchResult['kind'],
   title: string,
   identifier: string | undefined,
   item: WorkItem | undefined,
+  links: readonly SearchTerm[],
   contextLabel?: string,
 ): string {
   return joinValue([
@@ -69,6 +94,7 @@ function buildValue(
     identifier,
     item?.sourceKey,
     item ? relationshipLabel(item) : undefined,
+    ...linkWords(item, links),
   ]);
 }
 
@@ -76,6 +102,7 @@ function createFactorySessionResult(
   factoryId: string,
   session: FactoryUserSession,
   association: SessionWorkItem | undefined,
+  links: readonly SearchTerm[],
 ): SessionSearchResult {
   const item = association?.item;
   const factoryKind = getFactorySessionKind(session, item);
@@ -96,7 +123,7 @@ function createFactorySessionResult(
     title,
     context,
     identifier,
-    value: buildValue(session, kind, title, identifier, item, contextSession?.label),
+    value: buildValue(session, kind, title, identifier, item, links, contextSession?.label),
     path: threadPath(factoryId, { sessionId: session.sessionId, threadId }),
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
@@ -112,7 +139,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     kind,
     title,
     context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
-    value: buildValue(session, kind, title, undefined, undefined),
+    value: buildValue(session, kind, title, undefined, undefined, []),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,
     updatedAt: session.updatedAt,
@@ -143,12 +170,15 @@ export function createSessionSearchGroups(input: {
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each session reads by the phase it runs. */
   boards?: readonly BoardInfo[];
+  /** What is typed: a pasted link keeps the sessions of the card it names. */
+  query: string;
 }): {
   work: SessionSearchResult[];
   review: SessionSearchResult[];
   user: SessionSearchResult[];
 } {
   const bySessionId = workItemsBySessionId(input.workItems, input.boards);
+  const links = pastedLinks(input.query);
   // Sessions on one card share its update time; the one its current phase runs in leads.
   const newestThenCurrent = (a: SessionSearchResult, b: SessionSearchResult) =>
     newestFirst(a, b) ||
@@ -159,7 +189,7 @@ export function createSessionSearchGroups(input: {
 
   for (const repository of input.repositories) {
     for (const session of repository.workspaces) {
-      const result = createFactorySessionResult(input.factoryId, session, bySessionId.get(session.sessionId));
+      const result = createFactorySessionResult(input.factoryId, session, bySessionId.get(session.sessionId), links);
       if (result.kind === 'review-session') review.push(result);
       else work.push(result);
     }
@@ -186,7 +216,12 @@ function searchedNumber(item: WorkItem): string | undefined {
   return typeof number === 'number' ? `#${number}` : undefined;
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
+function createWorkItemResult(
+  factoryId: string,
+  item: WorkItem,
+  board: BoardInfo | undefined,
+  links: readonly SearchTerm[],
+): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
   const stage = currentItemStageLabel(item, board);
@@ -196,7 +231,8 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    // Everything the server's search reads is in it, so a row the server matched passes the palette's filter too.
+    // Everything the server's search reads is in it, the pasted links the card answers too, so a row
+    // the server matched passes the palette's filter.
     value: joinValue([
       item.title,
       'work item',
@@ -207,6 +243,7 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
       item.workItem?.key,
       searchedNumber(item),
       item.sourceKey,
+      ...linkWords(item, links),
     ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
@@ -221,8 +258,11 @@ export function createWorkItemSearchResults(input: {
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
   boards?: readonly BoardInfo[];
+  /** What is typed: a pasted link keeps the card it names. */
+  query: string;
 }): WorkItemSearchResult[] {
+  const links = pastedLinks(input.query);
   return input.workItems
-    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item)))
+    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item), links))
     .sort(newestFirst);
 }

@@ -6,8 +6,9 @@ import type { WorkItemBranchSource } from '../work-item-branch.js';
 import { metadataLabels } from './card-labels.js';
 import { factoryParticipantId, providerPeople } from './card-people.js';
 import type { BoardRelations, ProviderPerson, ProviderPersonRole } from './card-people.js';
-import { cardSearchText } from './card-search-text.js';
+import { cardSearch } from './card-search.js';
 import type { SourceFacts } from './card-source-filters.js';
+import type { SearchableCard } from './search-terms.js';
 
 /** What a board view's search and filters read of a card. */
 export interface CardFacts extends SourceFacts {
@@ -19,8 +20,8 @@ export interface CardFacts extends SourceFacts {
   relations: BoardRelations;
   /** The Factory users who created the card, moved it or started a session on it. */
   humanActorIds: readonly string[];
-  /** Lowercased, so a search lowercases only its own words. */
-  text: string;
+  /** What a search reads of the card, lowercased, so a search lowercases only its own words. */
+  search: SearchableCard;
 }
 
 // A card object never changes: `listShared` gives a changed card a new object.
@@ -81,7 +82,7 @@ export function cardFacts(card: Card): CardFacts {
       'review-requested': new Set(people['review-requested'].map(person => person.id)),
     },
     humanActorIds: actorIds,
-    text: cardSearchText(card),
+    search: cardSearch(card),
   };
   factsByCard.set(card, facts);
   return facts;

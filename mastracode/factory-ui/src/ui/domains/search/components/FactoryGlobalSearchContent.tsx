@@ -47,11 +47,13 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     repositories: sessions.repositories,
     workItems: workItems.withSessions,
     boards: catalog.data,
+    query,
   });
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.unstarted,
     boards: catalog.data,
+    query,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,

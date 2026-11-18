@@ -1,3 +1,5 @@
+import { matchesSearch, searchableCard, searchTerms } from '@mastra/factory/work-items/search-terms';
+
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
@@ -218,7 +220,7 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
   let total: number | undefined;
   if (scope !== null && scope !== 'sessions') return null;
   if (query.get('started') === 'false') {
-    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const terms = searchTerms(query.get('q') ?? '');
     const matches = cards
       .filter(card => !holdsSession(card))
       .filter(card => {
@@ -226,10 +228,13 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
         const facts = card.workItem?.metadata;
         const number =
           facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
-        const text = [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey]
-          .join(' ')
-          .toLowerCase();
-        return words.every(word => text.includes(word));
+        const searched = searchableCard({
+          words: [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey],
+          ids: [card.id],
+          sourceKeys: [card.workItem?.key],
+          links: [card.url, card.workItem?.url],
+        });
+        return matchesSearch(searched, terms);
       })
       .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     listed = matches.slice(0, Number(query.get('limit') ?? 20));

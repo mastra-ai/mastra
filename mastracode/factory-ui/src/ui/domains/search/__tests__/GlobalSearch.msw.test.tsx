@@ -949,6 +949,37 @@ describe('Global search', () => {
     expect(requests.createSessionRequests).toBe(0);
   });
 
+  it('finds the card a pasted link names, whatever page of the pull request the link opens', async () => {
+    const requests = stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    await screen.findByText('Review command palette PR');
+    const input = screen.getByRole('combobox', { name: 'Search MastraCode' });
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+
+    // A card holding a session: the palette reads it itself.
+    await user.type(input, 'https://github.com/mastra-ai/mastra/pull/900/files#diff-1a2b');
+    expect(await within(results).findByText('Review command palette PR')).toBeInTheDocument();
+    expect(within(results).queryByText('Add universal command search')).not.toBeInTheDocument();
+
+    // A card holding none: the server finds it, and the palette keeps it.
+    await user.clear(input);
+    await user.type(input, 'GitHub.com/Mastra-AI/mastra/pull/4242?tab=checks');
+    expect(await within(results).findByText('Bump the command palette dependencies')).toBeInTheDocument();
+    expect(within(results).queryByText('Review command palette PR')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(requests.workItemQueries).toContain(
+        `started=false&q=${encodeURIComponent('GitHub.com/Mastra-AI/mastra/pull/4242?tab=checks')}`,
+      ),
+    );
+
+    // A link names its own number, never one it starts.
+    await user.clear(input);
+    await user.type(input, 'https://github.com/mastra-ai/mastra/pull/42');
+    expect(await within(dialog).findByText('No matching results.')).toBeInTheDocument();
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();
