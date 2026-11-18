@@ -367,7 +367,7 @@ import type {
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
-/** Whether a failed owned recovery should terminate observers of the run. */
+
 interface RehydratedRecoveryState {
   requestContext: RequestContext;
   threadId?: string;
