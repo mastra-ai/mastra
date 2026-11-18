@@ -1243,6 +1243,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       repositories: this.#linkedRepositories,
       modes: this.#modes,
       onDependabotAlert: () => this.#reconcileWorker?.requestRun(['dependabot']),
+      onLateSwitchedOrgEvent: () => this.requestReconcile(),
     });
     return new PlatformGithubLegacyEventPoller({
       transport: this.#legacy,
