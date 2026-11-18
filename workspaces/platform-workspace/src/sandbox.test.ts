@@ -286,6 +286,102 @@ describe('PlatformSandbox', () => {
     expect(init.data.env).toEqual({ A: '1' });
   });
 
+  it('never reuses a cached lease minted for a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_1' }))
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_2' }));
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+    await sandbox.executeCommand('true');
+    (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_2';
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real' } });
+
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_2/exec-lease');
+    expect(sockets[1]!.subprotocols.join(' ')).not.toContain('jwt.sbx_1');
+    const init = JSON.parse(sockets[1]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
+  });
+
+  it('never joins or caches a lease that is in flight for a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let releaseOld!: () => void;
+    const oldLease = new Promise<Response>(resolve => {
+      releaseOld = () => resolve(leaseResponse({ jwt: 'jwt.sbx_1' }));
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockReturnValueOnce(oldLease)
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_2' }));
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+    const internals = sandbox as unknown as { _sandboxId: string; _lease: { boundTo: string } | null };
+
+    const oldCall = sandbox.executeCommand('gh', ['pr', 'view'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    internals._sandboxId = 'sbx_2';
+    const newCall = sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    releaseOld();
+    await Promise.all([oldCall, newCall]);
+
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_2/exec-lease');
+    expect(internals._lease?.boundTo).toBe('sbx_2');
+    const envs = sockets.map(
+      socket => (JSON.parse(socket.sent[0]!) as { data: { env: Record<string, string> } }).data.env,
+    );
+    // The call still holding the old VM's lease gets no GitHub credential; the new VM's call does.
+    expect(envs).toContainEqual({ A: '1' });
+    expect(envs).toContainEqual({ GH_TOKEN: 'ghs_real', A: '1' });
+  });
+
+  it('ignores a late checkpoint answer about a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let answer!: () => void;
+    const checkpoint = new Promise<Response>(resolve => {
+      answer = () => resolve(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }));
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockReturnValueOnce(checkpoint);
+    const sandbox = new PlatformSandbox({
+      id: 'mc-session-42',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    await sandbox._start();
+    const internals = sandbox as unknown as { _sandboxId: string | undefined };
+
+    const capture = sandbox.captureCheckpoint();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    internals._sandboxId = 'sbx_2';
+    sandbox.vault = true;
+    answer();
+    await capture;
+
+    expect(internals._sandboxId).toBe('sbx_2');
+    expect(sandbox.vault).toBe(true);
+  });
+
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
