@@ -978,6 +978,10 @@ export function createDurableToolCallStep() {
         }
       };
 
+      // An approval policy can call out, so it doesn't run for a queued call
+      // that shutdown reaches; recovery evaluates it.
+      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
+
       // 2. Check if tool requires approval. Prefer the live policy on the
       //    in-process registry (which preserves the function form with real
       //    toolName/args); fall back to the JSON-safe boolean shadow on the
