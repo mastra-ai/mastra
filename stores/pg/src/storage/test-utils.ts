@@ -189,6 +189,7 @@ export function pgTests() {
       it('returns how a span ended from every span read', async () => {
         const observability = (await store.getStore('observability'))!;
         const traceId = randomUUID().replaceAll('-', '');
+        const runId = randomUUID();
         const ended = {
           outcome: 'limit',
           stopReason: 'timeout',
@@ -200,6 +201,7 @@ export function pgTests() {
             traceId,
             spanId: 'root',
             parentSpanId: null,
+            runId,
             name: 'agent run',
             spanType: 'agent_run',
             isEvent: false,
@@ -212,8 +214,8 @@ export function pgTests() {
         expect((await observability.getSpan({ traceId, spanId: 'root' }))?.span).toMatchObject(ended);
         expect((await observability.getRootSpan({ traceId }))?.span).toMatchObject(ended);
         expect((await observability.getTrace({ traceId }))?.spans[0]).toMatchObject(ended);
-        const listed = await observability.listTraces({ filters: { traceId }, pagination: { page: 0, perPage: 10 } });
-        expect(listed.spans[0]).toMatchObject(ended);
+        const listed = await observability.listTraces({ filters: { runId }, pagination: { page: 0, perPage: 10 } });
+        expect(listed.spans).toMatchObject([{ traceId, ...ended }]);
       });
     });
 
