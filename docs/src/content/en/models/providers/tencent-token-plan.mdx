@@ -7,7 +7,7 @@ description: "Browse Tencent Token Plan model IDs, capabilities, context windows
 
 # <img src="https://models.dev/logos/tencent-token-plan.svg" alt="Tencent Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tencent Token Plan
 
-Access 3 Tencent Token Plan models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKEN_PLAN_API_KEY` environment variable.
+Access 15 Tencent Token Plan models through Mastra's model router. Authentication is handled automatically using the `TENCENT_TOKEN_PLAN_API_KEY` environment variable.
 
 Learn more in the [Tencent Token Plan documentation](https://cloud.tencent.com/document/product/1823/130060).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "tencent-token-plan/hy3"
+  model: "tencent-token-plan/deepseek/deepseek-flash"
 });
 
 // Generate a response
@@ -45,6 +45,90 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "tencent-token-plan/deepseek/deepseek-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.15013085,
+    "outputCost": 0.60052342
+  },
+  {
+    "model": "tencent-token-plan/deepseek/deepseek-v4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "tencent-token-plan/glm-5-2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "tencent-token-plan/glm-5-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.20104683,
+    "outputCost": 4.20366391
+  },
+  {
+    "model": "tencent-token-plan/glm-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "tencent-token-plan/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.20104683,
+    "outputCost": 4.20366391
+  },
+  {
+    "model": "tencent-token-plan/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.12010468,
+    "outputCost": 0.42036639
+  },
   {
     "model": "tencent-token-plan/hy3",
     "imageInput": false,
@@ -78,8 +162,68 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1024000,
     "maxOutput": 64000,
-    "inputCost": 0.834,
-    "outputCost": 2.501
+    "inputCost": 0.90078512,
+    "outputCost": 2.70235537
+  },
+  {
+    "model": "tencent-token-plan/kimi-k2.7-code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.97585055,
+    "outputCost": 4.05353306
+  },
+  {
+    "model": "tencent-token-plan/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 3.00261708,
+    "outputCost": 15.01308541
+  },
+  {
+    "model": "tencent-token-plan/mimo-v2.6-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15013085,
+    "outputCost": 0.30026171
+  },
+  {
+    "model": "tencent-token-plan/minimax-m-3-0",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 512000,
+    "inputCost": 0.31527479,
+    "outputCost": 1.26109917
+  },
+  {
+    "model": "tencent-token-plan/minimax-m3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 512000,
+    "inputCost": 0.31527479,
+    "outputCost": 1.26109917
   }
 ]}
 />
@@ -97,8 +241,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.lkeap.cloud.tencent.com/plan/v3",
-    id: "tencent-token-plan/hy3",
+    url: "https://tokenhub.tencentmaas.com/plan/v3",
+    id: "tencent-token-plan/deepseek/deepseek-flash",
     apiKey: process.env.TENCENT_TOKEN_PLAN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -118,8 +262,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "tencent-token-plan/hy4-preview"
-      : "tencent-token-plan/hy3";
+      ? "tencent-token-plan/minimax-m3"
+      : "tencent-token-plan/deepseek/deepseek-flash";
   }
 });
 ```
