@@ -10,7 +10,7 @@ import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../b
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
+import { isAgentActor, REVISION_CONFLICT_REASON } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type {
@@ -209,8 +209,9 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   }
 }
 
-function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
-  return result.status === 'rejected' && result.code === 'stale';
+/** The commit lost a race on the card's revision; a board policy's own `stale` is not one. */
+function isRevisionConflict(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
+  return result.status === 'rejected' && result.code === 'stale' && result.reason === REVISION_CONFLICT_REASON;
 }
 
 /** Tell the caller where the card is now, so a model doesn't read "stale" as "already moved". */
@@ -402,10 +403,9 @@ export class FactoryTransitionService {
     }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
     let from = item;
-    if (isStale(result)) {
+    if (isRevisionConflict(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
-      // Only a revision conflict is retried; a policy's own `stale` stands.
-      if (current && current.revision !== request.expectedRevision && reachedTarget(request, current)) {
+      if (current && reachedTarget(request, current)) {
         // Another move already took the card where this one was going (e.g. an approval
         // that waited while a later run moved it on). Retrying at the old revision would
         // only go stale again, so evaluate the move once more against the card as it is:
@@ -418,7 +418,7 @@ export class FactoryTransitionService {
           current,
           { reachedTarget: true },
         );
-        if (isStale(result)) {
+        if (isRevisionConflict(result)) {
           // Lost a second race: report where the card is now, not where it was.
           const latest = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
           if (latest) result = staleRejection(result, latest);

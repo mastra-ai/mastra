@@ -112,6 +112,8 @@ export interface ThreadSettingsStore {
 /** Process-local listener awaited before a terminal agent event is emitted. */
 export type SessionBeforeAgentEndListener = (
   event: Extract<AgentControllerEvent, { type: 'agent_end' }>,
+  /** The run that is ending; the session may already track another one. */
+  context: { runId: string | null },
 ) => void | Promise<void>;
 
 /** Options for {@link Session.sendNotificationSignal}. */
@@ -4532,18 +4534,19 @@ export class Session<TState = unknown> {
   ): Promise<void> {
     const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
     const runId = endingRunId ?? this.run.getRunId();
-    // Listeners and the display state both read the ending run; a listener may
-    // move the tracked run on, so hand them the run that ended.
+    // A listener may move the tracked run on, and another run may end while one
+    // awaits, so each listener gets this run's id rather than a shared slot.
+    for (const listener of this.#beforeAgentEndListeners) {
+      try {
+        await listener(event, { runId });
+      } catch (error) {
+        console.error('Error in before-agent-end listener:', error);
+      }
+    }
+    if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
+    // The display state clears the ending run's prompts during this synchronous emit.
     this.#endingRunId = runId;
     try {
-      for (const listener of this.#beforeAgentEndListeners) {
-        try {
-          await listener(event);
-        } catch (error) {
-          console.error('Error in before-agent-end listener:', error);
-        }
-      }
-      if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
       this.emit(event);
     } finally {
       this.#endingRunId = undefined;
@@ -4561,8 +4564,7 @@ export class Session<TState = unknown> {
     const completion = new Promise<void>(resolve => {
       resolveCompletion = resolve;
     });
-    const unsubscribe = this.onBeforeAgentEnd(() => {
-      const endingRunId = this.#endingRunId === undefined ? this.run.getRunId() : this.#endingRunId;
+    const unsubscribe = this.onBeforeAgentEnd((_event, { runId: endingRunId }) => {
       if (!endingRunId) return;
       completedRunIds.add(endingRunId);
       if (endingRunId === runId) resolveCompletion();

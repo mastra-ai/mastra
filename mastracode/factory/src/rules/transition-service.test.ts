@@ -3389,7 +3389,38 @@ describe('a stale agent move into the phase the card already reached', () => {
         ingress: { type: 'agent', identity: 'policy-stale-move' },
         cause: 'Build complete.',
       }),
-    ).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
+    ).resolves.toMatchObject({ status: 'rejected', code: 'stale', reason: 'Checks are still running.' });
+    expect(evaluations).toBe(1);
+  });
+
+  it("keeps a board policy's stale rejection even when the card's revision moves on right after", async () => {
+    let evaluations = 0;
+    const { read, current, service, storage } = await overtakenCard(context => {
+      if (context.fromStage !== context.toStage) return undefined;
+      evaluations += 1;
+      return evaluations === 1 ? { type: 'reject', code: 'stale', reason: 'Checks are still running.' } : undefined;
+    });
+    // An unrelated write lands between the policy's rejection and anything reading the card again.
+    const commit = storage.commitTransition.bind(storage);
+    vi.spyOn(storage, 'commitTransition').mockImplementationOnce(async input => {
+      const committed = await commit(input);
+      await storage.update({
+        orgId: 'org-1',
+        id: read.id,
+        userId: 'factory-rule-dispatcher',
+        patch: { metadata: { openPullRequestNumber: 6 } },
+      });
+      return committed;
+    });
+
+    await expect(
+      service.transition({
+        ...request(current, { board: 'ship', stage: 'review', expectedRevision: current.revision }),
+        actor: { type: 'agent', bindingId: 'current-run', role: 'review' },
+        ingress: { type: 'agent', identity: 'policy-stale-then-bump' },
+        cause: 'Build complete.',
+      }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'stale', reason: 'Checks are still running.' });
     expect(evaluations).toBe(1);
   });
 
