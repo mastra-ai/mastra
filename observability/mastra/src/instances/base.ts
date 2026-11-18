@@ -403,6 +403,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.errorInfo = cached.errorInfo;
     }
 
+    // No start event is emitted here, so ask `spanFilter` again to restore its start verdict.
+    if (this.config.spanFilter) this.judgeSpanStart(span);
+
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
@@ -859,49 +862,45 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    if (!span.isValid) return undefined;
-    if (span.isInternal && !this.config.includeInternalSpans) return undefined;
-
-    // Check excludeSpanTypes before processing
-    if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
-
-    const processedSpan = this.processSpan(span);
-    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
-    if (!exportedSpan) return undefined;
-
-    // Apply spanFilter on the exported span data
-    if (this.config.spanFilter) {
-      try {
-        if (!this.config.spanFilter(exportedSpan)) return undefined;
-      } catch (error) {
-        this.logger.error(`[Observability] spanFilter error`, error);
-        // On filter error, keep the span to avoid silent data loss
-      }
-    }
-
-    return exportedSpan;
+    const exportedSpan = this.getUnfilteredSpanForExport(span);
+    return exportedSpan && this.passesSpanFilter(exportedSpan) ? exportedSpan : undefined;
   }
 
-  /** Export an already-processed span, returning undefined if filtered out. */
-  private getProcessedSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
+  /**
+   * Export a span before `spanFilter` judges it. Pass `alreadyProcessed` when
+   * the span already went through the output processors.
+   */
+  private getUnfilteredSpanForExport(span: AnySpan, alreadyProcessed = false): AnyExportedSpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
-
     if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
 
-    const exportedSpan = span.exportSpan(this.config.includeInternalSpans);
-    if (!exportedSpan) return undefined;
+    const processedSpan = alreadyProcessed ? span : this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
 
-    if (this.config.spanFilter) {
-      try {
-        if (!this.config.spanFilter(exportedSpan)) return undefined;
-      } catch (error) {
-        this.logger.error(`[Observability] spanFilter error`, error);
-        // On filter error, keep the span to avoid silent data loss
-      }
+  /** A `spanFilter` that throws keeps the span, to avoid silent data loss. */
+  private passesSpanFilter(exportedSpan: AnyExportedSpan): boolean {
+    if (!this.config.spanFilter) return true;
+    try {
+      return Boolean(this.config.spanFilter(exportedSpan));
+    } catch (error) {
+      this.logger.error(`[Observability] spanFilter error`, error);
+      return true;
     }
+  }
 
-    return exportedSpan;
+  /**
+   * Ask `spanFilter` about a span's start. When it drops the start, record that
+   * on the span so descendants point at an ancestor exporters did receive.
+   * Returns the start view to export, if any.
+   */
+  private judgeSpanStart(span: AnySpan): AnyExportedSpan | undefined {
+    const exportedSpan = this.getUnfilteredSpanForExport(span);
+    if (!exportedSpan) return undefined;
+    if (this.passesSpanFilter(exportedSpan)) return exportedSpan;
+    if (span instanceof BaseSpan) span.isStartFiltered = true;
+    return undefined;
   }
 
   /**
@@ -909,7 +908,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanStarted(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
+    const exportedSpan = this.judgeSpanStart(span);
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
       this.emitTracingEvent(event);
@@ -955,11 +954,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
     }
 
-    const exportedSpan = spanWasProcessed
-      ? processedSpan
-        ? this.getProcessedSpanForExport(processedSpan)
-        : undefined
-      : this.getSpanForExport(span);
+    const unfilteredSpan = spanWasProcessed
+      ? processedSpan && this.getUnfilteredSpanForExport(processedSpan, true)
+      : this.getUnfilteredSpanForExport(span);
+    const exportedSpan = unfilteredSpan && this.passesSpanFilter(unfilteredSpan) ? unfilteredSpan : undefined;
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
@@ -1101,13 +1099,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Walk up the parent chain to find the closest ancestor that will actually
-   * reach exporters. Skips both internal-filtered ancestors and ancestors
-   * whose type matches `excludeSpanTypes`, so the rollup target is one whose
-   * mutated `internalUsage` attribute is visible in exported traces.
-   *
-   * Note: this does not preemptively run `spanFilter` — that filter can be
-   * async and have side effects, so the rare case of a `spanFilter`-dropped
-   * ancestor falls through.
+   * reach exporters. Skips internal-filtered ancestors, ancestors whose type
+   * matches `excludeSpanTypes`, and ancestors whose start `spanFilter` dropped,
+   * so the rollup target is one whose mutated `internalUsage` attribute is
+   * visible in exported traces.
    */
   private findExportedAncestor(span: AnySpan): AnySpan | undefined {
     let ancestor: AnySpan | undefined = span.parent;
@@ -1119,14 +1114,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * Returns true when a span would be dropped by `getSpanForExport` for a
-   * reason cheap to check up-front (internal-span filtering or
-   * `excludeSpanTypes`). Used by `findExportedAncestor` to skip rollup
-   * targets that would silently lose their `internalUsage` attribute.
+   * reason already known (internal-span filtering, `excludeSpanTypes`, or a
+   * start event `spanFilter` dropped). Used by `findExportedAncestor` to skip
+   * rollup targets that would silently lose their `internalUsage` attribute.
    */
   private isFilteredFromExport(span: AnySpan): boolean {
     if (span.isInternal && !this.config.includeInternalSpans) return true;
     if (this.config.excludeSpanTypes?.includes(span.type)) return true;
-    return false;
+    return span instanceof BaseSpan && span.isStartFiltered;
   }
 
   /**

@@ -73,6 +73,8 @@ type AnyBaseSpan = AnySpan & {
   getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined;
   /** True when the span is dropped before export (excludeSpanTypes / internal / alwaysExcluded) */
   readonly isExcluded?: boolean;
+  /** True when `spanFilter` dropped the span's start event */
+  readonly isStartFiltered?: boolean;
 };
 
 /** Parent and root entity fields shared by exported spans and correlation context */
@@ -208,7 +210,7 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   }
 
   const parent = options.parent as AnyBaseSpan;
-  if (parent.isInternal || parent.isExcluded) {
+  if (parent.isInternal || parent.isExcluded || parent.isStartFiltered) {
     // Parent won't reach exporters — walk to the closest exported ancestor
     return parent.getParentSpanId(false);
   }
@@ -318,6 +320,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * getMetricsContext() (which hand it to a context that snapshots it).
    */
   public isExcluded: boolean;
+  /**
+   * True when `spanFilter` dropped this span's start event, so exporters never
+   * saw the span open. The observability instance sets it right after creation,
+   * before any child exists. Parent-chain walks skip the span the same way they
+   * skip `isExcluded` ones. Unlike `isExcluded`, the span keeps its data:
+   * `spanFilter` still judges its update and end events.
+   */
+  public isStartFiltered = false;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
   /**
@@ -394,8 +404,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
     this.resumedFromSpanId = options.resumedFromSpanId;
-    // Entity identification - inherit from closest non-internal parent if not explicitly provided
-    const entityParent = this.getParentSpan(false);
+    // Entity identification - inherit from closest non-internal parent if not explicitly provided.
+    // A parent whose start `spanFilter` dropped still owns its children, so a filter on the
+    // entity keeps matching them.
+    let entityAncestor = this.parent as AnyBaseSpan | undefined;
+    while (entityAncestor && (entityAncestor.isExcluded || entityAncestor.isInternal)) {
+      entityAncestor = entityAncestor.parent as AnyBaseSpan | undefined;
+    }
+    const entityParent = entityAncestor;
     this.entityType = options.entityType ?? entityParent?.entityType;
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
@@ -595,7 +611,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /**
    * Get the closest parent span.
-   * Always skips ancestors dropped by `excludeSpanTypes` (`isExcluded`), so
+   * Always skips ancestors dropped by `excludeSpanTypes` (`isExcluded`) and
+   * ancestors whose start event `spanFilter` dropped (`isStartFiltered`), so
    * exported `parentSpanId` values never point at spans exporters omit.
    * When `includeInternalSpans` is false/undefined, also skips `isInternal`
    * ancestors.
@@ -605,7 +622,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return undefined;
     }
     const parent = this.parent as AnyBaseSpan;
-    if (parent.isExcluded || (!includeInternalSpans && parent.isInternal)) {
+    if (parent.isExcluded || parent.isStartFiltered || (!includeInternalSpans && parent.isInternal)) {
       return parent.getParentSpan(includeInternalSpans);
     }
     return this.parent;
@@ -861,7 +878,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
+      const bridgeContextSpan =
+        this.isInternal || this.isExcluded || this.isStartFiltered ? this.getParentSpan(false) : this;
       return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
     }
 
@@ -876,7 +894,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
+      const bridgeContextSpan =
+        this.isInternal || this.isExcluded || this.isStartFiltered ? this.getParentSpan(false) : this;
       return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
     }
 
