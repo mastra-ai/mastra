@@ -35,7 +35,11 @@ export const TEMPLATE_SHA = 'bb789a55bfcf744b3c83aa9132e4ffa562106aa3';
  * plus the change — which GitHub serves directly from the upstream
  * repository, so providers that only need upstream templates share the same
  * pin for a consistent generation source. Move these providers back to
- * `TEMPLATE_SHA` once #677 merges.
+ * `TEMPLATE_SHA` once #677 merges. When posthog moves, delete
+ * `adaptPosthogRunQuery` in `generate-provider.ts` if the template already
+ * declares `types` as pairs (the override throws once it no longer matches),
+ * and replace the reconstructed `posthogRunQueryTemplate` fixture in
+ * `provider-commands.test.ts` with the fetched template.
  */
 const PIN_677: TemplatePin = {
   repo: 'NangoHQ/integration-templates',

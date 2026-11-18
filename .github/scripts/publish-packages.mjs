@@ -14,10 +14,18 @@
 // Packages already on the registry at their current version are skipped, so
 // re-running after a partial failure publishes only what's left — the same
 // behavior `pnpm publish -r` has. A failed publish is retried, and an attempt
-// that hangs is killed after PUBLISH_TIMEOUT_MS (default 10 minutes). If a
-// package still fails, the rest of its dependency level finishes, no later
-// level is attempted (even packages that don't depend on the failed one), and
-// the script exits 1; re-running publishes what is left.
+// that hangs is killed after PUBLISH_TIMEOUT_MS (default 10 minutes).
+//
+// Provenance signing can fail on its own: the sigstore transparency log
+// sometimes answers 409 "an equivalent entry already exists" for minutes at a
+// time. After such a failure the registry is polled for up to
+// PUBLISH_REGISTRY_LAG_MS (default 30s) in case the version landed anyway, and
+// the publish is retried more times with a longer backoff (30s up to 5 minutes).
+//
+// If a package still fails, every package that doesn't depend on it (directly
+// or through another package) is still published; the ones that do are left
+// out, and the script exits 1 at the end with a summary. Re-running publishes
+// what is left.
 //
 // Usage:
 //   node publish-packages.mjs [--tag <dist-tag>] [--concurrency <n>] [--registry <url>]
@@ -32,7 +40,14 @@ import path from 'node:path';
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const DEFAULT_CONCURRENCY = 8;
 const PUBLISH_ATTEMPTS = 3;
+const SIGNING_PUBLISH_ATTEMPTS = 6;
 const RETRY_DELAY_MS = Number(process.env.PUBLISH_RETRY_DELAY_MS ?? 15_000);
+// Waits after each failed attempt, in RETRY_DELAY_MS units: 15s, 30s for an
+// ordinary failure; 30s, 1m, 2m, 4m, 5m for a provenance-signing failure.
+const RETRY_STEPS = [1, 2];
+const SIGNING_RETRY_STEPS = [2, 4, 8, 16, 20];
+const REGISTRY_LAG_MS = Number(process.env.PUBLISH_REGISTRY_LAG_MS ?? 30_000);
+const REGISTRY_POLL_MS = 2_000;
 const PUBLISH_TIMEOUT_MS = Number(process.env.PUBLISH_TIMEOUT_MS ?? 10 * 60_000);
 const FETCH_ATTEMPTS = 3;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -79,6 +94,9 @@ function discoverPublishablePackages() {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// npm signs the provenance statement, and records it in the sigstore
+// transparency log (Rekor), before it uploads anything.
+const isSigningFailure = output => /TLOG_|tlog entry|transparency log|sigstore|fulcio|rekor|provenance/i.test(output);
 const isTransient = status => status === 408 || status === 429 || status >= 500;
 
 async function isPublished(registry, { name, version }) {
@@ -114,14 +132,16 @@ async function mapConcurrent(items, concurrency, fn) {
   return results;
 }
 
+// The packages still to publish that this one needs at runtime.
+const runtimeDeps = ({ manifest }, pending) =>
+  Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies }).filter(
+    dep => dep !== manifest.name && pending.has(dep),
+  );
+
 // Groups packages into levels: every package's workspace runtime
 // dependencies are in an earlier level (or already published).
 function dependencyLevels(pending) {
-  const runtimeDeps = ({ manifest }) =>
-    Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies }).filter(
-      dep => dep !== manifest.name && pending.has(dep),
-    );
-  const remaining = new Map([...pending.values()].map(pkg => [pkg.name, runtimeDeps(pkg)]));
+  const remaining = new Map([...pending.values()].map(pkg => [pkg.name, runtimeDeps(pkg, pending)]));
   const done = new Set();
   const levels = [];
   while (remaining.size > 0) {
@@ -168,31 +188,53 @@ function runPublish(pkg, options) {
   });
 }
 
+// Whether the version is on the registry, polling for up to `lagMs` because a
+// version npm just accepted can take a while to show.
+async function appearsOnRegistry(registry, pkg, lagMs) {
+  const deadline = Date.now() + lagMs;
+  for (;;) {
+    if (await isPublished(registry, pkg).catch(() => false)) return true;
+    if (Date.now() + REGISTRY_POLL_MS > deadline) return false;
+    await sleep(REGISTRY_POLL_MS);
+  }
+}
+
 async function publishPackage(pkg, options, registry) {
   const id = `${pkg.name}@${pkg.version}`;
   const started = Date.now();
-  for (let attempt = 1; attempt <= PUBLISH_ATTEMPTS; attempt++) {
+  // Once a signing failure has been seen, the package gets the signing budget and
+  // backoff for the rest of its attempts, whatever the later failures are.
+  let signingSeen = false;
+  let attempts = PUBLISH_ATTEMPTS;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const { code, output } = await runPublish(pkg, options);
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     if (code === 0) {
       console.log(`::group::Published ${id} (${seconds}s)\n${output.trimEnd()}\n::endgroup::`);
       return true;
     }
+    const signing = isSigningFailure(output);
+    if (signing && !signingSeen) {
+      signingSeen = true;
+      attempts = SIGNING_PUBLISH_ATTEMPTS;
+    }
     // The publish can reach npm and still exit non-zero (e.g. a dropped
     // connection after the upload). The registry is the source of truth.
-    if (await isPublished(registry, pkg).catch(() => false)) {
+    if (await appearsOnRegistry(registry, pkg, signing ? REGISTRY_LAG_MS : 0)) {
       console.log(
         `::group::Published ${id} (${seconds}s, reported a failure but is on the registry)\n${output.trimEnd()}\n::endgroup::`,
       );
       return true;
     }
-    if (attempt < PUBLISH_ATTEMPTS) {
+    if (attempt < attempts) {
+      const delay = RETRY_DELAY_MS * (signingSeen ? SIGNING_RETRY_STEPS : RETRY_STEPS)[attempt - 1];
+      const why = signing ? ', provenance signing' : '';
       console.log(
-        `::group::Retrying ${id} (attempt ${attempt} of ${PUBLISH_ATTEMPTS} failed)\n${output.trimEnd()}\n::endgroup::`,
+        `::group::Retrying ${id} (attempt ${attempt} of ${attempts} failed${why}; next in ${delay / 1000}s)\n${output.trimEnd()}\n::endgroup::`,
       );
-      await sleep(RETRY_DELAY_MS * attempt);
+      await sleep(delay);
     } else {
-      console.log(`::error::Failed to publish ${id} after ${PUBLISH_ATTEMPTS} attempts`);
+      console.log(`::error::Failed to publish ${id} after ${attempts} attempts`);
       console.log(output.trimEnd());
     }
   }
@@ -218,23 +260,36 @@ async function main() {
   );
 
   const started = Date.now();
-  for (const [index, level] of levels.entries()) {
-    const results = await mapConcurrent(level, options.concurrency, pkg => publishPackage(pkg, options, registry));
-    const failed = level.filter((_, i) => !results[i]);
-    if (failed.length > 0) {
-      const notAttempted = levels.slice(index + 1).flat();
-      console.log(`::error::Publishing stopped: ${failed.length} package(s) failed`);
-      console.log(`Failed: ${failed.map(pkg => `${pkg.name}@${pkg.version}`).join(', ')}`);
-      if (notAttempted.length > 0) {
-        console.log(
-          `Not published because they come after a failed package: ${notAttempted.map(pkg => pkg.name).join(', ')}`,
-        );
-      }
-      console.log('Re-run the publish to publish the remaining packages; already published versions are skipped.');
-      process.exit(1);
+  const failed = [];
+  // Package name → the failed package it needs, directly or through another.
+  const blockedBy = new Map();
+  for (const level of levels) {
+    const ready = [];
+    for (const pkg of level) {
+      const cause = runtimeDeps(pkg, pending)
+        .map(dep => blockedBy.get(dep) ?? (failed.includes(pending.get(dep)) ? dep : undefined))
+        .find(Boolean);
+      if (cause) blockedBy.set(pkg.name, cause);
+      else ready.push(pkg);
     }
+    const results = await mapConcurrent(ready, options.concurrency, pkg => publishPackage(pkg, options, registry));
+    failed.push(...ready.filter((_, i) => !results[i]));
   }
-  console.log(`Published ${pending.size} package(s) in ${((Date.now() - started) / 1000).toFixed(0)}s`);
+  const seconds = ((Date.now() - started) / 1000).toFixed(0);
+  if (failed.length === 0) {
+    console.log(`Published ${pending.size} package(s) in ${seconds}s`);
+    return;
+  }
+  const publishedCount = pending.size - failed.length - blockedBy.size;
+  console.log(`::error::${failed.length} package(s) failed to publish; ${blockedBy.size} more depend on them`);
+  console.log(`Published ${publishedCount} of ${pending.size} package(s) in ${seconds}s`);
+  console.log(`Failed: ${failed.map(pkg => `${pkg.name}@${pkg.version}`).join(', ')}`);
+  if (blockedBy.size > 0) {
+    const blocked = [...blockedBy].map(([name, cause]) => `${name}@${pending.get(name).version} (needs ${cause})`);
+    console.log(`Not published because a dependency failed: ${blocked.join(', ')}`);
+  }
+  console.log('Re-run the publish to publish the remaining packages; already published versions are skipped.');
+  process.exit(1);
 }
 
 main().catch(error => {

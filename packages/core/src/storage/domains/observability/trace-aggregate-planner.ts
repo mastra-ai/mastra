@@ -213,15 +213,22 @@ interface HavingState<M extends string> {
  */
 export function planTraceAggregate(
   request: NormalizedTraceAggregateRequest,
-  options: Pick<TraceQueryPlanOptions, 'scope'> = {},
+  options: Pick<TraceQueryPlanOptions, 'scope' | 'allowTokenSearch'> = {},
 ): TrustedTraceAggregatePlan {
   const issues: TraceQueryIssue[] = [];
-  const where = request.where ? planTraceQuerySelectionPredicate(request.where, issues) : undefined;
+  const where = request.where
+    ? planTraceQuerySelectionPredicate(request.where, issues, ['where'], options.allowTokenSearch)
+    : undefined;
   const plan = planAggregateGroups(request, issues, {
     isDimension: isTraceAggregateDimension,
     parseMeasure: parseTraceAggregateMeasure,
   });
-  return { result: 'aggregate', ...plan, where, scope: normalizeTraceQueryTenantScope(options.scope) };
+  return {
+    result: 'aggregate',
+    ...plan,
+    where,
+    scope: normalizeTraceQueryTenantScope(options.scope),
+  };
 }
 
 /** @internal The parts of an aggregate request that trace and span scopes share. */
@@ -445,7 +452,7 @@ function planHaving<M extends string>(
     return { type: 'membership', measure, operator: predicate.op, values: values as number[] };
   }
 
-  if (predicate.op === 'matches' || predicate.op === 'notMatches') {
+  if (predicate.op === 'matches' || predicate.op === 'notMatches' || predicate.op === 'hasAllTokens') {
     state.issues.push({
       code: 'operator_not_allowed',
       path: [...path, 'op'],

@@ -36,8 +36,28 @@ describe('scopeTitle', () => {
     expect(scopeTitle(scope('notion:Mastra:not_01', 'Engineering wiki'))).toBe('Engineering wiki');
   });
 
-  it('keeps the address of a scope from an unknown source', () => {
-    expect(scopeTitle(scope('org:team'))).toBe('org:team');
+  it('names a built-in scope by its kind instead of its address', () => {
+    expect(scopeTitle(scope('org:org_01KPRK1TA1J73YAV6ARRZYFM66'))).toBe('Organization');
+  });
+
+  it('names the page an importer writes under by its source, with its icon', () => {
+    const notion = {
+      ...scope('org:acme'),
+      id: 'notion',
+      isScope: false,
+      address: undefined,
+      scopeId: 'org',
+      parentId: 'org',
+      key: 'notion',
+      name: 'notion',
+    };
+    expect(scopeTitle(notion)).toBe('Notion');
+    expect(scopeSource(notion)?.icon).toBe(NotionIcon);
+    expect(scopeTitle({ ...notion, parentId: 'deeper' })).toBe('notion');
+  });
+
+  it('keeps the address of a scope of an unknown kind', () => {
+    expect(scopeTitle(scope('region:eu'))).toBe('region:eu');
   });
 });
 

@@ -2,7 +2,7 @@ import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import type { LoaderFunctionArgs } from 'react-router';
+import type { LoaderFunctionArgs, ShouldRevalidateFunction } from 'react-router';
 
 import type { ApiConfig } from '../api/config';
 import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
@@ -22,18 +22,23 @@ import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
   boardPhasesQueryOptions,
+  sessionWorkItemsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
+  workItemQueryOptions,
   workItemStartersQueryOptions,
 } from '../hooks/useWorkItems';
+import { userSessionQueryOptions } from '../hooks/useWorkspaces';
 import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
 import { boardFiltersFromParams } from './domains/factory/boardFilters';
 import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
 import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
 import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
+import { linkedSessionRepository } from './domains/factory/hooks/useSessionRepository';
 import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
+import { pullRequestSubscriptionsQuery } from './domains/factory/services/githubSubscriptions';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
 import { readPinnedSessions } from './domains/workspaces/hooks/usePinnedSessions';
 import { readSessionFilters } from './domains/workspaces/hooks/useSessionFilters';
@@ -48,17 +53,22 @@ export interface RouteLoaderServices {
   api: ApiConfig;
 }
 
-export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void;
+export type Prefetch = (services: RouteLoaderServices, args: LoaderFunctionArgs) => void | Promise<void>;
 
-export function createLoadOnEntry(services: RouteLoaderServices | undefined) {
-  return function loadOnEntry(prefetch?: Prefetch, page?: LazyPageComponent) {
+export function createLoadOnEntry(services: RouteLoaderServices | undefined, holdsNavigation?: () => boolean) {
+  return function loadOnEntry(
+    prefetch?: Prefetch,
+    page?: LazyPageComponent,
+    shouldRevalidate: ShouldRevalidateFunction = () => false,
+  ) {
     if (!services) return {};
     return {
       loader: (args: LoaderFunctionArgs) => {
         page?.preload().catch(noop);
-        prefetch?.(services, args);
+        const reads = prefetch?.(services, args);
+        return holdsNavigation?.() ? reads : undefined;
       },
-      shouldRevalidate: () => false,
+      shouldRevalidate,
     };
   };
 }
@@ -179,6 +189,66 @@ export const prefetchDraft: Prefetch = (services, args) => {
   void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
   void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
 };
+
+/** A card's draft offers the card's own actions under the composer. */
+export const prefetchCardDraft: Prefetch = (services, args) => {
+  prefetchComposer(services, args);
+  const { factoryId, workItemId } = args.params;
+  if (!factoryId || !workItemId) return;
+  const { queryClient, api } = services;
+  void queryClient.query(workItemQueryOptions(api.baseUrl, factoryId, workItemId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+};
+
+const CACHED_UNLESS_INVALIDATED = { staleTime: Infinity };
+
+export const loadSessionFrame: Prefetch = async (services, { params }) => {
+  const { queryClient, api } = services;
+  const { factoryId, threadId } = params;
+  const sessionId = params.sessionId ?? threadId;
+  if (!factoryId || !sessionId || !threadId) return;
+  const cardReads = params.sessionId
+    ? [
+        queryClient
+          .query({
+            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...CACHED_UNLESS_INVALIDATED,
+          })
+          .catch(noop),
+        queryClient
+          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .catch(noop),
+      ]
+    : [];
+  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+};
+
+async function loadSessionSubscriptions(
+  { queryClient, api }: RouteLoaderServices,
+  factoryId: string,
+  sessionId: string,
+  threadId: string,
+) {
+  const [factories, session] = await Promise.all([
+    queryClient.query({ ...factoriesQueryOptions(api.baseUrl), ...CACHED_UNLESS_INVALIDATED }).catch(() => undefined),
+    queryClient
+      .query({ ...userSessionQueryOptions(api.baseUrl, sessionId), ...CACHED_UNLESS_INVALIDATED })
+      .catch(() => undefined),
+  ]);
+  const factory = factories?.find(candidate => candidate.id === factoryId);
+  const { repository, provider } = linkedSessionRepository(factory, session);
+  if (!repository) return;
+  await queryClient
+    .query({
+      ...pullRequestSubscriptionsQuery(api.baseUrl, sessionId, threadId, provider, true),
+      ...CACHED_UNLESS_INVALIDATED,
+    })
+    .catch(noop);
+}
+
+export const reloadOnAnotherThread: ShouldRevalidateFunction = ({ currentParams, nextParams }) =>
+  currentParams.sessionId !== nextParams.sessionId || currentParams.threadId !== nextParams.threadId;
 
 export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, request }) => {
   const { factoryId } = params;

@@ -1769,7 +1769,7 @@ export interface IModelSpanTracker {
   getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   /** @internal Record a chunk after the runtime has applied output processors. */
-  recordChunk?(chunk: ChunkType): void;
+  recordChunk?<OUTPUT>(chunk: ChunkType<OUTPUT>): void;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
 

@@ -1,6 +1,10 @@
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem } from '@mastra/factory/boards/board-events';
+import {
+  INTAKE_ROUTE_RULE_FIELDS,
+  matchesOutsiderPullRequests,
+  routeEventsProblem,
+} from '@mastra/factory/boards/board-events';
 import { ruleGroupSchema } from '@mastra/factory/rules/rule-group';
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -20,6 +24,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import { ConditionRows } from '../../settings/components/ConditionRows';
 import { describeRule, intakeRouteFacts } from '../../settings/components/conditionFields';
 import { boardName, phaseName, phaseOptions } from '../ruleTargets';
@@ -48,18 +53,14 @@ const STEPS: { id: RuleStep; title: string; question: string }[] = [
 ];
 
 /**
- * Phases a rule may aim at. An item with no card yet can't land in a finished phase and starts in the board's first
- * phase, so it may only land where that phase can move it. A card already on a board can go to any phase.
+ * Phases a rule may aim at. An item with no card yet can't land in a finished phase; any other
+ * phase works, even one the board's first phase can't move to — the rule's author designs the
+ * board too. A card already on a board can go to any phase.
  */
 function targetPhases(board: InstalledBoardInfo | undefined, placesNew: boolean) {
   const phases = board?.phases ?? [];
   if (!placesNew) return phases;
-  const first = phases.find(phase => phase.id === board?.initialPhase);
-  return phases.filter(
-    phase =>
-      phase.kind !== 'terminal' &&
-      (phase.id === first?.id || first?.transitions.some(transition => transition.to === phase.id) === true),
-  );
+  return phases.filter(phase => phase.kind !== 'terminal');
 }
 
 /** What stops the rule saving, in words; undefined when it can save. */
@@ -79,6 +80,7 @@ function suggestName(on: readonly RuleEvent[], when: RuleGroup | null, target: s
 }
 
 export function RuleBuilderDialog({
+  factoryId,
   board,
   boards,
   initial,
@@ -90,6 +92,8 @@ export function RuleBuilderDialog({
   onSave,
   onClose,
 }: {
+  /** The Factory project whose repositories, teams and projects the source filter suggests. */
+  factoryId: string;
   board: InstalledBoardInfo;
   boards: readonly InstalledBoardInfo[];
   /** The rule being edited; a new rule when undefined. */
@@ -104,6 +108,7 @@ export function RuleBuilderDialog({
   onSave: (draft: RuleDraft) => void;
   onClose: () => void;
 }) {
+  const sources = useSourceSuggestions(factoryId);
   const [on, setOn] = useState<RuleEvent[]>(() => initial?.on ?? (initialEvent ? [initialEvent] : []));
   const [when, setWhen] = useState<RuleGroup | null>(() => initial?.when ?? null);
   const [filtered, setFiltered] = useState(() => (initial?.when?.conditions.length ?? 0) > 0);
@@ -114,6 +119,8 @@ export function RuleBuilderDialog({
   );
   const [name, setName] = useState<string | undefined>(() => initial?.name);
   const [step, setStep] = useState<RuleStep>(initialStep);
+  // Bumped when the dialog rewrites the conditions itself: the editor reads them once per key.
+  const [rewrites, setRewrites] = useState(0);
 
   const placesNew = placesArrival(on);
   const targetBoard = boards.find(candidate => candidate.id === boardKey);
@@ -150,6 +157,21 @@ export function RuleBuilderDialog({
       when: rule,
       target: { phaseKey: phase.id, moveToBoardKey: boardKey === board.id ? null : boardKey },
     });
+  };
+
+  // The rule moves cards on pull request events for whoever opened them, so it can narrow itself to trusted authors.
+  const addTrustedCondition = () => {
+    const trusted: RuleCondition = { field: 'pullRequest.trusted', operator: 'equals', value: true };
+    setWhen(
+      rule === null
+        ? { operator: 'AND', conditions: [trusted] }
+        : rule.operator === 'AND'
+          ? { ...rule, conditions: [...rule.conditions, trusted] }
+          : { operator: 'AND', conditions: [rule, trusted] },
+    );
+    setFiltered(true);
+    setIncomplete(false);
+    setRewrites(count => count + 1);
   };
 
   const summary: Record<RuleStep, ReactNode> = {
@@ -246,10 +268,11 @@ export function RuleBuilderDialog({
                   {filtered && (
                     <div className="border-border bg-fill-subtle rounded-xl border p-3">
                       <ConditionRows
+                        key={rewrites}
                         label="Conditions"
                         rule={when}
                         facts={intakeRouteFacts(on)}
-                        options={phaseOptions(board)}
+                        options={{ ...phaseOptions(board), 'source.repository': sources }}
                         onChange={(next, unfinished) => {
                           setWhen(next);
                           setIncomplete(unfinished);
@@ -258,6 +281,18 @@ export function RuleBuilderDialog({
                     </div>
                   )}
                   {problem && <Notice variant="warning">{problem}</Notice>}
+                  {!initial?.outsiderPullRequestsGated && matchesOutsiderPullRequests(on, rule) && (
+                    <Notice variant="info">
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span>Also matches pull requests from outside authors.</span>
+                        {!readOnly && (
+                          <button type="button" onClick={addTrustedCondition} className="shrink-0 underline">
+                            Add: Pull request trusted is yes
+                          </button>
+                        )}
+                      </span>
+                    </Notice>
+                  )}
                 </div>
               )}
 
@@ -454,7 +489,7 @@ function TriggerStep({
     <div className="flex flex-col gap-5">
       {on.includes(LEGACY_OPENED_EVENT) && (
         <Notice variant="info">
-          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new issues and pull requests. Saving
+          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new work items and pull requests. Saving
           keeps it.
         </Notice>
       )}

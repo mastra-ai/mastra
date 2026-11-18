@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse, FactorySkillInfo, FactorySkillsResponse } from '../../../../api/types';
 import { FactorySkillsSection } from '../components/FactorySkillsSection';
 
 const SKILLS_URL = `${TEST_BASE_URL}/web/factory/skills`;
 const BOARDS_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/boards`;
 const SKILL_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/skills/:name`;
+const CREATE_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/skills`;
 
 const bundled = { origin: 'bundled', builtIn: true } as const;
 
@@ -49,7 +50,7 @@ function serve({
       const { content } = (await request.json()) as { content: string };
       const name = String(params.name);
       writes.push({ method: 'PUT', name, content });
-      if (!content.includes(`name: ${name}\n`)) {
+      if (!content.includes(`name: ${JSON.stringify(name)}\n`)) {
         return HttpResponse.json({ error: 'invalid_skill', message: 'name must match' }, { status: 400 });
       }
       const description = JSON.parse(/^description: (.*)$/m.exec(content)![1]) as string;
@@ -67,9 +68,34 @@ function serve({
       );
       return HttpResponse.json({ skill: current.find(skill => skill.name === name) });
     }),
+    http.post(CREATE_URL, async ({ request }) => {
+      const { name, content } = (await request.json()) as { name: string; content: string };
+      writes.push({ method: 'POST', name, content });
+      if (current.some(skill => skill.name === name)) {
+        return HttpResponse.json(
+          { error: 'skill_exists', message: `A skill named "${name}" already exists. Edit it instead.` },
+          { status: 409 },
+        );
+      }
+      const description = JSON.parse(/^description: (.*)$/m.exec(content)![1]) as string;
+      const created: FactorySkillInfo = {
+        name,
+        description,
+        content: content.slice(content.indexOf('\n---\n') + 5).trim(),
+        origin: 'project',
+        builtIn: false,
+        created: { updatedBy: 'admin-1', updatedAt: '2026-11-17T00:00:00.000Z' },
+      };
+      current = [...current, created];
+      return HttpResponse.json({ skill: created }, { status: 201 });
+    }),
     http.delete(SKILL_URL, ({ params }) => {
       const name = String(params.name);
       writes.push({ method: 'DELETE', name });
+      if (current.find(skill => skill.name === name)?.origin === 'project') {
+        current = current.filter(skill => skill.name !== name);
+        return HttpResponse.json({ skill: null });
+      }
       const original = catalog.find(skill => skill.name === name)!;
       current = current.map(skill =>
         skill.name === name ? { ...original, edited: undefined, originalChanged: undefined } : skill,
@@ -219,7 +245,7 @@ describe('FactorySkillsSection', () => {
         {
           method: 'PUT',
           name: 'changelog-lint',
-          content: '---\nname: changelog-lint\ndescription: "Our lint: check # first"\n---\n\n# Lint\n',
+          content: '---\nname: "changelog-lint"\ndescription: "Our lint: check # first"\n---\n\n# Lint\n',
         },
       ]);
       expect(await within(card('changelog-lint')).findByText('Edited')).toBeInTheDocument();
@@ -355,6 +381,125 @@ describe('FactorySkillsSection', () => {
       dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
       expect(within(dialog).getByDisplayValue('Lint changelogs')).toBeInTheDocument();
     });
+  });
+
+  describe('creating a skill', () => {
+    it('creates a skill for this Factory and lists it as custom', async () => {
+      const { writes } = serve();
+      const user = userEvent.setup();
+      const { client } = renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'New skill' }));
+      const dialog = await screen.findByRole('dialog', { name: 'New skill' });
+      const create = within(dialog).getByRole('button', { name: 'Create' });
+      expect(create).toBeDisabled();
+      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'release-notes');
+      expect(create).toBeDisabled();
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Write notes: what # changed');
+      await user.click(create);
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(writes).toEqual([
+        {
+          method: 'POST',
+          name: 'release-notes',
+          content: '---\nname: "release-notes"\ndescription: "Write notes: what # changed"\n---\n\n\n',
+        },
+      ]);
+      const created = await screen.findByRole('button', { name: /^release-notes/ });
+      expect(within(created).getByText('Custom')).toBeInTheDocument();
+      expect(within(card('changelog-lint')).queryByText('Custom')).not.toBeInTheDocument();
+      await waitForMutationsIdle(client);
+    });
+
+    it('keeps an all-digit name a string in the SKILL.md it sends', async () => {
+      const { writes } = serve();
+      const user = userEvent.setup();
+      const { client } = renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'New skill' }));
+      const dialog = await screen.findByRole('dialog', { name: 'New skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), '123');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Numbered');
+      await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0]).toMatchObject({ method: 'POST', name: '123' });
+      expect(writes[0].content).toMatch(/^---\nname: "123"\n/);
+      await waitForMutationsIdle(client);
+    });
+
+    it('explains a name agents cannot use and keeps Create disabled', async () => {
+      const { writes } = serve();
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'New skill' }));
+      const dialog = await screen.findByRole('dialog', { name: 'New skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Release_Notes');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Write release notes');
+
+      expect(within(dialog).getByText(/lowercase letters, digits, and single hyphens/)).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Create' })).toBeDisabled();
+      expect(writes).toEqual([]);
+    });
+
+    it('shows why the server refused it and keeps the editor open', async () => {
+      serve();
+      const user = userEvent.setup();
+      const { client } = renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'New skill' }));
+      const dialog = await screen.findByRole('dialog', { name: 'New skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'changelog-lint');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Mine');
+      await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+        'A skill named "changelog-lint" already exists. Edit it instead.',
+      );
+      expect(screen.getByRole('dialog', { name: 'New skill' })).toBeInTheDocument();
+      await waitForMutationsIdle(client);
+    });
+
+    it('offers no New skill to members who are not admins', async () => {
+      serve({ canEdit: false });
+      renderSection();
+
+      expect(await screen.findByRole('button', { name: 'View configure-factory-rules' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'New skill' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('deletes a skill this Factory created once confirmed, and offers no revert for it', async () => {
+    const releaseNotes: FactorySkillInfo = {
+      name: 'release-notes',
+      description: 'Write release notes',
+      content: '# Notes',
+      origin: 'project',
+      builtIn: false,
+      created: { updatedBy: 'admin-1', updatedAt: '2026-11-17T00:00:00.000Z' },
+    };
+    const { writes } = serve({ catalog: [...skills, releaseNotes] });
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit release-notes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+    expect(within(dialog).queryByRole('button', { name: 'Revert to original' })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    expect(within(dialog).getByText(/Delete release-notes\?/)).toBeInTheDocument();
+    expect(writes).toEqual([]);
+
+    // Keep backs out without deleting.
+    await user.click(within(dialog).getByRole('button', { name: 'Keep' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Delete skill' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(writes).toEqual([{ method: 'DELETE', name: 'release-notes' }]);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^release-notes/ })).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
   });
 
   it('surfaces a load failure from the server', async () => {

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
+import { http, HttpResponse } from 'msw';
 
 import { DOCK_MIN_REM } from '../src/ui/domains/workspace-viewer/layout';
 import { HEAVY, heavySessionHandlers } from './ui/heavy-session';
@@ -13,8 +14,11 @@ async function boxOf(locator: Locator) {
   return box;
 }
 
-async function openPanel(page: Page) {
-  await page.goto(`/factories/${HEAVY.factoryId}/workspaces/${HEAVY.sessionId}/threads/${HEAVY.threadId}`);
+async function openPanel(
+  page: Page,
+  path = `/factories/${HEAVY.factoryId}/workspaces/${HEAVY.sessionId}/threads/${HEAVY.threadId}`,
+) {
+  await page.goto(path);
   const toggle = page.getByRole('button', { name: 'Session panel' });
   if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
@@ -215,5 +219,30 @@ test.describe('Session panel with a heavy session', () => {
     await panel.getByRole('button', { name: 'Back to files' }).click();
     await finder.press('Escape');
     await expect(panel.getByRole('treeitem', { name: /agent-runner\.ts/, selected: true })).toBeVisible();
+  });
+
+  test("keeps a card draft's setup screen clear of the panel, whatever the panel's width", async ({
+    page,
+  }, testInfo) => {
+    server.use(
+      http.get('*/web/factory/projects/:factoryId/work-items/:workItemId/session-repository', () =>
+        HttpResponse.json({ status: 'resolved', projectRepositoryId: HEAVY.repositoryId, slug: 'mastra-ai/mastra' }),
+      ),
+    );
+    const panel = await openPanel(page, `/factories/${HEAVY.factoryId}/cards/card-c2`);
+    await expect(page.getByRole('heading', { name: 'No model available' })).toBeVisible();
+    const setup = page.getByText('Chats in this Factory run on your own keys');
+    const panelWidths: number[] = [];
+
+    for (const width of [1600, 1400]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await transitionsEnd(page);
+      const text = await boxOf(setup);
+      const panelBox = await boxOf(panel);
+      expect(text.x + text.width).toBeLessThan(panelBox.x);
+      panelWidths.push(panelBox.width);
+      await page.screenshot({ path: testInfo.outputPath(`card-draft-setup-${width}.png`) });
+    }
+    expect(panelWidths[1]).toBeLessThan(panelWidths[0] ?? 0);
   });
 });

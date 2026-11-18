@@ -48,7 +48,6 @@ function rowsAnswer(rows: SessionRowWire[], groupTotal: number): SessionRowsResp
     groups: [{ key: 'all', total: groupTotal, rows }],
     boards: [],
     owners: [],
-    settling: false,
   };
 }
 

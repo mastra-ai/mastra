@@ -99,9 +99,9 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
 
-  it('shows the initializing belt for a session that has not materialized yet', async () => {
+  it('shows the initializing belt while a run waits on the session setting up', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
-    stubActiveSessions(new Set());
+    stubActiveSessions(new Set(['sess-2']));
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
@@ -109,33 +109,15 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('clears the initializing belt once the run that materialized the session finishes', async () => {
-    let settled = false;
+  it('clears the initializing belt once the run ends, though setup never finished', async () => {
     const active = new Set(['sess-4']);
-    stubProjectAndSessions([]);
-    // Serve a mutable session row so the next sessions refetch observes the
-    // stamped `materializedAt` (registered after the base stub — the most
-    // recent handler wins).
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
-        HttpResponse.json({
-          sessions: [
-            makeSession({
-              sessionId: 'sess-4',
-              branch: 'user/feature-d',
-              materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
-            }),
-          ],
-        }),
-      ),
-    );
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-4', branch: 'user/feature-d', materializedAt: null })]);
     stubActiveSessions(active);
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
     await screen.findByRole('status', { name: 'Initializing feature-d' });
 
-    settled = true;
     active.delete('sess-4');
     await invalidateSessionQueries(client, factoryId);
     await waitForMutationsIdle(client);
