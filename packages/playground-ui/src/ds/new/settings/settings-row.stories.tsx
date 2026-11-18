@@ -201,6 +201,20 @@ export const Destructive: Story = {
   ),
 };
 
+/** A disabled destructive row keeps its red label. */
+export const DestructiveDisabled: Story = {
+  render: () => (
+    <SettingsRow
+      label="Leave organization"
+      description="Remove your access to this organization."
+      tone="destructive"
+      disabled
+    >
+      <Button variant="destructive-ghost">Leave</Button>
+    </SettingsRow>
+  ),
+};
+
 export const Validation: Story = {
   render: () => (
     <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
