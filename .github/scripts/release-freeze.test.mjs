@@ -542,3 +542,48 @@ test('the check pin is compared with the app that runs the freeze, not a fixed i
   assert.equal(puts(api).length, 0);
   assert.equal(statusPosts(api).length, 0);
 });
+
+// Jobs of a workflow file, by id, as their raw text (top-level `jobs:` keys are
+// indented two spaces). The lint job runs these tests without installing a YAML parser.
+function workflowJobs(file) {
+  const text = readFileSync(new URL(`../workflows/${file}`, import.meta.url), 'utf8');
+  const body = text.slice(text.indexOf('\njobs:\n'));
+  const jobs = {};
+  for (const block of body.split(/\n(?=  [A-Za-z0-9_-]+:\n)/).slice(1)) {
+    jobs[block.match(/^ {2}([A-Za-z0-9_-]+):/)[1]] = block;
+  }
+  return jobs;
+}
+
+const freezeLock = /\n {4}concurrency:\n {6}group: release-merge-freeze\n {6}cancel-in-progress: false\n/;
+
+// Every job that changes the freeze ruleset, plus the scheduled alpha push whose
+// late freeze check is only sound while it holds the same lock.
+const freezeWriters = [
+  ['release-freeze.yml', 'freeze'],
+  ['npm-publish.yml', 'after_stable'],
+  ['cron-alpha-publish.yml', 'alpha-version'],
+];
+
+for (const [file, job] of freezeWriters) {
+  test(`${file} ${job} holds the release-merge-freeze lock without cancelling`, () => {
+    const block = workflowJobs(file)[job];
+    assert.ok(block, `${job} not found in ${file}`);
+    assert.match(block, freezeLock);
+  });
+}
+
+test('no job outside the locked writers can freeze or unfreeze main', () => {
+  for (const file of ['release-freeze.yml', 'npm-publish.yml', 'cron-alpha-publish.yml']) {
+    for (const [job, block] of Object.entries(workflowJobs(file))) {
+      const calls = block.match(/release-freeze\.mjs[^\n]*/g) ?? [];
+      const mutates = calls.some(call => !/--action (check|mark)\b/.test(call));
+      if (mutates) {
+        assert.ok(
+          freezeWriters.some(([f, j]) => f === file && j === job),
+          `${file} ${job} changes the freeze ruleset but is not a locked writer`,
+        );
+      }
+    }
+  }
+});

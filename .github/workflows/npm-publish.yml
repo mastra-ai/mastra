@@ -436,6 +436,11 @@ jobs:
       github.event.inputs.publish_type == 'stable' &&
       !inputs.dry_run &&
       needs.stable.result == 'success'
+    # Same lock as release-freeze.yml and the scheduled alpha push, so this unfreeze
+    # never races a manual freeze/unfreeze or an alpha push that checked the freeze.
+    concurrency:
+      group: release-merge-freeze
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
