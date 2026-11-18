@@ -1,3 +1,4 @@
+import { format } from 'node:util';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Processor } from '../../processors';
@@ -17,7 +18,7 @@ describe('input processor tripwire logging', () => {
     const printed: string[] = [];
     for (const method of ['error', 'warn', 'info', 'log', 'debug'] as const) {
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        printed.push(args.map(String).join(' '));
+        printed.push(format(...args));
       });
     }
     const doGenerate = vi.fn();

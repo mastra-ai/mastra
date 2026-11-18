@@ -306,10 +306,11 @@ describe('StepExecutor', () => {
   it('logs a step error at ERROR with its stack', async () => {
     const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
     stepExecutor.__setLogger(logger as any);
+    const boom = new Error('boom');
     const failingStep = createStep({
       id: 'failing-step',
       execute: async () => {
-        throw new Error('boom');
+        throw boom;
       },
       inputSchema: z.object({}),
       outputSchema: z.object({}),
@@ -326,7 +327,7 @@ describe('StepExecutor', () => {
     });
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('Error executing step failing-step: Error: boom'),
+      expect.stringContaining(`Error executing step failing-step: ${boom.stack}`),
     );
     expect(logger.trackException).toHaveBeenCalledTimes(1);
   });
