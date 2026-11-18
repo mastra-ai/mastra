@@ -3,7 +3,7 @@
     {
       "match": {
         "userMessage": "User: Return the configured Mastra Code e2e smoke phrase.",
-        "systemMessage": "you will generate a short title",
+        "systemMessage": "the title must be 3 to 5 words long",
         "model": "gpt-5.4-mini",
         "endpoint": "chat"
       },
