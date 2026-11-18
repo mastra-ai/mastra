@@ -1,5 +1,17 @@
 # mastra
 
+## 1.40.1-alpha.2
+
+### Patch Changes
+
+- Factory skills now open on their own page instead of a dialog. A skill's description and instructions are edited where they show, a save bar appears once something changed, and leaving or reloading with unsaved changes asks first. **New skill** sits in the Skills page header and opens its own page, **Edit** on a board phase opens the skill's page, and **Back** returns to where you came from. ([#30769](https://github.com/mastra-ai/mastra/pull/30769))
+
+- The Factory sidebar lists sessions in a single list again, ordered by activity, instead of grouping them by board. To find sessions from one place, use the new **Source** filter in the sidebar's properties menu: pick a board, **User** or **Slack**. Setting **Group** to **Board** in the same menu still splits the list by board. ([#30764](https://github.com/mastra-ai/mastra/pull/30764))
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/deployer@1.85.0-alpha.1
+
 ## 1.40.1-alpha.1
 
 ### Patch Changes
