@@ -65,7 +65,14 @@ export function createLargeIdListTests({ storage }: { storage: MastraStorage }) 
 
     it(`updates more messages than the database allows bound parameters in one call`, async () => {
       const updated = await memoryStorage.updateMessages({
-        messages: messageIds.map((id, i) => ({ id, content: { content: `large list updated ${i}` } })),
+        // The update contract wants a complete `MastraMessageContentV2`, so a bare
+        // `{ content: string }` is rejected by the type checker. Build it from the fixture so
+        // `format` and `parts` stay coherent with the text.
+        messages: messageIds.map((id, i) => ({
+          id,
+          content: createSampleMessageV2({ threadId: threadIds[i]!, content: { content: `large list updated ${i}` } })
+            .content,
+        })),
       });
 
       expect(updated).toHaveLength(TOTAL);
@@ -73,9 +80,11 @@ export function createLargeIdListTests({ storage }: { storage: MastraStorage }) 
       const { messages } = await memoryStorage.listMessagesById({ messageIds });
       expect(messages).toHaveLength(TOTAL);
 
-      const serialized = messages.map(m => JSON.stringify(m.content)).join('\n');
-      for (let i = 0; i < TOTAL; i++) {
-        expect(serialized).toContain(`large list updated ${i}`);
+      // Compare per id: a substring check would let `large list updated 1` match `updated 10`
+      // and would pass when the update landed on the wrong message.
+      const byId = new Map(messages.map(message => [message.id, message]));
+      for (const [i, id] of messageIds.entries()) {
+        expect(byId.get(id)).toMatchObject({ content: { content: `large list updated ${i}` } });
       }
     });
 
@@ -94,6 +103,20 @@ export function createLargeIdListTests({ storage }: { storage: MastraStorage }) 
       });
 
       expect(result.messages.map(m => m.id).sort()).toEqual([...messageIds].sort());
+    });
+
+    it(`reports no further pages when the include path returns every message of the requested threads`, async () => {
+      // perPage: 1 returns one message; the include brings the other one back, so the call has
+      // returned everything the requested threads hold and must not advertise another page.
+      // Both ids are included so the case does not depend on which message pagination picks.
+      const result = await memoryStorage.listMessages({
+        threadId: [threadIds[0]!, threadIds[1]!],
+        perPage: 1,
+        include: messageIds.slice(0, 2).map(id => ({ id })),
+      });
+
+      expect(result.messages.map(m => m.id).sort()).toEqual(messageIds.slice(0, 2).sort());
+      expect(result.hasMore).toBe(false);
     });
 
     it(`deletes more messages than the database allows bound parameters in one call`, async () => {

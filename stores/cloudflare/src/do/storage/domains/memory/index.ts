@@ -1157,7 +1157,10 @@ export class MemoryStorageDO extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const hasMore =
         perPageInput !== false &&
         (metadataFilter || returnedThreadMessageIds.size < total) &&
