@@ -3197,10 +3197,11 @@ describe('Agent signals: claimed thread ownership', () => {
       const acquireStarted = new Promise<void>(resolve => {
         pubsub.onAcquireLease = resolve;
       });
-      pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+      // Only the old attempt's lease request is held open. The newer reservation takes the lease itself.
+      const oldAcquireHeld = new Promise<void>(resolve => (releaseAcquire = resolve));
       const acquire = vi.spyOn(pubsub, 'acquireLease').mockImplementationOnce(async () => {
         pubsub.onAcquireLease?.();
-        await pubsub.acquireLeaseWait;
+        await oldAcquireHeld;
         if (mode === 'remote-newer') return { acquired: false, owner: 'foreign-owner' };
         throw new Error('injected backend rejection');
       });

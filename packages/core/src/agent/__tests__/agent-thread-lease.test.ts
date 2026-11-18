@@ -386,3 +386,181 @@ describe('registerRun thread lease', () => {
     }
   });
 });
+
+// A second message on a busy thread can land on another server replica, which knows nothing of the
+// first replica's run except the shared lease. Each runtime here stands in for one replica. (#30069)
+describe('taking a thread for a new run across processes', () => {
+  function setup(name: string) {
+    const pubsub = new ControlledLeasePubSub();
+    const acquireLease = vi.spyOn(pubsub, 'acquireLease');
+    const agent = { id: `${name}-agent` } as Agent<any, any, any, any>;
+    const threadId = `${name}-thread`;
+    const resourceId = `${name}-user`;
+    const memory = { thread: threadId, resource: resourceId };
+    return {
+      pubsub,
+      agent,
+      target: { threadId, resourceId },
+      key: [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR),
+      askedForLease: (runId: string) => acquireLease.mock.calls.some(([, owner]) => owner === runId),
+      take: (replica: AgentThreadStreamRuntime, runId: string) =>
+        replica.waitForCrossAgentThreadRun(agent, { memory, runId }, pubsub),
+      // Registers a run that streams until `finish` is called.
+      run: async (replica: AgentThreadStreamRuntime, runId: string) => {
+        let finish!: () => void;
+        const finished = new Promise<void>(resolve => {
+          finish = resolve;
+        });
+        const fullStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'start', runId });
+            controller.enqueue({
+              type: 'finish',
+              runId,
+              payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+            });
+            controller.close();
+          },
+        });
+        await replica.registerRun(
+          agent,
+          { runId, status: 'running', fullStream, _waitUntilFinished: () => finished } as any,
+          { memory } as any,
+          pubsub,
+        );
+        return finish;
+      },
+      // Registers a run that streams until `park` is called, then waits on a tool approval.
+      runUntilParked: async (replica: AgentThreadStreamRuntime, runId: string) => {
+        let settle!: () => void;
+        const settled = new Promise<void>(resolve => {
+          settle = resolve;
+        });
+        let stream!: ReadableStreamDefaultController;
+        const output = {
+          runId,
+          status: 'running',
+          fullStream: new ReadableStream({
+            start(controller) {
+              stream = controller;
+              controller.enqueue({ type: 'start', runId });
+            },
+          }),
+          _waitUntilFinished: () => settled,
+        };
+        await replica.registerRun(agent, output as any, { memory } as any, pubsub);
+        return async () => {
+          stream.enqueue({
+            type: 'tool-call-approval',
+            runId,
+            payload: { toolCallId: 'approval-1', toolName: 'approveAction' },
+          });
+          stream.close();
+          output.status = 'suspended';
+          settle();
+          await waitForCondition(() => pubsub.publishedTypes.includes('run-suspended'));
+        };
+      },
+    };
+  }
+
+  it('makes a run on a second replica wait for the run a first replica is streaming', async () => {
+    const { pubsub, key, askedForLease, take, run } = setup('replica-wait');
+    const replicaA = new AgentThreadStreamRuntime();
+    const replicaB = new AgentThreadStreamRuntime();
+    const order: string[] = [];
+
+    await take(replicaA, 'first-run');
+    const finishFirst = await run(replicaA, 'first-run');
+    const second = take(replicaB, 'second-run').then(() => order.push('second run took the thread'));
+    await Promise.race([second, waitForCondition(() => askedForLease('second-run'))]);
+    order.push('first run finished');
+    finishFirst();
+    await second;
+
+    expect(order).toEqual(['first run finished', 'second run took the thread']);
+    expect(pubsub.owners.get(key)).toBe('second-run');
+    replicaB.releaseThreadRunReservation('second-run', pubsub);
+    await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('starts only one run when two replicas take an idle thread at the same moment', async () => {
+    const { pubsub, key, askedForLease, take, run } = setup('replica-race');
+    const replicas = { 'run-a': new AgentThreadStreamRuntime(), 'run-b': new AgentThreadStreamRuntime() };
+    const took: Array<keyof typeof replicas> = [];
+    const takes = (['run-a', 'run-b'] as const).map(runId => take(replicas[runId], runId).then(() => took.push(runId)));
+
+    await Promise.race([Promise.all(takes), waitForCondition(() => askedForLease('run-a') && askedForLease('run-b'))]);
+    await Promise.race(takes);
+    expect(took).toHaveLength(1);
+    const winner = took[0]!;
+    expect(pubsub.owners.get(key)).toBe(winner);
+
+    (await run(replicas[winner], winner))();
+    await Promise.all(takes);
+    const loser = winner === 'run-a' ? 'run-b' : 'run-a';
+    expect(took).toEqual([winner, loser]);
+    expect(pubsub.owners.get(key)).toBe(loser);
+    replicas[loser].releaseThreadRunReservation(loser, pubsub);
+  });
+
+  it('refuses to start a run while the lease backend is unreachable, and leaves the thread free', async () => {
+    const { pubsub, key, target, take } = setup('replica-outage');
+    const replica = new AgentThreadStreamRuntime();
+
+    pubsub.failAcquire = true;
+    await expect(take(replica, 'outage-run')).rejects.toThrow('thread lease backend did not answer');
+    expect(replica.getThreadState(target, pubsub)).toBe('idle');
+
+    pubsub.failAcquire = false;
+    await take(replica, 'next-run');
+    expect(pubsub.owners.get(key)).toBe('next-run');
+    replica.releaseThreadRunReservation('next-run', pubsub);
+    await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  // A run waiting on a person keeps the thread lease, and may wait for hours. A new message must not wait with it.
+  it('starts a run beside a run that is parked on another replica', async () => {
+    const { pubsub, key, take, runUntilParked } = setup('replica-parked');
+    const replicaA = new AgentThreadStreamRuntime();
+    const replicaB = new AgentThreadStreamRuntime();
+
+    await take(replicaA, 'parked-run');
+    const park = await runUntilParked(replicaA, 'parked-run');
+    await park();
+    let started = false;
+    void take(replicaB, 'next-run').then(() => (started = true));
+    await waitForCondition(() => started);
+
+    expect(pubsub.owners.get(key)).toBe('parked-run');
+    replicaB.releaseThreadRunReservation('next-run', pubsub);
+  });
+
+  it('stops waiting for a run on another replica once that run parks', async () => {
+    const { pubsub, askedForLease, take, runUntilParked } = setup('replica-parks-later');
+    const replicaA = new AgentThreadStreamRuntime();
+    const replicaB = new AgentThreadStreamRuntime();
+    const order: string[] = [];
+
+    await take(replicaA, 'first-run');
+    const park = await runUntilParked(replicaA, 'first-run');
+    const second = take(replicaB, 'second-run').then(() => order.push('second run took the thread'));
+    await Promise.race([second, waitForCondition(() => askedForLease('second-run'))]);
+    order.push('first run parked');
+    await park();
+    await second;
+
+    expect(order).toEqual(['first run parked', 'second run took the thread']);
+    replicaB.releaseThreadRunReservation('second-run', pubsub);
+  });
+
+  it('does not wait on its own run when a resume lands on another replica', async () => {
+    const { pubsub, key, take } = setup('replica-resume');
+    const fencedOwner = 'mastra:thread-lease:["parked-run","generation",7]';
+    pubsub.owners.set(key, fencedOwner);
+
+    await take(new AgentThreadStreamRuntime(), 'parked-run');
+
+    expect(pubsub.owners.get(key)).toBe(fencedOwner);
+  });
+});
