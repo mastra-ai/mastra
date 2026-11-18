@@ -16,6 +16,7 @@ import { SpanToolsSection } from './span-payload/span-tools-section';
 import type { RegisteredTools } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
+import type { TraceToolCallsProps } from './trace-tool-calls';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
@@ -24,7 +25,7 @@ import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut'
 
 const KV = DataDetailsPanel.KeyValueList;
 
-export interface SpanDetailsViewProps {
+export interface SpanDetailsViewProps extends TraceToolCallsProps {
   spanId: string;
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
@@ -48,6 +49,8 @@ export function SpanDetailsView({
   onClose,
   traceSpans,
   registeredTools,
+  mcpAppTools,
+  renderToolCall,
 }: SpanDetailsViewProps) {
   return (
     <DataDetailsPanel>
@@ -116,7 +119,14 @@ export function SpanDetailsView({
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
-          <SpanToolsSection span={span} layout="details" traceSpans={traceSpans} registeredTools={registeredTools} />
+          <SpanToolsSection
+            span={span}
+            layout="details"
+            traceSpans={traceSpans}
+            registeredTools={registeredTools}
+            mcpAppTools={mcpAppTools}
+            renderToolCall={renderToolCall}
+          />
           <SpanPayloadJsonSection title="Metadata" icon={<IconCodeBrackets />} raw={span.metadata} layout="details" />
           <SpanPayloadJsonSection
             title="Attributes"

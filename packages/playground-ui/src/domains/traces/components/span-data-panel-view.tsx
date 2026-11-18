@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import type { SpanRecord, SpanTab, TraceSpanRecord } from '../types';
 import { SpanDataPanel } from './span-data-panel';
 import type { RegisteredTools } from './span-payload/span-tools-section';
+import type { TraceToolCallsProps } from './trace-tool-calls';
 
-export interface SpanDataPanelViewProps {
+export interface SpanDataPanelViewProps extends TraceToolCallsProps {
   traceId: string;
   spanId: string;
   /** Full span record (`getSpan`). The panel never fetches: the host hands it down (Studio: `useSpanDetail`). */
@@ -59,6 +60,8 @@ export function SpanDataPanelView({
   onTabChange,
   feedbackTabSlot,
   feedbackTabBadge,
+  mcpAppTools,
+  renderToolCall,
   className,
 }: SpanDataPanelViewProps) {
   return (
@@ -84,7 +87,9 @@ export function SpanDataPanelView({
       }
       details={<SpanDataPanel.Details />}
       input={<SpanDataPanel.Input registeredTools={registeredTools} />}
-      output={<SpanDataPanel.Output traceSpans={traceSpans} />}
+      output={
+        <SpanDataPanel.Output traceSpans={traceSpans} mcpAppTools={mcpAppTools} renderToolCall={renderToolCall} />
+      }
       feedback={span && feedbackTabSlot?.({ span, traceId, spanId })}
       feedbackCount={feedbackTabBadge}
     />

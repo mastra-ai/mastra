@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
-import { useMcpAppTools } from '@mastra/react/hooks/mcps';
+import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
@@ -28,7 +28,7 @@ import { parseSkillActivation } from '@/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ToolCallEffects } from '@/domains/chat/tools/tool-call-effects';
 import { ToolCard } from '@/domains/chat/tools/tool-card';
-import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
+import type { DataMessagePart, ToolCardProps } from '@/domains/chat/tools/tool-card';
 import { badgeStatus, isSettledState } from '@/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@/domains/chat/tools/tool-groups';
@@ -47,7 +47,16 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   readOnly?: boolean;
   footer?: ReactNode;
+  /** The agent's MCP app tools (`useMcpAppTools`), so their calls are grouped and drawn as apps. */
+  mcpAppTools?: Record<string, McpAppToolInfo>;
+  /**
+   * Draws each tool call; defaults to the live `ToolCard` of a chat. A record read back elsewhere (a
+   * trace) passes `RecordedToolCard`, which needs no request and no provider.
+   */
+  renderToolCard?: (props: ToolCardProps) => ReactNode;
 }
+
+const renderLiveToolCard = (props: ToolCardProps) => <ToolCard {...props} />;
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
@@ -143,6 +152,8 @@ export const MessageRow = memo(function MessageRow({
   onStopSpeaking,
   readOnly,
   footer,
+  mcpAppTools,
+  renderToolCard = renderLiveToolCard,
   className,
   ...rootProps
 }: MessageRowProps) {
@@ -152,7 +163,6 @@ export const MessageRow = memo(function MessageRow({
   const dataParts = useMemo(() => getDataParts(message), [message]);
   const running = useChatRunning();
   const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
-  const { data: mcpAppTools } = useMcpAppTools();
   const parts = dbMessage?.content.parts ?? NO_PARTS;
   const revealed = useRevealedParts(parts, isStreaming(parts));
   const shownParts = isProse(parts, metadata) ? revealed : parts;
@@ -169,9 +179,8 @@ export const MessageRow = memo(function MessageRow({
         const members = group.map(readToolPart);
         return (
           <>
-            {members.map(member => (
-              <ToolCallEffects key={member.toolCallId} {...member} readOnly={readOnly} />
-            ))}
+            {/* A call read back has nothing to do to the page: its effects belong to the live chat. */}
+            {!readOnly && members.map(member => <ToolCallEffects key={member.toolCallId} {...member} />)}
             <Arriving>
               <ToolCallGroup
                 steps={members.map(member => ({
@@ -191,7 +200,7 @@ export const MessageRow = memo(function MessageRow({
                       className="flex items-start gap-2"
                     >
                       <div className="min-w-0 flex-1">
-                        <ToolCard {...member} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
+                        {renderToolCard({ ...member, metadata, dataParts, readOnly })}
                       </div>
                       {incomplete && (
                         <Txt as="span" variant="meta" className="mt-1 shrink-0">
@@ -209,10 +218,8 @@ export const MessageRow = memo(function MessageRow({
       if (toolGroups.memberKeys.has(fields.toolCallId)) return null;
       return (
         <>
-          <ToolCallEffects {...fields} readOnly={readOnly} />
-          <Arriving>
-            <ToolCard {...fields} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
-          </Arriving>
+          {!readOnly && <ToolCallEffects {...fields} />}
+          <Arriving>{renderToolCard({ ...fields, metadata, dataParts, readOnly })}</Arriving>
         </>
       );
     };
@@ -231,7 +238,7 @@ export const MessageRow = memo(function MessageRow({
         </Notice>
       ),
     };
-  }, [metadata, dataParts, readOnly, toolGroups, isRunning]);
+  }, [metadata, dataParts, readOnly, toolGroups, isRunning, renderToolCard]);
 
   const userRenderers = useMemo<MessageRenderers>(
     () => ({

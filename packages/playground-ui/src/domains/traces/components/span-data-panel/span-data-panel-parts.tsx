@@ -26,6 +26,7 @@ import { getPromptChanges, runsAfterModel } from '../span-prompt-impact';
 import { SpanTokenUsage } from '../span-token-usage';
 import { getModelFacts, getTokenUsageRows } from '../span-token-usage.utils';
 import { SpanTypeBadge } from '../span-type-badge';
+import type { TraceToolCallsProps } from '../trace-tool-calls';
 import { useSpanDataPanel } from './span-data-panel-context';
 import type { PayloadView } from './span-data-panel-context';
 import { getSpanTitle } from './span-data-panel-title';
@@ -148,7 +149,7 @@ export function SpanDataPanelInput({ registeredTools }: SpanDataPanelInputProps)
   return <InputTab span={span} view={view} onViewChange={setView} registeredTools={registeredTools} />;
 }
 
-export interface SpanDataPanelOutputProps {
+export interface SpanDataPanelOutputProps extends TraceToolCallsProps {
   /**
    * Every span of the trace with its payload (`getTrace`): each tool call the span requested is paired
    * with the result its tool span recorded. Without it, the calls show no result.
@@ -157,10 +158,19 @@ export interface SpanDataPanelOutputProps {
 }
 
 /** The Output tab: why it failed or stopped, what it produced, and the tools it called. */
-export function SpanDataPanelOutput({ traceSpans }: SpanDataPanelOutputProps) {
+export function SpanDataPanelOutput({ traceSpans, mcpAppTools, renderToolCall }: SpanDataPanelOutputProps) {
   const { span, view, setView } = useSpanDataPanel();
   if (!span) return null;
-  return <OutputTab span={span} view={view} onViewChange={setView} traceSpans={traceSpans} />;
+  return (
+    <OutputTab
+      span={span}
+      view={view}
+      onViewChange={setView}
+      traceSpans={traceSpans}
+      mcpAppTools={mcpAppTools}
+      renderToolCall={renderToolCall}
+    />
+  );
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -273,7 +283,13 @@ function InputTab({
   );
 }
 
-function OutputTab({ span, view, onViewChange, traceSpans }: PayloadTabProps & { traceSpans?: TraceSpanRecord[] }) {
+function OutputTab({
+  span,
+  view,
+  onViewChange,
+  traceSpans,
+  ...toolCallsProps
+}: PayloadTabProps & SpanDataPanelOutputProps) {
   const output = getSpanOutputPayload(span);
   return (
     <Stack>
@@ -295,7 +311,7 @@ function OutputTab({ span, view, onViewChange, traceSpans }: PayloadTabProps & {
           <SpanOutputRenderer span={span} />
         </Payload>
       )}
-      <ToolCalls span={span} traceSpans={traceSpans} />
+      <ToolCalls span={span} traceSpans={traceSpans} {...toolCallsProps} />
     </Stack>
   );
 }
@@ -435,12 +451,16 @@ function SpanProblem({ span }: { span: SpanRecord }) {
   );
 }
 
-function ToolCalls({ span, traceSpans = [] }: { span: SpanRecord; traceSpans?: TraceSpanRecord[] }) {
+function ToolCalls({
+  span,
+  traceSpans = [],
+  ...toolCallsProps
+}: { span: SpanRecord; traceSpans?: TraceSpanRecord[] } & TraceToolCallsProps) {
   const toolCalls = formatSpanToolCallMessages(span, traceSpans);
   if (toolCalls.length === 0) return null;
   return (
     <Section title="Tool calls" count={toolCalls.length}>
-      <SpanToolCallList toolCalls={toolCalls} />
+      <SpanToolCallList toolCalls={toolCalls} {...toolCallsProps} />
     </Section>
   );
 }

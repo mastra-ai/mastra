@@ -3,6 +3,7 @@ import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useThreadHasOtherTraces, useTraceSpans } from '@mastra/react/hooks/traces';
 import type { ComponentProps, ReactNode } from 'react';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
+import { useLiveToolCalls } from '../hooks/use-live-tool-calls';
 import type { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TracePanel } from '@/domains/traces/components/trace-panel';
 import type {
@@ -149,6 +150,8 @@ export function TraceSpanPanel({
   const scorers = useScorers();
   const triggerScorer = useTriggerScorer();
   const download = useDownloadTraceJson();
+  // Studio draws the trace's tool calls with the chat's live cards (workflow graph, MCP app UI).
+  const toolCalls = useLiveToolCalls();
 
   const rootSpan = getTraceRootSpan(spans, anchorSpanId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
@@ -219,6 +222,7 @@ export function TraceSpanPanel({
                         isLoading={fullTrace.isLoading}
                         error={fullTrace.error ?? undefined}
                         onHighlightSpans={onHighlightSpans}
+                        {...toolCalls}
                       />
                     )
                   }
@@ -257,6 +261,7 @@ export function TraceSpanPanel({
                 onTabChange={onSpanTabChange}
                 feedbackTabBadge={spanFeedbackTabBadge}
                 feedbackTabSlot={spanFeedbackTabSlot}
+                {...toolCalls}
               />
             }
           />

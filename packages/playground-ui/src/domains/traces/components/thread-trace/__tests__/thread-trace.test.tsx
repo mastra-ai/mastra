@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,8 +7,6 @@ import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import type { ThreadTraceRootProps, ThreadTraceRowProps, ThreadTraceSelectedSpan } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
 import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const TRACE_IDS = ['trace-a', 'trace-b'];
 
@@ -395,12 +392,10 @@ describe('ThreadTrace', () => {
   });
 
   describe('when the host composes a turn from the turn parts', () => {
-    // The chat message renderer resolves MCP app tools; it belongs to the chat domain, not to this compound.
-    const serveMcpAppToolsLookup = () =>
-      server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })));
-
+    // No Mastra client and no React Query: the turn draws the spans it is given. Only the Studio link
+    // provider is around, for the trace route `TraceLink` falls back to.
     const renderTurn = (row: Partial<ThreadTraceRowProps> = {}) =>
-      renderWithProviders(
+      renderUI(
         <TestLinkProvider>
           <ThreadTrace traceIds={['trace-a']}>
             <ThreadTrace.Row
@@ -418,14 +413,12 @@ describe('ThreadTrace', () => {
       );
 
     it('reconstructs the turn from the spans given to TurnMessages', async () => {
-      serveMcpAppToolsLookup();
       renderTurn();
 
       expect(await within(getRow('trace-a')).findByText('cook pasta')).toBeTruthy();
     });
 
     it('highlights the spans behind a message in the same turn', async () => {
-      serveMcpAppToolsLookup();
       renderTurn();
       await within(getRow('trace-a')).findByText('cook pasta');
 
@@ -437,7 +430,6 @@ describe('ThreadTrace', () => {
     });
 
     it('links the turn to its trace page', async () => {
-      serveMcpAppToolsLookup();
       renderTurn();
 
       const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });
@@ -446,7 +438,6 @@ describe('ThreadTrace', () => {
     });
 
     it('links the turn wherever the host says', async () => {
-      serveMcpAppToolsLookup();
       renderTurn({ link: <ThreadTrace.TraceLink href="/elsewhere/trace-a" /> });
 
       const link = await within(getRow('trace-a')).findByRole('link', { name: 'Go to trace' });

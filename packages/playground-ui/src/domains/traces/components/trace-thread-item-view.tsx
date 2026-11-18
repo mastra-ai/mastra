@@ -2,6 +2,8 @@ import type { TraceSpanRecord } from '../types';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from './read-only-tool-call-provider';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
+import { useTraceToolCardRenderer } from './trace-tool-calls';
+import type { TraceToolCallsProps } from './trace-tool-calls';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { Button } from '@/ds/components/Button';
@@ -9,7 +11,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { cn } from '@/utils/cn';
 
-export interface TraceThreadItemViewProps {
+export interface TraceThreadItemViewProps extends TraceToolCallsProps {
   /**
    * Every span of the trace with its payload (`getTrace`); the turn is reconstructed from them.
    * The view never fetches: the host hands them down (Studio: `useTraceSpans`).
@@ -30,8 +32,12 @@ export function TraceThreadItemView({
   isLoading,
   error,
   onHighlightSpans,
+  mcpAppTools,
+  renderToolCall,
   className,
 }: TraceThreadItemViewProps) {
+  const renderToolCard = useTraceToolCardRenderer({ mcpAppTools, renderToolCall });
+
   if (isLoading) return <TraceMessagesSkeleton className={className} />;
 
   if (error) {
@@ -43,6 +49,7 @@ export function TraceThreadItemView({
   }
 
   const messages = spans ? formatTraceThreadMessages(spans) : [];
+  const rowProps = { readOnly: true, mcpAppTools, renderToolCard };
 
   if (messages.length === 0) {
     return (
@@ -78,7 +85,7 @@ export function TraceThreadItemView({
               // Tool calls sit on one line, so the action goes beside the tool card instead of below it.
               return (
                 <div key={message.id} className="group/tool mb-3 flex items-start gap-1 last:mb-0">
-                  <MessageRow message={message} readOnly className="flex-1" />
+                  <MessageRow message={message} {...rowProps} className="flex-1" />
                   <div className="shrink-0 group-focus-within/tool:opacity-100 group-hover/tool:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
                     {action}
                   </div>
@@ -86,7 +93,7 @@ export function TraceThreadItemView({
               );
             }
 
-            return <MessageRow key={message.id} message={message} readOnly footer={action} />;
+            return <MessageRow key={message.id} message={message} {...rowProps} footer={action} />;
           })}
         </ReadOnlyToolCallProvider>
       </div>

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import '@/test/inert-resize-observer';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -10,10 +9,7 @@ import { TRACE_ID, panelTraceSpans, spanDetailById } from '../../__tests__/fixtu
 import { TracePanel } from '../index';
 import type { TracePanelFrameProps, TracePanelRootProps } from '../index';
 import { panelScorers, skillSignalTraceSpans } from './fixtures/trace-panel';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
 import { recordRequests } from '@/test/record-requests';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom reports zero-sized elements; give them a real size so the virtualized span tree
 // materializes its rows.
@@ -31,11 +27,6 @@ afterAll(() => {
   if (originalOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth);
   vi.unstubAllGlobals();
 });
-
-/** The chat message renderer resolves MCP app tools; it belongs to the chat domain, not to this panel. */
-const MCP_APP_TOOLS_LOOKUP = '/api/mcp/v0/servers';
-const serveMcpAppToolsLookup = () =>
-  server.use(http.get(`${TEST_BASE_URL}${MCP_APP_TOOLS_LOOKUP}`, () => HttpResponse.json({ servers: [] })));
 
 /** The main column most compositions below use: search, layout switch and the span tree. */
 const spanTree = (props: Partial<Parameters<typeof TracePanel.Spans>[0]> = {}) => (
@@ -88,7 +79,8 @@ function Panel({
   );
 }
 
-const render = (ui: ReactNode) => renderWithProviders(<TestLinkProvider>{ui}</TestLinkProvider>);
+// No Mastra client, no React Query, no Studio router: the panel draws what it is given and needs nothing else.
+const render = (ui: ReactNode) => renderUI(ui);
 const treeRow = (title: string) => screen.findByLabelText(`View details for span ${title}`);
 
 describe('TracePanel', () => {
@@ -133,7 +125,6 @@ describe('TracePanel', () => {
       );
 
     it('draws the span tree from the spans given to the root', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       expect(await treeRow('Root agent run')).toBeTruthy();
@@ -141,7 +132,6 @@ describe('TracePanel', () => {
     });
 
     it('shows the selected span record given to the span slot', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       const detail = await screen.findByRole('region', { name: 'First tool call' });
@@ -150,7 +140,6 @@ describe('TracePanel', () => {
     });
 
     it('reconstructs the turn from the full trace given to the messages slot', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       const messages = await screen.findByTestId('messages-panel');
@@ -159,7 +148,6 @@ describe('TracePanel', () => {
     });
 
     it('offers one side tab per filled view slot, with its count', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       await screen.findByTestId('messages-panel');
@@ -176,7 +164,6 @@ describe('TracePanel', () => {
     });
 
     it('shows what the host put in the feedback slot on its tab', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       fireEvent.click(await screen.findByRole('tab', { name: /Feedback/ }));
@@ -185,22 +172,19 @@ describe('TracePanel', () => {
     });
 
     it('summarizes what ran and how it ended from the root span', async () => {
-      serveMcpAppToolsLookup();
       composeEverything();
 
       expect(await screen.findByLabelText('Trace status')).toBeTruthy();
       expect(screen.getByRole('link', { name: /Weather Agent/ }).getAttribute('href')).toBe('/agents/weather-agent');
     });
 
-    it('asks the network for nothing but the chat renderer’s MCP app tools', async () => {
-      serveMcpAppToolsLookup();
+    it('asks the network for nothing', async () => {
       const requests = recordRequests();
-      const { queryClient } = composeEverything();
+      composeEverything();
 
       await screen.findByText('No rain is expected.');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      expect(requests.filter(path => path !== MCP_APP_TOOLS_LOOKUP)).toEqual([]);
+      expect(requests).toEqual([]);
     });
   });
 
@@ -506,7 +490,6 @@ describe('TracePanel', () => {
 
   describe('when the host says the thread has more turns', () => {
     it('opens the full thread through the side column’s action', async () => {
-      serveMcpAppToolsLookup();
       const onOpenFullThread = vi.fn();
       render(
         <Panel

@@ -2,6 +2,8 @@ import type { GetToolResponse } from '@mastra/client-js';
 import type { SpanRecord, TraceSpanRecord } from '../../types';
 import { formatSpanToolCallMessages, getRequestedToolCalls } from '../format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from '../read-only-tool-call-provider';
+import { useTraceToolCardRenderer } from '../trace-tool-calls';
+import type { TraceToolCallsProps } from '../trace-tool-calls';
 import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
 import { getDelegatedToolHref, getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
@@ -70,7 +72,7 @@ export function SpanToolList({ tools, registeredTools = NO_TOOLS }: SpanToolList
 /** The tool calls a span requested, paired with the results their tool spans recorded. */
 export type SpanToolCallMessages = ReturnType<typeof formatSpanToolCallMessages>;
 
-export interface SpanToolsSectionProps {
+export interface SpanToolsSectionProps extends TraceToolCallsProps {
   span: SpanRecord;
   layout?: SpanPayloadSectionProps['layout'];
   /** Every span of the trace (`getTrace`): a call's result lives on its tool span. Without it, calls show no result. */
@@ -83,19 +85,24 @@ export interface SpanToolsSectionProps {
  * The tools the model called, each opening on its input and result like in the chat,
  * then the tools the span offered the model.
  */
-export function SpanToolsSection({ span, layout, traceSpans, registeredTools }: SpanToolsSectionProps) {
+export function SpanToolsSection({ span, layout, traceSpans, registeredTools, ...toolCalls }: SpanToolsSectionProps) {
   return (
     <>
       {getRequestedToolCalls(span).length > 0 && (
-        <SpanToolCallsSection span={span} layout={layout} traceSpans={traceSpans} />
+        <SpanToolCallsSection span={span} layout={layout} traceSpans={traceSpans} {...toolCalls} />
       )}
       <SpanAvailableToolsSection span={span} layout={layout} registeredTools={registeredTools} />
     </>
   );
 }
 
+export interface SpanToolCallListProps extends TraceToolCallsProps {
+  toolCalls: SpanToolCallMessages;
+}
+
 /** Each call opens on its input and result, like in the chat. */
-export function SpanToolCallList({ toolCalls }: { toolCalls: SpanToolCallMessages }) {
+export function SpanToolCallList({ toolCalls, mcpAppTools, renderToolCall }: SpanToolCallListProps) {
+  const renderToolCard = useTraceToolCardRenderer({ mcpAppTools, renderToolCall });
   return (
     // Tool rows carry their own vertical margins; strip them at the edges so the container is the only outer spacing.
     <div
@@ -104,7 +111,13 @@ export function SpanToolCallList({ toolCalls }: { toolCalls: SpanToolCallMessage
     >
       <ReadOnlyToolCallProvider>
         {toolCalls.map(message => (
-          <MessageRow key={message.id} message={message} readOnly />
+          <MessageRow
+            key={message.id}
+            message={message}
+            readOnly
+            mcpAppTools={mcpAppTools}
+            renderToolCard={renderToolCard}
+          />
         ))}
       </ReadOnlyToolCallProvider>
     </div>
@@ -112,7 +125,13 @@ export function SpanToolCallList({ toolCalls }: { toolCalls: SpanToolCallMessage
 }
 
 /** The tools the model called, each opening on its input and the result its tool span recorded. */
-export function SpanToolCallsSection({ span, layout, traceSpans }: Omit<SpanToolsSectionProps, 'registeredTools'>) {
+export function SpanToolCallsSection({
+  span,
+  layout,
+  traceSpans,
+  mcpAppTools,
+  renderToolCall,
+}: Omit<SpanToolsSectionProps, 'registeredTools'>) {
   const toolCalls = formatSpanToolCallMessages(span, traceSpans ?? []);
   // Only tools the chat never draws (task tools, working memory) were called; the Output JSON keeps them.
   if (toolCalls.length === 0) return null;
@@ -127,7 +146,7 @@ export function SpanToolCallsSection({ span, layout, traceSpans }: Omit<SpanTool
       clip={false}
       layout={layout}
     >
-      <SpanToolCallList toolCalls={toolCalls} />
+      <SpanToolCallList toolCalls={toolCalls} mcpAppTools={mcpAppTools} renderToolCall={renderToolCall} />
     </SpanPayloadSection>
   );
 }

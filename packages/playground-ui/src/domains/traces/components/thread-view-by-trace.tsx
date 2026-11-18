@@ -1,6 +1,7 @@
 import { useTools } from '@mastra/react/hooks/tools';
 import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useMemo, useState } from 'react';
+import { useLiveToolCalls } from '../hooks/use-live-tool-calls';
 import { useThreadTraceSpans } from '../hooks/use-thread-trace-spans';
 import type { FeedbackOptions } from './feedback-options';
 import { TraceScoresTab } from '@/domains/scores/components/trace-scores-tab';
@@ -9,6 +10,7 @@ import { ThreadTrace, useThreadTrace } from '@/domains/traces/components/thread-
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { getTraceRootSpan } from '@/domains/traces/components/trace-thread-context';
+import type { TraceToolCallsProps } from '@/domains/traces/components/trace-tool-calls';
 import type { ThreadTurnSpans } from '@/domains/traces/hooks/use-thread-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
@@ -118,6 +120,8 @@ function LoadedThread({
   useTraceSpans({ traceId: selectedSpan?.traceId, queryOptions: { enabled: !!selectedSpan } });
   // Tools only matter to an open span: its Input tab links the tools it offered to their pages.
   const { data: registeredTools } = useTools({ queryOptions: { enabled: !!selectedSpan } });
+  // Studio draws the turns' tool calls with the chat's live cards (workflow graph, MCP app UI).
+  const toolCalls = useLiveToolCalls();
 
   if (!isReady) return <ThreadTrace.Loading withFeedback={withFeedback} />;
   if (turns.length === 0) return <ThreadTrace.Empty />;
@@ -138,6 +142,7 @@ function LoadedThread({
           span={spanDetail.data?.span}
           isLoading={spanDetail.isLoading}
           registeredTools={registeredTools}
+          {...toolCalls}
         />
       }
     >
@@ -149,7 +154,14 @@ function LoadedThread({
             traceId={turn.traceId}
             label={`Turn ${index + 1}`}
             link={<ThreadTrace.TraceLink />}
-            messages={<ThreadTrace.TurnMessages spans={turn.spans} isLoading={turn.isLoading} error={turn.error} />}
+            messages={
+              <ThreadTrace.TurnMessages
+                spans={turn.spans}
+                isLoading={turn.isLoading}
+                error={turn.error}
+                {...toolCalls}
+              />
+            }
             feedback={
               withFeedback && (
                 <TraceFeedbackTab
@@ -178,7 +190,7 @@ function LoadedThread({
   );
 }
 
-interface SelectedSpanDetailProps {
+interface SelectedSpanDetailProps extends TraceToolCallsProps {
   turns: ThreadTurnSpans[];
   span?: SpanRecord;
   isLoading: boolean;
@@ -186,7 +198,7 @@ interface SelectedSpanDetailProps {
 }
 
 /** The open span's detail, with its turn's spans so its tool calls show their results. */
-function SelectedSpanDetail({ turns, span, isLoading, registeredTools }: SelectedSpanDetailProps) {
+function SelectedSpanDetail({ turns, span, isLoading, registeredTools, ...toolCalls }: SelectedSpanDetailProps) {
   const { selected } = useThreadTrace();
   const traceSpans = turns.find(turn => turn.traceId === selected?.traceId)?.spans;
   return (
@@ -195,6 +207,7 @@ function SelectedSpanDetail({ turns, span, isLoading, registeredTools }: Selecte
       isLoading={isLoading}
       traceSpans={traceSpans}
       registeredTools={registeredTools}
+      {...toolCalls}
     />
   );
 }

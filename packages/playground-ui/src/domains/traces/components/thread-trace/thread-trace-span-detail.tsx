@@ -1,9 +1,10 @@
 import type { SpanRecord, TraceSpanRecord } from '../../types';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import type { RegisteredTools } from '../span-payload/span-tools-section';
+import type { TraceToolCallsProps } from '../trace-tool-calls';
 import { useThreadTrace } from './thread-trace-context';
 
-export interface ThreadTraceSpanDetailProps {
+export interface ThreadTraceSpanDetailProps extends TraceToolCallsProps {
   /** Full record of the selected span (`getSpan`); the host loads it for `useThreadTrace().selected`. */
   span?: SpanRecord;
   isLoading?: boolean;
@@ -23,6 +24,8 @@ export function ThreadTraceSpanDetail({
   isLoading,
   traceSpans,
   registeredTools,
+  mcpAppTools,
+  renderToolCall,
   className,
 }: ThreadTraceSpanDetailProps) {
   const { selected, selectSpan } = useThreadTrace();
@@ -38,6 +41,8 @@ export function ThreadTraceSpanDetail({
       isLoading={isLoading}
       traceSpans={traceSpans}
       registeredTools={registeredTools}
+      mcpAppTools={mcpAppTools}
+      renderToolCall={renderToolCall}
       onClose={() => selectSpan(selected.traceId, undefined)}
     />
   );
