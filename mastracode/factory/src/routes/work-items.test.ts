@@ -3441,7 +3441,7 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
         orgId: 'org1',
         id: issue.id,
         source: github('pull-request', 'acme/app', 307),
-        metadata: { githubPullRequestNumber: 307, headBranch: 'fix/login-redirect' },
+        metadata: { githubPullRequestNumber: 307, headBranch: 'octo.cat/login-redirect' },
       });
       // Its number starts with the attached pull request's.
       const pullRequest = await file('', {
@@ -3497,7 +3497,7 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       ['a link and a word', 'https://github.com/acme/app login', ['issue']],
       // Typed words read as text, so a key also finds the longer keys it starts.
       ['a pull request’s key, typed', 'acme/app#307', ['issue', 'pull request']],
-      ['a branch, whole', 'fix/login-redirect', ['issue']],
+      ['a branch, whole', 'octo.cat/login-redirect', ['issue']],
       // Every GitHub issue link holds `issues`; only one title does.
       ['a word of links but of one title', 'issues', ['other repository']],
       ['a link to an issue no card carries', 'https://github.com/acme/app/issues/404', []],

@@ -47,6 +47,27 @@ describe('matchesSearch', () => {
     expect(finds(searched, 'https://tracker.example.com/tickets/90')).toBe(false);
   });
 
+  it('finds a branch whose first segment holds a dot, which reads as a link, when pasted whole', () => {
+    const searched = card({ ids: ['user.name/fix-login'] });
+
+    expect(searchTerms('user.name/fix-login')[0]?.kind).toBe('link');
+    expect(finds(searched, 'user.name/fix-login')).toBe(true);
+    expect(finds(searched, 'user.name/fix')).toBe(false);
+  });
+
+  it('reads a link as a Factory card only on a Factory card’s page', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const sourceLink = `https://gitlab.example.com/cards/${id}/-/issues/9`;
+    const carrier = card({ links: [sourceLink], sourceKeys: [`cards/${id}#9`] });
+
+    expect(searchTerms(sourceLink)[0]?.kind).toBe('link');
+    expect(finds(carrier, sourceLink)).toBe(true);
+    expect(searchTerms(`https://factory.example.com/factories/p1/cards/${id}/new/x`)).toEqual([
+      { kind: 'card', word: `https://factory.example.com/factories/p1/cards/${id}/new/x`, id },
+    ]);
+    expect(finds(card({ ids: [id] }), `https://factory.example.com/factories/p1/cards/${id}`)).toBe(true);
+  });
+
   it('finds an id or a branch only when pasted whole', () => {
     const searched = card({ ids: ['factory/issue-12-abc'] });
 

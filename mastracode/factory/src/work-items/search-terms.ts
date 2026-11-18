@@ -16,24 +16,53 @@ export interface SearchableCard {
   links: readonly string[];
 }
 
-function present(values: readonly unknown[]): string[] {
-  return values.filter((value): value is string => typeof value === 'string' && value !== '');
+/**
+ * A card as a search reads it, from whichever side holds it: the server's card or the browser's.
+ * Both build their search from it, so the board, the palette and the server agree on what a card answers.
+ */
+export interface SearchedCard {
+  id: string;
+  title: string;
+  /** The issue or pull request number the card shows, or the one given to a card filed by hand. */
+  number: number | null;
+  /** The id its source gave it. */
+  sourceId: string | null | undefined;
+  /** Its own source's key (`ENG-42`). */
+  key: string | null | undefined;
+  /** Its own source's links. */
+  urls: readonly (string | null | undefined)[];
+  /** Every issue and pull request the card carries, its own first. */
+  sources: readonly { key: string | null; url: string | null; metadata: Record<string, unknown> | null }[];
+  sessions: Readonly<Record<string, { branch: string }>>;
 }
 
-/** What a search reads of a card, from its parts as stored: blanks dropped, the rest lowercased and links normalized. */
-export function searchableCard(parts: {
-  words: readonly unknown[];
-  ids: readonly unknown[];
-  sourceKeys: readonly unknown[];
-  links: readonly unknown[];
-}): SearchableCard {
-  // A card has a handful of each, so arrays: cheaper to build than sets, as quick to read.
-  const lowercased = (values: readonly unknown[]) => present(values).map(value => value.toLowerCase());
+// A card has a handful of each, so arrays: cheaper to build than sets, as quick to read.
+function lowercased(values: readonly unknown[]): string[] {
+  return values
+    .filter((value): value is string => typeof value === 'string' && value !== '')
+    .map(value => value.toLowerCase());
+}
+
+/**
+ * What a search reads of a card: its title, its number, its source id and the key of every issue
+ * and pull request it carries as words, so a pull request attached to its issue's card finds that
+ * card; those keys and links for a pasted link; and its id and branches, pasted whole.
+ */
+export function searchableCard(card: SearchedCard): SearchableCard {
+  const keys = lowercased([card.key, ...card.sources.map(source => source.key)]);
   return {
-    text: lowercased(parts.words).join(' '),
-    ids: lowercased(parts.ids),
-    sourceKeys: lowercased(parts.sourceKeys),
-    links: present(parts.links).map(normalizedUrl),
+    // `#12` also answers a search for `12`. Attached keys bring their numbers: `acme/app#30772`.
+    text: [...lowercased([card.title, card.number === null ? null : `#${card.number}`, card.sourceId]), ...keys].join(
+      ' ',
+    ),
+    ids: lowercased([
+      card.id,
+      ...Object.values(card.sessions).map(session => session.branch),
+      // An outside contributor's pull request is worked on its own branch.
+      ...card.sources.map(source => source.metadata?.headBranch),
+    ]),
+    sourceKeys: keys,
+    links: lowercased([...card.urls, ...card.sources.map(source => source.url)]).map(normalizedUrl),
   };
 }
 
@@ -48,7 +77,9 @@ export type SearchTerm =
 const LINK = /^https?:\/\//i;
 /** A link pasted without its scheme: `github.com/acme/app/pull/3`. */
 const BARE_LINK = /^(?:[a-z0-9-]+\.)+[a-z]{2,}\//i;
-const CARD_LINK = /\/cards\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/i;
+/** A Factory card's page, `/factories/<project>/cards/<card id>`: not any link with a `/cards/<uuid>` in it. */
+const CARD_LINK =
+  /^https?:\/\/[^/]+\/factories\/[^/?#]+\/cards\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/i;
 
 function searchTerm(word: string): SearchTerm {
   const link = LINK.test(word) ? word : BARE_LINK.test(word) ? `https://${word}` : undefined;
@@ -78,9 +109,10 @@ function isAtOrUnder(inner: string, outer: string): boolean {
 }
 
 function matchesTerm(card: SearchableCard, term: SearchTerm): boolean {
-  // A word in a title still finds the card, whatever else the word could name.
-  if (card.text.includes(term.word)) return true;
-  if (term.kind === 'word') return card.ids.includes(term.word);
+  // A word in a title, or a whole id or branch, still finds the card, whatever else the word could
+  // name: `user.name/fix-login` reads as a link, and is a branch too.
+  if (card.text.includes(term.word) || card.ids.includes(term.word)) return true;
+  if (term.kind === 'word') return false;
   if (term.kind === 'card') return card.ids.includes(term.id);
   // A link to the issue or pull request, to a page of it, or to a repository or project holding it.
   return (
