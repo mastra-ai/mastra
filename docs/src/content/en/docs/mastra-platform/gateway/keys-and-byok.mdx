@@ -32,7 +32,7 @@ When you create a key, you can set:
 - **Allowed models**: The only models the key can call. `/v1/models` lists only those models for the key.
 - **Disable failover**: Keep each request on a single route.
 
-Restrictions are fixed at creation. To change them, create a new key and revoke the old one.
+Label, expiry, allowed models, and failover are fixed at creation. To change them, create a new key and revoke the old one.
 
 :::info[Rolling out]
 
@@ -67,15 +67,19 @@ A BYOK connection routes requests through your own provider account. The provide
 | - | - |
 | OpenAI | Chat Completions, Responses, Embeddings, Decisions |
 | Anthropic | Messages |
-| Google | Chat Completions (OpenAI-compatible) |
-| Custom HTTPS endpoint | Chat Completions |
+| Google | Chat Completions and Embeddings (OpenAI-compatible) |
+| Custom HTTPS endpoint | Chat Completions, Responses, and Messages |
 
 Images, audio, and rerank aren't available over BYOK.
+
+An Anthropic connection also serves `/v1/messages/count_tokens` and the Anthropic Files API through the same key.
 
 To set up a connection:
 
 1. Open **Gateway** > **BYOK** in [projects.mastra.ai](https://projects.mastra.ai).
 1. Add a connection with your provider API key.
 1. Optionally assign the connection to projects. Keys in those projects then use it for that provider.
+
+Each connection's proxy key can have an expiry and a spend limit, set when you add the connection. You can edit the spend limit later, but not the expiry. Custom endpoint connections support an expiry only.
 
 BYOK requests make one attempt on your connection and don't fail over to another provider. Allowed-model restrictions and organization policy still apply. If the connection is inactive, requests return `403` with `byok_connection_inactive`.

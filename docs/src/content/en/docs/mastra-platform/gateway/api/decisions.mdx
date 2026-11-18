@@ -42,7 +42,7 @@ curl https://gateway-api.mastra.ai/v1/decisions \
 | - | - |
 | `model` | Required. A model that supports Decisions. |
 | `input` | Required. A string, or messages whose content can include `input_text`, `input_image`, and `input_json` parts. |
-| `questions` | Required. 1 to 400 questions with unique `name` values. |
+| `questions` | Required. 1 to 400 questions. Each `name` is optional but must be unique. |
 
 Question types:
 
@@ -52,4 +52,4 @@ Question types:
 
 ## Response
 
-The response has one entry in `answers` per question, in the same order and with the same `name`. A model can return an answer of type `refusal` instead of the requested type.
+The response has one entry in `answers` per question, in the same order. Answers keep the question's `name`, or `null` if it had none. A model can return an answer of type `refusal` instead of the requested type.
