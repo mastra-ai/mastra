@@ -2294,7 +2294,9 @@ export class EventedRun<
       }
     });
     const releaseTracking = this.mastra.__trackEventedRun(background);
-    void background.finally(releaseTracking);
+    // Release on either outcome: `background` rejects only if the logger throws, and a
+    // `.finally()` chain would turn that into an unhandled rejection.
+    void background.then(releaseTracking, releaseTracking);
 
     // Surface subscribe/publish failures, but don't wait for the workflow to finish.
     await Promise.race([dispatched, execution]);
