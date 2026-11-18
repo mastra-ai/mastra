@@ -311,8 +311,9 @@ export const SHUTDOWN_TOOL_SETTLE_MS = TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_
  * An execution with a tool result not checkpointed yet is first given up to `toolSettleMs` to finish its tool calls
  * and reach its next model request, so the results are checkpointed rather than discarded and the tools run again on
  * recovery. It starts no further tool calls meanwhile. One whose tool call is still running after that keeps its
- * claim until the claim expires, so recovery can't run the tool a second time while this process may still be
- * running it.
+ * claim, unrenewed, so recovery can't run the tool beside it until the claim expires. Recovery can take the run once
+ * it does, even if the tool is still running, so a tool whose side effects can outlive the lease needs to be
+ * idempotent or fenced externally.
  */
 export async function abandonDurableAgentExecutions(
   mastra: Mastra,

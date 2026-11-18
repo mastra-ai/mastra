@@ -1481,6 +1481,8 @@ export function createDurableToolCallStep() {
         }
       }
 
+      // A queued call that shutdown reaches before it starts is left for recovery, before its hooks run.
+      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).
       if (tool && 'onInputAvailable' in tool && typeof (tool as any).onInputAvailable === 'function') {
         try {
@@ -1816,8 +1818,7 @@ export function createDurableToolCallStep() {
           backgroundTask: { taskId, status },
         },
       });
-      // A queued call that shutdown reaches before it starts, in the foreground or the background, is left for
-      // recovery.
+      // Checked again since the hook and the steps above can await.
       await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       // Background task dispatch via the shared dispatch ladder with the
       // durable policy: steps replay under at-least-once redelivery, so an
@@ -2145,9 +2146,13 @@ export function createDurableToolCallStep() {
       if (bgOutcome.status !== 'sync') {
         if (bgOutcome.disposition === 'awaited') {
           let completedTask: Awaited<ReturnType<typeof bgOutcome.waitForCompletion>>;
+          // Shutdown keeps the run's claim while the awaited task runs, as it does for a foreground tool body.
+          const settleAwaitedTask = startToolCall(registryEntry);
           try {
             completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+            settleAwaitedTask();
           } catch (error) {
+            settleAwaitedTask();
             if (!toolAbortSignal?.aborted || error !== toolAbortSignal.reason) throw error;
             return {
               ...typedInput,
@@ -2237,6 +2242,8 @@ export function createDurableToolCallStep() {
 
       // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
       // running until the tool body settles, even after the abort grace hands control back to the loop.
+      // Dispatch can await before falling back to running the tool here.
+      await stopAtShutdownBoundary(registryEntry, ownership, 'tool-call');
       const settleRunTool = startRunStep(registryEntry);
       // Shutdown keeps the run's claim while a tool body runs, so a result it returns in time is checkpointed.
       const settleToolCall = startToolCall(registryEntry);
