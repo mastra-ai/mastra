@@ -110,8 +110,9 @@ import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
-import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
+import { buildFactoryMcpRoutes, factoryMcpResource, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { createMcpTokenVerifier } from './mcp/token.js';
 import {
   FactoryMetrics,
   installFactoryMetrics,
@@ -338,8 +339,10 @@ export interface MastraFactoryConfig {
    */
   publicUrl?: string;
   /**
-   * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
-   * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
+   * The Factory MCP server at `<publicUrl>/mcp`, which lets MCP clients such
+   * as Claude and ChatGPT use the Factory tools as the signed-in user. It
+   * serves the organization's only Factory project, and accepts only access
+   * tokens issued for this URL (RFC 8707 Resource Indicators).
    * On by default with Mastra Platform auth; other providers need
    * `authorizationServers` set. Pass `false` to turn it off.
    */
@@ -2284,7 +2287,10 @@ export class MastraFactory {
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...(mcpEnabled
             ? buildFactoryMcpRoutes({
-                auth: routeAuth,
+                verifyAccessToken: createMcpTokenVerifier({
+                  authorizationServers: mcpAuthorizationServers,
+                  resource: factoryMcpResource(publicOrigin),
+                }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
                 projects: factoryProjectsStorage,

@@ -1,0 +1,80 @@
+import { createRemoteJWKSet, decodeJwt, errors, jwtVerify } from 'jose';
+import type { JWTVerifyGetKey } from 'jose';
+
+/** The person an MCP access token was issued to, in the org they chose when signing in. */
+export interface McpCaller {
+  userId: string;
+  orgId?: string;
+}
+
+export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
+
+/**
+ * Verifies MCP access tokens as JWTs issued for this endpoint alone: signed by
+ * one of `authorizationServers`, with `aud` naming `resource`. A token issued
+ * for anything else (a Platform login, another Factory, Platform's own MCP)
+ * is refused, and Platform refuses tokens issued for a resource, so a leaked
+ * or phished MCP token can't reach the rest of the user's account.
+ *
+ * Signing keys come from each server's `jwks_uri` (RFC 8414 metadata).
+ * Returns `null` for a token that isn't valid here; throws when the signing
+ * keys can't be fetched, so an outage isn't mistaken for a bad sign-in.
+ */
+export function createMcpTokenVerifier(options: {
+  authorizationServers: string[];
+  resource: string;
+}): McpTokenVerifier {
+  const issuers = new Set(options.authorizationServers.map(trimSlash));
+  const keySets = new Map<string, Promise<JWTVerifyGetKey>>();
+
+  const keysFor = (issuer: string) => {
+    let keys = keySets.get(issuer);
+    if (!keys) {
+      keys = (async () => {
+        const response = await fetch(`${issuer}/.well-known/oauth-authorization-server`);
+        if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
+        const { jwks_uri } = (await response.json()) as { jwks_uri?: unknown };
+        if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
+        return createRemoteJWKSet(new URL(jwks_uri));
+      })();
+      keySets.set(issuer, keys);
+      // Retry a failed lookup on the next request instead of caching the failure.
+      keys.catch(() => keySets.delete(issuer));
+    }
+    return keys;
+  };
+
+  return async token => {
+    let issuer: string;
+    try {
+      const { iss } = decodeJwt(token);
+      if (typeof iss !== 'string') return null;
+      issuer = trimSlash(iss);
+    } catch {
+      return null;
+    }
+    if (!issuers.has(issuer)) return null;
+    try {
+      const { payload } = await jwtVerify(token, await keysFor(issuer), {
+        issuer: [issuer, `${issuer}/`],
+        audience: options.resource,
+        requiredClaims: ['sub', 'exp'],
+      });
+      const orgId = typeof payload.org_id === 'string' && payload.org_id ? payload.org_id : undefined;
+      return { userId: payload.sub!, ...(orgId ? { orgId } : {}) };
+    } catch (error) {
+      if (
+        error instanceof errors.JOSEError &&
+        !(error instanceof errors.JWKSTimeout) &&
+        error.code !== 'ERR_JOSE_GENERIC'
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  };
+}
+
+function trimSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}

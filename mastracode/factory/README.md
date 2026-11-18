@@ -1593,14 +1593,16 @@ Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
 
 ```
-https://<your-factory>/web/factory/projects/<projectId>/mcp
+https://<your-factory>/mcp
 ```
 
-The Factory UI does not show this URL while the MCP endpoint is being reworked. Build it from your Factory URL and project id as shown above.
+The endpoint serves the organization's Factory project. An organization with more than one project gets `409 multiple_projects`. The Factory UI does not show this URL yet.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
-Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`. Its `resource` is the endpoint URL, and clients ask the authorization server for a token bound to it.
+
+The Factory accepts only JWT access tokens issued for this endpoint: signed by a listed authorization server (keys from its `jwks_uri`) with `aud` set to `https://<your-factory>/mcp`. The user and organization come from the token's `sub` and `org_id`. A Platform login token, a token issued for another Factory, or one issued for Platform's own MCP server is refused, and Platform refuses tokens issued for this endpoint. A leaked MCP token reaches this endpoint only. The authorization server must have Resource Indicators (RFC 8707) enabled with the endpoint registered as a resource. Without them it issues tokens with no audience, which the endpoint refuses. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
 
 To connect a client:
 
@@ -1609,7 +1611,7 @@ To connect a client:
 
 The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Clients that still open with a 2025-era `initialize` request, such as VS Code and Cursor, are served too, statelessly: they sign in the same way and get the same tools, but no session id, no `GET` event stream and no activity events. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
 
-Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. Register `https://<your-factory>/mcp` as a Resource Indicator there. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
 ```ts
 new MastraFactory({
