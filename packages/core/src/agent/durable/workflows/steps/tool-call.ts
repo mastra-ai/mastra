@@ -87,6 +87,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -523,11 +524,11 @@ export function createDurableToolCallStep() {
             toolName: info.toolName,
             toolCallId: info.toolCallId,
           };
-          // After a prior resume, end the resume spans (registry override) — they are the
-          // active root for this segment. Otherwise end the threaded originals.
+          // The pair this execution reports under: the run's first, or the one a resume or
+          // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-          const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-          const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+          const segment = segmentSpanData(requestContext, runId, initData, reg);
+          const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
           // iteration) for the originals.
@@ -539,8 +540,9 @@ export function createDurableToolCallStep() {
                   completionStartTime: typedInput.completionStartTime,
                   timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
                 },
+            segment.carried,
           );
-          if (typedInput.stepSpanData) {
+          if (typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData)) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
               output,
               outcome: 'suspend',
@@ -555,7 +557,7 @@ export function createDurableToolCallStep() {
             });
           }
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({
+            obs.rebuildSpan(modelSpanData)?.end({
               output,
               attributes,
               outcome: 'suspend',
@@ -570,7 +572,7 @@ export function createDurableToolCallStep() {
             });
           }
           if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({
+            obs.rebuildSpan(agentSpanData)?.end({
               output,
               attributes,
               outcome: 'suspend',
@@ -624,13 +626,10 @@ export function createDurableToolCallStep() {
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
       // in-process, rebuilt cross-process). Without it they export as orphan trace roots.
-      const processorAgentSpanData = registryEntry?.resumeAgentSpanData ?? initData.agentSpanData;
+      const processorAgentSpanData = segmentSpanData(requestContext, runId, initData, registryEntry).agentSpanData;
       const processorAgentSpan =
-        registryEntry?.resumeAgentSpan ??
-        registryEntry?.agentSpan ??
-        (processorAgentSpanData && observability
-          ? observability.rebuildSpan(processorAgentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-          : undefined);
+        liveSegmentSpan(processorAgentSpanData, registryEntry?.resumeAgentSpan, registryEntry?.agentSpan) ??
+        (processorAgentSpanData && observability ? observability.rebuildSpan(processorAgentSpanData) : undefined);
       const processorObservabilityContext = processorAgentSpan
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
