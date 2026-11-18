@@ -18,7 +18,7 @@ export const deleteGroupInputSchema = z
   .object({
     group_id: z
       .union([
-        z.number().int().positive(),
+        z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
         z
           .string()
           .min(1)

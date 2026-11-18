@@ -25,7 +25,7 @@ function gitlabPathSegment(value: string | number): string {
 export const listPipelinesInputSchema = z.object({
   project_id: z
     .union([
-      z.number().int().positive(),
+      z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
       z
         .string()
         .min(1)

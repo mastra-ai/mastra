@@ -916,8 +916,8 @@ function rewriteModuleStatements(action: ExtractedAction, rewrites: readonly Sta
  * strings must be encodable (an unpaired surrogate makes encodeURIComponent
  * throw before the request).
  */
-const GITLAB_ID_OR_PATH_SCHEMA =
-  "z.union([z.number().int().positive(), z.string().min(1).refine(value => { try { encodeURIComponent(value); return true; } catch { return false; } }, 'must not contain unpaired surrogate characters')])";
+export const GITLAB_ID_OR_PATH_SCHEMA =
+  "z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().min(1).refine(value => { try { encodeURIComponent(value); return true; } catch { return false; } }, 'must not contain unpaired surrogate characters')])";
 
 /**
  * GitLab returns `null`, not an omitted field, for these values, and the

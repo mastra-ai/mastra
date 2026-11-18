@@ -6,6 +6,10 @@ import type { AddressInfo } from 'node:net';
 import { RequestContext } from '@mastra/core/request-context';
 import { isValidationError } from '@mastra/core/tools';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { z as z4 } from 'zod';
+import { z as z3 } from 'zod/v3';
+
+import { GITLAB_ID_OR_PATH_SCHEMA } from '../../scripts/generate-provider.js';
 
 import { tools } from '../tools.js';
 
@@ -459,6 +463,26 @@ describe('generated GitLab tools', () => {
       expect(pipeline).toMatchObject({ id: 7, coverage: '87.50' });
     });
   });
+  // Generated tools run on whichever zod the app installs (the package
+  // supports 3 and 4), but the tests above only ever run zod 4, so build the
+  // emitted id schema against both.
+  describe.each([
+    ['zod 3', z3],
+    ['zod 4', z4],
+  ])('generated id schema on %s', (_version, z) => {
+    const idOrPath = new Function('z', `return ${GITLAB_ID_OR_PATH_SCHEMA}`)(z) as {
+      safeParse(value: unknown): { success: boolean };
+    };
+
+    it.each([42, 'team/app', 'team%2Fapp', Number.MAX_SAFE_INTEGER])('accepts %s', value => {
+      expect(idOrPath.safeParse(value).success).toBe(true);
+    });
+
+    it.each([Number.MAX_SAFE_INTEGER + 2, 0, 1.5, '', 'team/\ud800'])('refuses %s', value => {
+      expect(idOrPath.safeParse(value).success).toBe(false);
+    });
+  });
+
   describe('input rules', () => {
     it('refuses a project id too large to send exactly', async () => {
       await expectRefused('gitlab_delete_file', {
