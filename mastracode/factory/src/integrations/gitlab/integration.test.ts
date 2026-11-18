@@ -460,17 +460,15 @@ describe('PlatformGitLabIntegration', () => {
     expect(gitlab.diagnostics()).not.toHaveProperty('pollingIntervalMs');
   });
 
-  it('runs the Platform event poller by default and reports its settings without needing a webhook secret', () => {
+  it("routes its connections' events to the Platform event poller by default and reports its settings without needing a webhook secret", () => {
     const context = {
       controller: {},
       storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
     } as never;
 
-    expect(
-      platform()
-        .workers(context)
-        .map(worker => worker.name),
-    ).toEqual(['platform-gitlab-events']);
+    const route = platform().connectEventRoute(context);
+    expect(route).toMatchObject({ binding: expect.anything() });
+    expect(route).not.toHaveProperty('pollIntervalMs');
 
     vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
     const tuned = platform();
@@ -479,8 +477,8 @@ describe('PlatformGitLabIntegration', () => {
       pollingIntervalMs: 45_000,
       webhookConfigured: false,
     });
-    expect(tuned.workers(context)).toHaveLength(1);
-    expect(() => tuned.workers({ storage: context.storage } as never)).toThrow(
+    expect(tuned.connectEventRoute(context)).toMatchObject({ pollIntervalMs: 45_000 });
+    expect(() => tuned.connectEventRoute({ storage: context.storage } as never)).toThrow(
       'Platform GitLab event polling requires the mounted Mastra Code controller.',
     );
 
@@ -491,7 +489,7 @@ describe('PlatformGitLabIntegration', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_ENABLED', 'false');
     const disabled = platform();
     expect(disabled.diagnostics()).toMatchObject({ pollingEnabled: false });
-    expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
+    expect(disabled.connectEventRoute({ storage: context.storage } as never)).toBeNull();
     expect(
       new PlatformGitLabIntegration({
         connect: {

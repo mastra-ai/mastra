@@ -8,12 +8,13 @@ import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
 import { PlatformConnectBinding } from '../foundation/connect-binding.js';
 import type { PlatformConnection } from '../foundation/connect-binding.js';
+import type { PlatformConnectEventRoute, PlatformConnectEventSource } from '../foundation/connect-events.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
-import { PlatformGitLabEventWorker } from './event-worker.js';
-import type { PlatformGitLabEventStorage } from './event-worker.js';
+import { handleGitLabConnectEvent } from './connect-events.js';
 
 interface PlatformGitLabContext {
   id: string;
@@ -39,7 +40,7 @@ export interface PlatformGitLabIntegrationConfig {
   webhookSecret?: string;
   /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`, and to true when that is unset. */
   pollingEnabled?: boolean;
-  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the worker's 20 s when unset. */
+  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the poller's 20 s when unset. */
   pollingIntervalMs?: number;
 }
 
@@ -48,13 +49,17 @@ export interface PlatformGitLabIntegrationConfig {
  * self-hosted integration shares, and composes the Connect plumbing through a
  * `PlatformConnectBinding`.
  */
-export class PlatformGitLabIntegration extends GitLabIntegrationBase implements PlatformConnectProviderSource {
+export class PlatformGitLabIntegration
+  extends GitLabIntegrationBase
+  implements PlatformConnectProviderSource, PlatformConnectEventSource
+{
   readonly binding: PlatformConnectBinding;
   readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
   readonly #webhookSecret: string | undefined;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
+  #reconcileWorker: IssueReconcileWorker | undefined;
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
@@ -117,30 +122,38 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase implements 
   }
 
   /**
-   * The reconcile sweeps from the base class plus, when polling is on, the
-   * Platform event poller. Polling replaces the direct project webhook: the
-   * webhook route stays mounted for deployments that also configured a secret,
-   * but nothing in Platform mode requires one.
+   * The reconcile sweeps from the base class. Events come through the
+   * deployment's Platform Connect event poller (`connectEventRoute`), which
+   * replaces the direct project webhook: the webhook route stays mounted for
+   * deployments that also configured a secret, but nothing in Platform mode
+   * requires one.
    */
   override workers(ctx: IntegrationContext): MastraWorker[] {
     void this.binding.ensureBootLinked();
     const workers = super.workers(ctx);
-    if (!this.#pollingEnabled) return workers;
-    if (!ctx.controller) {
+    this.#reconcileWorker = workers.find(worker => worker instanceof IssueReconcileWorker);
+    return workers;
+  }
+
+  /** The route the Platform Connect event poller reads GitLab events through, unless polling is off. */
+  connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute | null {
+    if (!this.#pollingEnabled) return null;
+    const controller = ctx.controller;
+    if (!controller) {
       throw new Error('Platform GitLab event polling requires the mounted Mastra Code controller.');
     }
-    return [
-      ...workers,
-      new PlatformGitLabEventWorker({
-        client: this.binding.connect,
-        controller: ctx.controller,
-        gitlab: this,
-        storage: ctx.storage.generic as unknown as PlatformGitLabEventStorage,
-        listConnections: () => this.listConnections(),
-        ingestFactoryEvent: attachGitLabRules(this, ctx),
-        intervalMs: this.#pollingIntervalMs,
-      }),
-    ];
+    const ingestFactoryEvent = attachGitLabRules(this, ctx);
+    return {
+      binding: this.binding,
+      handle: event =>
+        handleGitLabConnectEvent(event, {
+          controller,
+          gitlab: this,
+          ingestFactoryEvent,
+        }),
+      reconcile: () => this.#reconcileWorker?.requestRun(),
+      ...(this.#pollingIntervalMs === undefined ? {} : { pollIntervalMs: this.#pollingIntervalMs }),
+    };
   }
 
   diagnostics(): Record<string, unknown> {

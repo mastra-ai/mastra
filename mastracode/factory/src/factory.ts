@@ -41,6 +41,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
+import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -106,8 +107,13 @@ import {
   projectConnectTools,
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
-import { logIntegrationSummary } from './integrations/startup-summary.js';
+import {
+  PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID,
+  PlatformConnectEventPoller,
+} from './integrations/platform/foundation/connect-event-poller.js';
+import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
+import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -256,7 +262,8 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 /** Tools for every Factory session, or a resolver called per run. */
 export type FactoryTools =
-  IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+  | IntegrationTools
+  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -1362,7 +1369,8 @@ export class MastraFactory {
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     ) as GitLabIntegrationBase | undefined;
@@ -2700,36 +2708,54 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              integrations: integrationRegistrations,
-              configVersion,
-              boardRegistry: this.#projectBoards ?? this.#boards,
-              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
-              // Only with the boards domain ready, as intake routes are.
-              ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
-              factoryReady,
-              domains,
-              // The Platform GitHub lane only receives pushes through its polling worker.
-              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
-          ),
+    const readyContexts = integrationRegistrations
+      .filter(({ ready }) => ready)
+      .map(({ integration }) => ({
+        integration,
+        context: buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+            // Only with the boards domain ready, as intake routes are.
+            ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
+            factoryReady,
+            domains,
+            // The Platform GitHub lane only receives pushes through its polling worker.
+            ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
         ),
+      }));
+    const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
+      integration.workers ? integration.workers(context) : [],
+    );
+    // One event poller per deployment reads the platform event log of every
+    // Platform integration's connections and routes each event to its
+    // integration. Integrations without an event route add nothing.
+    const eventRoutes = readyContexts.flatMap(({ integration, context }) => {
+      if (!isPlatformConnectEventSource(integration)) return [];
+      const route = integration.connectEventRoute(context);
+      return route ? [route] : [];
+    });
+    if (eventRoutes.length > 0) {
+      integrationWorkers.push(
+        new PlatformConnectEventPoller({
+          storage: integrationStorage.forIntegration(PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID),
+          routes: eventRoutes,
+        }),
       );
+    }
 
     return {
       ...prepared.mastraArgs,

@@ -21,9 +21,21 @@ export interface FakeReply {
   contentType?: string;
 }
 
+/** A row of a connection's platform event log, as `GET /v2/connections/:id/events` returns it. */
+export interface FakeConnectionEvent {
+  /** A Redis stream id, `<unix ms>-<sequence>`. */
+  id: string;
+  timestamp: number;
+  integrationId: string;
+  eventType: string;
+  sourceEventId: string | null;
+  payload: unknown;
+}
+
 export interface FakePlatformRequest {
   method: string;
   path: string;
+  query: URLSearchParams;
 }
 
 /** A platform problem response (`application/problem+json`), as the platform itself answers. */
@@ -47,6 +59,10 @@ export class FakePlatform {
   /** Replies for the next project listings, in place of the listing. */
   readonly nextListingReplies: FakeReply[] = [];
   readonly requests: FakePlatformRequest[] = [];
+  /** Each connection's event log, oldest first. */
+  readonly connectionEvents = new Map<string, FakeConnectionEvent[]>();
+  /** Replies for the next event log reads of a connection, in place of the log. */
+  readonly nextEventReplies = new Map<string, FakeReply[]>();
   proxy: (connectionId: string, path: string, query: URLSearchParams) => FakeReply = () => ({ status: 200, body: {} });
 
   #url = '';
@@ -82,7 +98,7 @@ export class FakePlatform {
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', 'http://platform');
     const path = url.pathname;
-    this.requests.push({ method, path });
+    this.requests.push({ method, path, query: url.searchParams });
     const reply = this.#route(method, path, url.searchParams);
     res.statusCode = reply.status;
     if (reply.body === undefined) {
@@ -125,10 +141,26 @@ export class FakePlatform {
         },
       };
     }
+    const events = /^\/v2\/connections\/([^/]+)\/events$/.exec(path);
+    if (method === 'GET' && events) {
+      const id = decodeURIComponent(events[1]!);
+      const reply = this.nextEventReplies.get(id)?.shift();
+      if (reply) return reply;
+      const after = query.get('afterEventId') ?? '0-0';
+      const limit = Number(query.get('limit') ?? 100);
+      const page = (this.connectionEvents.get(id) ?? []).filter(e => compareStreamIds(e.id, after) > 0).slice(0, limit);
+      return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
+    }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
     if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query);
     return problem(404, 'not_found', `${method} ${path}`);
   }
+}
+
+function compareStreamIds(a: string, b: string): number {
+  const [aMs = 0, aSeq = 0] = a.split('-').map(Number);
+  const [bMs = 0, bSeq = 0] = b.split('-').map(Number);
+  return aMs - bMs || aSeq - bSeq;
 }
 
 export function startFakePlatform(): Promise<FakePlatform> {
