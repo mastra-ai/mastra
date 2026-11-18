@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
-import { useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
+import { slideWindow, useListAnchor, useListHeadPoll } from '@/domains/observability/hooks/use-list-head-poll';
 import { observabilityListQueryOptions } from '@/domains/observability/hooks/use-observability-list-filters';
 import { OBSERVABILITY_LIST_HEAD_LIMIT } from '@/domains/observability/list-polling';
 import { mergeHeadRows } from '@/domains/observability/merge-head-rows';
@@ -49,11 +49,11 @@ export function useSpansListSource({
   enabled = true,
 }: UseSpansListSourceArgs) {
   const client = useMastraClient();
-  const { anchorTo, reanchor } = useListAnchor(query);
+  const { anchorWindow, reanchor } = useListAnchor(query);
 
   const listQuery = useMemo<SpanQueryArgs>(
-    () => (anchorTo ? { ...query, timeRange: { ...query.timeRange, to: anchorTo } } : query),
-    [query, anchorTo],
+    () => (anchorWindow ? { ...query, timeRange: { ...query.timeRange, ...anchorWindow } } : query),
+    [query, anchorWindow],
   );
   const list = useQuerySpans({ query: listQuery, limit, enabled, queryOptions: observabilityListQueryOptions });
 
@@ -64,7 +64,7 @@ export function useSpansListSource({
       // so a long-running span started inside the window is caught once it ends.
       const result = await client.querySpans({
         ...query,
-        timeRange: { from: query.timeRange.from, to },
+        timeRange: { ...query.timeRange, ...slideWindow(query.timeRange, to) },
         orderBy: [{ field: 'endedAt', direction: 'desc' }],
         page: { limit: OBSERVABILITY_LIST_HEAD_LIMIT },
       });
@@ -74,7 +74,7 @@ export function useSpansListSource({
     getEndedAt: span => span.endedAt,
     since: Date.parse(listQuery.timeRange.to),
     enabled: enabled && rolling && autoRefetch && list.spans !== undefined && !list.isFetching && !list.isError,
-    onOverflow: reanchor,
+    onOverflow: () => reanchor(query.timeRange),
   });
 
   const { orderBy } = query;
