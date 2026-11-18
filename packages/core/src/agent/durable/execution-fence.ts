@@ -39,7 +39,7 @@ import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-owners
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { executionTransport, withExecutionStreamProducer } from './execution-stream-publisher';
-import { runInRunFenceScope } from './run-fence-scope';
+import { currentRunFenceScope, runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
@@ -1083,6 +1083,33 @@ export class ExecutionFence implements RunFenceScope {
     if (this.generation === undefined) this.#leaseExpiresAt = startedAt + EXECUTION_LEASE_TTL_MS;
   }
 
+  /**
+   * {@link verify} for writes that may land after settlement, such as a
+   * background task's result or suspension: refuses only once another
+   * execution claimed the run. A released or lapsed claim still passes, as
+   * storage accepts the claim's writes until the next claim, and the write's
+   * own fence ({@link runFencedToClaim}) rejects it once a successor raised
+   * memory. Never waits for a release in flight.
+   *
+   * Only storage-backed claims get this rule: their generation tells a
+   * released claim from one a successor claimed, released or not. A lease
+   * keeps no record once released, so an empty lease can't tell this claim's
+   * release from a successor that claimed and released it since, and nothing
+   * fences the write behind it. A lease-backed claim always gets {@link verify}.
+   */
+  async verifyNotSuperseded(): Promise<void> {
+    if (this.generation === undefined) return this.verify();
+    const details = this.#details();
+    const superseded = this.#takenOver || (await retryOnce(() => this.#backend.isSuperseded(this.claim), details));
+    // A takeover the heartbeat saw while the read was on its way also refuses.
+    if (superseded || this.#takenOver) {
+      const error = new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+      this.#takenOver = true;
+      this.#markLost(error);
+      throw error;
+    }
+  }
+
   stopHeartbeat(): void {
     if (this.#heartbeat) clearInterval(this.#heartbeat);
     this.#heartbeat = undefined;
@@ -1538,7 +1565,7 @@ export async function assertExecutionNotSuperseded(args: {
   const local =
     args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
     fencesByExecutionId.get(claim.executionId);
-  if (local) return local.verify();
+  if (local) return local.verifyNotSuperseded();
 
   const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
   if (!backend) return;
@@ -1546,6 +1573,57 @@ export async function assertExecutionNotSuperseded(args: {
   if (await retryOnce(() => backend.isSuperseded(claim), details)) {
     throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
   }
+}
+
+/**
+ * {@link assertExecutionNotSuperseded} for a claim with a storage generation,
+ * {@link assertExecutionOwned} for one without. For writes that refused a
+ * released claim before late writes were accepted, such as a background
+ * task's suspension: only a generation tells this claim's release from
+ * another execution that claimed and released the run since, and a
+ * lease-backed write has no storage fence behind it (#30182).
+ */
+export async function assertExecutionNotSupersededInStorage(
+  args: Parameters<typeof assertExecutionNotSuperseded>[0],
+): Promise<void> {
+  const claim = getExecutionClaim(args.requestContext, args.runId);
+  if (claim?.generation === undefined) return assertExecutionOwned(args);
+  return assertExecutionNotSuperseded(args);
+}
+
+/**
+ * Run `fn` with its writes to `memoryStore` carrying the memory fence of the
+ * claim `requestContext` holds for `runId`, also once that execution settled
+ * and stopped fencing its own writes. For writes that may land after the run
+ * finished, such as a background task's suspension: an ownership check before
+ * the write can't see a successor that claims the run while the write is on
+ * its way, but storage rejects the write once that successor raised the memory
+ * fence. Runs `fn` unchanged when the claim never raised memory (lease-backed
+ * claims, memory stores without run fencing). Other writes keep the fence of
+ * the enclosing scope.
+ */
+export async function runFencedToClaim<T>(
+  args: {
+    requestContext: RequestContext | undefined;
+    runId: string;
+    /** Resolves the memory store the claim raised; called only when it raised one. */
+    memoryStore: () => Promise<object | undefined>;
+  },
+  fn: () => Promise<T>,
+): Promise<T> {
+  const fence = getRunFence(args.requestContext, args.runId, 'memory');
+  const memoryStore = fence && (await args.memoryStore());
+  if (!fence || !memoryStore) return fn();
+  const outer = currentRunFenceScope();
+  return runInRunFenceScope(
+    {
+      fenceFor: (store, runId) => (store === memoryStore ? fence : outer?.fenceFor(store, runId)),
+      onConflict: conflict => outer?.onConflict?.(conflict),
+      coverNestedRun: (parentRunId, nestedRunId) => outer?.coverNestedRun?.(parentRunId, nestedRunId),
+      generationFor: runId => outer?.generationFor?.(runId),
+    },
+    fn,
+  );
 }
 
 /**

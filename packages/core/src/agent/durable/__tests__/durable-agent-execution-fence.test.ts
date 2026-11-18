@@ -2064,6 +2064,70 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       result.cleanup();
     });
 
+    // A foreground tool's suspension keeps the strict check: only a background task's suspension may land
+    // after the run released its claim. An execution that couldn't renew its claim past the lease, with
+    // nobody else claiming the run, must not record an approval or question nobody can answer (#30182).
+    it('a foreground tool that suspends after its execution lost the lease stops the run without recording the suspension', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      const storage = createStorage(backend);
+      const memory = new MockMemory({ storage });
+      const model = toolCallThenTextModel('askReviewer', { topic: 'refund' }, 'must not be reached');
+      let enterTool!: () => void;
+      const toolEntered = new Promise<void>(resolve => (enterTool = resolve));
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      const askReviewer = createTool({
+        id: 'askReviewer',
+        description: 'Ask a reviewer to approve the refund',
+        inputSchema: z.object({ topic: z.string() }),
+        execute: async ({ topic }, options) => {
+          enterTool();
+          await toolGate;
+          return options?.agent?.suspend?.({ awaiting: 'reviewer', topic }) as any;
+        },
+      });
+      const durableAgent = buildAgent({ model: model.model, storage, memory, tools: { askReviewer } });
+      const result = await durableAgent.stream('Refund this order once a reviewer approves', {
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      const { runId } = result;
+      const stream = collect(result.fullStream);
+      const errors: any[] = [];
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        if (event.type === 'error') errors.push(event);
+      });
+      try {
+        await toolEntered;
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        // Renewals can't reach the backend until the claim's lease runs out, as a dropped connection would.
+        if (backend === 'storage') {
+          vi.spyOn(storage.stores.workflows!, 'renewRunOwnership').mockRejectedValue(new Error('store unreachable'));
+        } else {
+          vi.spyOn(pubsub, 'renewLease').mockRejectedValue(new Error('redis unreachable'));
+        }
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 2 * EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(fence.isLost()).toBe(true);
+        expect(await foreignOwnership(backend, storage, pubsub).owner(durableAgent.id, runId)).not.toBe('successor');
+
+        releaseTool();
+        await fence.whenSettled;
+        await vi.waitFor(() => expect(errors).toHaveLength(1));
+        expect(errors[0].data.error.message).toContain(
+          `Durable run ${runId}: could not verify that this execution still owns the run`,
+        );
+        const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+        const metadata = messages.map(message => message.content.metadata ?? {});
+        // No open request for the reviewer: nothing a later resume() could answer.
+        expect(metadata.some(entry => 'suspendedTools' in entry || 'pendingToolApprovals' in entry)).toBe(false);
+        expect(model.calls()).toBe(1);
+      } finally {
+        releaseTool();
+        vi.useRealTimers();
+        await stream.stop();
+        result.cleanup();
+      }
+    });
+
     it.each([
       ['stream', 'takeOver'],
       ['stream', 'vanish'],

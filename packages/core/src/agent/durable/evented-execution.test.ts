@@ -33,6 +33,7 @@ import {
 import { EventedExecutionEngine as DurableEventedExecutionEngine } from './evented-execution-engine';
 import {
   __resetExecutionFencesForTests,
+  assertExecutionNotSuperseded,
   DURABLE_PARTICIPANT_FENCES,
   DurableExecutionFenceError,
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
@@ -2100,6 +2101,62 @@ it('detaches worker participants on shutdown without invalidating a surviving pa
     ownerId: coordinator.executionId,
     generation: coordinator.generation,
   });
+});
+
+// Worker B ran the tool-call step; worker A handled the terminal event and released the shared claim. B's
+// participant fence stays registered until its heartbeat notices, and a background task's late write on B
+// was checked strictly against it, so it failed as superseded though nobody took the run. (#30182)
+it("accepts a late background write on one worker after another worker released the run's claim", async () => {
+  const { workflowsStore, pubsub, mastra: workerA, coordinator, event } = await createExecution();
+  const workerB = new Mastra({ storage: workerA.getStorage(), pubsub });
+  instances.push(workerB);
+  await participateInDurableExecution(workerA, event, async () => {});
+  await participateInDurableExecution(workerB, event, async () => {});
+  const participantB = workerB.__getRunScope('run')!.get(DURABLE_PARTICIPANT_FENCES)!.get(coordinator.executionId)!;
+
+  await settleEventedDurableExecution(workerA, { ...event, type: 'workflow.end' });
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+  const late = { runId: 'run', agentId: 'agent', mastra: workerB };
+  const requestContext = new RequestContext(Object.entries(event.data.requestContext));
+  await expect(assertExecutionNotSuperseded({ ...late, requestContext })).resolves.toBeUndefined();
+  expect(participantB.isLost()).toBe(false);
+
+  // Once another execution claims the run, the late write on B is refused.
+  const successor = await workflowsStore.claimRunOwnership({
+    runId: 'run',
+    ownerId: 'successor',
+    leaseMs: 60_000,
+    expectedGeneration: coordinator.generation,
+  });
+  expect(successor.acquired).toBe(true);
+  await expect(assertExecutionNotSuperseded({ ...late, requestContext })).rejects.toMatchObject({
+    id: EXECUTION_SUPERSEDED_ERROR_ID,
+  });
+});
+
+it('refuses a late background write on one worker once a successor claimed the run another worker released', async () => {
+  const { workflowsStore, pubsub, mastra: workerA, coordinator, event } = await createExecution();
+  const workerB = new Mastra({ storage: workerA.getStorage(), pubsub });
+  instances.push(workerB);
+  await participateInDurableExecution(workerA, event, async () => {});
+  await participateInDurableExecution(workerB, event, async () => {});
+
+  await settleEventedDurableExecution(workerA, { ...event, type: 'workflow.end' });
+  await workflowsStore.claimRunOwnership({
+    runId: 'run',
+    ownerId: 'successor',
+    leaseMs: 60_000,
+    expectedGeneration: coordinator.generation,
+  });
+  const requestContext = new RequestContext(Object.entries(event.data.requestContext));
+  await expect(
+    assertExecutionNotSuperseded({ runId: 'run', agentId: 'agent', requestContext, mastra: workerB }),
+  ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({ ownerId: 'successor', live: true });
 });
 
 it('stops renewing the claim when the processor abandons a root terminal delivery', async () => {
