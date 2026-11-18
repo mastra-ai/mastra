@@ -14,7 +14,7 @@ const code: InlineFormat = { node: 'InlineCode', marker: '`' };
 const urlPattern = /^https?:\/\/\S+$/;
 const blockPrefix = /^\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|>\s?|#{1,6}\s+)*/;
 const codeBlock = /^(?:FencedCode|CodeBlock)$/;
-const proseBlock = /^(?:Paragraph|ATXHeading\d|SetextHeading\d|Task)$/;
+const proseBlock = /^(?:Paragraph|ATXHeading\d|SetextHeading\d|Task|TableCell)$/;
 const sides: readonly (-1 | 1)[] = [1, -1];
 const boldItalicRun = bold.marker.length + italic.marker.length;
 

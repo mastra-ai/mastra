@@ -120,6 +120,26 @@ describe('MarkdownEditor — formatting', () => {
     expect(saved()).toBe('**Intro**\n```ts\nconst a = 1\n```\n***\n**Outro**');
   });
 
+  it('bolds a word inside a table cell', async () => {
+    const { view, saved } = open('| Step | Owner |\n| --- | --- |\n| Lint | Bot |');
+    const user = userEvent.setup();
+
+    select(view, 'Lint');
+    await user.keyboard('{Control>}b{/Control}');
+
+    expect(saved()).toBe('| Step | Owner |\n| --- | --- |\n| **Lint** | Bot |');
+  });
+
+  it('leaves whole table rows alone so the cells keep their pipes', async () => {
+    const { view, saved } = open('| Step | Owner |\n| --- | --- |\n| Lint | Bot |');
+    const user = userEvent.setup();
+
+    select(view, view.state.doc.toString());
+    await user.keyboard('{Control>}b{/Control}');
+
+    expect(saved()).toBeUndefined();
+  });
+
   it('types bold text from a shortcut at the caret, and the same shortcut ends it', async () => {
     const { view, saved } = open('Say ');
     const user = userEvent.setup();
