@@ -7,7 +7,7 @@ description: "Browse 302.AI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/302ai.svg" alt="302.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />302.AI
 
-Access 126 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
+Access 127 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
 
 Learn more in the [302.AI documentation](https://doc.302.ai).
 
@@ -461,7 +461,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 32768,
-    "maxOutput": 64000,
+    "maxOutput": 32768,
     "inputCost": 2,
     "outputCost": 120
   },
@@ -1253,7 +1253,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -1265,7 +1265,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2.4,
     "outputCost": 12
   },
@@ -1342,6 +1342,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.88
   },
   {
+    "model": "302ai/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.18,
+    "outputCost": 0.72
+  },
+  {
     "model": "302ai/ministral-14b-2512",
     "imageInput": true,
     "audioInput": false,
@@ -1361,7 +1373,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 128000,
-    "maxOutput": 262144,
+    "maxOutput": 128000,
     "inputCost": 1.1,
     "outputCost": 3.3
   },
