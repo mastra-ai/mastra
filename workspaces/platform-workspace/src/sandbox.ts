@@ -372,6 +372,23 @@ const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
  * input as `command` allows arbitrary shell syntax execution on the remote
  * sandbox.
  */
+/**
+ * Drops GitHub credentials from a per-call env: `GH_TOKEN`/`GH_TOKEN_<n>` and
+ * a `GIT_CONFIG_*` block that scopes a header to github.com. Other hosts'
+ * credentials (GitLab) are left alone.
+ */
+function withoutGithubCredentials(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const githubConfig = Object.entries(env).some(
+    ([name, value]) => /^GIT_CONFIG_KEY_\d+$/.test(name) && !!value?.startsWith('http.https://github.com/'),
+  );
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) =>
+        !/^GH_TOKEN(_\d+)?$/.test(name) && !(githubConfig && /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name)),
+    ),
+  );
+}
+
 function buildCommand(command: string, args?: string[]): string {
   return args?.length ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 }
@@ -913,6 +930,7 @@ export class PlatformSandbox extends MastraSandbox {
         }
         this._failIfReattachRequired('destroyed');
         this._sandboxId = undefined;
+        this.vault = undefined;
       } catch (error) {
         // 404: the proxy never issued this id. 410: it did, and has since
         // marked the record destroyed (idle GC, manual delete). Neither is
@@ -920,6 +938,7 @@ export class PlatformSandbox extends MastraSandbox {
         if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
         this._failIfReattachRequired(String(error.status), error);
         this._sandboxId = undefined;
+        this.vault = undefined;
       }
     }
 
@@ -992,13 +1011,15 @@ export class PlatformSandbox extends MastraSandbox {
    * `vault` unchanged, so an unknown mode stays unknown.
    */
   async refreshVault(): Promise<boolean | undefined> {
-    if (!this._sandboxId) return this.vault;
+    const sandboxId = this._sandboxId;
+    if (!sandboxId) return this.vault;
     try {
-      const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
       const json = (await response.json()) as CreateSandboxResponse;
-      if (typeof json.vault === 'boolean') this.vault = json.vault;
+      // A replacement sandbox provisioned while this read was in flight has its own mode.
+      if (typeof json.vault === 'boolean' && this._sandboxId === sandboxId) this.vault = json.vault;
     } catch (error) {
-      this.logger.warn(`Could not read the credential-vault mode of sandbox ${this._sandboxId}`, { error });
+      this.logger.warn(`Could not read the credential-vault mode of sandbox ${sandboxId}`, { error });
     }
     return this.vault;
   }
@@ -1304,6 +1325,7 @@ export class PlatformSandbox extends MastraSandbox {
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
     this._sandboxId = undefined;
+    this.vault = undefined;
     this._createdAt = null;
     // Drop the exec lease with the sandbox — the JWT is tied to the provider
     // instance id and would be rejected against a fresh one.
@@ -1449,6 +1471,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._probeTarget = null;
     this._transportReadyPromise = null;
     this._sandboxId = undefined;
+    this.vault = undefined;
     this._createdAt = null;
     this._lease = null;
     this._addressRegistry?.delete(destroyedSandboxId);
@@ -1503,9 +1526,13 @@ export class PlatformSandbox extends MastraSandbox {
     // these options, and none of them route through the process manager.
     const sandboxEnv = this.getEnv();
     const { cwd, ...restOptions } = options ?? {};
+    // The caller built its env before this call acquired the VM. A vault VM
+    // authenticates GitHub through the vault, so it never gets a real GitHub
+    // credential, even one built while the previous VM was not vault.
+    if (this.vault === true && restOptions.env) restOptions.env = withoutGithubCredentials(restOptions.env);
     const execCommand = commandInCwd(fullCommand, cwd, this.workingDirectory);
     const execCallOptions: ExecuteCommandOptions =
-      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...options?.env } } : restOptions;
+      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...restOptions.env } } : restOptions;
 
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
@@ -1643,6 +1670,7 @@ export class PlatformSandbox extends MastraSandbox {
           this._lease = null;
           const priorSandboxId = this._sandboxId;
           this._sandboxId = undefined;
+          this.vault = undefined;
           // Reset lifecycle status too: the next `ensureRunning()` must re-run
           // the full start lifecycle (acquisition + `onStart` hook) so a
           // replacement VM is set up, not just leased.
@@ -1985,6 +2013,7 @@ export class PlatformSandbox extends MastraSandbox {
         this._lease = null;
         const priorSandboxId = this._sandboxId;
         this._sandboxId = undefined;
+        this.vault = undefined;
         this.status = 'stopped';
         throw new SandboxDestroyedError(
           `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,

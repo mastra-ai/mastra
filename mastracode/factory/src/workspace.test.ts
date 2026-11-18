@@ -115,6 +115,8 @@ const mocks = vi.hoisted(() => ({
   setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
+  settingsHold: null as Promise<void> | null,
+  settingsHoldSkip: 0,
   githubReviewerPat: null as string | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
@@ -225,6 +227,8 @@ afterEach(async () => {
   mocks.mintInstallationToken.mockClear();
   mocks.setEnv.mockClear();
   mocks.githubPat = null;
+  mocks.settingsHold = null;
+  mocks.settingsHoldSkip = 0;
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
@@ -346,14 +350,17 @@ function fakeGithubIntegration() {
     getInstallationOctokit: vi.fn(),
     integrationStorage: {
       settings: {
-        get: vi.fn(async () =>
-          mocks.githubPat || mocks.githubReviewerPat
+        get: vi.fn(async () => {
+          const hold = mocks.settingsHoldSkip-- > 0 ? null : mocks.settingsHold;
+          if (hold) mocks.settingsHold = null;
+          if (hold) await hold;
+          return mocks.githubPat || mocks.githubReviewerPat
             ? {
                 ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
                 ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
               }
-            : null,
-        ),
+            : null;
+        }),
       },
     },
     sourceControlStorage: {
@@ -2737,6 +2744,64 @@ describe('GitHub session workspace preparation', () => {
       await sandbox.start();
 
       expect(lastGhToken()).not.toBe('ghp_reviewer');
+    });
+
+    it('drops a withheld PAT lookup that a role change overtook during reconnect', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      mocks.runBindingRole = 'review';
+      await reuse();
+
+      // Setup reads the PAT first; hold the reconnect's reviewer PAT lookup while the role changes back.
+      mocks.settingsHoldSkip = 1;
+      let release!: () => void;
+      mocks.settingsHold = new Promise<void>(resolve => (release = resolve));
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      const reconnect = sandbox.start();
+      await vi.waitFor(() => expect(mocks.settingsHold).toBeNull());
+      mocks.runBindingRole = 'work';
+      await reuse();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+      release();
+      await reconnect;
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('re-mints on the next command after a failed mint left a reconnected sandbox without a token', async () => {
+      mocks.vault = true;
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      // Setup mints for the clone; the reconnect's own mint then fails.
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      let calls = 0;
+      const mint = mocks.getRepositoryAccess.getMockImplementation()!;
+      mocks.getRepositoryAccess.mockImplementation(async (args: { repositoryId: string }) => {
+        if (calls++ === 1) throw new Error('mint unavailable');
+        return mint(args);
+      });
+      await sandbox.start();
+      mocks.getRepositoryAccess.mockImplementation(mint);
+      mocks.setEnv.mockClear();
+
+      await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
     });
 
     it('clears a token left by an earlier token-mode start before setup runs a command', async () => {
