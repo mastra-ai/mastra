@@ -146,8 +146,10 @@ export function createSlackChatTools({
           mimeType === 'image/jpeg'
             ? data.length >= 5 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff && data.at(-2) === 0xff && data.at(-1) === 0xd9
             : mimeType === 'image/png'
-              ? data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-              : data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP';
+              ? data.length >= 57 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
+                data.subarray(12, 16).equals(Buffer.from('IHDR')) && data.readUInt32BE(8) === 13 &&
+                data.includes(Buffer.from('IDAT'), 33) && data.subarray(-8, -4).equals(Buffer.from('IEND'))
+              : data.length >= 12 && data.subarray(0, 4).equals(Buffer.from('RIFF')) && data.subarray(8, 12).equals(Buffer.from('WEBP'));
         if (!matchesFormat) throw new Error('Attachment bytes do not match the declared image format.');
         return { name: attachment.name, mimeType, base64: data.toString('base64') };
       },

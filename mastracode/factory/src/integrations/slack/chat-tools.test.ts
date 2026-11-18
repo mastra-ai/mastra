@@ -252,6 +252,46 @@ describe('Slack tools on a Factory session, by default', () => {
     }
   });
 
+  it('rejects truncated PNG and altered WebP headers before model output', async () => {
+    const images = [
+      { mimeType: 'image/png', bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) },
+      { mimeType: 'image/webp', bytes: Buffer.from('UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAA=', 'base64') },
+    ];
+    images[1]!.bytes[0] |= 0x80;
+    try {
+      const { run } = await slackSession();
+      for (const image of images) {
+        fileBytes = image.bytes;
+        workspace.history.C1![0]!.files = [{
+          id: 'F1', name: 'image', mimetype: image.mimeType, size: fileBytes.length,
+          url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+        }];
+        await expect(run('downloadSlackAttachment', {
+          threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+        })).rejects.toThrow('Attachment bytes do not match the declared image format.');
+      }
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects understated downloaded image size before model output', async () => {
+    fileBytes = Buffer.concat([jpeg.subarray(0, -2), Buffer.alloc(3_750_001 - jpeg.length), jpeg.subarray(-2)]);
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'large.jpg', mimetype: 'image/jpeg', size: jpeg.length,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('5 MB encoded model input limit');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
   it('accepts PNG and WebP bytes matching their declared formats', async () => {
     const images = [
       { mimeType: 'image/png', name: 'pixel.png', base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVQI12NoAAAAggCB3UNq9AAAAABJRU5ErkJggg==' },
