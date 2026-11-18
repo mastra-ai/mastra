@@ -272,9 +272,9 @@ describe('Tab', () => {
         </TabList>
       </Tabs>
     );
-    // Room for two 100px tabs on the track and the menu, not three.
+    // Room for two 100px tabs on the track and the "+N" menu, not three.
     const narrow = () => {
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(270);
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(290);
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
     };
 

@@ -108,10 +108,11 @@ export const TabList = ({
   }, [folds]);
   // Space between tabs, and around them, that folding has to count: the inset frame's, a pill
   // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Once some fold, the "+N"
-  // menu takes 48px, plus the `gap-1` before it outside contained tabs.
+  // menu needs room: 48px pinned in contained tabs; elsewhere the `sm` trigger, 58px for "+1" and up to
+  // 68px for a two-digit count, plus the `gap-1` before it.
   const gap = contained || pillTrack ? 4 : resolvedVariant === 'pill-ghost' ? 2 : 0;
   const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
-  const menuReserve = contained ? 48 : 52;
+  const menuReserve = contained ? 48 : 72;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!folds || available === null) return hidden;
