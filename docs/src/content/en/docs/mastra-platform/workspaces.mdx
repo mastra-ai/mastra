@@ -106,11 +106,11 @@ Every deploy that runs on a platform environment with a workspace receives these
 | `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
 
-These names are reserved. If your project sets any of them explicitly, the platform-managed values take precedence.
+These names are reserved. The platform drops any value your project stores under them, even when it doesn't inject that variable itself.
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` [access token](/docs/mastra-platform/access-tokens) on your organization's settings page under **API Keys**. Platform deploys use an injected JWT instead. If observability is turned off for the project, set `MASTRA_PLATFORM_ACCESS_TOKEN` on the environment yourself.
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` [access token](/docs/mastra-platform/access-tokens) on your organization's settings page under **API Keys**. Platform deploys use an injected JWT instead. If observability is turned off for the project, the platform doesn't inject a token: add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`, which the providers read when `MASTRA_PLATFORM_ACCESS_TOKEN` is unset.
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token

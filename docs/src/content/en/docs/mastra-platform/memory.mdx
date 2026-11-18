@@ -98,7 +98,7 @@ An access token is required. Set one of the two token variables, or pass the tok
 
 When you deploy a server, the platform sets `MASTRA_MEMORY_INSTANCE_ID` if exactly one ready Memory instance is available to the environment. With more than one instance, set `MASTRA_MEMORY_INSTANCE_ID` in the [environment variables](/docs/mastra-platform/deploy/environments#environment-variables) to choose which one the deploy uses.
 
-The platform sets `MASTRA_PLATFORM_ACCESS_TOKEN` only when [observability](/docs/mastra-platform/observability/overview) is on for the project. If you turn observability off, add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`. Setting `MASTRA_PLATFORM_ACCESS_TOKEN` yourself can turn platform observability export back on.
+The platform sets `MASTRA_PLATFORM_ACCESS_TOKEN` only when [observability](/docs/mastra-platform/observability/overview) is on for the project. If you turn observability off, add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`. A `MASTRA_PLATFORM_ACCESS_TOKEN` you store on the environment never reaches the runtime, because the name is reserved.
 
 ## Browse threads and messages
 
