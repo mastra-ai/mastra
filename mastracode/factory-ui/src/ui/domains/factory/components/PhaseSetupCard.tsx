@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
@@ -76,7 +76,9 @@ export function PhaseSetupCard({
         arrivals={
           <>
             {rulesLoading ? (
-              <Skeleton className="h-4 w-24" />
+              <span role="status" aria-label="Loading rules" className="flex">
+                <SkeletonText aria-hidden line="text-caption" className="w-24 motion-reduce:before:animate-none" />
+              </span>
             ) : arriving === undefined ? (
               <Muted>Rules didn’t load</Muted>
             ) : arriving.length === 0 ? (

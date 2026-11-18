@@ -1,5 +1,6 @@
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useBoardQuery } from '../hooks/useBoardEditor';
@@ -23,24 +24,50 @@ const BOARD_CONFIG_VIEW = 'board-config';
 
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
+
+  return (
+    <AppSidebarLayout
+      switcher={<FactorySwitcher />}
+      search={<SidebarGlobalSearchButton />}
+      navLabel={settingsOpen ? 'Settings sections' : 'Main'}
+      footer={<SidebarSettingsLink />}
+    >
+      {settingsOpen ? <SettingsNavigation /> : <MainNavigation />}
+    </AppSidebarLayout>
+  );
+}
+
+export function AppSidebarLayout({
+  switcher,
+  search,
+  navLabel,
+  footer,
+  inert = false,
+  children,
+}: {
+  switcher: ReactNode;
+  search: ReactNode;
+  navLabel: string;
+  footer: ReactNode;
+  inert?: boolean;
+  children: ReactNode;
+}) {
   const pageHeaderOwnsToggle = useSidebar().desktopState === 'collapsed';
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
       <Sidebar.CommandHeader>
-        <FactorySwitcher />
+        {switcher}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <SidebarGlobalSearchButton />
+          {search}
           {!pageHeaderOwnsToggle && <Sidebar.Trigger />}
         </div>
       </Sidebar.CommandHeader>
-      <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        {settingsOpen ? <SettingsNavigation /> : <MainNavigation />}
+      <Sidebar.Nav inert={inert} aria-label={navLabel}>
+        {children}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Account and settings">
-        <Sidebar.NavList>
-          <SidebarSettingsLink />
-        </Sidebar.NavList>
+      <Sidebar.Footer inert={inert} aria-label="Account and settings">
+        <Sidebar.NavList>{footer}</Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
   );
@@ -55,23 +82,47 @@ function MainNavigation() {
   if (boardConfig && !sameLocation(boardConfig, shownConfig)) setShownConfig(boardConfig);
 
   return (
-    <Sidebar.NavStack
-      value={boardConfig ? BOARD_CONFIG_VIEW : MAIN_VIEW}
-      rootValue={MAIN_VIEW}
+    <MainNavigationLayout
+      view={boardConfig ? BOARD_CONFIG_VIEW : MAIN_VIEW}
       // The URL decides the view; going back means leaving the configuration for its board.
-      onValueChange={() => {
+      onViewChange={() => {
         if (boardConfig) void navigate(rememberedBoardPath(boardConfig.factoryId, boardConfig.boardId));
       }}
-      className="min-h-0 flex-1"
-    >
-      <Sidebar.NavStack.Root className="flex min-h-0 flex-col gap-4">
-        <SidebarNewSessionButton />
-        <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+      newSession={<SidebarNewSessionButton />}
+      sections={
+        <>
           <FactorySection />
           <SessionsSection />
+        </>
+      }
+    >
+      {shownConfig && <BoardConfigView {...shownConfig} />}
+    </MainNavigationLayout>
+  );
+}
+
+export function MainNavigationLayout({
+  view = MAIN_VIEW,
+  onViewChange = () => undefined,
+  newSession,
+  sections,
+  children,
+}: {
+  view?: string;
+  onViewChange?: () => void;
+  newSession?: ReactNode;
+  sections: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <Sidebar.NavStack value={view} rootValue={MAIN_VIEW} onValueChange={onViewChange} className="min-h-0 flex-1">
+      <Sidebar.NavStack.Root className="flex min-h-0 flex-col gap-4">
+        {newSession}
+        <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+          {sections}
         </section>
       </Sidebar.NavStack.Root>
-      {shownConfig && <BoardConfigView {...shownConfig} />}
+      {children}
     </Sidebar.NavStack>
   );
 }

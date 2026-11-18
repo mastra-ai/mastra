@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { findLive, renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 function renderFactoryRoute(initialEntry = '/factories/fp-1') {
@@ -150,7 +150,8 @@ describe('Factory root route', () => {
 
     try {
       // The seeded draft already has a repository, which is a source on its own.
-      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      const continueButton = await findLive(() => screen.getByRole('button', { name: 'Continue' }));
+      await user.click(continueButton);
       await screen.findByRole('button', { name: 'Create factory' });
     } finally {
       clearOnboarding();

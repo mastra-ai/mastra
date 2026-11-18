@@ -1,5 +1,5 @@
 import type { BoardPhaseKind } from '@mastra/factory/boards';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -11,6 +11,33 @@ import { BoardStageIcon } from './BoardIcons';
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
   return cn('min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed ? 'w-14' : 'w-80');
+}
+
+const COLUMN_HEADER_CLASS = 'flex min-h-8 items-start justify-between gap-2';
+const COLUMN_TITLE_CLASS = 'flex h-8 min-w-0 items-center gap-2';
+const COLUMN_COUNT_SKELETON_CLASS = 'h-6 w-12 shrink-0 rounded-full motion-reduce:before:animate-none';
+const COLUMN_ACTION_SLOT_CLASS = 'mb-1 h-4 shrink-0';
+const COLUMN_LANE_CLASS = 'flex min-h-16 flex-1 flex-col gap-2.5 pb-2';
+
+export function BoardColumnHeaderSkeleton() {
+  return (
+    <div aria-hidden className={cn(columnWidthClass(false), COLUMN_HEADER_CLASS)}>
+      <div className={COLUMN_TITLE_CLASS}>
+        <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+        <SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />
+        <Skeleton className={COLUMN_COUNT_SKELETON_CLASS} />
+      </div>
+    </div>
+  );
+}
+
+export function BoardColumnSkeleton({ children }: { children: React.ReactNode }) {
+  return (
+    <div aria-hidden className={cn(columnWidthClass(false), 'flex flex-col')}>
+      <div className={COLUMN_ACTION_SLOT_CLASS} />
+      <div className={COLUMN_LANE_CLASS}>{children}</div>
+    </div>
+  );
 }
 
 function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {
@@ -100,16 +127,13 @@ export function BoardColumnHeader({
   }
 
   return (
-    <div
-      data-board-stage={stage}
-      className={cn(columnWidthClass(false), 'flex min-h-8 items-start justify-between gap-2')}
-    >
-      <div className="flex h-8 min-w-0 items-center gap-2">
+    <div data-board-stage={stage} className={cn(columnWidthClass(false), COLUMN_HEADER_CLASS)}>
+      <div className={COLUMN_TITLE_CLASS}>
         <BoardStageIcon stage={stage} kind={phaseKind} />
         <Txt tone="muted" as="h2" variant="label" className="m-0 truncate">
           {label}
         </Txt>
-        {loading && <Skeleton className="h-6 w-12 shrink-0 rounded-full" />}
+        {loading && <Skeleton aria-hidden className={COLUMN_COUNT_SKELETON_CLASS} />}
         {!loading && totalTaskCount > 0 && <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />}
       </div>
       {headerExtras && <div className="flex h-8 shrink-0 items-center gap-1">{headerExtras}</div>}
@@ -151,8 +175,8 @@ export function BoardColumn({
       )}
       {...dropZone.dropZoneProps}
     >
-      {!collapsed && <div className="mb-1 h-4 shrink-0">{action}</div>}
-      <div className="flex min-h-16 flex-1 flex-col gap-2.5 pb-2">{collapsed ? null : children}</div>
+      {!collapsed && <div className={COLUMN_ACTION_SLOT_CLASS}>{action}</div>}
+      <div className={COLUMN_LANE_CLASS}>{collapsed ? null : children}</div>
     </section>
   );
 }

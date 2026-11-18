@@ -1,5 +1,6 @@
 import { Header } from '@mastra/playground-ui/components/Header';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -10,6 +11,7 @@ import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 
 interface ChatPageLayoutProps {
   title?: ReactNode;
+  titleLoading?: boolean;
   titleMenu?: ReactNode;
   headerCenter?: ReactNode;
   headerActions?: ReactNode;
@@ -19,6 +21,7 @@ interface ChatPageLayoutProps {
 
 export function ChatPageLayout({
   title,
+  titleLoading,
   titleMenu,
   headerCenter,
   headerActions,
@@ -26,14 +29,21 @@ export function ChatPageLayout({
   children,
 }: ChatPageLayoutProps) {
   const slots = useSidebarHeaderSlots({
-    breadcrumbs: title ? (
-      <div className="h-control-sm flex min-w-0 items-center gap-0.5">
-        <Txt as="h1" variant="label" tone="ink" className="min-w-0 truncate px-3">
-          {title}
-        </Txt>
-        {titleMenu}
-      </div>
-    ) : undefined,
+    breadcrumbs:
+      title || titleLoading ? (
+        <div className="h-control-sm flex min-w-0 items-center gap-0.5">
+          {titleLoading ? (
+            <span role="status" aria-label="Loading session title" className="flex min-w-0 px-3">
+              <SkeletonText line="text-label" className="w-32 max-w-full motion-reduce:before:animate-none" />
+            </span>
+          ) : (
+            <Txt as="h1" variant="label" tone="ink" className="min-w-0 truncate px-3">
+              {title}
+            </Txt>
+          )}
+          {titleMenu}
+        </div>
+      ) : undefined,
     triggerClassName: 'size-control-sm rounded-full [&>svg]:size-icon-md',
   });
   const hasHeader = Boolean(slots.breadcrumbs || headerActions);

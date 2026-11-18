@@ -18,17 +18,10 @@ export function OnboardingConnectionRow({
   tone?: 'muted' | 'warning' | 'error';
 }) {
   return (
-    <div className="group/onboarding-connection flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
-      <span
-        className="text-muted-foreground size-icon-md [&>svg]:size-icon-md flex shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110"
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <Txt as="h3" variant="caption">
-          {name}
-        </Txt>
+    <OnboardingConnectionRowLayout
+      icon={icon}
+      name={<OnboardingConnectionName name={name} />}
+      description={
         <Txt
           variant="meta"
           tone={tone === 'muted' ? 'muted' : undefined}
@@ -40,6 +33,42 @@ export function OnboardingConnectionRow({
         >
           {description}
         </Txt>
+      }
+      action={action}
+    />
+  );
+}
+
+export function OnboardingConnectionName({ name }: { name: string }) {
+  return (
+    <Txt as="h3" variant="caption">
+      {name}
+    </Txt>
+  );
+}
+
+export function OnboardingConnectionRowLayout({
+  icon,
+  name,
+  description,
+  action,
+}: {
+  icon: ReactNode;
+  name: ReactNode;
+  description: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="group/onboarding-connection flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
+      <span
+        className="text-muted-foreground size-icon-md [&>svg]:size-icon-md flex shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        {name}
+        {description}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

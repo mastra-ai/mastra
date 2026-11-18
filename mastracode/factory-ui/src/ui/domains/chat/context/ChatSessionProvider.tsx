@@ -6,7 +6,6 @@ import { useContext, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
@@ -286,13 +285,7 @@ function ChatMessageFeedback({ error }: { error: Error }) {
 }
 
 function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesApi) {
-  if (threadId && isPending) {
-    return (
-      <div className="flex flex-col gap-4">
-        <SkeletonRows label="Loading messages" rows={6} />
-      </div>
-    );
-  }
+  if (threadId && isPending) return <TranscriptLoading />;
 
   if (threadId && error) {
     const errorMessage = error instanceof Error ? error.message : undefined;

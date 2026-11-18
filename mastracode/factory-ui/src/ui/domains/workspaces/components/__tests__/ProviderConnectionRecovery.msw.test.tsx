@@ -84,7 +84,7 @@ describe('provider connection recovery', () => {
       expect(starts).toEqual([{ mode: 'device-code', scope }]);
       await waitFor(() => expect(pollStatuses).toContain('pending'));
       approved = true;
-      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
       await waitForMutationsIdle(client);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(pollStatuses.filter(status => status === 'complete')).toEqual(['complete']);
@@ -174,7 +174,7 @@ describe('provider connection recovery', () => {
     expect(screen.getByRole('button', { name: 'Provider: OpenAI' })).toBeEnabled();
     empty = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol'));
   });
 
   it('does not present deployment-managed access as a personal API key', async () => {

@@ -7,7 +7,8 @@ import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
 export function OnboardingLinearConnection({ onConnect }: { onConnect: () => void }) {
   const query = useLinearStatusQuery();
-  if (query.isPending) return <OnboardingConnectionSkeleton label="Loading Linear status" />;
+  if (query.isPending)
+    return <OnboardingConnectionSkeleton label="Loading Linear status" icon={<LinearIcon />} name="Linear" />;
   const status = query.data;
   if (status?.connected)
     return (

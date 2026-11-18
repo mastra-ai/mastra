@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   SettingsContainer,
@@ -8,6 +9,7 @@ import {
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { ProviderInfo, VoiceSettingsResponse } from '../../../../../api/types';
 import { useProvidersQuery } from '../../../../../hooks/use-providers';
@@ -37,7 +39,13 @@ function voiceKeyConnection(status: VoiceKeyStatus, provider: ProviderInfo): Pro
     : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
 }
 
-export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scope: VoiceSettingsResponse['scope'] }) {
+export function SpeechToTextKeys({
+  keys,
+  scope,
+}: {
+  keys: VoiceKeyStatus[] | undefined;
+  scope: VoiceSettingsResponse['scope'] | undefined;
+}) {
   const providersQuery = useProvidersQuery();
   const { authEnabled, requestScope, actionsDisabled, memberReason } = useCredentialAccess(
     scope === 'factory' ? 'org' : 'user',
@@ -45,7 +53,15 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   const [addOpen, setAddOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  if (providersQuery.isPending) return <SpeechToTextKeysSkeleton />;
+  if (!keys || providersQuery.isPending) {
+    const savedCount = keys?.filter(status => status.saved).length;
+    return (
+      <SpeechToTextKeyList count={savedCount} addDisabled={actionsDisabled} addInert>
+        {savedCount !== 0 && <SettingsSkeleton label="Loading providers" variant="item" rows={savedCount ?? 1} />}
+        <MemberReasonRow reason={memberReason} />
+      </SpeechToTextKeyList>
+    );
+  }
 
   const options = keys.map(status => {
     const provider = speechProviderInfo(status, providersQuery.data);
@@ -58,22 +74,10 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   };
 
   const connected = options.flatMap(({ connection }) => (connection ? [connection] : []));
-  const addProvider = (
-    <Button size="sm" icon={<IconPlusMedium />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
-      Add provider
-    </Button>
-  );
 
   return (
     <>
-      <SettingsContainer>
-        {connected.length === 0 ? (
-          <SettingsEmptyRow action={addProvider}>No speech-to-text keys</SettingsEmptyRow>
-        ) : (
-          <SettingsListHeader action={addProvider}>
-            {connected.length === 1 ? '1 provider' : `${connected.length} providers`}
-          </SettingsListHeader>
-        )}
+      <SpeechToTextKeyList count={connected.length} addDisabled={actionsDisabled} onAdd={() => setAddOpen(true)}>
         {connected.map(connection => (
           <ConnectedProviderRow
             key={connection.provider.provider}
@@ -84,14 +88,8 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
             onUpdateKey={() => setKeyDialogProvider(connection.provider)}
           />
         ))}
-        {memberReason && (
-          <SettingsNoticeRow>
-            <Txt as="p" variant="caption" tone="muted">
-              {memberReason}
-            </Txt>
-          </SettingsNoticeRow>
-        )}
-      </SettingsContainer>
+        <MemberReasonRow reason={memberReason} />
+      </SpeechToTextKeyList>
       <AddSpeechToTextKeyDrawer
         open={addOpen}
         options={options.map(({ provider, connection }) => ({ provider, connectedAs: connection?.status.label }))}
@@ -110,10 +108,53 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   );
 }
 
-export function SpeechToTextKeysSkeleton() {
+function SpeechToTextKeyList({
+  count,
+  addDisabled,
+  addInert = false,
+  onAdd,
+  children,
+}: {
+  count: number | undefined;
+  addDisabled: boolean;
+  addInert?: boolean;
+  onAdd?: () => void;
+  children: ReactNode;
+}) {
+  const addProvider = (
+    <Button size="sm" icon={<IconPlusMedium />} disabled={addDisabled} inert={addInert} onClick={onAdd}>
+      Add provider
+    </Button>
+  );
   return (
     <SettingsContainer>
-      <SettingsSkeleton variant="item" label="Loading providers" rows={2} />
+      {count === 0 ? (
+        <SettingsEmptyRow action={addProvider}>No speech-to-text keys</SettingsEmptyRow>
+      ) : (
+        <SettingsListHeader action={addProvider}>
+          {count === undefined ? (
+            <span aria-hidden>
+              <SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />
+            </span>
+          ) : count === 1 ? (
+            '1 provider'
+          ) : (
+            `${count} providers`
+          )}
+        </SettingsListHeader>
+      )}
+      {children}
     </SettingsContainer>
+  );
+}
+
+function MemberReasonRow({ reason }: { reason: string | undefined }) {
+  if (!reason) return null;
+  return (
+    <SettingsNoticeRow>
+      <Txt as="p" variant="caption" tone="muted">
+        {reason}
+      </Txt>
+    </SettingsNoticeRow>
   );
 }

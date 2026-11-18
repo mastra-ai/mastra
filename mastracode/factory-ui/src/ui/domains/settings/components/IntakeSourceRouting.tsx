@@ -7,6 +7,7 @@ import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../.
 import type { IntakeSourceBinding } from '../../factory/services/intake';
 import { SourcePicker, sourcePickerItemText } from './IntakeSourcePicker';
 import type { SourcePickerItem, SourcePickerProps } from './IntakeSourcePicker';
+import { PendingValue } from '../../../ui/PendingField';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 const UNROUTED = '__unrouted__';
@@ -44,9 +45,10 @@ export function RoutedSourcePicker({
           return undefined;
         }}
         itemActions={item =>
-          bindings && (
+          (bindings || bindingsQuery.isPending) && (
             <SourceRoute
               item={item}
+              pending={bindingsQuery.isPending}
               binding={bindingBySource.get(item.id)}
               factories={factories}
               onRoute={factoryProjectId => saveBinding.mutate({ integrationId, sourceId: item.id, factoryProjectId })}
@@ -72,11 +74,13 @@ export function RoutedSourcePicker({
 
 function SourceRoute({
   item,
+  pending,
   binding,
   factories,
   onRoute,
 }: {
   item: SourcePickerItem;
+  pending: boolean;
   binding: IntakeSourceBinding | undefined;
   factories: Factory[];
   onRoute: (factoryProjectId: string | null) => void;
@@ -84,18 +88,24 @@ function SourceRoute({
   const routedFactory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
   return (
     <Select
-      value={routedFactory?.id ?? UNROUTED}
-      disabled={factories.length === 0}
+      value={pending ? '' : (routedFactory?.id ?? UNROUTED)}
+      disabled={!pending && factories.length === 0}
       onValueChange={value => onRoute(value === UNROUTED ? null : value)}
     >
       <SelectTrigger
         size="sm"
+        inert={pending}
+        aria-busy={pending}
         aria-label={`Factory for ${sourcePickerItemText(item)}`}
         className="w-auto max-w-full min-w-0"
       >
-        <Txt as="span" variant="caption">
-          {routedFactory?.name ?? 'Not routed'}
-        </Txt>
+        {pending ? (
+          <PendingValue />
+        ) : (
+          <Txt as="span" variant="caption">
+            {routedFactory?.name ?? 'Not routed'}
+          </Txt>
+        )}
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNROUTED}>Not routed</SelectItem>

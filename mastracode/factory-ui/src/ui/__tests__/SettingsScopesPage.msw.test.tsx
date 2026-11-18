@@ -69,8 +69,10 @@ describe('Settings ownership', () => {
     const user = userEvent.setup();
     renderSettings('models');
 
-    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
-    await user.click(await within(factoryDefaults).findByRole('button', { name: 'OpenAI actions' }));
+    const openAiActions = await waitFor(() =>
+      within(screen.getByRole('region', { name: 'Factory defaults' })).getByRole('button', { name: 'OpenAI actions' }),
+    );
+    await user.click(openAiActions);
     await user.click(await screen.findByRole('menuitem', { name: 'Update key' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-shared');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -88,9 +90,12 @@ describe('Settings ownership', () => {
     const user = userEvent.setup();
     renderSettings('models');
 
-    const personalDefaults = await screen.findByRole('region', { name: 'Personal defaults' });
+    await waitFor(() =>
+      within(screen.getByRole('region', { name: 'Factory defaults' })).getByRole('button', { name: 'OpenAI actions' }),
+    );
+    const personalDefaults = screen.getByRole('region', { name: 'Personal defaults' });
     expect(within(personalDefaults).queryByText('OpenAI')).not.toBeInTheDocument();
-    await user.click(await within(personalDefaults).findByRole('button', { name: 'Add provider' }));
+    await user.click(within(personalDefaults).getByRole('button', { name: 'Add provider' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add provider' });
     await user.type(within(dialog).getByLabelText('Search providers'), 'openai');
     await user.click(within(dialog).getByRole('button', { name: 'Add API key for OpenAI' }));

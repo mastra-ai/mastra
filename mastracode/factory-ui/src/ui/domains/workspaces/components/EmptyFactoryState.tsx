@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { FactoryOnboarding } from './FactoryOnboarding';
+import { FactoryOnboardingSkeleton } from './FactoryOnboardingSkeleton';
 import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
 
 export function EmptyFactoryState({
@@ -13,7 +13,7 @@ export function EmptyFactoryState({
   onDismissGithubCallback: () => void;
 }) {
   const auth = useFactoryAuth();
-  if (auth.isPending) return <SkeletonRows label="Loading Factory setup" rows={3} />;
+  if (auth.isPending) return <FactoryOnboardingSkeleton label="Loading Factory setup" />;
   // A failed background refetch keeps the form and its open dialogs; only a first load with no account blocks.
   if (!auth.data)
     return (

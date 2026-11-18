@@ -143,7 +143,7 @@ describe('ModelRoutingSection', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 
     rerender(
@@ -152,7 +152,7 @@ describe('ModelRoutingSection', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(patchedBodies).toEqual([]);
   });
@@ -185,14 +185,14 @@ describe('ModelRoutingSection', () => {
         <ModelRoutingSection factoryId="fp-2" />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
     rerender(
       <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
         <ModelRoutingSection factoryId="fp-1" />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('radio', { name: 'Factory' })).toBeChecked();
+    await waitFor(() => expect(routing('Factory')).toBeChecked());
     await user.click(routing('Hybrid'));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 
@@ -219,10 +219,9 @@ describe('ModelRoutingSection', () => {
     stubFactory('user');
     renderRoutingSection('/factories/fp-1/settings/models#factory-defaults');
 
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(
-      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('combobox', {
-        name: 'Factory default model',
-      }),
+      await within(region('Factory defaults')).findByRole('combobox', { name: 'Factory default model' }),
     ).toBeInTheDocument();
   });
 

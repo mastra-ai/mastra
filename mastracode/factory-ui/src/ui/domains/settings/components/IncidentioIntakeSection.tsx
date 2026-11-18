@@ -54,8 +54,7 @@ export function IncidentioIntakeSection({
   const unavailable = !directConfigured && (connectionsQuery.isError || statusQuery.isError);
   return (
     <IntakeProviderCard
-      name="incident.io"
-      icon={<SettingsIntegrationIcon provider="incidentio" />}
+      provider="incidentio"
       account={account}
       listed={listed}
       description={description}

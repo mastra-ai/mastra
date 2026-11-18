@@ -1,7 +1,9 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
@@ -21,6 +23,15 @@ function VersionValue({ children }: { children: string }) {
   );
 }
 
+function VersionsList({ packages, nodeVersion }: { packages: ReactNode; nodeVersion: ReactNode }) {
+  return (
+    <SettingsContainer>
+      {packages}
+      <SettingsItem title="Node.js">{nodeVersion}</SettingsItem>
+    </SettingsContainer>
+  );
+}
+
 export function DebugSection() {
   const query = useServerVersions();
 
@@ -30,21 +41,38 @@ export function DebugSection() {
       title="Running versions"
       description="The Mastra packages this Factory server was built with. Include them when you report an issue."
       action={
-        query.data && (
-          <CopyButton
-            content={formatVersions(query.data)}
-            tooltip="Copy versions"
-            variant="ghost"
-            size="icon-sm"
-            showToast={false}
-          />
+        !query.isError && (
+          <div inert={query.isPending}>
+            <CopyButton
+              content={query.data ? formatVersions(query.data) : ''}
+              tooltip="Copy versions"
+              variant="ghost"
+              size="icon-sm"
+              showToast={false}
+            />
+          </div>
         )
       }
     >
       {query.isPending ? (
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading versions" />
-        </SettingsContainer>
+        <div role="status" aria-label="Loading versions">
+          <VersionsList
+            packages={Array.from({ length: 5 }, (_, index) => (
+              <SettingsItem
+                key={index}
+                aria-hidden
+                title={<SkeletonText line="text-label" className="w-40 max-w-full motion-reduce:before:animate-none" />}
+              >
+                <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />
+              </SettingsItem>
+            ))}
+            nodeVersion={
+              <span aria-hidden>
+                <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />
+              </span>
+            }
+          />
+        </div>
       ) : query.isError ? (
         <SettingsContainer>
           <RetryRow label="Versions" errorMsg="Couldn't load versions." onRetry={() => void query.refetch()} />
@@ -57,16 +85,14 @@ export function DebugSection() {
               one.
             </Txt>
           )}
-          <SettingsContainer>
-            {query.data.packages.map(({ name, version }) => (
+          <VersionsList
+            packages={query.data.packages.map(({ name, version }) => (
               <SettingsItem key={name} title={name}>
                 <VersionValue>{version}</VersionValue>
               </SettingsItem>
             ))}
-            <SettingsItem title="Node.js">
-              <VersionValue>{query.data.nodeVersion}</VersionValue>
-            </SettingsItem>
-          </SettingsContainer>
+            nodeVersion={<VersionValue>{query.data.nodeVersion}</VersionValue>}
+          />
         </>
       )}
     </SettingsSubsection>

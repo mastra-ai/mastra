@@ -2,7 +2,6 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { boardOf } from '../boardFlow';
@@ -24,10 +23,6 @@ import { RelatedCards } from './RelatedCards';
 import { SectionLoadError } from './SectionLoadError';
 
 export const overviewSectionClass = 'flex flex-col gap-3 p-1.5 pb-3';
-
-export function OverviewSkeleton() {
-  return <SkeletonRows label="Loading overview" rows={4} className="p-3" />;
-}
 
 export function CardOverview({
   item,

@@ -1,4 +1,5 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -9,6 +10,25 @@ import { ChangeStatusLetter } from '../changes/ChangeStatusLetter';
 import { WakeSandbox } from '../WakeSandbox';
 import { getFileIcon } from './file-icons';
 import type { FileFinder } from './useFileFinder';
+
+const foundListClass = 'flex flex-col p-1.5';
+const foundRowClass = 'flex h-7 w-full min-w-0 shrink-0 items-center gap-1.5 rounded-sm px-1';
+
+function FileFinderResultsSkeleton() {
+  return (
+    <SkeletonRows
+      label="Indexing files"
+      rows={8}
+      className={cn('min-h-0 flex-1 gap-0 overflow-hidden', foundListClass)}
+    >
+      <div aria-hidden className={foundRowClass}>
+        <Skeleton className="size-icon-sm shrink-0 rounded-sm motion-reduce:before:animate-none" />
+        <SkeletonText line="text-caption" className="h-3 w-24 motion-reduce:before:animate-none" />
+        <SkeletonText line="text-caption" className="h-3 w-36 max-w-full motion-reduce:before:animate-none" />
+      </div>
+    </SkeletonRows>
+  );
+}
 
 /** `matched` indexes the whole path; `text` starts at `from` in it. */
 function Marked({ text, from, matched }: { text: string; from: number; matched: readonly number[] }) {
@@ -46,7 +66,7 @@ interface FileFinderResultsProps {
 export function FileFinderResults({ workspacePath, finder, changes }: FileFinderResultsProps) {
   const { index, found, active, setActive } = finder;
   if (index.isLoading || (index.isFetching && found.total === 0)) {
-    return <SkeletonRows label="Indexing files" rows={8} className="gap-3 p-3" rowClassName="h-3 w-full" />;
+    return <FileFinderResultsSkeleton />;
   }
   if (index.error) {
     return (
@@ -88,7 +108,7 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
   return (
     <>
       <ScrollArea className="min-h-0 flex-1">
-        <div id={finder.listboxId} role="listbox" aria-label="Files found" className="flex flex-col p-1.5">
+        <div id={finder.listboxId} role="listbox" aria-label="Files found" className={foundListClass}>
           {found.matches.map(({ path, matched }, at) => {
             const nameStart = path.lastIndexOf('/') + 1;
             const status = changes.get(path);
@@ -102,10 +122,7 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 tabIndex={-1}
                 aria-selected={at === active}
                 title={path}
-                className={cn(
-                  'text-caption flex h-7 w-full min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm px-1 text-left',
-                  at === active && 'bg-fill-hover',
-                )}
+                className={cn(foundRowClass, 'text-caption cursor-pointer text-left', at === active && 'bg-fill-hover')}
                 onMouseDown={event => event.preventDefault()}
                 onPointerMove={() => {
                   if (at !== active) setActive(at);

@@ -3,7 +3,7 @@ import { createContext, useContext } from 'react';
 import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { AppLayoutSkeleton } from '../../../layouts/AppLayoutSkeleton';
 import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import type { FactoryProject } from '../services/github';
@@ -27,7 +27,7 @@ export function FactoryLayout() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: factories, isPending, isError } = useFactoriesQuery();
 
-  if (isPending) return <AuthPendingSkeleton label="Loading factories" />;
+  if (isPending) return <AppLayoutSkeleton label="Loading factories" />;
 
   if (isError) {
     return (

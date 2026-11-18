@@ -152,7 +152,8 @@ describe('OMSection', () => {
     );
 
     // The field itself is the search box: it holds the selected model's name until cleared.
-    const search = await screen.findByRole('combobox', { name: 'Observer model' });
+    await screen.findByDisplayValue('1,000');
+    const search = screen.getByRole('combobox', { name: 'Observer model' });
     await user.clear(search);
     await user.type(search, 'anthropic');
     // The custom-value row stays first; the only catalog match is the Anthropic model.
@@ -178,7 +179,12 @@ describe('OMSection', () => {
 
     renderWithProviders(<OMSection models={models} />);
 
-    expect(await screen.findByRole('status', { name: 'Loading observational-memory settings' })).toBeInTheDocument();
+    const observeAfter = await screen.findByRole('textbox', { name: 'Observe after' });
+    expect(observeAfter).toHaveValue('');
+    expect(observeAfter.closest('[aria-busy="true"]')).not.toBeNull();
+    const observerModel = screen.getByRole('combobox', { name: 'Observer model' });
+    expect(observerModel.getAttribute('placeholder') ?? '').toBe('');
+    expect(observerModel.closest('[aria-busy="true"]')).not.toBeNull();
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2,000')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
@@ -199,7 +205,8 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observe after' });
+    await screen.findByDisplayValue('1,000');
+    const input = screen.getByRole('textbox', { name: 'Observe after' });
     expect(input).toHaveValue('1,000');
     await user.clear(input);
     await user.type(input, '5000');
@@ -223,7 +230,8 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Reflect after' });
+    await screen.findByDisplayValue('2,000');
+    const input = screen.getByRole('textbox', { name: 'Reflect after' });
     expect(input).toHaveValue('2,000');
     const row = input.closest<HTMLElement>('[data-slot=input-number-group]');
     if (!row) throw new Error('Expected the threshold stepper group');
@@ -252,7 +260,8 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observe after' });
+    await screen.findByDisplayValue('1,000');
+    const input = screen.getByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.type(input, '2000');
     await user.tab();
@@ -285,7 +294,8 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observe after' });
+    await screen.findByDisplayValue('1,000');
+    const input = screen.getByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.tab();
 
@@ -317,7 +327,8 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const observerTrigger = await screen.findByRole('combobox', { name: 'Observer model' });
+    await screen.findByDisplayValue('1,000');
+    const observerTrigger = screen.getByRole('combobox', { name: 'Observer model' });
     expect(observerTrigger).toHaveValue('Observer X');
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 

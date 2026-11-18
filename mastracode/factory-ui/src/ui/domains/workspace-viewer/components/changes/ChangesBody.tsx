@@ -1,4 +1,3 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { lazy, Suspense } from 'react';
 import type { Ref } from 'react';
@@ -9,14 +8,9 @@ import type { DiffLayout } from '../../hooks/useDiffLayout';
 import { ChangesEmptyState } from './ChangesEmptyState';
 import { ChangesNotice } from './ChangesNotice';
 import type { StackedDiffsHandle } from './diffs/StackedDiffs';
+import { StackedDiffsSkeleton } from './diffs/StackedDiffsSkeleton';
 
 const StackedDiffs = lazy(() => import('./diffs/StackedDiffs').then(({ StackedDiffs }) => ({ default: StackedDiffs })));
-
-const centeredSpinner = (
-  <div className="flex min-h-0 flex-1 items-center justify-center">
-    <Spinner size="sm" />
-  </div>
-);
 
 interface ChangesBodyProps {
   workspacePath: string;
@@ -38,7 +32,7 @@ export function ChangesBody({ workspacePath, scope, visible, layout, diffsRef }:
       </div>
     );
   }
-  if (!patches.data) return centeredSpinner;
+  if (!patches.data) return <StackedDiffsSkeleton />;
   if (patches.data.changes.length === 0) {
     return (
       <>
@@ -52,7 +46,7 @@ export function ChangesBody({ workspacePath, scope, visible, layout, diffsRef }:
   return (
     <>
       <ChangesNotice changes={patches.data} />
-      <Suspense fallback={centeredSpinner}>
+      <Suspense fallback={<StackedDiffsSkeleton />}>
         <StackedDiffs key={scope} ref={diffsRef} changes={patches.data} layout={layout} className="flex-1" />
       </Suspense>
     </>

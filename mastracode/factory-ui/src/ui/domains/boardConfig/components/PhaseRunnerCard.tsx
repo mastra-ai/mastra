@@ -1,4 +1,5 @@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
@@ -14,6 +15,16 @@ import { boardConfigPath, boardSkillPath } from '../boardConfigPaths';
 import { Muted } from './PhaseTimeline';
 import { SkillBadges } from './skills/SkillBadges';
 
+const RUNNER_CHIP = 'flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5';
+
+export function PhaseRunnerCardSkeleton() {
+  return (
+    <Skeleton className={cn(RUNNER_CHIP, 'w-28 border-transparent motion-reduce:before:animate-none')}>
+      <span>{'\u200b'}</span>
+    </Skeleton>
+  );
+}
+
 /**
  * The agent working a phase, as a chip naming its skill. Hovering or focusing it shows what the agent is told: the
  * skill's instructions, what this phase adds, its goal and session. The chip opens the skill, or the phase when the
@@ -27,7 +38,7 @@ export function PhaseRunnerCard({
 }: {
   factoryId: string;
   boardId: string;
-  phase: StoredPhaseInfo;
+  phase: Pick<StoredPhaseInfo, 'key' | 'name' | 'runner'>;
   /** Undefined until the factory's skills load, so a skill is never called missing early. */
   skills: FactorySkillInfo[] | undefined;
 }) {
@@ -51,7 +62,8 @@ export function PhaseRunnerCard({
         render={<Link to={to} />}
         className={cn(
           focusRing,
-          'border-border bg-fill-subtle hover:bg-fill flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5 transition-colors',
+          RUNNER_CHIP,
+          'border-border bg-fill-subtle hover:bg-fill transition-colors',
           broken && 'border-destructive-foreground text-destructive-foreground',
         )}
       >

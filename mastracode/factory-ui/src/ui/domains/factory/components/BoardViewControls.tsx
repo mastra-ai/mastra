@@ -3,8 +3,9 @@ import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { ReactNode } from 'react';
 
+import { useRunQueue } from '../../../../hooks/useFactoryDecisions';
+import { ConfigureBoardButton } from '../../boardConfig/components/ConfigureBoardButton';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardPeople';
 import type { BoardViewSettings } from '../boardSavedViews';
@@ -14,6 +15,7 @@ import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
 import { BoardPropertiesMenu } from './BoardPropertiesMenu';
 import { BoardViewControlsLayout } from './BoardViewControlsLayout';
+import { RunQueueIndicator } from './RunQueueIndicator';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
 
@@ -31,21 +33,24 @@ function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
 }
 
 export function BoardViewControls({
+  factoryId,
+  boardId,
   reviewsPullRequests,
   view,
   participants,
   availableLabels,
   currentUserId,
-  aside,
 }: {
+  factoryId: string;
+  boardId: string;
   reviewsPullRequests: boolean;
   view: BoardView;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
   currentUserId?: string;
-  aside?: ReactNode;
 }) {
   const { savedViews } = view;
+  const runQueue = useRunQueue(factoryId);
   const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
     reviewsPullRequests,
@@ -100,7 +105,12 @@ export function BoardViewControls({
           }}
         />
       }
-      aside={aside}
+      aside={
+        <div className="flex items-center gap-2">
+          <RunQueueIndicator factoryId={factoryId} queue={runQueue.data} />
+          <ConfigureBoardButton factoryId={factoryId} boardId={boardId} />
+        </div>
+      }
       editor={savedViews.draft && <SavedViewEditor views={savedViews} />}
     />
   );

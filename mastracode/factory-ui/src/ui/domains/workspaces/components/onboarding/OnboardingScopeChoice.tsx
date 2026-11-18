@@ -27,7 +27,7 @@ export function OnboardingScopeChoice({
   disabled,
   onScopeChange,
 }: {
-  scope: OnboardingModelScope;
+  scope?: OnboardingModelScope;
   companyLocked: boolean;
   disabled: boolean;
   onScopeChange: (scope: OnboardingModelScope) => void;
@@ -36,7 +36,8 @@ export function OnboardingScopeChoice({
     <OnboardingInset>
       <RadioGroup
         aria-label="Who pays for model usage?"
-        value={scope}
+        value={scope ?? null}
+        inert={scope === undefined}
         disabled={disabled}
         onValueChange={value => {
           const next = SCOPES.find(item => item.value === value);

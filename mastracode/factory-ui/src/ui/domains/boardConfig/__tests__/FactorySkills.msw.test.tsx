@@ -64,14 +64,14 @@ function openAt(
     catalog = skills,
     boards = builtinBoardCatalog,
     canEdit = true,
-  }: { catalog?: FactorySkillInfo[]; boards?: BoardCatalogResponse; canEdit?: boolean } = {},
+  }: { catalog?: FactorySkillInfo[]; boards?: BoardCatalogResponse | (() => Response); canEdit?: boolean } = {},
 ) {
   stubFactory();
   serveBoard(storedWorkBoard());
   let current = catalog.map(skill => ({ ...skill }));
   const writes: { method: string; name: string; content?: string }[] = [];
   server.use(
-    http.get(BOARDS_URL, () => HttpResponse.json(boards)),
+    http.get(BOARDS_URL, () => (typeof boards === 'function' ? boards() : HttpResponse.json(boards))),
     http.get(SKILLS_URL, () => HttpResponse.json({ skills: current, canEdit } satisfies FactorySkillsResponse)),
     http.put<{ name: string }, { content: string }>(SKILL_URL, async ({ request, params }) => {
       const { content } = await request.json();
@@ -170,8 +170,7 @@ describe('the skills page', () => {
   });
 
   it("lists every skill, saying why, when the installed boards can't be loaded", async () => {
-    openAt(SKILLS_PAGE);
-    server.use(http.get(BOARDS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+    openAt(SKILLS_PAGE, { boards: () => HttpResponse.json({ error: 'boom' }, { status: 500 }) });
 
     expect(await screen.findByText(/Installed boards could not be loaded/)).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();

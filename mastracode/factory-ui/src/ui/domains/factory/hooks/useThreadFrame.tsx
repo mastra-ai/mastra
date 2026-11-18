@@ -13,7 +13,7 @@ import type { WorkspacePanelPage } from '../../workspace-viewer/context/Workspac
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { currentItemStage } from '../boardStages';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
-import { CardStageBar } from '../components/CardStageBar';
+import { CardStageBar, CardStageBarSkeleton } from '../components/CardStageBar';
 import { CardStageSummary } from '../components/CardStageSummary';
 import { SessionContextMenu } from '../components/SessionContextMenu';
 import { SessionPanelOverview } from '../components/SessionPanelOverview';
@@ -71,7 +71,7 @@ function stageUnavailable(
 
 export function useThreadFrame(): SessionFrameSlots {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
-  const { session, isUserThread, title: sessionTitle } = useOpenSession();
+  const { session, isUserThread, title: sessionTitle, loading: sessionLoading } = useOpenSession();
   const { workspacePath } = useThreadWorkspacePath();
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
@@ -81,6 +81,7 @@ export function useThreadFrame(): SessionFrameSlots {
     board: boardEntry,
     boards,
     loading: cardLoading,
+    boardsLoading,
     boardsFailed,
   } = useSessionCard();
 
@@ -89,11 +90,14 @@ export function useThreadFrame(): SessionFrameSlots {
   const switchable = openContext && openContext.sessions.length > 1 ? openContext : undefined;
   // No title until the card is known: the session's own would flash, then go.
   const title = currentItem ? switchable && `${switchable.label} session` : cardLoading ? undefined : sessionTitle;
+  const titleLoading = !currentItem && !cardLoading && sessionLoading;
   const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
+  const stageLoading = cardLoading || Boolean(currentItem && (boardsLoading || factoryQuery.isPending));
 
   return {
     panel: workspacePath ? SESSION_PANEL : undefined,
     title,
+    titleLoading,
     titleMenu:
       switchable && factoryId && sessionId ? (
         <>
@@ -125,6 +129,8 @@ export function useThreadFrame(): SessionFrameSlots {
         />
       ) : currentItem && stageNote ? (
         <CardStageSummary item={currentItem} board={boardEntry} note={stageNote} />
+      ) : stageLoading ? (
+        <CardStageBarSkeleton />
       ) : undefined,
   };
 }

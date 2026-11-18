@@ -19,7 +19,6 @@ import {
   useKnowledgeTreeLevels,
 } from '../../hooks/useKnowledgeGraph';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { KnowledgeLoadingSkeleton } from '../domains/factory/components/knowledge/KnowledgeLoadingSkeleton';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -82,9 +81,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeLoadingSkeleton label="Loading knowledge" layout="graph" />;
   if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
-  if (graph.data.pages.length === 0) {
+  if (graph.data?.pages.length === 0) {
     return (
       <Txt tone="muted" as="p" variant="body">
         No knowledge in this project yet. Pages appear here as factory sessions write them.

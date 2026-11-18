@@ -18,32 +18,6 @@ import { CreateFactoryNameRows } from './CreateFactoryNameRows';
 import { CreateFactoryPalette } from './CreateFactoryPalette';
 import { CreateFactoryRepositoryRows } from './CreateFactoryRepositoryRows';
 
-interface StepChrome {
-  title: string;
-  placeholder: string;
-  searchable?: boolean;
-}
-
-const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
-  name: {
-    title: 'Name your new Factory',
-    placeholder: 'e.g. Mastra',
-    searchable: false,
-  },
-  vcs: {
-    title: 'Choose your codebase',
-    placeholder: 'Search repositories',
-  },
-  'project-management': {
-    title: 'Connect the work behind the code',
-    placeholder: 'Search options',
-  },
-  'model-provider': {
-    title: 'Choose your Factory model',
-    placeholder: 'Search models and providers',
-  },
-};
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
@@ -65,7 +39,7 @@ export function CreateFactoryWizard() {
   const draft = flow.draft;
   // The repository list loads while the name is still being typed, so the next step has rows on arrival.
   const githubStatus = useGithubStatusQuery();
-  useGithubReposQuery(undefined, draft?.step === 'name' && githubStatus.data?.connected === true);
+  useGithubReposQuery(undefined, draft.step === 'name' && githubStatus.data?.connected === true);
 
   const createFactory = useCreateFactoryFromDraft({
     draft,
@@ -85,77 +59,63 @@ export function CreateFactoryWizard() {
   };
   useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });
 
-  const step = draft?.step;
-  if (!step) return null;
-
-  // Each step starts from its own field value — the name step from the name already given.
-  const typedOnThisStep = typed?.step === step ? typed.value : undefined;
-  const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
+  const step = draft.step;
+  const value = (typed?.step === step ? typed.value : undefined) ?? flow.stepValue;
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 pt-6">
-      <CreateFactoryPalette
-        {...STEP_CHROME[step]}
-        step={step}
-        value={value}
-        onValueChange={nextValue => setTyped({ step, value: nextValue })}
-        onBack={
-          // Once the final commit has written any server state (a Factory row or
-          // a linked repository), stepping back would let the user pick a new
-          // name or repository while the retry still resumes the prior IDs, so
-          // the Back affordance is dropped until the wizard completes.
-          step === 'name' || committing || Boolean(draft.factoryId) || Boolean(draft.linkedRepositoryId)
-            ? undefined
-            : () => {
-                setTyped(undefined);
-                void flow.back();
-              }
-        }
-        onSkip={step === 'project-management' ? () => void flow.skipProjectManagement() : undefined}
-      >
-        {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
-        {step === 'vcs' && (
-          <CreateFactoryRepositoryRows
+    <CreateFactoryPalette
+      step={step}
+      value={value}
+      onValueChange={nextValue => setTyped({ step, value: nextValue })}
+      onBack={
+        flow.canGoBack && !committing
+          ? () => {
+              setTyped(undefined);
+              void flow.back();
+            }
+          : undefined
+      }
+      onSkip={() => void flow.skipProjectManagement()}
+    >
+      {step === 'name' && <CreateFactoryNameRows name={value} onSubmit={flow.startVcs} />}
+      {step === 'vcs' && (
+        <CreateFactoryRepositoryRows
+          query={value}
+          githubRedirecting={githubRedirecting}
+          onConnect={() => {
+            setGithubRedirecting(true);
+            flow.persistBeforeRedirect(factoryId);
+            connectGithub(baseUrl);
+          }}
+          onManageConnection={() => {
+            flow.persistBeforeRedirect(factoryId);
+            manageGithubConnection(baseUrl);
+          }}
+          onSelectRepository={repository => void flow.chooseRepository(repository)}
+        />
+      )}
+      {step === 'project-management' && (
+        <>
+          <CreateFactoryLinearRows
             query={value}
-            githubRedirecting={githubRedirecting}
             onConnect={() => {
-              setGithubRedirecting(true);
               flow.persistBeforeRedirect(factoryId);
-              connectGithub(baseUrl);
+              connectLinear(baseUrl);
             }}
-            onManageConnection={() => {
-              flow.persistBeforeRedirect(factoryId);
-              manageGithubConnection(baseUrl);
-            }}
-            onSelectRepository={repository => void flow.chooseRepository(repository)}
+            onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
+            onSkip={() => void flow.skipProjectManagement()}
           />
-        )}
-        {step === 'project-management' && (
-          <>
-            <CreateFactoryLinearRows
-              query={value}
-              onConnect={() => {
-                flow.persistBeforeRedirect(factoryId);
-                connectLinear(baseUrl);
-              }}
-              onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
-              onSkip={() => void flow.skipProjectManagement()}
-            />
-            <CreateFactoryJiraRows
-              query={value}
-              onSelectProject={projectId => void flow.chooseJiraProject(projectId)}
-            />
-          </>
-        )}
-        {step === 'model-provider' && (
-          <CreateFactoryModelStep
-            query={value}
-            savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
-            error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
-          />
-        )}
-      </CreateFactoryPalette>
-    </div>
+          <CreateFactoryJiraRows query={value} onSelectProject={projectId => void flow.chooseJiraProject(projectId)} />
+        </>
+      )}
+      {step === 'model-provider' && (
+        <CreateFactoryModelStep
+          query={value}
+          savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
+          error={createFactory.error ? errorMessage(createFactory.error) : undefined}
+          onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
+        />
+      )}
+    </CreateFactoryPalette>
   );
 }

@@ -3,7 +3,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconTicket } from '@mastra/playground-ui/icons/central/IconTicket';
@@ -26,7 +26,7 @@ import { factoryHomePath } from '../domains/workspaces/services/factoryPaths';
 export function CardDraftPage({ workItemId }: { workItemId: string }) {
   const { factoryId = '', workItemId: routedWorkItemId } = useParams<{ factoryId: string; workItemId?: string }>();
   const guards = useDraftModelGuards(factoryId, 'factory');
-  const { card, item, board } = useDraftCard(factoryId, workItemId);
+  const { card, catalog, item, board } = useDraftCard(factoryId, workItemId);
   const factory = guards.activeFactory;
   const unconfigured = guards.missingModel || guards.missingCredential !== undefined;
   const drafting = Boolean(routedWorkItemId && item && factory && !unconfigured);
@@ -85,15 +85,7 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       </div>
     );
   }
-  if (!item || !factory) {
-    return (
-      <div className={draftPageClass} aria-busy="true">
-        <Skeleton aria-label="Loading card" className="h-8 w-2/3" />
-        <Skeleton className="h-36 w-full rounded-xl" />
-      </div>
-    );
-  }
-  if (unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
+  if (item && unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
 
   return (
     <SessionView
@@ -102,16 +94,26 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
       emptyState={
         <section className={emptyThreadClass} aria-labelledby="card-draft-title">
           <Logo size="md" aria-label="Mastra Code" />
-          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
-            {item.title}
-          </Txt>
+          {card.data ? (
+            <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
+              {card.data.title}
+            </Txt>
+          ) : (
+            <div role="status" aria-label="Loading card" className="mt-7">
+              <SkeletonText line="text-title" className="w-64 max-w-full motion-reduce:before:animate-none" />
+            </div>
+          )}
           <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
             No session yet. Your first message starts one.
           </Txt>
           <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
             {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
             <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
-            {board && <CardDraftActions factory={factory} item={item} board={board} />}
+            {item && factory && board ? (
+              <CardDraftActions factory={factory} item={item} board={board} />
+            ) : card.isPending || catalog.isPending ? (
+              <Skeleton aria-hidden className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />
+            ) : null}
           </div>
         </section>
       }

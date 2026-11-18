@@ -93,12 +93,13 @@ export function NewBoardPage() {
       }
     >
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        {access.isPending ? null : !access.data?.canEdit ? (
+        {!access.isPending && !access.data?.canEdit ? (
           <Notice variant="info">Only organization admins can create boards.</Notice>
         ) : (
           <form
             className="flex flex-col gap-6"
             aria-label="New board"
+            inert={access.isPending}
             onSubmit={event => {
               event.preventDefault();
               create.mutate(

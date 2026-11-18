@@ -146,7 +146,7 @@ export interface KnowledgeExplorerSource {
 }
 
 export interface KnowledgePageExplorerProps {
-  graph: KnowledgeExplorerGraph;
+  graph: KnowledgeExplorerGraph | undefined;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
   /** `null` clears the selection: a click on empty graph canvas. */
@@ -254,6 +254,7 @@ type InsetStyle = CSSProperties & {
   '--knowledge-tree-drawer-inset': string;
   '--knowledge-drawer-inset': string;
 };
+const PENDING_GRAPH: KnowledgeExplorerGraph = { pages: [], edges: [], pinnedIds: [], truncated: true };
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
@@ -337,6 +338,30 @@ function TreeRowsSkeleton({ label, rows }: { label: string; rows: number }) {
           <SkeletonText className={width} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function GraphSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading graph"
+      className="absolute inset-0 flex items-center justify-center gap-8 pr-(--knowledge-drawer-inset) pl-(--knowledge-tree-inset)"
+    >
+      <div className="flex flex-col items-center gap-16">
+        <Skeleton className="size-5 rounded-full" />
+        <Skeleton className="size-8 rounded-full" />
+      </div>
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-px w-8" />
+        <Skeleton className="size-12 rounded-full" />
+        <Skeleton className="h-px w-8" />
+      </div>
+      <div className="flex flex-col items-center gap-16">
+        <Skeleton className="size-8 rounded-full" />
+        <Skeleton className="size-5 rounded-full" />
+      </div>
     </div>
   );
 }
@@ -948,7 +973,7 @@ function useLazyTree(
  * page instead.
  */
 export function KnowledgePageExplorer({
-  graph,
+  graph: hostGraph,
   source,
   selectedPageId,
   onSelect,
@@ -957,6 +982,7 @@ export function KnowledgePageExplorer({
   toolbarEnd,
   flush = false,
 }: KnowledgePageExplorerProps) {
+  const graph = hostGraph ?? PENDING_GRAPH;
   const narrow = useIsMobile(1024);
   const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
@@ -1333,7 +1359,7 @@ export function KnowledgePageExplorer({
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
-        {source.useTreeLevels && lazy.rootsPending ? (
+        {(source.useTreeLevels ? lazy.rootsPending : !hostGraph) ? (
           <div className="p-2">
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
@@ -1393,7 +1419,7 @@ export function KnowledgePageExplorer({
           </ActionRow.Start>
           {toolbarEnd ? <ActionRow.End>{toolbarEnd}</ActionRow.End> : null}
         </ActionRow>
-        {!lazyMode && graph.truncated && !showPage ? (
+        {!lazyMode && hostGraph?.truncated && !showPage ? (
           <Txt variant="caption" tone="muted" className={flush ? 'px-3 pt-2' : undefined}>
             The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
           </Txt>
@@ -1503,7 +1529,8 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown && !pageOverGraph ? (
+              {graphShown && !pageOverGraph && !hostGraph ? <GraphSkeleton /> : null}
+              {graphShown && !pageOverGraph && hostGraph ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}

@@ -12,18 +12,25 @@ import {
 } from '../../../../chat/services/thinkingLevels';
 
 interface PersonalThinkingControlProps {
+  loading: boolean;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   saving: boolean;
 }
 
-export function PersonalThinkingControl({ savedModelId, savedThinkingLevel, saving }: PersonalThinkingControlProps) {
+export function PersonalThinkingControl({
+  loading,
+  savedModelId,
+  savedThinkingLevel,
+  saving,
+}: PersonalThinkingControlProps) {
   const setLevel = useSetDefaultThinkingLevel();
 
   const unavailable = (reason: string) => (
     <ThinkingLevelUnavailable options={ALL_THINKING_LEVEL_OPTIONS} label="Thinking" reason={reason} />
   );
 
+  if (loading) return unavailable("The thinking level isn't loaded yet.");
   if (!savedModelId) return unavailable('Pick a personal default model first.');
   if (saving) return unavailable('Saving your personal defaults…');
 

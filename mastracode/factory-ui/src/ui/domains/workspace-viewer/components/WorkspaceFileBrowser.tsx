@@ -21,6 +21,7 @@ import { changeMarks, NO_CHANGE_MARKS } from './files/change-marks';
 import type { ChangeMarks } from './files/change-marks';
 import { getFileIcon, getFolderIcon } from './files/file-icons';
 import { FileFinderResults } from './files/FileFinderResults';
+import { FileTreeSkeleton } from './files/FileTreeSkeleton';
 import { foldersAbove } from './files/folders-above';
 import { useFileFinder } from './files/useFileFinder';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
@@ -218,9 +219,7 @@ export function WorkspaceFileBrowser({
   };
 
   let content: ReactNode;
-  if (root.isLoading) {
-    content = <Spinner size="sm" />;
-  } else if (root.error) {
+  if (root.error) {
     content = <TreeMessage tone="error">{root.error.message}</TreeMessage>;
   } else if (root.data && !root.data.available) {
     content = <WakeSandbox workspacePath={workspacePath} />;
@@ -282,6 +281,8 @@ export function WorkspaceFileBrowser({
       ) : null}
       {finder.finding ? (
         <FileFinderResults workspacePath={workspacePath} finder={finder} changes={marks.files} />
+      ) : root.isLoading ? (
+        <FileTreeSkeleton />
       ) : content ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
       ) : (

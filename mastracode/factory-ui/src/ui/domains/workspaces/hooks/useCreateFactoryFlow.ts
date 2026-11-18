@@ -160,6 +160,7 @@ export function useCreateFactoryFlow() {
   const draftQuery = useQuery({
     queryKey: queryKeys.factoryCreateFlow(),
     queryFn: readDraft,
+    initialData: readDraft,
   });
 
   const clear = useMutation({
@@ -167,10 +168,19 @@ export function useCreateFactoryFlow() {
     onSuccess: () => queryClient.setQueryData(queryKeys.factoryCreateFlow(), { step: 'name' }),
   });
 
-  const step = draftQuery.data?.step ?? 'name';
+  const draft = draftQuery.data;
+  const step = draft.step;
 
   return {
-    draft: draftQuery.data,
+    draft,
+    /** Each step starts from its own field value — the name step from the name already given. */
+    stepValue: step === 'name' ? (draft.name ?? '') : '',
+    /**
+     * Once the final commit has written any server state (a Factory row or a linked repository), stepping
+     * back would let the user pick a new name or repository while the retry still resumes the prior IDs,
+     * so the Back affordance is dropped until the wizard completes.
+     */
+    canGoBack: step !== 'name' && !draft.factoryId && !draft.linkedRepositoryId,
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
     chooseRepository: (repository: SourceControlRepository) =>
       patchDraft.mutateAsync({ step: 'project-management', repository }),

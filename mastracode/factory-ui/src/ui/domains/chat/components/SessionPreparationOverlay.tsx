@@ -1,5 +1,6 @@
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 
+import { transcriptTopClass } from './chatPageHeader';
 import { TranscriptLoading } from './TranscriptLoading';
 
 interface SessionPreparationOverlayProps {
@@ -20,7 +21,7 @@ export function SessionPreparationOverlay({ preparing }: SessionPreparationOverl
         <div aria-hidden="true" className="session-preparation-veil absolute inset-x-0 opacity-0" />
         <div className="session-preparation-loader invisible absolute inset-0 z-1 -translate-y-1 bg-(--chat-surface) opacity-0">
           {/* Stays mounted through the exit fade; `aria-hidden` above drops it from the accessibility tree. */}
-          <ChatShell.Column className="pt-[calc(var(--chat-header-room,0px)+1.5rem)]">
+          <ChatShell.Column className={transcriptTopClass}>
             <TranscriptLoading />
           </ChatShell.Column>
         </div>

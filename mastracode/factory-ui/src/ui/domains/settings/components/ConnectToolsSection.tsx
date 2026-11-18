@@ -7,13 +7,13 @@ import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import {
   SettingsContainer,
   SettingsEmptyRow,
   SettingsItem,
   SettingsItemIcon,
   SettingsListHeader,
-  SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -35,6 +35,7 @@ import type {
 } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
+import { SettingsListSkeleton } from './common/SettingsListSkeleton';
 
 const SECTION_LABEL = 'Mastra Connect';
 
@@ -63,9 +64,7 @@ export function ConnectToolsSection() {
         </Notice>
       )}
       {query.isPending ? (
-        <SettingsContainer>
-          <SettingsSkeleton variant="item" label="Loading Mastra Connect tools" />
-        </SettingsContainer>
+        <SettingsListSkeleton label="Loading Mastra Connect tools" action={<ManageLink projectId={undefined} />} />
       ) : offReason ? (
         <Notice variant="info">
           <Notice.Message>
@@ -164,9 +163,9 @@ function ToolsDisclosure({
     <Collapsible>
       <SettingsItem media={media} title={name} description={description}>
         {status === 'pending' ? (
-          <Txt as="span" variant="meta" tone="muted">
-            Loading tools…
-          </Txt>
+          <span role="status" aria-label={`Loading ${name} tools`}>
+            <Skeleton aria-hidden className="h-control-sm w-20 rounded-full motion-reduce:before:animate-none" />
+          </span>
         ) : status === 'error' ? null : tools.length === 0 ? (
           <Txt as="span" variant="meta" tone="muted">
             No tools
@@ -255,11 +254,16 @@ function statusLabel(status: string): string | undefined {
   return 'Unavailable';
 }
 
-function ManageLink({ projectId }: { projectId: string }) {
+function ManageLink({ projectId }: { projectId: string | undefined }) {
   const auth = useFactoryAuth();
-  const href = platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
+  const href = projectId && platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
   return (
-    <Button size="sm" iconEnd={<IconSquareArrowTopRight />} render={<a href={href} target="_blank" rel="noreferrer" />}>
+    <Button
+      size="sm"
+      inert={!href}
+      iconEnd={<IconSquareArrowTopRight />}
+      render={<a href={href} target="_blank" rel="noreferrer" />}
+    >
       Manage in Platform
     </Button>
   );

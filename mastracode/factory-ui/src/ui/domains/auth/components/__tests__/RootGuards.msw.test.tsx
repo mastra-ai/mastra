@@ -115,6 +115,28 @@ describe('Factory session expiry', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Session expired' })).toBeInTheDocument();
   });
 
+  it('keeps the unreachable-server screen while it retries a server that was down at startup', async () => {
+    server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 503 })));
+    renderApp();
+    await screen.findByRole('status', { name: 'Unable to reach MastraCode server' });
+
+    let release = () => {};
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const retry = vi.fn(async () => {
+      await held;
+      return new HttpResponse(undefined, { status: 503 });
+    });
+    server.use(http.get(AUTH_ME_URL, retry));
+    returnToTab();
+    await waitFor(() => expect(retry).toHaveBeenCalled());
+
+    expect(screen.getByRole('status', { name: 'Unable to reach MastraCode server' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
+    release();
+  });
+
   it('sends an initially signed-out visitor to sign-in without an expiry dialog', async () => {
     server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
     const { router } = renderApp();

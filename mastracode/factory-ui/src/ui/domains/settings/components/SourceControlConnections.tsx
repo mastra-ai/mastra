@@ -1,9 +1,9 @@
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
-import { IntegrationItem } from './IntegrationItem';
+import { IntegrationItem, IntegrationItemSkeleton } from './IntegrationItem';
 import {
   AddPlatformAccountButton,
   connectionName,
@@ -31,7 +31,7 @@ function GithubConnectionRow() {
   const status = query.data;
   const github = { provider: 'github', name: 'GitHub' } as const;
 
-  if (query.isPending) return <SettingsSkeleton variant="item" label="Loading GitHub connection" rows={1} />;
+  if (query.isPending) return <IntegrationItemSkeleton {...github} label="Loading GitHub connection" />;
   if (query.isError || status?.reason === 'unavailable') {
     return (
       <RetryRow
@@ -75,7 +75,7 @@ function GitLabConnectionRows() {
   const status = query.data;
   const gitlab = platformIntegration('gitlab');
 
-  if (query.isPending) return <SettingsSkeleton variant="item" label="Loading GitLab connections" rows={1} />;
+  if (query.isPending) return <IntegrationItemSkeleton {...gitlab} label="Loading GitLab connections" />;
   if (query.isError || status?.reason === 'unavailable') {
     return (
       <RetryRow

@@ -131,7 +131,10 @@ describe('Behavior settings page (factory scope)', () => {
 
     const readGroup = await screen.findByRole('radiogroup', { name: 'Read permission' });
     const readAllow = within(readGroup).getByRole('radio', { name: 'Allow' });
-    await waitFor(() => expect(readAllow).toBeEnabled());
+    await waitFor(() =>
+      expect(within(readGroup).getByRole('radio', { name: 'Ask' })).toHaveAttribute('aria-checked', 'true'),
+    );
+    expect(readAllow).toBeEnabled();
     expect(seen.permissionResourceIds).toContain(FACTORY_RESOURCE_ID);
 
     await user.click(readAllow);

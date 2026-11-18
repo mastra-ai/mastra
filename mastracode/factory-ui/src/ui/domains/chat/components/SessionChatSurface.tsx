@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 
 import { chatColumnClass, composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
-import { chatHeaderRoomPx } from './chatPageHeader';
+import { chatHeaderRoomPx, transcriptTopClass } from './chatPageHeader';
 import { ComposerPanel } from './ComposerPanel';
 import { SessionPreparationOverlay } from './SessionPreparationOverlay';
 import { TaskPanel } from './TaskPanel';
@@ -66,8 +66,7 @@ export function SessionChatSurface({
               role="region"
               aria-label="Conversation"
               aria-busy={preparing}
-              // A sibling selector, not `:has()`: under `:has()` every new message would restyle the whole transcript.
-              className="relative gap-0 pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6"
+              className={cn('relative gap-0', transcriptTopClass)}
             >
               <SessionPreparationOverlay preparing={preparing} />
               <ChatShell.Transcript className="flex-1">

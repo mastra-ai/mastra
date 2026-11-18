@@ -1,5 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
@@ -11,7 +12,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useBoardQuery } from '../../../../hooks/useBoardEditor';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarLoadError } from '../../../ui/LoadErrorState';
-import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { SidebarNavRowSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
@@ -75,7 +76,7 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, ru
         <section className="flex flex-col gap-1 pt-2" aria-label="Phases">
           <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
           {query.isPending ? (
-            <SidebarNavigationSkeleton label="Loading phases" rows={4} />
+            <PhasesSkeleton factoryId={factoryId} boardId={boardId} phaseKey={phaseKey} />
           ) : query.isError ? (
             <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
               Couldn’t load phases
@@ -97,14 +98,58 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, ru
   );
 }
 
+const DEFAULT_PHASE_COUNT = 7;
+
+function PhasesSkeleton({
+  factoryId,
+  boardId,
+  phaseKey,
+}: {
+  factoryId: string;
+  boardId: string;
+  phaseKey: string | undefined;
+}) {
+  const phases = useBoardCatalog(factoryId).data?.find(board => board.id === boardId)?.phases;
+  return (
+    <div role="status" aria-label="Loading phases" inert className="flex flex-col gap-1">
+      {phases ? (
+        <Sidebar.NavList>
+          {phases.map(phase => (
+            <ConfigLink
+              key={phase.id}
+              to={boardConfigPath(factoryId, boardId, phase.id)}
+              isActive={phase.id === phaseKey}
+              icon={
+                <PhaseIcon movable={false}>
+                  <BoardStageIcon stage={phase.id} kind={phaseIconKind(boardId, phase.kind)} decorative />
+                </PhaseIcon>
+              }
+              label={phase.name ?? phase.title}
+            />
+          ))}
+        </Sidebar.NavList>
+      ) : (
+        <Sidebar.NavList aria-hidden className="pointer-events-none">
+          {Array.from({ length: DEFAULT_PHASE_COUNT }, (_, index) => (
+            <SidebarNavRowSkeleton key={index} />
+          ))}
+        </Sidebar.NavList>
+      )}
+      <AddPhaseButton factoryId={factoryId} boardId={boardId} board={undefined} disabled={false} />
+    </div>
+  );
+}
+
 /** Names the board being configured, and opens another board's configuration in its place. */
 function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: string }) {
   const catalog = useBoardCatalog(factoryId);
-  const response = useBoardQuery(factoryId, boardId).data;
-  const board = response?.board;
+  const query = useBoardQuery(factoryId, boardId);
+  const board = query.data?.board;
   const name = useShownDraft(factoryId, boardId, board)?.name;
   const boards = catalog.data ? orderedBoards(catalog.data) : [];
-  const title = name || boards.find(other => other.id === boardId)?.title || 'Board';
+  const known = name || boards.find(other => other.id === boardId)?.title;
+  const pending = !known && (catalog.isPending || query.isPending);
+  const title = known || 'Board';
   const overlays = useOverlays();
 
   return (
@@ -112,14 +157,21 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
       <DropdownMenu.Trigger
         type="button"
         aria-label={`Board: ${title}`}
+        inert={pending}
         variant="ghost"
         size="sm"
         className="w-full min-w-0 justify-start gap-2"
       >
         <IconKanbanView aria-hidden />
-        <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
-          {title}
-        </Txt>
+        {pending ? (
+          <span className="min-w-0 flex-1">
+            <SkeletonText line="text-body" className="w-20 motion-reduce:before:animate-none" />
+          </span>
+        ) : (
+          <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
+            {title}
+          </Txt>
+        )}
         <IconChevronDownMedium aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
@@ -133,7 +185,7 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
             {other.id === boardId && <IconCheckmark2Medium aria-label="Open board" />}
           </DropdownMenu.Item>
         ))}
-        {response?.canEdit && (
+        {query.data?.canEdit && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item render={<Link to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}>

@@ -33,7 +33,7 @@ import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
-import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { SessionRowsSkeleton } from './SessionRowsSkeleton';
 import {
   SESSION_SORT_MENU_OPTIONS,
   SESSION_STATUS_MENU_OPTIONS,
@@ -50,20 +50,12 @@ export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const openSessionId = useRouteSessionId();
   const openNewUserSession = useOpenNewUserSession();
-  const {
-    view,
-    hiddenGroupKeys,
-    groupOrderKeys,
-    changedSettingCount,
-    updateView,
-    changeGroupVisibility,
-    changeGroupOrder,
-    resetView,
-  } = useSessionListView();
+  const { view, hiddenGroupKeys, groupOrderKeys, updateView, changeGroupVisibility, changeGroupOrder } =
+    useSessionListView();
   const sidebarState = useMaybeSidebarState()?.state;
   // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
   const children = view.revealChildSessions && sidebarState !== 'collapsed';
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
+  const { filters, changeFilters } = useSessionFilters();
   const pinned = usePinnedSessions();
   const viewKey = JSON.stringify([factoryId, view.sort, view.groupBy, filters, children]);
   const [deepened, setDeepened] = useState({ viewKey, extraRows: NO_EXTRA_ROWS });
@@ -135,125 +127,114 @@ export function SessionsSection() {
     : undefined;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Sessions">
-      <Sidebar.NavHeader
-        className="mt-0"
-        action={
-          <div className="flex items-center gap-0.5">
-            {hasRepositories && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New user session"
-                onClick={() => openNewUserSession(factoryId)}
-                disabled={deletion.deleting}
-              >
-                <IconPlusMedium />
-              </Button>
-            )}
-            <PropertiesMenu
-              label="Sessions properties"
-              changedCount={changedSettingCount + activeFilterCount}
-              onReset={() => {
-                resetView();
-                resetFilters();
-              }}
-            >
-              <DropdownMenu.RadioSub
-                label="Sort"
-                icon={<IconArrowsUpDown aria-hidden />}
-                options={SESSION_SORT_MENU_OPTIONS}
-                value={view.sort}
-                onValueChange={sort => updateView({ sort })}
-              />
-              <DropdownMenu.RadioSub
-                label="Owner"
-                icon={<IconUser aria-hidden />}
-                options={sessionOwnerMenuOptions(owners, viewer?.userId)}
-                value={filters.owner}
-                onValueChange={owner => changeFilters({ owner })}
-              />
-              <DropdownMenu.RadioSub
-                label="Source"
-                icon={<IconKanbanView aria-hidden />}
-                options={sessionSourceMenuOptions(sessionGroupHeadings('board', groupContext))}
-                value={filters.source}
-                onValueChange={source => changeFilters({ source })}
-              />
-              <DropdownMenu.RadioSub
-                label="Status"
-                icon={<IconCircleDashed aria-hidden />}
-                options={SESSION_STATUS_MENU_OPTIONS}
-                value={filters.status}
-                onValueChange={status => changeFilters({ status })}
-              />
-              <DropdownMenu.RadioSub
-                label="Updated"
-                icon={<IconClock aria-hidden />}
-                options={SESSION_UPDATED_MENU_OPTIONS}
-                value={filters.updated}
-                onValueChange={updated => changeFilters({ updated })}
-              />
-              <SessionGroupMenu
-                groupBy={view.groupBy}
-                onGroupByChange={groupBy => updateView({ groupBy })}
-                groups={menuGroups}
-                hiddenKeys={hiddenGroupKeys}
-                onVisibilityChange={changeGroupVisibility}
-                onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
-              />
-              <DropdownMenu.Separator />
-              <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
-                Compact view
-              </DropdownMenu.CheckboxItem>
-              <DropdownMenu.CheckboxItem
-                checked={view.revealChildSessions}
-                onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
-              >
-                Reveal child sessions
-              </DropdownMenu.CheckboxItem>
-            </PropertiesMenu>
-          </div>
-        }
-      >
-        Sessions
-      </Sidebar.NavHeader>
-
-      <div className="flex flex-col gap-4">
-        {!response && !loadFailed && <SidebarNavigationSkeleton label="Loading sessions" />}
-        {groups.map(group => (
-          <SessionGroupList
-            key={group.key}
-            group={group}
-            showHeader={view.groupBy !== 'none'}
-            onShowMore={() => deepen(group.key, (extraRows[group.key] ?? 0) + SESSION_GROUP_INCREMENT)}
-            onShowLess={() => deepen(group.key, undefined)}
-            renderRow={row => {
-              const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
-                <SessionListItem
-                  key={entry.session.sessionId}
-                  factoryId={factoryId}
-                  row={entry}
-                  subscriptions={subscriptionsBySessionId[entry.session.sessionId]}
-                  level={level}
-                  compact={view.compact}
-                  disabled={deletion.deleting}
-                  onDelete={deletion.requestDeletion}
-                  subItems={subItems}
-                />
-              );
-              return item(
-                row,
-                undefined,
-                row.childRows?.length ? (
-                  <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
-                ) : undefined,
-              );
-            }}
+    <SessionsSectionLayout
+      newSession={
+        hasRepositories && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New user session"
+            onClick={() => openNewUserSession(factoryId)}
+            disabled={deletion.deleting}
+          >
+            <IconPlusMedium />
+          </Button>
+        )
+      }
+      properties={
+        <SessionsPropertiesMenu>
+          <DropdownMenu.RadioSub
+            label="Sort"
+            icon={<IconArrowsUpDown aria-hidden />}
+            options={SESSION_SORT_MENU_OPTIONS}
+            value={view.sort}
+            onValueChange={sort => updateView({ sort })}
           />
-        ))}
-      </div>
-
+          <DropdownMenu.RadioSub
+            label="Owner"
+            icon={<IconUser aria-hidden />}
+            options={sessionOwnerMenuOptions(owners, viewer?.userId)}
+            value={filters.owner}
+            onValueChange={owner => changeFilters({ owner })}
+          />
+          <DropdownMenu.RadioSub
+            label="Source"
+            icon={<IconKanbanView aria-hidden />}
+            options={sessionSourceMenuOptions(sessionGroupHeadings('board', groupContext))}
+            value={filters.source}
+            onValueChange={source => changeFilters({ source })}
+          />
+          <DropdownMenu.RadioSub
+            label="Status"
+            icon={<IconCircleDashed aria-hidden />}
+            options={SESSION_STATUS_MENU_OPTIONS}
+            value={filters.status}
+            onValueChange={status => changeFilters({ status })}
+          />
+          <DropdownMenu.RadioSub
+            label="Updated"
+            icon={<IconClock aria-hidden />}
+            options={SESSION_UPDATED_MENU_OPTIONS}
+            value={filters.updated}
+            onValueChange={updated => changeFilters({ updated })}
+          />
+          <SessionGroupMenu
+            groupBy={view.groupBy}
+            onGroupByChange={groupBy => updateView({ groupBy })}
+            groups={menuGroups}
+            hiddenKeys={hiddenGroupKeys}
+            onVisibilityChange={changeGroupVisibility}
+            onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
+          />
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
+            Compact view
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={view.revealChildSessions}
+            onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
+          >
+            Reveal child sessions
+          </DropdownMenu.CheckboxItem>
+        </SessionsPropertiesMenu>
+      }
+      list={
+        <>
+          {!response && !loadFailed && <SessionRowsSkeleton label="Loading sessions" compact={view.compact} />}
+          {groups.map(group => (
+            <SessionGroupList
+              key={group.key}
+              group={group}
+              showHeader={view.groupBy !== 'none'}
+              onShowMore={() => deepen(group.key, (extraRows[group.key] ?? 0) + SESSION_GROUP_INCREMENT)}
+              onShowLess={() => deepen(group.key, undefined)}
+              renderRow={row => {
+                const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
+                  <SessionListItem
+                    key={entry.session.sessionId}
+                    factoryId={factoryId}
+                    row={entry}
+                    subscriptions={subscriptionsBySessionId[entry.session.sessionId]}
+                    level={level}
+                    compact={view.compact}
+                    disabled={deletion.deleting}
+                    onDelete={deletion.requestDeletion}
+                    subItems={subItems}
+                  />
+                );
+                return item(
+                  row,
+                  undefined,
+                  row.childRows?.length ? (
+                    <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
+                  ) : undefined,
+                );
+              }}
+            />
+          ))}
+        </>
+      }
+    >
       {loadFailed && (
         // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
         <SidebarLoadError onRetry={() => void rowsRead.refetch()} announce={false}>
@@ -270,7 +251,7 @@ export function SessionsSection() {
           onConfirm={deletion.confirm}
         />
       )}
-    </section>
+    </SessionsSectionLayout>
   );
 }
 
@@ -286,4 +267,52 @@ function emptyListMessage({
   if (matching > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (total === 0) return 'No sessions yet';
   return 'No sessions match these filters';
+}
+
+export function SessionsSectionLayout({
+  newSession,
+  properties,
+  list,
+  children,
+}: {
+  newSession: ReactNode;
+  properties: ReactNode;
+  list: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2" aria-label="Sessions">
+      <Sidebar.NavHeader
+        className="mt-0"
+        action={
+          <div className="flex items-center gap-0.5">
+            {newSession}
+            {properties}
+          </div>
+        }
+      >
+        Sessions
+      </Sidebar.NavHeader>
+      <div className="flex flex-col gap-4">{list}</div>
+      {children}
+    </section>
+  );
+}
+
+export function SessionsPropertiesMenu({ children }: { children?: ReactNode }) {
+  const { changedSettingCount, resetView } = useSessionListView();
+  const { activeFilterCount, resetFilters } = useSessionFilters();
+
+  return (
+    <PropertiesMenu
+      label="Sessions properties"
+      changedCount={changedSettingCount + activeFilterCount}
+      onReset={() => {
+        resetView();
+        resetFilters();
+      }}
+    >
+      {children}
+    </PropertiesMenu>
+  );
 }

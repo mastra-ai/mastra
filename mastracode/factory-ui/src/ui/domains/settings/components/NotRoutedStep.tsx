@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
@@ -29,15 +30,19 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
       onError: error => toast.error(error.message),
     });
 
-  const summary = query.isPending
-    ? 'Loading…'
-    : query.isError
-      ? 'Items not routed didn’t load.'
-      : query.hasNextPage
-        ? `${items.length > 0 ? `${items.length}+` : 'More'} waiting for a board.`
-        : items.length === 0
-          ? 'Every new issue and pull request found a board.'
-          : `${items.length} waiting for a board.`;
+  const summary = query.isPending ? (
+    <span role="status" aria-label="Loading items not routed">
+      <SkeletonText line="text-caption" className="w-48 motion-reduce:before:animate-none" />
+    </span>
+  ) : query.isError ? (
+    'Items not routed didn’t load.'
+  ) : query.hasNextPage ? (
+    `${items.length > 0 ? `${items.length}+` : 'More'} waiting for a board.`
+  ) : items.length === 0 ? (
+    'Every new issue and pull request found a board.'
+  ) : (
+    `${items.length} waiting for a board.`
+  );
 
   return (
     <section

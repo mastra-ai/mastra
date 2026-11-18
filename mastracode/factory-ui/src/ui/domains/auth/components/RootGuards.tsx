@@ -1,13 +1,14 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { authCheckFailed, useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
+import { RouteFrameSkeleton } from '../../../layouts/RouteFrameSkeleton';
 
 export const RootGuards = () => {
   return (
@@ -20,14 +21,16 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
+  const { isPending, data, errorUpdateCount } = useFactoryAuth({ monitorSession: true });
   const location = useLocation();
   const [wasSignedIn, setWasSignedIn] = useState(false);
 
   if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
-  if (isPending) return <AuthPendingSkeleton />;
-  if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (authCheckFailed({ data, errorUpdateCount })) {
+    return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  }
+  if (isPending) return <RouteFrameSkeleton label="Checking sign-in" />;
   if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
@@ -47,7 +50,7 @@ const OnboardingGuard = () => {
   const pathname = useLocation().pathname;
   const { data: factories, isPending: factoriesPending, isFetching, refetch } = useFactoriesQuery();
 
-  if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
+  if (factoriesPending) return <RouteFrameSkeleton label="Loading factories" />;
   if (!factories) return <FactoriesUnavailableScreen retrying={isFetching} onRetry={() => void refetch()} />;
   if (factories.length === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
   if (factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
@@ -96,7 +99,7 @@ function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; 
   );
 }
 
-export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
+function AuthPendingSkeleton({ label }: { label: string }) {
   return (
     <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
       <BrandLoader size="lg" aria-label={label} />

@@ -629,7 +629,7 @@ describe('Repositories settings', () => {
       '[data-slot="settings-row"]',
     );
     if (!workerRow) throw new Error('Worker token row is missing');
-    expect(within(workerRow).getByText('Not set')).toBeInTheDocument();
+    expect(await within(workerRow).findByText('Not set')).toBeInTheDocument();
     await userEvent.click(within(workerRow).getByRole('button', { name: 'Add token' }));
     const input = screen.getByLabelText('Worker token GitHub Personal Access Token');
     await userEvent.type(input, 'worker-secret');

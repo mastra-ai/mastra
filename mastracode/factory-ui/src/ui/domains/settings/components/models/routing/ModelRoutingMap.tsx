@@ -14,8 +14,14 @@ import { MODEL_ROUTES, defaultsInUse } from './model-routes';
 import { RoutingMapLayout, createConnectorAnchors } from './RoutingMapLayout';
 import { IconWindow } from '@mastra/playground-ui/icons/central/IconWindow';
 
-export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; modelScope: FactoryModelScope }) {
-  const routes = MODEL_ROUTES[modelScope];
+export function ModelRoutingMap({
+  factoryId,
+  modelScope,
+}: {
+  factoryId: string;
+  modelScope: FactoryModelScope | undefined;
+}) {
+  const routes = modelScope && MODEL_ROUTES[modelScope];
   const [anchors] = useState(createConnectorAnchors);
 
   return (
@@ -24,7 +30,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
       routes={routes}
       lanes={
         <>
-          <LaneCard lane="chats" destination={routes.chats} anchorRef={anchors.chats}>
+          <LaneCard lane="chats" destination={routes?.chats} anchorRef={anchors.chats}>
             <LaneSource label="Web app">
               <IconWindow />
             </LaneSource>
@@ -32,7 +38,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
               <SlackIcon />
             </LaneSource>
           </LaneCard>
-          <LaneCard lane="runs" destination={routes.runs} anchorRef={anchors.runs}>
+          <LaneCard lane="runs" destination={routes?.runs} anchorRef={anchors.runs}>
             <LaneSource label="GitHub">
               <GithubIcon />
             </LaneSource>
@@ -55,14 +61,14 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
         <>
           <DefaultsCard
             defaults="personal"
-            inUse={defaultsInUse(modelScope, 'personal')}
+            inUse={!modelScope || defaultsInUse(modelScope, 'personal')}
             anchorRef={anchors.personal}
             model={<PersonalDefaultModel />}
             providers={<ProviderList credentialScope="user" />}
           />
           <DefaultsCard
             defaults="factory"
-            inUse={defaultsInUse(modelScope, 'factory')}
+            inUse={!modelScope || defaultsInUse(modelScope, 'factory')}
             anchorRef={anchors.factory}
             model={<FactoryDefaultModel factoryId={factoryId} />}
             providers={<ProviderList credentialScope="org" />}

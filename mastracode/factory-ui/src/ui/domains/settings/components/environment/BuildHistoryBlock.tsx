@@ -3,12 +3,7 @@ import { useState } from 'react';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  SettingsContainer,
-  SettingsEmptyRow,
-  SettingsNoticeRow,
-  SettingsSkeleton,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsEmptyRow, SettingsNoticeRow } from '@mastra/playground-ui/new/settings';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -16,6 +11,8 @@ import type { FactoryEnvironmentBuild } from '../../../workspaces/services/envir
 import { BUILD_STATUS, formatBuildTime } from './BuildStatusBlock';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
+
+export const BUILD_HISTORY_ROW = 'flex w-full items-center gap-3';
 
 /** The provider's build history, newest first; a row opens to its error and logs. */
 export function BuildHistoryBlock({
@@ -25,7 +22,7 @@ export function BuildHistoryBlock({
   builds: FactoryEnvironmentBuild[] | undefined;
   error: string | undefined;
 }) {
-  // Only the loaded builds make a list; the error, skeleton and empty row are single rows of the same card.
+  // Only the loaded builds make a list; the error and empty row are single rows of the same card.
   const listed = !error && builds !== undefined && builds.length > 0;
   return (
     <SettingsContainer role={listed ? 'list' : undefined} aria-label={listed ? 'Build history' : undefined}>
@@ -50,8 +47,7 @@ function BuildHistoryRows({
       </SettingsNoticeRow>
     );
   }
-  if (!builds) return <SettingsSkeleton label="Loading build history" rows={3} />;
-  if (builds.length === 0) return <SettingsEmptyRow>No builds yet.</SettingsEmptyRow>;
+  if (!builds?.length) return <SettingsEmptyRow>No builds yet.</SettingsEmptyRow>;
 
   return (
     <>
@@ -63,7 +59,7 @@ function BuildHistoryRows({
           <div key={build.buildId} role="listitem" className="flex flex-col gap-3">
             <button
               type="button"
-              className={cn('flex w-full items-center gap-3 rounded-sm text-left', focusRing)}
+              className={cn(BUILD_HISTORY_ROW, 'rounded-sm text-left', focusRing)}
               aria-expanded={expanded}
               aria-label={`Build ${build.buildId}`}
               onClick={() => setOpen(expanded ? undefined : build.buildId)}

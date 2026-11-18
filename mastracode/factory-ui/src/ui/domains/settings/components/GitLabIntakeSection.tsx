@@ -48,8 +48,7 @@ export function GitLabIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="GitLab"
-      icon={<SettingsIntegrationIcon provider="gitlab" />}
+      provider="gitlab"
       account={status?.accounts?.join(', ')}
       listed={listed}
       connection={
@@ -88,7 +87,7 @@ export function GitLabIntakeSection({
           addLabel="Add project"
           itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
           groups={groupGitLabProjectsByAccount(projects)}
-          selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
+          selectedIds={config.gitlab.sourceIds}
           saving={selection.saving}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}

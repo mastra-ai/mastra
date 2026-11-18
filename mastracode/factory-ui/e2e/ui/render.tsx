@@ -94,3 +94,12 @@ export function findPageHeader(): Promise<HTMLElement> {
     return header;
   });
 }
+
+/** jsdom ignores `inert`, so a role query can resolve on a loading preview's copy of a control. */
+export function findLive(find: () => HTMLElement): Promise<HTMLElement> {
+  return waitFor(() => {
+    const element = find();
+    if (element.closest('[inert]')) throw new Error('Only an inert copy is rendered');
+    return element;
+  });
+}

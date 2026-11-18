@@ -97,8 +97,9 @@ describe('OnboardingPage GitHub callback', () => {
   it('given the install callback returns to onboarding with a refusal, when onboarding renders, then it shows the reason in the Codebase section instead of a toast', async () => {
     const router = renderOnboarding('/onboarding?github_app_error=github_app_installation_preexisting');
 
-    const codebase = await screen.findByRole('region', { name: 'Codebase' });
-    expect(await within(codebase).findByText(/choose Refresh accounts/)).toBeInTheDocument();
+    const refusal = await screen.findByText(/choose Refresh accounts/);
+    const codebase = screen.getByRole('region', { name: 'Codebase' });
+    expect(codebase).toContainElement(refusal);
     await waitFor(() => expect(router.state.location.search).toBe(''));
     expect(screen.getAllByText(/choose Refresh accounts/)).toHaveLength(1);
 
@@ -111,8 +112,9 @@ describe('OnboardingPage GitHub callback', () => {
   it('shows an approval request inline on onboarding', async () => {
     const router = renderOnboarding('/onboarding?github_app_requested=true');
 
-    const codebase = await screen.findByRole('region', { name: 'Codebase' });
-    expect(await within(codebase).findByText('GitHub App installation requested')).toBeInTheDocument();
+    const request = await screen.findByText('GitHub App installation requested');
+    const codebase = screen.getByRole('region', { name: 'Codebase' });
+    expect(codebase).toContainElement(request);
     expect(within(codebase).getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.search).toBe(''));
     expect(

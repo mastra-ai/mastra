@@ -18,3 +18,7 @@ export const headerCapsuleClass = cn(
   raisedSurfaceStyle,
   'pointer-events-auto flex w-fit min-w-0 items-center gap-0.5 rounded-full p-0.5 empty:hidden',
 );
+
+// A sibling selector, not `:has()`: under `:has()` every new message would restyle the whole transcript.
+export const transcriptTopClass =
+  'pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6';

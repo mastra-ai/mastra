@@ -12,12 +12,20 @@ export function ModelRoutingSwitch({
   pending,
   onValueChange,
 }: {
-  value: FactoryModelScope;
+  value: FactoryModelScope | undefined;
   pending: boolean;
   onValueChange: (scope: FactoryModelScope) => void;
 }) {
   return (
-    <SegmentedControl aria-label="Model routing" aria-busy={pending} value={value} onValueChange={onValueChange}>
+    <SegmentedControl<FactoryModelScope | ''>
+      aria-label="Model routing"
+      aria-busy={pending}
+      inert={value === undefined}
+      value={value ?? ''}
+      onValueChange={next => {
+        if (next) onValueChange(next);
+      }}
+    >
       <SegmentedControlItem value="user">
         <RouteGlyph scope="user" />
         {MODEL_SCOPE_LABELS.user}

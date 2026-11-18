@@ -127,8 +127,7 @@ export function LinearIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="Linear"
-      icon={<SettingsIntegrationIcon provider="linear" />}
+      provider="linear"
       account={status?.workspace?.name ?? undefined}
       listed={listed}
       connection={linearConnection()}
@@ -187,7 +186,7 @@ export function LinearIntakeSection({
           addLabel="Add project or team"
           itemIcon={<SettingsIntegrationIcon provider="linear" />}
           groups={groups}
-          selectedIds={projectsQuery.isPending || teamsQuery.isPending ? [] : selectedIds}
+          selectedIds={selectedIds}
           fallbackLabel={missingSourceLabel}
           saving={selection.saving}
           loading={projectsQuery.isPending}

@@ -9,9 +9,6 @@ export type ConnectorAnchors = Record<ModelLane, RefObject<HTMLDivElement | null
 
 type ConnectorLayout = { width: number; y: Record<ModelLane | ModelDefaults, number | undefined> };
 
-export const ROUTING_MAP_GRID_CLASS =
-  'grid grid-cols-1 gap-3 @min-[38rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[38rem]:gap-0';
-
 export function createConnectorAnchors(): ConnectorAnchors {
   return {
     chats: createRef<HTMLDivElement>(),
@@ -48,7 +45,7 @@ export function RoutingMapLayout({
   defaults,
 }: {
   anchors: ConnectorAnchors;
-  routes: Record<ModelLane, ModelDefaults>;
+  routes: Record<ModelLane, ModelDefaults> | undefined;
   lanes: ReactNode;
   defaults: ReactNode;
 }) {
@@ -71,12 +68,13 @@ export function RoutingMapLayout({
 
   return (
     <div className="@container">
-      <div className={ROUTING_MAP_GRID_CLASS}>
+      <div className="grid grid-cols-1 gap-3 @min-[38rem]:grid-cols-[13rem_minmax(4rem,1fr)_minmax(0,26rem)] @min-[38rem]:gap-0">
         <div ref={lanesRef} className="flex flex-col gap-3 self-center">
           {lanes}
         </div>
         <svg ref={svgRef} aria-hidden="true" className="hidden h-full w-full overflow-visible @min-[38rem]:block">
           {layout &&
+            routes &&
             MODEL_LANES.map(lane => {
               const fromY = layout.y[lane];
               const toY = layout.y[routes[lane]];

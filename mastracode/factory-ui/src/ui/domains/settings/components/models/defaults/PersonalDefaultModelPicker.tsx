@@ -11,15 +11,18 @@ import {
   useSetDefaultModel,
 } from '../../../../../../hooks/use-default-model';
 import { ModelCombobox } from '../../ModelCombobox';
+import { PendingField } from '../../../../../ui/PendingField';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
+  loading,
   savedModelId,
   savedThinkingLevel,
   models,
   fallbackModelId,
 }: {
+  loading: boolean;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
@@ -30,6 +33,7 @@ export function PersonalDefaultModelPicker({
   const applyDefaultModel = useApplyDefaultModel();
 
   const busy = setDefaultModel.isPending || clearDefaultModel.isPending || applyDefaultModel.isPending;
+  const actionsDisabled = busy || (!loading && !savedModelId);
   const unavailableModelId =
     savedModelId && models && !models.some(model => model.id === savedModelId) ? savedModelId : undefined;
   const errorText = (setDefaultModel.error ?? clearDefaultModel.error ?? applyDefaultModel.error)?.message;
@@ -46,26 +50,33 @@ export function PersonalDefaultModelPicker({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div inert={loading} className="flex min-w-0 flex-col gap-2">
       <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
-        <ModelCombobox
-          models={models ?? []}
-          value={savedModelId ?? ''}
-          onValueChange={saveDefaultModel}
-          fallbackModelId={fallbackModelId}
-          placeholder="Select a model"
-          aria-label="Personal default model"
-          size="sm"
-          className="min-w-0 flex-1"
-          disabled={busy}
+        <PendingField pending={loading} className="min-w-0 flex-1">
+          <ModelCombobox
+            models={models ?? []}
+            value={savedModelId ?? ''}
+            onValueChange={saveDefaultModel}
+            fallbackModelId={fallbackModelId}
+            placeholder="Select a model"
+            pending={loading}
+            aria-label="Personal default model"
+            size="sm"
+            disabled={busy}
+          />
+        </PendingField>
+        <PersonalThinkingControl
+          loading={loading}
+          savedModelId={savedModelId}
+          savedThinkingLevel={savedThinkingLevel}
+          saving={busy}
         />
-        <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
       </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
+        <Button size="sm" disabled={actionsDisabled} onClick={() => applyDefaultModel.mutate()}>
           Apply to my running chats
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
+        <Button size="sm" variant="ghost" disabled={actionsDisabled} onClick={clearDefault}>
           Clear
         </Button>
       </div>

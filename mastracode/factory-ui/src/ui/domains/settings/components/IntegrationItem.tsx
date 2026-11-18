@@ -1,5 +1,6 @@
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import type { SettingsItemProps } from '@mastra/playground-ui/new/settings';
 import type { ComponentProps, ReactNode } from 'react';
 
@@ -34,6 +35,28 @@ export function IntegrationItem({
       title={name}
       description={error ? <IntegrationError description={description} error={error} /> : description}
       {...props}
+    />
+  );
+}
+
+export function IntegrationItemSkeleton({
+  provider,
+  name,
+  label,
+}: {
+  provider: IntegrationProvider;
+  name: ReactNode;
+  label: string;
+}) {
+  return (
+    <IntegrationItem
+      provider={provider}
+      name={name}
+      description={
+        <span role="status" aria-label={label}>
+          <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
+        </span>
+      }
     />
   );
 }

@@ -1,14 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsItem, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
+import { PendingField } from '../../../ui/PendingField';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
@@ -67,14 +70,24 @@ export function AccountSettingsSection() {
   );
 }
 
+const PROFILE_DESCRIPTION = 'Your signed-in identity for this MastraCode deployment.';
+
+const ACCOUNT_VALUE_SKELETON = (
+  <span aria-hidden>
+    <SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />
+  </span>
+);
+
 function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }) {
   if (auth.isPending) {
     return (
-      <SettingsSubsection scope="personal" title="Profile">
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading your account" rows={3} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <ProfileItems
+        name={ACCOUNT_VALUE_SKELETON}
+        email={ACCOUNT_VALUE_SKELETON}
+        authentication={ACCOUNT_VALUE_SKELETON}
+        accountId=""
+        organizationId=""
+      />
     );
   }
 
@@ -94,29 +107,53 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
   const user = state.user;
 
   return (
-    <SettingsSubsection
-      scope="personal"
-      title="Profile"
-      description="Your signed-in identity for this MastraCode deployment."
-    >
+    <ProfileItems
+      name={<AccountValue>{user?.name ?? 'Not provided'}</AccountValue>}
+      email={<AccountValue>{user?.email ?? 'Not provided'}</AccountValue>}
+      authentication={<AccountValue>{authProviderLabel(state.provider)}</AccountValue>}
+      accountId={user?.userId}
+      organizationId={user?.organizationId}
+    />
+  );
+}
+
+function ProfileItems({
+  name,
+  email,
+  authentication,
+  accountId,
+  organizationId,
+}: {
+  name: ReactNode;
+  email: ReactNode;
+  authentication: ReactNode;
+  accountId: string | undefined;
+  organizationId: string | undefined;
+}) {
+  return (
+    <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
       <SettingsContainer>
         <SettingsItem title="Name" description="From your sign-in provider.">
-          <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
+          {name}
         </SettingsItem>
         <SettingsItem title="Email" description="From your sign-in provider.">
-          <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
+          {email}
         </SettingsItem>
         <SettingsItem title="Authentication" description="How you signed in.">
-          <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
+          {authentication}
         </SettingsItem>
-        {user?.userId && (
+        {accountId !== undefined && (
           <SettingsItem title="Account ID" description="Useful when contacting support.">
-            <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
+            <PendingField pending={!accountId} className="w-full sm:w-55">
+              <CopyInput value={accountId} label="account ID" />
+            </PendingField>
           </SettingsItem>
         )}
-        {user?.organizationId && (
+        {organizationId !== undefined && (
           <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
-            <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
+            <PendingField pending={!organizationId} className="w-full sm:w-55">
+              <CopyInput value={organizationId} label="organization ID" />
+            </PendingField>
           </SettingsItem>
         )}
       </SettingsContainer>

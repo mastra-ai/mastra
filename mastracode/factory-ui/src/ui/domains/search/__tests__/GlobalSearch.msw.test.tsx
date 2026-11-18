@@ -397,7 +397,8 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+    await screen.findAllByText('search@example.com', {}, { timeout: 5_000 });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
     const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     await screen.findByRole('dialog', { name: 'Global search' });
@@ -423,7 +424,8 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute();
 
-    await user.click(await screen.findByRole('button', { name: 'Open navigation menu' }, { timeout: 5_000 }));
+    await screen.findAllByText('search@example.com', {}, { timeout: 5_000 });
+    await user.click(screen.getByRole('button', { name: 'Open navigation menu' }));
     const navigation = await screen.findByRole('dialog', { name: 'Navigation' });
     await user.click(within(navigation).getByRole('button', { name: 'Search and navigate' }));
     await screen.findByRole('dialog', { name: 'Global search' });

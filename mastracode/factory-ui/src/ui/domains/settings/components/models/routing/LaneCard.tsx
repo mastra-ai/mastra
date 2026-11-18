@@ -1,3 +1,4 @@
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode, Ref } from 'react';
 
@@ -12,7 +13,7 @@ export function LaneCard({
   children,
 }: {
   lane: ModelLane;
-  destination: ModelDefaults;
+  destination: ModelDefaults | undefined;
   anchorRef: Ref<HTMLDivElement>;
   children: ReactNode;
 }) {
@@ -29,9 +30,15 @@ export function LaneCard({
           {MODEL_LANE_LABELS[lane]}
         </Txt>
         <ul className="text-muted-foreground [&_svg]:size-icon-sm flex flex-wrap items-center gap-2.5">{children}</ul>
-        <Txt variant="meta" tone="muted" className="@min-[38rem]:sr-only">
-          Uses {MODEL_DEFAULTS_LABELS[destination]}
-        </Txt>
+        {destination ? (
+          <Txt variant="meta" tone="muted" className="@min-[38rem]:sr-only">
+            Uses {MODEL_DEFAULTS_LABELS[destination]}
+          </Txt>
+        ) : (
+          <span aria-hidden className="@min-[38rem]:hidden">
+            <SkeletonText line="text-meta" className="w-24 motion-reduce:before:animate-none" />
+          </span>
+        )}
       </div>
     </section>
   );

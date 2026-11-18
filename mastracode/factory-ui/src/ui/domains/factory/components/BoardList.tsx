@@ -2,7 +2,7 @@ import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -14,17 +14,31 @@ import { BoardStageIcon, stageHeaderTintClass } from './BoardIcons';
 
 export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
-/** Each row lays out its own columns, so one wide action or badge never narrows every other title. */
-export function BoardList({ children }: { children: ReactNode }) {
+const GROUP_CLASS = 'content-start pb-4';
+const GROUP_HEADER_CLASS = 'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3';
+const GROUP_COUNT_SKELETON_CLASS = 'h-4 w-5 rounded-sm motion-reduce:before:animate-none';
+const GROUP_ROWS_CLASS = cn(SPANS_LIST_GRID, 'gap-y-px [&>:not(.data-list-row)]:col-span-full');
+
+export function BoardListGroupSkeleton({ children }: { children: ReactNode }) {
   return (
-    <DataList
-      columns="minmax(0,1fr)"
-      variant="light"
-      fit="container"
-      scrollable={false}
-      aria-label="Board stages"
-      className="p-0"
-    >
+    <DataList.Group aria-hidden className={GROUP_CLASS}>
+      <div className={GROUP_HEADER_CLASS}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <DisclosureChevron direction="right" open className="size-3.5" />
+          <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+          <SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />
+          <Skeleton className={GROUP_COUNT_SKELETON_CLASS} />
+        </div>
+      </div>
+      <div className={GROUP_ROWS_CLASS}>{children}</div>
+    </DataList.Group>
+  );
+}
+
+/** Each row lays out its own columns, so one wide action or badge never narrows every other title. */
+export function BoardList({ children, ...props }: { children: ReactNode; 'aria-label'?: string }) {
+  return (
+    <DataList {...props} columns="minmax(0,1fr)" variant="light" fit="container" scrollable={false} className="p-0">
       {children}
     </DataList>
   );
@@ -64,12 +78,13 @@ export function BoardListGroup({
       onOpenChange={onOpenChange}
       aria-label={label}
       data-testid={`board-column-${stage}`}
-      className="content-start pb-4"
+      className={GROUP_CLASS}
       {...dropZone.dropZoneProps}
     >
       <div
         className={cn(
-          'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
+          GROUP_HEADER_CLASS,
+          'transition-colors motion-reduce:transition-none',
           dropZone.isDragOver ? 'bg-fill-hover' : stageHeaderTintClass(stage, phaseKind),
         )}
       >
@@ -84,7 +99,7 @@ export function BoardListGroup({
               {label}
             </Txt>
             {loading ? (
-              <Skeleton className="h-4 w-5 rounded-sm" />
+              <Skeleton aria-hidden className={GROUP_COUNT_SKELETON_CLASS} />
             ) : (
               <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
                 {count}
@@ -101,7 +116,7 @@ export function BoardListGroup({
         keepMounted
         // Clip during the collapse animation, then let the first/last row's activity halo extend beyond the panel.
         render={<div className={cn(SPANS_LIST_GRID, 'data-open:not-data-starting-style:overflow-visible')} />}
-        className={cn(SPANS_LIST_GRID, 'gap-y-px [&>:not(.data-list-row)]:col-span-full')}
+        className={GROUP_ROWS_CLASS}
       >
         {children}
       </CollapsibleContent>

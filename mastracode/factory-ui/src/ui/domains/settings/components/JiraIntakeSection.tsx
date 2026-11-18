@@ -49,8 +49,7 @@ export function JiraIntakeSection({
   }
   return (
     <IntakeProviderCard
-      name="Jira"
-      icon={<SettingsIntegrationIcon provider="jira" />}
+      provider="jira"
       account={account}
       listed={listed}
       connection={
@@ -85,7 +84,7 @@ export function JiraIntakeSection({
           addLabel="Add project"
           itemIcon={<SettingsIntegrationIcon provider="jira" />}
           groups={groupJiraProjectsBySite(projects)}
-          selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
+          selectedIds={config.jira.sourceIds}
           saving={selection.saving}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}

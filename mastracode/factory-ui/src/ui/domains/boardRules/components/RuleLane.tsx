@@ -4,17 +4,7 @@ import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  CircleDashed,
-  GripVertical,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, GripVertical, MoreHorizontal, Trash2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
@@ -35,8 +25,8 @@ import {
 import type { RuleEvent } from '../ruleLanes';
 import { boardName, phaseName } from '../ruleTargets';
 import { ConditionChips } from './ConditionChips';
-import { GithubOnlyBadge } from './GithubOnlyBadge';
 import { RuleTarget } from './RuleTarget';
+import { LaneCard, LaneEnd } from './RuleLaneFrame';
 
 /** The part of a rule the builder opens at: its conditions or its destination. */
 export type RuleFocus = 'conditions' | 'action';
@@ -91,7 +81,6 @@ export function RuleLane({
   onUngate: (rule: IntakeRouteInfo) => void;
 }) {
   const text = laneText(event);
-  const Icon = text.icon;
   const catchAll = catchAllIndex(rules, event);
   const opened = isOpenedLane(event);
   const everything = everythingOn(event);
@@ -106,28 +95,7 @@ export function RuleLane({
         : 'No rules: the card stays where it is');
 
   return (
-    <section
-      aria-label={text.label}
-      className={cn(
-        'flex flex-col gap-3 rounded-xl border border-border bg-card p-4',
-        !rules.length && !incoming && 'opacity-60 focus-within:opacity-100 hover:opacity-100',
-      )}
-    >
-      <div className="flex flex-col gap-1">
-        <span className="flex items-center gap-1.5">
-          <Icon className="text-badge-amber-indicator size-3.5 shrink-0" aria-hidden />
-          <Txt as="h3" variant="label" tone="ink">
-            {text.label}
-          </Txt>
-          {text.githubOnly && <GithubOnlyBadge />}
-        </span>
-        {text.description && (
-          <Txt as="p" variant="caption" tone="muted">
-            {text.description}
-          </Txt>
-        )}
-      </div>
-
+    <LaneCard event={event} dimmed={!rules.length && !incoming}>
       <div className="flex min-w-0 flex-col">
         <ol aria-label={`${text.label} rules`} className="flex min-w-0 flex-col">
           {rules.map((rule, index) => {
@@ -340,25 +308,11 @@ export function RuleLane({
             );
           })}
 
-          {!only && (
-            <li className="flex flex-wrap items-center gap-3">
-              {catchAll < 0 && (
-                <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
-                  <CircleDashed className="size-icon-md shrink-0" aria-hidden />
-                  {fallback}
-                </Txt>
-              )}
-              {canEdit && (
-                <Button variant="ghost" size="sm" icon={<Plus />} onClick={onAdd}>
-                  Add rule
-                </Button>
-              )}
-            </li>
-          )}
+          {!only && <LaneEnd fallback={catchAll < 0 ? fallback : undefined} onAdd={canEdit ? onAdd : undefined} />}
         </ol>
         {incoming}
       </div>
-    </section>
+    </LaneCard>
   );
 }
 

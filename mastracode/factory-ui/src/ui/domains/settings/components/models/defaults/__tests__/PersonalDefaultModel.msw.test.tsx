@@ -98,7 +98,8 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
+    await screen.findByRole('combobox', { name: 'Personal default model' });
+    await user.click(screen.getByRole('button', { name: 'Apply to my running chats' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByText(/Switched 1 session/)).toHaveTextContent('Switched 1 session. 1 skipped: not running (1)');
@@ -119,7 +120,8 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
+    await screen.findByRole('combobox', { name: 'Personal default model' });
+    await user.click(screen.getByRole('button', { name: 'Apply to my running chats' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByText(/No sessions switched/)).toHaveTextContent(
@@ -140,7 +142,8 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Clear' }));
+    await screen.findByRole('combobox', { name: 'Personal default model' });
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();

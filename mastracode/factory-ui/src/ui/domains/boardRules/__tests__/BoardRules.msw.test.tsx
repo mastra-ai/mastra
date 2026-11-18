@@ -24,6 +24,11 @@ function lane(label: string) {
   return within(screen.getByRole('region', { name: label }));
 }
 
+async function findLane(label: string) {
+  await screen.findByRole('list', { name: `${label} rules` });
+  return screen.getByRole('region', { name: label });
+}
+
 /** The rule names a lane checks, top to bottom. */
 function ruleNames(label: string) {
   return lane(label)
@@ -56,7 +61,8 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    const regions = await screen.findAllByRole('region');
+    await findLane(OPENED);
+    const regions = screen.getAllByRole('region');
     expect(regions[0]).toHaveAccessibleName('New issues and pull requests');
     expect(regions[1]).toHaveAccessibleName(OPENED);
     expect(ruleNames(OPENED)).toEqual(['Bugs go to Triage', 'Everything else goes to Intake', 'Never checked']);
@@ -117,7 +123,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: PRS });
+    await findLane(PRS);
     const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
     // On pull_request.opened these rules also move the issue cards a pull request links to or was opened from, and
     // those cards are issues, so rule 1 only hides rules that need a pull request too.
@@ -145,7 +151,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: PRS });
+    await findLane(PRS);
     await user.click(lane(PRS).getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Every new one/ }));
@@ -180,7 +186,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: PRS });
+    await findLane(PRS);
     const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
     expect(row('Everything else goes to Planning').queryByText(/Never reached/)).not.toBeInTheDocument();
     expect(row('Late catch-all').getByText('Never reached: rule 2 above matches every pull request.')).toBeVisible();
@@ -220,7 +226,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: PRS });
+    await findLane(PRS);
     const row = (name: string) => within(lane(PRS).getByRole('listitem', { name }));
     expect(
       row('Opened pull requests move their card').getByText('Moves cards only: files no new pull requests'),
@@ -234,7 +240,7 @@ describe('Board rules', () => {
     serveRules({ rules: [bugs(), everythingElse()] });
     const user = userEvent.setup();
     const { client } = renderRules();
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     server.use(
       http.patch(`${PROJECT_URL}/intake-routes/:id`, async () => {
         await new Promise<void>(resolve => pending.push(resolve));
@@ -272,7 +278,7 @@ describe('Board rules', () => {
       section(name)
         .getAllByRole('region')
         .map(region => region.getAttribute('aria-label'));
-    await screen.findByRole('region', { name: 'New issues and pull requests' });
+    await findLane(OPENED);
     expect(lanesIn('New issues and pull requests')).toEqual(['Issue opened', 'Pull request opened']);
     expect(lanesIn('Cards on this board')).toEqual([
       'Issue reopened',
@@ -319,7 +325,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     for (const label of [OPENED, 'Pull request opened']) {
       const row = within(await lane(label).findByRole('listitem', { name: 'Old intake rule' }));
       expect(row.getByText('Issue or pull request opened (legacy)')).toBeVisible();
@@ -356,7 +362,7 @@ describe('Board rules', () => {
     renderRules();
 
     const name = 'Issue labels or assignees change';
-    await screen.findByRole('region', { name });
+    await findLane(name);
     expect(lane(name).getByText('Label added has hotfix')).toBeVisible();
     expect(screen.queryByText(/event\.labels/i)).not.toBeInTheDocument();
   });
@@ -365,7 +371,7 @@ describe('Board rules', () => {
     serveRules({ rules: [bugs()], order: ['release', 'work'] });
     renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     expect(await lane(OPENED).findByText('Otherwise: Not routed')).toBeVisible();
   });
 
@@ -374,9 +380,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    await user.click(
-      within(await screen.findByRole('region', { name: 'Issue closed' })).getByRole('button', { name: 'Add rule' }),
-    );
+    await user.click(within(await findLane('Issue closed')).getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
     const checkboxes = (group: string) =>
@@ -400,7 +404,7 @@ describe('Board rules', () => {
     renderRules();
 
     const footer = 'Otherwise: Release Preview is asked next';
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     expect(await lane(OPENED).findByText(footer)).toBeVisible();
     expect(lane('Pull request opened').getByText(footer)).toBeVisible();
     expect(lane('Issue reopened').queryByText(footer)).not.toBeInTheDocument();
@@ -417,7 +421,7 @@ describe('Board rules', () => {
     renderRules('release');
 
     const changed = 'Issue labels or assignees change';
-    await screen.findByRole('region', { name: changed });
+    await findLane(changed);
     const from = within(await lane(changed).findByRole('region', { name: 'From other boards' }));
     const link = from.getByRole('link', { name: 'Labelled releases go to Release Preview, on Work' });
     expect(link).toHaveAttribute('href', `/factories/${FACTORY_ID}/work/rules`);
@@ -482,7 +486,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     const repeats = within(await lane(OPENED).findByRole('listitem', { name: 'When labels has bug, move to Triage' }));
     expect(repeats.queryByText('When labels has bug, move to Triage')).not.toBeInTheDocument();
     expect(
@@ -496,7 +500,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     await user.click(lane(OPENED).getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Every new one/ }));
@@ -528,7 +532,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     await user.click(lane(OPENED).getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Every new one/ }));
@@ -573,7 +577,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await findLane('Issue closed'));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Every card/ }));
@@ -607,7 +611,7 @@ describe('Board rules', () => {
     const { client } = renderRules();
 
     const laneName = 'Pull request gets new commits';
-    await screen.findByRole('region', { name: laneName });
+    await findLane(laneName);
     const row = within(lane(laneName).getByRole('listitem', { name: 'Merged go to Done' }));
     await user.click(row.getByRole('button', { name: 'Check earlier' }));
 
@@ -624,7 +628,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('radio', { name: 'Release Preview' }));
@@ -655,7 +659,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('radio', { name: 'Release Preview' }));
@@ -691,7 +695,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     const row = within(lane('Issue closed').getByRole('listitem', { name: 'Closed issues go to Done' }));
     expect(
       await row.findByText('Skipped 3 times in the last 30 days: phase "done" doesn\'t take cards from "triage".'),
@@ -707,7 +711,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     const current = state.rules[0];
     if (current) state.rules[0] = { ...current, name: 'Renamed by a teammate', revision: current.revision + 1 };
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
@@ -744,7 +748,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue reopened' });
+    await findLane('Issue reopened');
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Reopened go to Release' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
@@ -777,7 +781,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await findLane('Issue closed'));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('button', { name: /Trigger/ }));
@@ -804,7 +808,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await findLane('Issue closed'));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
@@ -835,7 +839,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    const closedLane = within(await screen.findByRole('region', { name: 'Issue closed' }));
+    const closedLane = within(await findLane('Issue closed'));
     await user.click(closedLane.getByRole('button', { name: 'Add rule' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add rule' }));
     await user.click(dialog.getByRole('radio', { name: /Only ones that match/ }));
@@ -866,7 +870,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     await user.click(screen.getByRole('button', { name: 'Edit where Closed issues go to Done moves the card' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     const work = dialog.getByRole('radio', { name: 'Work (this board)' });
@@ -886,7 +890,7 @@ describe('Board rules', () => {
     serveRules({ rules: [broken, everythingElse()] });
     renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     const live = within(lane(OPENED).getByRole('listitem', { name: 'Everything else goes to Intake' }));
     expect(live.queryByText(/Never reached/)).not.toBeInTheDocument();
     expect(
@@ -901,7 +905,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { rerender } = renderRules();
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
     await screen.findByRole('dialog', { name: 'Edit rule' });
     rerender(
@@ -910,7 +914,7 @@ describe('Board rules', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -925,7 +929,7 @@ describe('Board rules', () => {
     const user = userEvent.setup();
     const { client } = renderRules();
 
-    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    await findLane('Pull request gets new commits');
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Pushes re-review' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit rule' }));
     const warning = 'Also matches pull requests from outside authors.';
@@ -955,7 +959,7 @@ describe('Board rules', () => {
     renderRules();
 
     const warning = 'Also matches pull requests from outside authors.';
-    await screen.findByRole('region', { name: 'Issue closed' });
+    await findLane('Issue closed');
     await user.click(screen.getByRole('button', { name: 'Edit conditions of Closed issues go to Done' }));
     expect(within(screen.getByRole('dialog')).queryByText(warning)).not.toBeInTheDocument();
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
@@ -978,10 +982,9 @@ describe('Board rules', () => {
     const { client } = renderRules();
 
     const item = within(
-      await within(await screen.findByRole('region', { name: 'Pull request gets new commits' })).findByRole(
-        'listitem',
-        { name: 'Pushes re-review' },
-      ),
+      await within(await findLane('Pull request gets new commits')).findByRole('listitem', {
+        name: 'Pushes re-review',
+      }),
     );
     expect(item.getByText(/Skips outside authors. pull requests \(older rule\)/)).toBeVisible();
 
@@ -1014,7 +1017,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: 'Pull request gets new commits' });
+    await findLane('Pull request gets new commits');
     expect(screen.queryByText(/older rule/)).not.toBeInTheDocument();
   });
 
@@ -1065,7 +1068,7 @@ describe('Board rules', () => {
     });
     renderRules();
 
-    await screen.findByRole('region', { name: PUSHES });
+    await findLane(PUSHES);
     // The gated rule skips outside authors' pull requests, so the rule below still catches those.
     expect(
       within(lane(PUSHES).getByRole('listitem', { name: 'Docs pushes wait in Triage' })).queryByText(/Never reached/),
@@ -1105,7 +1108,7 @@ describe('Board rules', () => {
     serveRules({ rules: [bugs(), closed()], canEdit: false });
     renderRules();
 
-    await screen.findByRole('region', { name: OPENED });
+    await findLane(OPENED);
     expect(screen.queryByRole('button', { name: 'Add rule' })).not.toBeInTheDocument();
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });

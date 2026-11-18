@@ -51,6 +51,40 @@ function Explained({ label, meaning, children }: { label: string; meaning: strin
   );
 }
 
+export function KindBadge({ kind }: { kind: StoredPhaseInfo['kind'] }) {
+  return (
+    <Explained label={KINDS[kind].label} meaning={KINDS[kind].meaning}>
+      <Badge>{KINDS[kind].label}</Badge>
+    </Explained>
+  );
+}
+
+export function ConfigHeaderLayout({
+  icon,
+  title,
+  meta,
+  description,
+  actions,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  meta?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <PageHeader>
+      <PageHeader.Title className="gap-2.5">
+        {icon}
+        {title}
+      </PageHeader.Title>
+      {meta && <PageHeader.Meta beside>{meta}</PageHeader.Meta>}
+      {description && <PageHeader.Description>{description}</PageHeader.Description>}
+      {actions && <PageHeader.Action className="gap-1">{actions}</PageHeader.Action>}
+    </PageHeader>
+  );
+}
+
 /**
  * The open page's own fields, edited in place: the board's name and revision on Overview, or the phase's
  * name, kind and description on a phase page.
@@ -107,10 +141,9 @@ export function BoardConfigHeader({
 
   return (
     <>
-      <PageHeader>
-        {/* The icon sits in the title row, so the icon, the description and the sections below share one left edge. */}
-        <PageHeader.Title className="gap-2.5">
-          {phase && <BoardStageIcon stage={phase.key} kind={phaseIconKind(boardId, phase.kind)} decorative />}
+      <ConfigHeaderLayout
+        icon={phase && <BoardStageIcon stage={phase.key} kind={phaseIconKind(boardId, phase.kind)} decorative />}
+        title={
           <InlineText
             value={name}
             label={phase ? 'Phase name' : 'Board name'}
@@ -120,37 +153,34 @@ export function BoardConfigHeader({
             tone="ink"
             onChange={next => (phase ? setPhase({ name: next }) : setDraft(current => ({ ...current, name: next })))}
           />
-        </PageHeader.Title>
-        {phase && (
-          <PageHeader.Meta beside>
-            {kindEditable ? (
-              <Select
-                value={phase.kind}
-                onValueChange={value => {
-                  const kind = KIND_ORDER.find(candidate => candidate === value);
-                  if (kind) setKind(kind);
-                }}
-              >
-                <SelectTrigger size="sm" aria-label="Phase kind">
-                  {KINDS[phase.kind].label}
-                </SelectTrigger>
-                <SelectContent>
-                  {KIND_ORDER.map(kind => (
-                    <SelectItem key={kind} value={kind}>
-                      {KINDS[kind].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Explained label={KINDS[phase.kind].label} meaning={KINDS[phase.kind].meaning}>
-                <Badge>{KINDS[phase.kind].label}</Badge>
-              </Explained>
-            )}
-          </PageHeader.Meta>
-        )}
-        {(description || !readOnly) && (
-          <PageHeader.Description>
+        }
+        meta={
+          phase &&
+          (kindEditable ? (
+            <Select
+              value={phase.kind}
+              onValueChange={value => {
+                const kind = KIND_ORDER.find(candidate => candidate === value);
+                if (kind) setKind(kind);
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Phase kind">
+                {KINDS[phase.kind].label}
+              </SelectTrigger>
+              <SelectContent>
+                {KIND_ORDER.map(kind => (
+                  <SelectItem key={kind} value={kind}>
+                    {KINDS[kind].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <KindBadge kind={phase.kind} />
+          ))
+        }
+        description={
+          (description || !readOnly) && (
             <InlineText
               value={description}
               label={phase ? 'Phase description' : 'Board description'}
@@ -166,23 +196,29 @@ export function BoardConfigHeader({
                   : setDraft(current => ({ ...current, description: next || null }))
               }
             />
-          </PageHeader.Description>
-        )}
-        {(resettable || deletable) && (
-          <PageHeader.Action className="gap-1">
-            {resettable && (
-              <BoardResetButton name={board.name} pending={locked} onReset={() => reset.mutate(board.revision ?? 0)} />
-            )}
-            {deletable && (
-              <BoardDeleteButton
-                name={board.name}
-                pending={locked}
-                onDelete={() => remove.mutate(board.revision ?? 0)}
-              />
-            )}
-          </PageHeader.Action>
-        )}
-      </PageHeader>
+          )
+        }
+        actions={
+          (resettable || deletable) && (
+            <>
+              {resettable && (
+                <BoardResetButton
+                  name={board.name}
+                  pending={locked}
+                  onReset={() => reset.mutate(board.revision ?? 0)}
+                />
+              )}
+              {deletable && (
+                <BoardDeleteButton
+                  name={board.name}
+                  pending={locked}
+                  onDelete={() => remove.mutate(board.revision ?? 0)}
+                />
+              )}
+            </>
+          )
+        }
+      />
       {reset.error && (
         <Notice variant="destructive" role="alert" className="mt-4">
           <Notice.Message>The board was not reset. {reset.error.reasons}</Notice.Message>

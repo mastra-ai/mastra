@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
@@ -11,20 +10,32 @@ import type { ReactNode } from 'react';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
+export const CONNECTED_ROW = 'flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3';
+export const ROW_TITLE = 'flex min-w-0 flex-1 flex-col';
+
 export function ProviderRows({
   children,
   addDisabled,
+  addInert = false,
   onAdd,
 }: {
   children: ReactNode;
   addDisabled: boolean;
-  onAdd: () => void;
+  addInert?: boolean;
+  onAdd?: () => void;
 }) {
   return (
     <ul className="divide-border divide-y">
       {children}
       <li>
-        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-10 w-full justify-start"
+          disabled={addDisabled}
+          inert={addInert}
+          onClick={onAdd}
+        >
           <IconPlusMedium aria-hidden="true" />
           Add provider
         </Button>
@@ -33,14 +44,10 @@ export function ProviderRows({
   );
 }
 
-export function ProviderRowsSkeleton() {
-  return <SettingsSkeleton label="Loading providers" variant="item" />;
-}
-
 /** The row's name on one line, and a detail that wraps rather than hiding a URL or a balance. */
 function RowTitle({ title, detail }: { title: string; detail: ReactNode }) {
   return (
-    <span className="flex min-w-0 flex-1 flex-col">
+    <span className={ROW_TITLE}>
       <Txt as="span" variant="caption" className="truncate">
         {title}
       </Txt>
@@ -69,7 +76,7 @@ export function ConnectedRow({
   children?: ReactNode;
 }) {
   return (
-    <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+    <li className={CONNECTED_ROW}>
       {icon}
       <RowTitle title={title} detail={detail} />
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">

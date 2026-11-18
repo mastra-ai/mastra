@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { catalogInfo, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
-import { waitForMutationsIdle } from '../../../../../e2e/ui/render';
+import { findLive, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { CreateBoardBody, ReplaceBoardBody, StoredBoardResponse } from '../../../../api/types';
 import { BOARD_URL, FACTORY_ID, PROJECT_URL, renderAt, stubFactory } from './fixtures/factory-app';
 import { storedWorkBoard } from './fixtures/work-board';
@@ -290,8 +290,7 @@ describe("Editing a board's phases", () => {
     const user = userEvent.setup();
     const { router, client } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config`);
 
-    const nav = within(await screen.findByRole('navigation', { name: 'Board configuration' }));
-    await user.click(await nav.findByRole('button', { name: 'Add phase' }));
+    await user.click(await findLive(() => configNav().getByRole('button', { name: 'Add phase' })));
     const dialog = within(await screen.findByRole('dialog', { name: 'Add phase' }));
     await user.type(dialog.getByLabelText('Phase name'), 'In Review');
     expect(dialog.getByLabelText('Phase key')).toHaveValue('in-review');

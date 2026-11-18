@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { findLive, renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
@@ -88,7 +88,7 @@ describe('Board run queue', () => {
     const user = userEvent.setup();
     const router = renderBoard();
 
-    const indicator = await screen.findByRole('button', { name: '3 queued, 2 running on this server' });
+    const indicator = await findLive(() => screen.getByRole('button', { name: '3 queued, 2 running on this server' }));
     await user.click(indicator);
 
     const rows = await screen.findAllByRole('menuitem');
@@ -134,7 +134,7 @@ describe('Board run queue', () => {
     const user = userEvent.setup();
     renderBoard();
 
-    await user.click(await screen.findByRole('button', { name: '2 queued, 4 running on this server' }));
+    await user.click(await findLive(() => screen.getByRole('button', { name: '2 queued, 4 running on this server' })));
 
     const menu = await screen.findByRole('menu');
     expect(menu.textContent).toMatch(

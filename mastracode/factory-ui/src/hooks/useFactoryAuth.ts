@@ -21,3 +21,8 @@ export function useFactoryAuth({ monitorSession = false } = {}) {
     },
   });
 }
+
+/** A refetch puts an errored query with no data back to pending; the error count survives it. */
+export function authCheckFailed({ data, errorUpdateCount }: { data: unknown; errorUpdateCount: number }): boolean {
+  return data === undefined && errorUpdateCount > 0;
+}

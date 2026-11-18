@@ -23,6 +23,9 @@ import { SettingsColumn } from './SettingsColumn';
 import { BoardOverview } from './BoardOverview';
 import { AddPhaseButton } from './AddPhaseButton';
 import { PhaseConfig } from './PhaseConfig';
+import { PhaseRunnerCard } from './PhaseRunnerCard';
+import { outlineOfStored } from './PhaseWalkthrough';
+import { StartsToggle } from './StartsToggle';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
@@ -165,19 +168,30 @@ export function BoardConfigEditor({
         <BoardOverview
           factoryId={factory.id}
           boardId={boardId}
-          phases={draft.phases}
-          skills={skills}
-          onAutoStart={
-            readOnly || locked
-              ? undefined
-              : (phaseKey, on) => {
-                  setDraft(current => ({
-                    ...current,
-                    phases: current.phases.map(phase => (phase.key === phaseKey ? withAutoStart(phase, on) : phase)),
-                  }));
-                  if (!on) setRawRule(rawRuleKey(phaseKey, 'autoStartWhen'), undefined);
+          phases={draft.phases.map(stored => ({
+            outline: outlineOfStored(stored, draft.phases),
+            starts: (
+              <StartsToggle
+                label={stored.name}
+                autoStart={stored.autoStart ?? false}
+                autoStartWhen={stored.autoStartWhen}
+                onChange={
+                  readOnly || locked
+                    ? undefined
+                    : on => {
+                        setDraft(current => ({
+                          ...current,
+                          phases: current.phases.map(other =>
+                            other.key === stored.key ? withAutoStart(other, on) : other,
+                          ),
+                        }));
+                        if (!on) setRawRule(rawRuleKey(stored.key, 'autoStartWhen'), undefined);
+                      }
                 }
-          }
+              />
+            ),
+            agent: <PhaseRunnerCard factoryId={factory.id} boardId={boardId} phase={stored} skills={skills} />,
+          }))}
           action={
             sidebarHidden && !readOnly ? (
               <AddPhaseButton factoryId={factory.id} boardId={boardId} board={board} disabled={locked} />

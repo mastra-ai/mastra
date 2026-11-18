@@ -67,6 +67,7 @@ export function ModelCombobox({
   auto,
   fallbackModelId,
   placeholder,
+  pending = false,
   disabled,
   className,
   variant,
@@ -79,6 +80,7 @@ export function ModelCombobox({
   auto?: { effectiveModelId?: string | null };
   fallbackModelId?: string;
   placeholder?: string;
+  pending?: boolean;
   disabled?: boolean;
   className?: string;
   variant?: ComboboxSingleProps['variant'];
@@ -108,9 +110,11 @@ export function ModelCombobox({
       value={value}
       onValueChange={onValueChange}
       placeholder={
-        fallbackModelId
-          ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
-          : (placeholder ?? 'Select model')
+        pending
+          ? ''
+          : fallbackModelId
+            ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
+            : (placeholder ?? 'Select model')
       }
       searchPlaceholder="Search models"
       emptyText="No matching model."

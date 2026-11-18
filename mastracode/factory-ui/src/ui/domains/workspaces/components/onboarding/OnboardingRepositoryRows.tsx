@@ -3,7 +3,8 @@ import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/Rad
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { ONBOARDING_REPOSITORY_ROW } from './onboardingLayout';
+import { OnboardingRepositoryRowsSkeleton } from './OnboardingRepositoryRowsSkeleton';
 import type { SourceControlRepository } from '../../services/github';
 import type { SourceControlHost } from '../../services/sourceControlHosts';
 
@@ -37,7 +38,7 @@ export function OnboardingRepositoryRows({
   onSelectRepository: (repository: SourceControlRepository) => void;
   onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
 }) {
-  if (pending) return <SkeletonRows label={`Loading ${host} repositories`} rows={3} rowClassName="h-12 w-full" />;
+  if (pending) return <OnboardingRepositoryRowsSkeleton label={`Loading ${host} repositories`} />;
   const visible = visibleRepositories(repositories, host, search);
   if (visible.length === 0) {
     return (
@@ -60,7 +61,8 @@ export function OnboardingRepositoryRows({
         <label
           key={repo.id}
           className={cn(
-            'group/onboarding-repo flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5',
+            'group/onboarding-repo cursor-pointer',
+            ONBOARDING_REPOSITORY_ROW,
             selectedRepositoryId === repo.id ? 'bg-fill' : 'hover:bg-fill-subtle focus-within:bg-fill-subtle',
           )}
           onMouseEnter={() => onPreviewRepository?.(repo)}

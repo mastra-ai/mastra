@@ -5,6 +5,10 @@ import type { ChangeSectionProps } from './OnboardingStepRow';
 
 /** Accounts while closed: who pays once Create is possible, or a preview before that. Opens the Model step. */
 export function OnboardingAccountsRow({ setup, ...change }: ChangeSectionProps & { setup: OnboardingModelSetup }) {
-  if (!setup.canCreate) return <OnboardingNextRow section="accounts" hint="Company or personal accounts" />;
+  if (!setup.canCreate) return <OnboardingAccountsNextRow />;
   return <OnboardingDoneRow section="accounts" value={SETUP_LABELS[setup.scope]} {...change} />;
+}
+
+export function OnboardingAccountsNextRow() {
+  return <OnboardingNextRow section="accounts" hint="Company or personal accounts" />;
 }

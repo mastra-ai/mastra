@@ -15,6 +15,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 
 import { SettingsSubsection } from './SettingsSubsection';
 import { SoundPicker } from './SettingsFields';
+import { PendingSwitch } from '../../../ui/PendingField';
 
 export function PreferencesSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
@@ -51,7 +52,7 @@ export function BehaviorSettings({
   permissions,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
-  const notificationMode = settings?.notifications ?? 'off';
+  const notificationMode = settings ? (settings.notifications ?? 'off') : '';
   return (
     <>
       <SettingsSubsection
@@ -63,16 +64,14 @@ export function BehaviorSettings({
           <SettingsRow label="Auto-approve tools" description="Run tool calls without asking.">
             <Toggle
               ariaLabel="Auto-approve tools"
-              checked={!!settings?.yolo}
-              disabled={!settings}
+              checked={settings ? !!settings.yolo : undefined}
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
           <SettingsRow label="Smart editing" description="Use AST-aware edits when available.">
             <Toggle
               ariaLabel="Smart editing"
-              checked={!!settings?.smartEditing}
-              disabled={!settings}
+              checked={settings ? !!settings.smartEditing : undefined}
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
@@ -80,8 +79,10 @@ export function BehaviorSettings({
             <SegmentedControl
               aria-label="Notifications"
               value={notificationMode}
-              disabled={!settings}
-              onValueChange={v => onBehaviorChange({ notifications: v })}
+              inert={!settings}
+              onValueChange={v => {
+                if (v) void onBehaviorChange({ notifications: v });
+              }}
             >
               <SegmentedControlItem value="off">Off</SegmentedControlItem>
               <SegmentedControlItem value="bell">Bell</SegmentedControlItem>
@@ -118,8 +119,7 @@ function PermissionsSection({
           <SettingsRow key={value} label={label} description={hint}>
             <PermissionPolicyControl
               category={label}
-              policy={permissions?.categories?.[value] ?? 'ask'}
-              disabled={!permissions}
+              policy={permissions ? (permissions.categories?.[value] ?? 'ask') : ''}
               onChange={policy => void setPermissionForCategory(value, policy)}
             />
           </SettingsRow>
@@ -132,16 +132,21 @@ function PermissionsSection({
 function PermissionPolicyControl({
   category,
   policy,
-  disabled,
   onChange,
 }: {
   category: string;
-  policy: PermissionPolicy;
-  disabled: boolean;
+  policy: PermissionPolicy | '';
   onChange: (policy: PermissionPolicy) => void;
 }) {
   return (
-    <SegmentedControl aria-label={`${category} permission`} value={policy} disabled={disabled} onValueChange={onChange}>
+    <SegmentedControl
+      aria-label={`${category} permission`}
+      value={policy}
+      inert={!policy}
+      onValueChange={next => {
+        if (next) onChange(next);
+      }}
+    >
       <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
       <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
       <SegmentedControlItem value="deny">Deny</SegmentedControlItem>
@@ -152,15 +157,12 @@ function PermissionPolicyControl({
 function Toggle({
   checked,
   ariaLabel,
-  disabled,
   onChange,
 }: {
-  checked: boolean;
+  checked: boolean | undefined;
   ariaLabel: string;
-  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
-  return (
-    <Switch aria-label={ariaLabel} checked={checked} disabled={disabled} onCheckedChange={value => onChange(value)} />
-  );
+  if (checked === undefined) return <PendingSwitch />;
+  return <Switch aria-label={ariaLabel} checked={checked} onCheckedChange={value => onChange(value)} />;
 }

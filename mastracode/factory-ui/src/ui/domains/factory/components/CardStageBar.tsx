@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
@@ -140,6 +141,17 @@ export function CardStageBar({
         ) : null}
       </div>
     </>
+  );
+}
+
+export function CardStageBarSkeleton() {
+  return (
+    <div role="status" aria-label="Loading card stage" className={headerCapsuleClass}>
+      <div aria-hidden className="contents">
+        <Skeleton className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
+        <Skeleton className="h-control-sm w-control-sm rounded-full motion-reduce:before:animate-none @2xl:w-24" />
+      </div>
+    </div>
   );
 }
 

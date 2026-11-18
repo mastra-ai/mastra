@@ -11,7 +11,6 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -22,6 +21,7 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { PendingField } from '../../../ui/PendingField';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -40,8 +40,8 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
 }
 
 // Stays editable while saving: disabling would drop focus mid-edit.
-function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
-  const [draft, setDraft] = useState<number | null>(value);
+function TokenThresholdInput({ value, onCommit }: { value: number | undefined; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(value ?? null);
   // Compared with what was sent, not a saved value whose response may still be in flight.
   const [sent, setSent] = useState(value);
   const [editing, setEditing] = useState(false);
@@ -50,7 +50,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   if (syncedValue !== value) {
     setSyncedValue(value);
     if (!editing) {
-      setDraft(value);
+      setDraft(value ?? null);
       setSent(value);
     }
   }
@@ -58,7 +58,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   const commit = (next: number | null) => {
     const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(sent);
+      setDraft(sent ?? null);
       return;
     }
     setDraft(rounded);
@@ -68,34 +68,36 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   };
 
   return (
-    <InputNumber
-      value={draft}
-      min={1}
-      step={1000}
-      largeStep={10000}
-      format={{ maximumFractionDigits: 0 }}
-      onValueChange={setDraft}
-      onValueCommitted={(next, details) => {
-        // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
-        if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
-      }}
-      className="w-full"
-    >
-      <InputNumberGroup
-        size="sm"
-        onFocus={() => setEditing(true)}
-        onBlur={event => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+    <PendingField pending={value === undefined}>
+      <InputNumber
+        value={draft}
+        min={1}
+        step={1000}
+        largeStep={10000}
+        format={{ maximumFractionDigits: 0 }}
+        onValueChange={setDraft}
+        onValueCommitted={(next, details) => {
+          // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
+          if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
         }}
+        className="w-full"
       >
-        <InputNumberInput onBlur={() => commit(draft)} />
-        <InputGroupAddon align="inline-end" variant="flush">
-          <InputGroupText className="mr-2">tokens</InputGroupText>
-          <InputNumberDecrement />
-          <InputNumberIncrement />
-        </InputGroupAddon>
-      </InputNumberGroup>
-    </InputNumber>
+        <InputNumberGroup
+          size="sm"
+          onFocus={() => setEditing(true)}
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+          }}
+        >
+          <InputNumberInput onBlur={() => commit(draft)} />
+          <InputGroupAddon align="inline-end" variant="flush">
+            <InputGroupText className="mr-2">tokens</InputGroupText>
+            <InputNumberDecrement />
+            <InputNumberIncrement />
+          </InputGroupAddon>
+        </InputNumberGroup>
+      </InputNumber>
+    </PendingField>
   );
 }
 
@@ -137,11 +139,7 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) {
-    return <SettingsSkeleton label="Loading observational-memory settings" rows={5} />;
-  }
-
-  if (omQuery.data === undefined) {
+  if (omQuery.isLoadingError) {
     return (
       <Txt as="p" variant="caption" className="text-destructive-foreground">
         {omQuery.error.message}
@@ -149,13 +147,13 @@ export function OMSection({
     );
   }
 
-  const { config } = omQuery.data;
+  const config = omQuery.data?.config;
   const modelsAvailable =
-    config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
+    !config || (config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available');
 
-  const attachmentChoice = attachmentToChoice(config.observeAttachments);
+  const attachmentChoice = config ? attachmentToChoice(config.observeAttachments) : '';
   return (
-    <div className="flex flex-col gap-4">
+    <div inert={!config} className="flex flex-col gap-4">
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
@@ -178,21 +176,24 @@ export function OMSection({
           <OMRow as="li" rail="node" label="Messages" />
           <OMRow as="li" rail="edge" label="Observe after" info="Message tokens processed before the observer runs.">
             <TokenThresholdInput
-              value={config.observationThreshold}
+              value={config?.observationThreshold}
               onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
             />
           </OMRow>
           <OMRow as="li" rail="node" label="Observer" info="Summarizes the conversation into observations.">
-            <ModelCombobox
-              models={models}
-              value={config.observer.model}
-              auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model"
-              aria-label="Observer model"
-              size="sm"
-              disabled={busy}
-              onValueChange={modelId => switchModel('observer', modelId)}
-            />
+            <PendingField pending={!config}>
+              <ModelCombobox
+                models={models}
+                value={config?.observer.model ?? ''}
+                auto={config && { effectiveModelId: config.observer.effectiveModelId }}
+                placeholder="Select observer model"
+                pending={!config}
+                aria-label="Observer model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('observer', modelId)}
+              />
+            </PendingField>
           </OMRow>
           <OMRow
             as="li"
@@ -201,21 +202,24 @@ export function OMSection({
             info="Observation tokens accumulated before the reflector runs."
           >
             <TokenThresholdInput
-              value={config.reflectionThreshold}
+              value={config?.reflectionThreshold}
               onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
             />
           </OMRow>
           <OMRow as="li" rail="node" label="Reflector" info="Distills observations into longer-term memory.">
-            <ModelCombobox
-              models={models}
-              value={config.reflector.model}
-              auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model"
-              aria-label="Reflector model"
-              size="sm"
-              disabled={busy}
-              onValueChange={modelId => switchModel('reflector', modelId)}
-            />
+            <PendingField pending={!config}>
+              <ModelCombobox
+                models={models}
+                value={config?.reflector.model ?? ''}
+                auto={config && { effectiveModelId: config.reflector.effectiveModelId }}
+                placeholder="Select reflector model"
+                pending={!config}
+                aria-label="Reflector model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('reflector', modelId)}
+              />
+            </PendingField>
           </OMRow>
         </ol>
         <OMRow
@@ -229,7 +233,9 @@ export function OMSection({
             size="sm"
             value={attachmentChoice}
             disabled={busy}
-            onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+            onValueChange={choice => {
+              if (choice) attachmentsMutation.mutate({ value: choiceToAttachment(choice) });
+            }}
           >
             <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
             <SegmentedControlItem value="on">On</SegmentedControlItem>

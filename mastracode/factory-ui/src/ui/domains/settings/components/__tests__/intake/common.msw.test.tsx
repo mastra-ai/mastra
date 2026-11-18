@@ -34,7 +34,7 @@ describe('IntakeSection common', () => {
       renderIntakeSection();
 
       const sources = await screen.findByRole('region', { name: 'Sources' });
-      const github = within(sources).getByRole('region', { name: 'GitHub' });
+      const github = await within(sources).findByRole('region', { name: 'GitHub' });
       const linear = within(sources).getByRole('region', { name: 'Linear' });
       expect(
         await within(github).findByRole('button', { name: 'Add repository to Bring in issues from' }),
@@ -136,7 +136,7 @@ describe('IntakeSection common', () => {
       await waitFor(() => expect(requested).toBe(true));
       expect(screen.getByRole('status', { name: 'Loading intake sources' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Linear' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Sources' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect Linear' })).not.toBeInTheDocument();
 
       releaseStatus();
 
@@ -326,7 +326,7 @@ describe('IntakeSection common', () => {
       renderIntakeSection();
 
       const sources = await screen.findByRole('region', { name: 'Sources' });
-      expect(within(sources).getByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
+      expect(await within(sources).findByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
       expect(within(sources).getByRole('button', { name: 'Connect Linear' })).toBeEnabled();
       expect(screen.queryByRole('button', { name: /^Add .* to / })).not.toBeInTheDocument();
     });

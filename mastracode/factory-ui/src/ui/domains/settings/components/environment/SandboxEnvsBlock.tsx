@@ -17,7 +17,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Table } from '@mastra/playground-ui/components/Table';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -59,7 +59,13 @@ export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {
 
   return (
     <>
-      <Button size="sm" icon={<IconPlusMedium />} disabled={!data?.writable} onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        icon={<IconPlusMedium />}
+        disabled={data?.writable === false}
+        inert={!data}
+        onClick={() => setOpen(true)}
+      >
         Add variable
       </Button>
       {open && data && <SandboxEnvDialog envs={data.envs} mutations={mutations} onClose={() => setOpen(false)} />}
@@ -83,23 +89,22 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
       <Notice variant="destructive">{errorMessage(envsQuery.error, 'Failed to load environment variables')}</Notice>
     );
   }
-  if (!envsQuery.data) return <Skeleton className="h-16 w-full" />;
-
-  const { envs, writable } = envsQuery.data;
+  const envs = envsQuery.data?.envs;
+  const writable = envsQuery.data?.writable;
 
   return (
     <div className="flex flex-col gap-4">
-      {!writable && (
+      {writable === false && (
         <Notice variant="destructive">
           Environment variables can't be saved until a credential encryption key is configured on the server.
         </Notice>
       )}
-      {envs.length === 0 ? (
+      {envs?.length === 0 ? (
         <Txt as="p" variant="body-sm" tone="muted">
           No variables yet.
         </Txt>
       ) : (
-        <Table variant="inset" aria-label="Environment variables">
+        <Table variant="inset" aria-label="Environment variables" aria-busy={!envs}>
           <Table.Header>
             <Table.Row>
               <Table.Head>Name</Table.Head>
@@ -120,7 +125,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {envs.map(env => {
+            {envs?.map(env => {
               const targets = toTargets(env.appliesTo);
               return (
                 <Table.Row key={env.name}>
@@ -177,10 +182,34 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
                 </Table.Row>
               );
             })}
+            {!envs &&
+              Array.from({ length: 2 }, (_, index) => (
+                <Table.Row key={index} aria-hidden inert>
+                  <Table.Cell>
+                    <SkeletonText line="text-body-sm font-mono" className="w-[9ch] motion-reduce:before:animate-none" />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Txt as="span" variant="body-sm" tone="muted" className="font-mono">
+                      {MASK}
+                    </Txt>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Skeleton className="h-5 w-24 rounded-full motion-reduce:before:animate-none" />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <SkeletonText className="w-10 motion-reduce:before:animate-none" />
+                  </Table.Cell>
+                  <Table.Cell align="end">
+                    <Button variant="ghost" size="icon-sm" aria-label="Variable actions">
+                      <IconDotGrid1x3Horizontal />
+                    </Button>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
           </Table.Body>
         </Table>
       )}
-      {editing && (
+      {editing && envs && (
         <SandboxEnvDialog env={editing} envs={envs} mutations={mutations} onClose={() => setEditing(undefined)} />
       )}
       <AlertDialog open={deleting !== undefined} onOpenChange={open => !open && setDeleting(undefined)}>

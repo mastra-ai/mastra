@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
@@ -9,7 +9,6 @@ import { pluralize } from '@mastra/playground-ui/utils/string';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { RepositoryProvider } from './changes/tree/change-tree';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
@@ -126,7 +125,9 @@ export function WorkspaceSection({
         {loading ? (
           <>
             {branchIcon}
-            <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-48" className="grow" />
+            <span role="status" aria-label="Loading workspace details" className="flex min-w-0 grow">
+              <SkeletonText className="w-48 max-w-full motion-reduce:before:animate-none" />
+            </span>
           </>
         ) : workspace ? (
           <BranchCopyButton branch={workspace.branch} />
@@ -140,9 +141,11 @@ export function WorkspaceSection({
         )}
         <span className="ml-auto flex shrink-0">{action}</span>
       </div>
-      {workspace ? (
+      {loading || workspace ? (
         <div className={cn(rowClass, 'gap-3 px-2')}>
-          {workspace.repository ? (
+          {loading ? (
+            <SkeletonText line="text-caption" className="h-3 w-32 max-w-full motion-reduce:before:animate-none" />
+          ) : workspace?.repository ? (
             <Txt as="span" variant="caption" tone="muted" className="flex min-w-0 items-center gap-1.5">
               {ProviderIcon ? (
                 <span aria-hidden className="flex shrink-0">
@@ -154,7 +157,12 @@ export function WorkspaceSection({
           ) : null}
           <Txt as="span" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1.5">
             <IconMerged aria-hidden className="size-icon-sm" />
-            into {workspace.baseBranch}
+            into{' '}
+            {workspace ? (
+              workspace.baseBranch
+            ) : (
+              <SkeletonText line="text-caption" className="h-3 w-12 motion-reduce:before:animate-none" />
+            )}
           </Txt>
         </div>
       ) : null}

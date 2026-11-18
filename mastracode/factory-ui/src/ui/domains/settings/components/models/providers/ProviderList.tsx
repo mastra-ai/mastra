@@ -22,7 +22,8 @@ import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { CustomProviderRow } from './CustomProviderRow';
-import { ProviderRows, ProviderRowsSkeleton } from './ProviderRows';
+import { ProviderRows } from './ProviderRows';
+import { ProviderRowsSkeleton } from './ProviderRowsSkeleton';
 
 const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 
@@ -102,7 +103,16 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
     if (flow) cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
   };
 
-  if (providersQuery.isPending || customProvidersQuery.isPending) return <ProviderRowsSkeleton />;
+  if (providersQuery.isPending || customProvidersQuery.isPending) {
+    return (
+      <div role="status" aria-label="Loading providers" className="flex flex-col gap-2">
+        <ProviderRows addDisabled={actionsDisabled} addInert>
+          <ProviderRowsSkeleton />
+        </ProviderRows>
+        <AccessNotes memberReason={memberReason} orgAudience={requestScope === 'org' && !readOnly} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -127,16 +137,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
         ))}
       </ProviderRows>
       {connections.some(connection => connection.provider.connectWithMastraAccount) && <MastraGatewayCreditsNotice />}
-      {memberReason && (
-        <Txt as="p" variant="caption" tone="muted">
-          {memberReason}
-        </Txt>
-      )}
-      {requestScope === 'org' && !readOnly && (
-        <Txt as="p" variant="caption" tone="muted">
-          {ORG_SCOPE_AUDIENCE}
-        </Txt>
-      )}
+      <AccessNotes memberReason={memberReason} orgAudience={requestScope === 'org' && !readOnly} />
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
           {error.message}
@@ -177,5 +178,22 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
         />
       )}
     </div>
+  );
+}
+
+function AccessNotes({ memberReason, orgAudience }: { memberReason: string | undefined; orgAudience: boolean }) {
+  return (
+    <>
+      {memberReason && (
+        <Txt as="p" variant="caption" tone="muted">
+          {memberReason}
+        </Txt>
+      )}
+      {orgAudience && (
+        <Txt as="p" variant="caption" tone="muted">
+          {ORG_SCOPE_AUDIENCE}
+        </Txt>
+      )}
+    </>
   );
 }

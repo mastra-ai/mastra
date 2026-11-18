@@ -13,18 +13,42 @@ import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRig
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
-  title: string;
-  placeholder: string;
-  /** The name step types into the field instead of searching it. */
-  searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
   /** Back navigation to the previous step. Omitted on the first step. */
   onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
-  onSkip?: () => void;
+  onSkip: () => void;
   children: ReactNode;
 }
+
+interface StepChrome {
+  title: string;
+  placeholder: string;
+  searchable?: boolean;
+  skippable?: boolean;
+}
+
+const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
+  name: {
+    title: 'Name your new Factory',
+    placeholder: 'e.g. Mastra',
+    searchable: false,
+  },
+  vcs: {
+    title: 'Choose your codebase',
+    placeholder: 'Search repositories',
+  },
+  'project-management': {
+    title: 'Connect the work behind the code',
+    placeholder: 'Search options',
+    skippable: true,
+  },
+  'model-provider': {
+    title: 'Choose your Factory model',
+    placeholder: 'Search models and providers',
+  },
+};
 
 const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none';
 
@@ -34,15 +58,13 @@ const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 m
  */
 export function CreateFactoryPalette({
   step,
-  title,
-  placeholder,
-  searchable = true,
   value,
   onValueChange,
   onBack,
   onSkip,
   children,
 }: CreateFactoryPaletteProps) {
+  const { title, placeholder, searchable = true, skippable = false } = STEP_CHROME[step];
   const stepIndex = CREATE_FACTORY_STEPS.indexOf(step);
 
   return (
@@ -75,7 +97,7 @@ export function CreateFactoryPalette({
         >
           {title}
         </Txt>
-        {onSkip && (
+        {skippable && (
           <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
             Skip
             <IconArrowRight aria-hidden="true" />

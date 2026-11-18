@@ -1,7 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import type { ReactNode } from 'react';
 import { Factory as FactoryIcon } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
@@ -9,6 +9,18 @@ import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+
+export const FACTORY_SWITCHER_TRIGGER = '-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1';
+
+export function FactorySwitcherTriggerContent({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <FactoryIcon className="shrink-0" />
+      {children}
+      <IconChevronDownMedium className="text-muted-foreground size-icon-sm shrink-0" />
+    </>
+  );
+}
 
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -35,21 +47,13 @@ export function FactorySwitcher() {
         aria-label="Select factory"
         variant="ghost"
         size="sm"
-        className="-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1"
+        className={FACTORY_SWITCHER_TRIGGER}
       >
-        <FactoryIcon />
-        {factoryId && activeFactoryQuery.isPending ? (
-          <Skeleton
-            role="status"
-            aria-label="Loading factory"
-            className="h-3.5 w-24 motion-reduce:before:animate-none"
-          />
-        ) : (
+        <FactorySwitcherTriggerContent>
           <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
             {activeFactory?.name ?? 'Select a factory…'}
           </Txt>
-        )}
-        <IconChevronDownMedium className="text-muted-foreground size-icon-sm shrink-0" />
+        </FactorySwitcherTriggerContent>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
