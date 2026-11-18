@@ -3217,20 +3217,18 @@ export class DurableAgent<
 
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
-    return this.#onReservedThread(runId, options, false, () =>
-      this.#startStream(messages, options, runId, requestContext),
-    );
+    return this.#onReservedThread(runId, options, () => this.#startStream(messages, options, runId, requestContext));
   }
 
   /**
    * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
    * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
-   * A registered run owns the thread from then on, and releasing after that does nothing.
+   * A registered run owns the thread from then on. A run that fails before it registers gives the
+   * thread back.
    */
   async #onReservedThread<T>(
     runId: string,
     options: DurableAgentStreamOptions<TOutput> | undefined,
-    releaseWhenSettled: boolean,
     start: () => Promise<T>,
   ): Promise<T> {
     const pubsub = this.getPubSub();
@@ -3241,17 +3239,13 @@ export class DurableAgent<
         { memory: options?.memory, requestContext: options?.requestContext, runId },
         pubsub,
       )) === 'reserved';
-    let started = false;
     try {
-      const result = await start();
-      started = true;
-      return result;
-    } finally {
+      return await start();
+    } catch (error) {
       // A thread already held under this run id belongs to whoever started the run: a signal wake,
       // a queued message, or an earlier call with the same run id. It stays theirs to release.
-      if (reserved && (!started || releaseWhenSettled)) {
-        agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
-      }
+      if (reserved) agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
+      throw error;
     }
   }
 
@@ -4883,9 +4877,7 @@ export class DurableAgent<
 
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
-    return this.#onReservedThread(runId, options, true, () =>
-      this.#runGenerate(messages, options, runId, requestContext),
-    );
+    return this.#onReservedThread(runId, options, () => this.#runGenerate(messages, options, runId, requestContext));
   }
 
   async #runGenerate(
