@@ -110,7 +110,7 @@ These names are reserved. If your project sets any of them explicitly, the platf
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` API token on your organization's settings page under **API Tokens**. Platform deploys use an injected JWT instead. If observability is turned off for the project, set `MASTRA_PLATFORM_ACCESS_TOKEN` on the environment yourself.
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` [access token](/docs/mastra-platform/access-tokens) on your organization's settings page under **API Keys**. Platform deploys use an injected JWT instead. If observability is turned off for the project, set `MASTRA_PLATFORM_ACCESS_TOKEN` on the environment yourself.
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token
