@@ -7,7 +7,7 @@ description: "Browse Infer by Flow7 model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/infer.svg" alt="Infer by Flow7 logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Infer by Flow7
 
-Access 2 Infer by Flow7 models through Mastra's model router. Authentication is handled automatically using the `INFER_API_KEY` environment variable.
+Access 10 Infer by Flow7 models through Mastra's model router. Authentication is handled automatically using the `INFER_API_KEY` environment variable.
 
 Learn more in the [Infer by Flow7 documentation](https://infer.flow7.org/opencode).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "infer/infer/gpt-5.6-sol:official"
+  model: "infer/infer/claude-fable-5-1:low-cost"
 });
 
 // Generate a response
@@ -46,6 +46,66 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "infer/infer/claude-fable-5-1:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4.91,
+    "outputCost": 24.53
+  },
+  {
+    "model": "infer/infer/claude-opus-5-5:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 1.97,
+    "outputCost": 9.81
+  },
+  {
+    "model": "infer/infer/claude-sonnet-5-5:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.99,
+    "outputCost": 4.91
+  },
+  {
+    "model": "infer/infer/gemini-3.1-pro-preview:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 199999,
+    "maxOutput": 65536,
+    "inputCost": 1.18,
+    "outputCost": 5.3
+  },
+  {
+    "model": "infer/infer/gemini-3.8-flash:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
+    "outputCost": 2.21
+  },
+  {
     "model": "infer/infer/gpt-5.6-sol:official",
     "imageInput": true,
     "audioInput": false,
@@ -58,6 +118,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 12.5
   },
   {
+    "model": "infer/infer/gpt-6-astra:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 271999,
+    "maxOutput": 128000,
+    "inputCost": 1.18,
+    "outputCost": 4.42
+  },
+  {
     "model": "infer/infer/gpt-6-astra:official",
     "imageInput": true,
     "audioInput": false,
@@ -68,6 +140,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 12.5,
     "outputCost": 62.5
+  },
+  {
+    "model": "infer/infer/gpt-6.1-sol:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 271999,
+    "maxOutput": 128000,
+    "inputCost": 0.24,
+    "outputCost": 0.89
+  },
+  {
+    "model": "infer/infer/grok-4.7:low-cost",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 199999,
+    "maxOutput": 199999,
+    "inputCost": 0.44,
+    "outputCost": 1.3
   }
 ]}
 />
@@ -86,7 +182,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://infer.flow7.org/v1",
-    id: "infer/infer/gpt-5.6-sol:official",
+    id: "infer/infer/claude-fable-5-1:low-cost",
     apiKey: process.env.INFER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -106,8 +202,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "infer/infer/gpt-6-astra:official"
-      : "infer/infer/gpt-5.6-sol:official";
+      ? "infer/infer/grok-4.7:low-cost"
+      : "infer/infer/claude-fable-5-1:low-cost";
   }
 });
 ```

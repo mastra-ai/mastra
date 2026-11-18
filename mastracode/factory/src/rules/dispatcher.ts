@@ -156,9 +156,10 @@ const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // slow cadence so the per-tick reconcile walk stays bounded.
 const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
 const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
-// The bound-thread reconcile walk reads a cursor + messages per binding; it
-// exists to catch results missed at run end, so it runs on a slow cadence off
-// the claim path rather than on every 1s tick.
+// The bound-thread reconcile pass reads a cursor + messages per binding that
+// stepped recently (and every active binding on a much slower cadence); it
+// exists to catch results missed at run end, so it runs off the claim path
+// rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
@@ -1343,7 +1344,13 @@ export class FactoryDecisionDispatcher {
       throw new FactoryDispatchError('run_configuration_invalid', 'The Factory session has no storage to hold a goal.');
     }
     if (!item || !phaseKey) return objective;
-    const stamp = { phaseKey, goalId: record.id, threadId: binding.threadId, sessionId: binding.sessionId };
+    const stamp = {
+      phaseKey,
+      boardKey: boardForWorkItem(item),
+      goalId: record.id,
+      threadId: binding.threadId,
+      sessionId: binding.sessionId,
+    };
     if (phaseGoalOf(item.metadata)?.goalId !== record.id) {
       await this.#storage.update({
         orgId: record.orgId,
@@ -1352,9 +1359,10 @@ export class FactoryDecisionDispatcher {
         patch: { metadata: { [PHASE_GOAL_METADATA_KEY]: stamp } },
       });
     }
-    // A move that committed before the stamp landed found no goal to end: end it here instead.
+    // A move that committed before the stamp landed found no goal to end: end it here instead. A
+    // same-named phase on another board is a different phase, so the board counts as a move too.
     const after = await this.#storage.get({ orgId: record.orgId, id: item.id });
-    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey) {
+    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey || boardForWorkItem(after) !== stamp.boardKey) {
       await endPhaseGoal(stamp, { agentFor: async () => session.machinery.getAgent(), store: async () => undefined });
       throw new FactoryDecisionSuperseded();
     }

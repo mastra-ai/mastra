@@ -583,8 +583,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
             errorInstance,
           );
-          this.logger?.trackException(mastraError);
-          this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          // A processor tripwire is an intentional block, not a failure: log it quietly without a stack
+          if (e instanceof TripWire) {
+            this.logger?.debug(`Step ${stepId} stopped by tripwire`, {
+              stepId,
+              processorId: e.processorId,
+              reason: e.message,
+            });
+          } else {
+            this.logger?.trackException(mastraError);
+            this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          }
 
           params.stepSpan?.error({
             ...workflowTermination(
@@ -909,10 +918,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */
-    tracingIds?: {
-      traceId: string;
-      workflowSpanId: string;
-    };
+    tracingIds?: ExecutionContext['tracingIds'];
   }): Promise<TOutput> {
     const {
       workflowId,

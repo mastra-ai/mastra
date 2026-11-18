@@ -1185,7 +1185,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemTransition",
     "method": "POST",
     "path": "/web/factory/projects/:id/work-items/:workItemId/transition",
-    "description": "Transition a work item with its expected revision",
+    "description": "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
     "pathParams": [
       "id",
       "workItemId"
