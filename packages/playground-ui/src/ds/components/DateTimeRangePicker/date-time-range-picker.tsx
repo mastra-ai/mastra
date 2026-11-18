@@ -9,6 +9,7 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { menuItemHintClass } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
@@ -59,6 +60,9 @@ function customRangeLabel(dateFrom: Date | undefined, dateTo: Date | undefined) 
 /** A fixed range offered beside the presets, e.g. the current billing period. */
 export type DateTimeRangePickerNamedRange = { label: string; from: Date; to?: Date };
 
+/** The widest range that can be picked, and the short reason shown on presets beyond it. */
+export type DateTimeRangePickerLimit = { maxMs: number; reason: string };
+
 export interface DateTimeRangePickerProps {
   preset?: DateRangePreset;
   onPresetChange?: (preset: DateRangePreset) => void;
@@ -73,6 +77,11 @@ export interface DateTimeRangePickerProps {
   disabled?: boolean;
   /** Widest custom range that can be applied, in milliseconds. Presets are unaffected. */
   maxRangeMs?: number;
+  /**
+   * A cap that applies to presets too, e.g. while a search is active: presets longer than
+   * `maxMs` stay listed but disabled with `reason` beside them, and custom ranges can't exceed it.
+   */
+  rangeLimit?: DateTimeRangePickerLimit;
   /** Earliest day a custom range can start on, e.g. the oldest data still kept. Earlier days are disabled. */
   minDate?: Date;
   /** Subset of presets to show. If omitted, all presets are shown. */
@@ -103,7 +112,8 @@ export function DateTimeRangePicker({
   onDateChange,
   onDateRangeChange,
   disabled,
-  maxRangeMs,
+  maxRangeMs: maxCustomRangeMs,
+  rangeLimit,
   minDate,
   presets,
   namedRanges = [],
@@ -112,6 +122,8 @@ export function DateTimeRangePicker({
   onReset,
   ref,
 }: DateTimeRangePickerProps) {
+  const maxRangeMs = rangeLimit ? Math.min(rangeLimit.maxMs, maxCustomRangeMs ?? Infinity) : maxCustomRangeMs;
+  const overLimit = (ms: number | undefined) => rangeLimit !== undefined && ms !== undefined && ms > rangeLimit.maxMs;
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
   const [presetMenuOpen, setPresetMenuOpen] = useState(false);
@@ -238,16 +250,21 @@ export function DateTimeRangePicker({
                 </DropdownMenu.RadioItem>
               ))}
               {namedRanges.length > 0 && <DropdownMenu.Separator />}
-              {visiblePresets.map(p => (
-                <DropdownMenu.RadioItem
-                  key={p.value}
-                  value={p.value}
-                  closeOnClick
-                  onClick={() => handlePresetSelect(p.value)}
-                >
-                  {p.label}
-                </DropdownMenu.RadioItem>
-              ))}
+              {visiblePresets.map(p => {
+                const blocked = overLimit(p.ms);
+                return (
+                  <DropdownMenu.RadioItem
+                    key={p.value}
+                    value={p.value}
+                    disabled={blocked}
+                    closeOnClick
+                    onClick={() => handlePresetSelect(p.value)}
+                  >
+                    {p.label}
+                    {blocked && <span className={menuItemHintClass}>{rangeLimit?.reason}</span>}
+                  </DropdownMenu.RadioItem>
+                );
+              })}
             </DropdownMenu.RadioGroup>
           </DropdownMenu.Content>
         </DropdownMenu>

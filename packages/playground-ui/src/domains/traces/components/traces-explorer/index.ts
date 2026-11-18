@@ -3,6 +3,7 @@ import { TracesExplorerColumnsMenu } from './traces-explorer-columns-menu';
 import {
   TracesExplorerFilterBar,
   TracesExplorerFilterChips,
+  TracesExplorerSearchNote,
   TracesExplorerTimeRangeChip,
 } from './traces-explorer-filter-bar';
 import { TracesExplorerHistogram } from './traces-explorer-histogram';
@@ -18,6 +19,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   FilterBar: TracesExplorerFilterBar,
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
+  SearchNote: TracesExplorerSearchNote,
   ColumnsMenu: TracesExplorerColumnsMenu,
   Histogram: TracesExplorerHistogram,
   List: TracesExplorerList,

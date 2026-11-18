@@ -70,7 +70,7 @@ const renderBody = (selection?: SpanSelection) => {
  * The body inside a stand-in router whose URL starts as `initial`, under a saved views store when
  * one is given; returns each list query sent.
  */
-const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
+const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource, searchMaxDays?: number) => {
   const queries: QuerySpansInput[] = [];
   server.use(
     http.post(SPANS_QUERY_URL, async ({ request }) => {
@@ -88,6 +88,7 @@ const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
           onSelectionChange={() => {}}
           renderPanel={() => null}
           urlState={urlState}
+          searchMaxDays={searchMaxDays}
         />
       )}
     </SearchParamsHost>
@@ -258,6 +259,80 @@ describe('SpansExplorerBody', () => {
         args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }],
       });
       await screen.findByRole('region', { name: 'Spans over time' });
+    });
+    describe('when the host caps word search at 7 days', () => {
+      const NARROWED_NOTE = 'Search covers at most 7 days, so we narrowed the range.';
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      const queriedDays = (query?: QuerySpansInput) =>
+        Math.round((Date.now() - Date.parse(query?.timeRange?.from ?? '')) / DAY_MS);
+      const searchAnyContent = async (word: string) => {
+        const input = screen.getByRole('combobox', { name: 'Add filter' });
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: 'Any Content' } });
+        fireEvent.click(await screen.findByRole('option', { name: 'Any Content' }));
+        fireEvent.change(input, { target: { value: word } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.keyDown(input, { key: 'Escape' });
+      };
+      beforeEach(() => {
+        setHandlers(spanRowsPage, searchable);
+        server.use(
+          http.post(SPANS_AGGREGATE_URL, () =>
+            HttpResponse.json<AggregateSpansResponse>({ rows: [], truncated: false }),
+          ),
+        );
+      });
+
+      it('narrows a 30-day range to the last 7 days when a word is added, and says so', async () => {
+        const { queries } = renderBodyAtUrl('datePreset=last-30d', undefined, 7);
+        await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+        expect(queriedDays(queries.at(-1))).toBe(30);
+
+        await searchAnyContent('refund');
+
+        await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['refund']));
+        expect(queriedDays(queries.at(-1))).toBe(7);
+        // Last 7 days is the default range, so it leaves the URL.
+        expect(currentSearchParams().has('datePreset')).toBe(false);
+        expect(screen.getByText(NARROWED_NOTE).getAttribute('role')).toBe('status');
+      });
+
+      it('offers only ranges up to 7 days while a word is searched', async () => {
+        const { queries } = renderBodyAtUrl('filter.all=refund&filter.all.op=hasAllTokens', undefined, 7);
+        await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+        const days14 = await screen.findByRole('menuitemradio', { name: /Last 14 days/ });
+        expect(days14.getAttribute('aria-disabled')).toBe('true');
+        expect(days14.textContent).toContain('Search covers at most 7 days');
+        expect(screen.getByRole('menuitemradio', { name: 'Last 24 hours' }).getAttribute('aria-disabled')).toBeNull();
+      });
+
+      it('keeps the narrowed range when the word is cleared, and hides the note', async () => {
+        const { queries } = renderBodyAtUrl('datePreset=last-30d', undefined, 7);
+        await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+        await searchAnyContent('refund');
+        await screen.findByText(NARROWED_NOTE);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Any Content filter' }));
+
+        await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual([]));
+        expect(queriedDays(queries.at(-1))).toBe(7);
+        expect(screen.queryByText(NARROWED_NOTE)).toBeNull();
+      });
+
+      it('leaves the range alone without a cap', async () => {
+        const { queries } = renderBodyAtUrl('datePreset=last-30d');
+        await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+
+        await searchAnyContent('refund');
+
+        await waitFor(() => expect(tokenTerms(queries.at(-1))).toEqual(['refund']));
+        expect(queriedDays(queries.at(-1))).toBe(30);
+        expect(currentSearchParams().get('datePreset')).toBe('last-30d');
+        expect(screen.queryByText(NARROWED_NOTE)).toBeNull();
+      });
     });
     it.each(['---', 'x'.repeat(257)])('rejects invalid edits without changing the applied search: %s', async value => {
       setHandlers(spanRowsPage, searchable);

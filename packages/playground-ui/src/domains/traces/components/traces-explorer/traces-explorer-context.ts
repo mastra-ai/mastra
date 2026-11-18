@@ -9,6 +9,7 @@ import type { SpanTab, TraceDatePreset } from '../../types';
 import type { FeedbackOptions } from '../feedback-options';
 import type { TraceSpanView } from '../trace-data-panel-view';
 import type { TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
+import type { DateTimeRangePickerLimit } from '@/ds/components/DateTimeRangePicker';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 
@@ -71,12 +72,22 @@ export type TracesFiltersActions = {
   zoomDateRange: (from: Date, to: Date) => void;
   /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
   resetDateRange: (defaultPreset: TraceDatePreset) => void;
+  /**
+   * Narrows the range to the word search cap (`searchMaxDays`), e.g. after the API rejected a
+   * saved link's range. Does nothing without a cap or when the range already fits.
+   */
+  narrowRangeForSearch: () => void;
 };
 
 export type TracesFiltersContextValue = TracesFiltersActions & {
   /** The host's filters with the entries this server can't query dropped. */
   filters: TracesFilters;
   hasTokenSearch: boolean;
+  /** The picker limit while a word search is active on a host that caps it. */
+  searchRangeLimit?: DateTimeRangePickerLimit;
+  /** A word search narrowed the range and is still active. */
+  searchNarrowed: boolean;
+  searchMaxDays?: number;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;

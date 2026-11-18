@@ -4,6 +4,7 @@ import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../hooks/use-spans-filter-bar';
+import type { DateTimeRangePickerLimit } from '@/ds/components/DateTimeRangePicker';
 import { FilterBar } from '@/ds/components/FilterBar';
 import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
@@ -18,6 +19,8 @@ export type SpansFilterBarProps = {
   dateTo?: Date;
   /** Earliest date the custom range picker allows. */
   minDate?: Date;
+  /** Caps the range while a word search is active (`searchRangeLimit` of `useObservabilityListFilters`). */
+  rangeLimit?: DateTimeRangePickerLimit;
   /** Window the value suggestions are looked up in. */
   timeRange: TraceQueryDiscoveryTimeRange;
   tokens: TraceFilterToken[];
@@ -40,6 +43,7 @@ export function SpansFilterBar({
   dateFrom,
   dateTo,
   minDate,
+  rangeLimit,
   timeRange,
   tokens,
   groups,
@@ -79,6 +83,7 @@ export function SpansFilterBar({
               dateFrom={dateFrom}
               dateTo={dateTo}
               minDate={minDate}
+              rangeLimit={rangeLimit}
               onDateChange={onDateChange}
               onDateRangeChange={onDateRangeChange}
               disabled={disabled}

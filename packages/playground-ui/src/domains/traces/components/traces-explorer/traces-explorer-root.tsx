@@ -46,6 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { narrowDatesForSearch, searchRangeLimit } from '@/domains/observability/lib/search-range-limit';
 import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
@@ -69,6 +70,8 @@ export type TracesExplorerRootProps = {
   feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
+  /** Longest range, in days, a word search may cover. Adding a word narrows a longer range. Unset: no cap. */
+  searchMaxDays?: number;
   children: ReactNode;
 };
 
@@ -84,9 +87,12 @@ const listIdForScope = (scope?: TracesExplorerScope) =>
       ? 'workflows-traces'
       : 'all-traces';
 
-type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortChange'> & {
+type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortChange' | 'searchMaxDays'> & {
   scopedFieldIds: ReadonlySet<string>;
+  withTokenSearch: boolean;
 };
+
+const searchesWords = (filters: TracesFilters) => [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
 
 export function TracesExplorerRoot({
   selection,
@@ -100,6 +106,7 @@ export function TracesExplorerRoot({
   rootSource,
   feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
+  searchMaxDays,
   children,
 }: TracesExplorerRootProps) {
   // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
@@ -158,11 +165,21 @@ export function TracesExplorerRoot({
   // Actions read the latest props when they run, so the host doesn't need stable callbacks.
   // `latest` is written as soon as a change is emitted, so a second action in the same tick
   // (the date picker fires a preset then its dates) builds on the first instead of the stale props.
-  const current: Latest = { selection, filters: rawFilters, onChange, onSortChange: onHostSortChange, scopedFieldIds };
+  const current: Latest = {
+    selection,
+    filters: rawFilters,
+    onChange,
+    onSortChange: onHostSortChange,
+    scopedFieldIds,
+    searchMaxDays,
+    withTokenSearch,
+  };
   const latest = useRef(current);
   latest.current = current;
   // Not part of the host's filters: a shared or reloaded link has no zoom to undo.
   const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
+  // Whether a word search narrowed the range, so the bar can say so. Any range edit clears it.
+  const [searchNarrowed, setSearchNarrowed] = useState(false);
 
   const actions = useMemo(() => {
     const emit = (next: TracesExplorerState) => {
@@ -196,6 +213,19 @@ export function TracesExplorerRoot({
     // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
     const pickRange = (next: TracesFilters) => {
       zoomMemory.current = undefined;
+      setSearchNarrowed(false);
+      updateFilters(next);
+    };
+    // Narrows `next` to the word search cap; `undefined` when there is no cap or the range fits.
+    const narrowForSearch = (next: TracesFilters): TracesFilters | undefined => {
+      const { searchMaxDays: maxDays } = latest.current;
+      if (!maxDays) return undefined;
+      const dates = narrowDatesForSearch(next, maxDays);
+      return dates && { tokens: next.tokens, groups: next.groups, ...dates };
+    };
+    const updateNarrowed = (next: TracesFilters) => {
+      zoomMemory.current = undefined;
+      setSearchNarrowed(true);
       updateFilters(next);
     };
     const filtersActions: TracesFiltersActions = {
@@ -204,7 +234,19 @@ export function TracesExplorerRoot({
       setFilterTokens: (tokens, groups) => {
         const { filters: base, scopedFieldIds: scoped } = latest.current;
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
-        updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
+        const next = applyFilterTokens(base, [...scopeTokens, ...tokens], groups);
+        if (!latest.current.withTokenSearch || !searchesWords(next)) {
+          setSearchNarrowed(false);
+          updateFilters(next);
+          return;
+        }
+        const narrowed = narrowForSearch(next);
+        if (narrowed) updateNarrowed(narrowed);
+        else updateFilters(next);
+      },
+      narrowRangeForSearch: () => {
+        const narrowed = narrowForSearch(latest.current.filters);
+        if (narrowed) updateNarrowed(narrowed);
       },
       setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
       setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),
@@ -294,7 +336,11 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const tokenSearchApplied = withTokenSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
+  const tokenSearchApplied = withTokenSearch && searchesWords(filters);
+  const searchRangeLimitValue = useMemo(
+    () => (tokenSearchApplied && searchMaxDays ? searchRangeLimit(searchMaxDays) : undefined),
+    [tokenSearchApplied, searchMaxDays],
+  );
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
@@ -303,6 +349,9 @@ export function TracesExplorerRoot({
       ...filtersActions,
       filters,
       hasTokenSearch: tokenSearchApplied,
+      searchRangeLimit: searchRangeLimitValue,
+      searchNarrowed: searchNarrowed && tokenSearchApplied,
+      searchMaxDays,
       dateFrom,
       dateTo,
       filtersApplied,
@@ -313,6 +362,9 @@ export function TracesExplorerRoot({
       filtersActions,
       filters,
       tokenSearchApplied,
+      searchRangeLimitValue,
+      searchNarrowed,
+      searchMaxDays,
       dateFrom,
       dateTo,
       filtersApplied,

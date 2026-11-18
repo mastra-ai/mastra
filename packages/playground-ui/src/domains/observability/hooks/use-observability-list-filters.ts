@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { narrowDatesForSearch, searchRangeLimit } from '../lib/search-range-limit';
 import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
 import type { ZoomMemory } from '../lib/zoom-memory';
 import {
@@ -15,7 +16,7 @@ import type { ObservabilityListDates, ObservabilityListSort } from '../observabi
 import { recoveryRefetchInterval } from '@/domains/observability/list-polling';
 import { resolveTracesDateWindow } from '@/domains/traces/components/traces-explorer/traces-explorer-actions';
 import { resolveTraceQueryTimeRange } from '@/domains/traces/trace-query-filters';
-import type { TraceFilterGroup, TraceFilterToken } from '@/domains/traces/trace-query-filters';
+import type { TraceFilterGroup, TraceFilterNode, TraceFilterToken } from '@/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@/domains/traces/types';
 import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 
@@ -33,6 +34,10 @@ export type ObservabilityListUrlState = {
   setSearchParams: SetURLSearchParamsLike;
 };
 
+/** Span and thread lists name fields without the `spans.` prefix, so a word search is its operator. */
+const searchesWords = (node: TraceFilterNode): boolean =>
+  'nodes' in node ? node.nodes.some(searchesWords) : node.operatorId === 'hasAllTokens';
+
 /** The search params of `url`, or of an in-memory store when the host keeps no URL state. */
 function useListSearchParams(url: ObservabilityListUrlState | undefined): ObservabilityListUrlState {
   const [localParams, setLocalParams] = useState(() => new URLSearchParams());
@@ -48,7 +53,8 @@ function useListSearchParams(url: ObservabilityListUrlState | undefined): Observ
  * date, sort and group params as /traces) so it survives a reload and can be shared. Without `url`
  * the state lives in memory. A sort on a field outside `sortFields` reads as start time, newest first.
  * `defaultDatePreset` is the range shown when the URL names none (last 7 days unless the host differs);
- * it is left out of the URL like any default.
+ * it is left out of the URL like any default. With `searchMaxDays`, adding a word search narrows a
+ * longer range to that many days (`searchNarrowed` says so) and `searchRangeLimit` caps the picker.
  */
 export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
@@ -56,7 +62,14 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     sortFields,
     withTokenSearch = false,
     defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
-  }: { sortFields?: readonly F[]; withTokenSearch?: boolean; defaultDatePreset?: TraceDatePreset } = {},
+    searchMaxDays,
+  }: {
+    sortFields?: readonly F[];
+    withTokenSearch?: boolean;
+    defaultDatePreset?: TraceDatePreset;
+    /** Longest range, in days, a word search may cover. Unset: no cap. */
+    searchMaxDays?: number;
+  } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
@@ -125,10 +138,23 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
 
   // Not URL state: a shared or reloaded link has no zoom to undo.
   const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
+  // Whether a word search narrowed the range, so the bar can say so. Any range edit clears it.
+  const [narrowed, setNarrowed] = useState(false);
   // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
   const pickDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) => {
     zoomMemory.current = undefined;
+    setNarrowed(false);
     updateDates(change);
+  };
+  // Writes the range a word search narrows to into `next`; false when there is no cap or it fits.
+  const narrowForSearch = (next: URLSearchParams) => {
+    if (!searchMaxDays) return false;
+    const dates = narrowDatesForSearch(readObservabilityListDates(next, defaultDatePreset), searchMaxDays);
+    if (!dates) return false;
+    writeObservabilityListDates(next, dates, defaultDatePreset);
+    zoomMemory.current = undefined;
+    setNarrowed(true);
+    return true;
   };
 
   // Switching to `custom` keeps the current dates so the picker opens on them; any other preset drops them.
@@ -156,10 +182,21 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
       return before ?? { datePreset: defaultPreset };
     });
   const onFiltersChange = (nextTokens: TraceFilterToken[], nextGroups: TraceFilterGroup[]) =>
-    update(next => writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups }));
+    update(next => {
+      writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups });
+      if (withTokenSearch && [...nextTokens, ...nextGroups].some(searchesWords)) narrowForSearch(next);
+      else setNarrowed(false);
+    });
+  /** Narrows the range to the word search cap, e.g. after the API rejected a saved link's range. */
+  const narrowRangeForSearch = () => update(narrowForSearch);
   const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
     update(params => writeObservabilityListSort(params, next));
 
+  const wordSearchApplied = withTokenSearch && [...tokens, ...groups].some(searchesWords);
+  const rangeLimit = useMemo(
+    () => (wordSearchApplied && searchMaxDays ? searchRangeLimit(searchMaxDays) : undefined),
+    [wordSearchApplied, searchMaxDays],
+  );
   const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
   const filtersApplied = contentFiltersApplied || datePreset !== defaultDatePreset;
 
@@ -180,6 +217,11 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     onZoom,
     onDateReset,
     onFiltersChange,
+    narrowRangeForSearch,
+    /** The picker limit while a word search is active on a host that caps it. */
+    searchRangeLimit: rangeLimit,
+    /** A word search narrowed the range and is still active. */
+    searchNarrowed: narrowed && wordSearchApplied,
     contentFiltersApplied,
     filtersApplied,
   };

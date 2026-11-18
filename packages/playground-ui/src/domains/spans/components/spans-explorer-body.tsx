@@ -9,6 +9,7 @@ import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
+import { SearchNarrowedNote } from '@/domains/observability/components/search-narrowed-note';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
@@ -38,15 +39,27 @@ export type SpansExplorerBodyProps = {
   renderPanel: (args: SpansExplorerPanelArgs) => ReactNode;
   /** The host's search params, so the time range, filters and sort survive a reload. Omitted: kept in memory. */
   urlState?: ObservabilityListUrlState;
+  /** Longest range, in days, a word search may cover. Adding a word narrows a longer range. Unset: no cap. */
+  searchMaxDays?: number;
 };
 
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
-export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
+export function SpansExplorerBody({
+  selection,
+  onSelectionChange,
+  renderPanel,
+  urlState,
+  searchMaxDays,
+}: SpansExplorerBodyProps) {
   const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
   const withTokenSearch = !!(
     capabilities?.capabilities.spanQueryTokenSearch && capabilities.capabilities.spanAggregateTokenSearch
   );
-  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS, withTokenSearch });
+  const filters = useObservabilityListFilters(urlState, {
+    sortFields: SPAN_LIST_SORT_FIELDS,
+    withTokenSearch,
+    searchMaxDays,
+  });
   const { timeRange, tokens, groups } = filters;
   const columns = useTraceColumnPreferences({ scope: 'spans' });
 
@@ -158,6 +171,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
                   dateTo={filters.dateTo}
+                  rangeLimit={filters.searchRangeLimit}
                   timeRange={timeRange}
                   tokens={tokens}
                   groups={groups}
@@ -173,6 +187,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                 <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
               </ActionRow.End>
             </ActionRow>
+            {filters.searchNarrowed && <SearchNarrowedNote maxDays={searchMaxDays} />}
           </>
         }
         chart={

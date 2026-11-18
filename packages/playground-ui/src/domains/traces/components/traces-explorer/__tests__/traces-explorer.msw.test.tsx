@@ -12,7 +12,13 @@ import {
 } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
+import {
+  TracesExplorer,
+  useTracesConfig,
+  useTracesFilterBar,
+  useTracesFilterBarFields,
+  useTracesFilters,
+} from '../index';
 import type {
   FeedbackOptions,
   TracesExplorerLayoutProps,
@@ -46,6 +52,7 @@ import {
   noTimeToFirstTokenSortCapabilities,
   streamedTracesPage,
   traceQueryCapabilities,
+  traceTokenSearchCapabilities,
   twoTracesPage,
   weatherRootSpan,
   weatherTraceSpans,
@@ -171,6 +178,7 @@ type HarnessProps = {
   traceHref?: TracesExplorerPanelProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
+  searchMaxDays?: number;
 };
 
 // Stands in for the host's view switch, which offers each view only when its query API is on.
@@ -202,6 +210,7 @@ function Harness({
   renderError,
   panelProps,
   tabs,
+  searchMaxDays,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -227,6 +236,7 @@ function Harness({
       rootSource={rootSource}
       feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
+      searchMaxDays={searchMaxDays}
     >
       <TracesExplorer.Layout
         renderError={renderError}
@@ -240,6 +250,7 @@ function Harness({
           <div>
             {filterBar}
             <TracesExplorer.ColumnsMenu />
+            <TracesExplorer.SearchNote />
           </div>
         }
       >
@@ -1775,6 +1786,177 @@ describe('TracesExplorer.Layout', () => {
       await screen.findByText('What is the weather in Paris?');
 
       expect(screen.queryByLabelText(/^View: /)).toBeNull();
+    });
+  });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NARROWED_NOTE = 'Search covers at most 7 days, so we narrowed the range.';
+type QueriedRange = { timeRange?: { from?: string; to?: string } };
+const lastQueriedRange = () => (onTraceQuery.mock.calls.at(-1)?.[0] as QueriedRange | undefined)?.timeRange;
+/** Days the last trace query reaches back. Rolling ranges pad `to` past now, so measure to now. */
+const lastQueriedDays = () => Math.round((Date.now() - Date.parse(lastQueriedRange()?.from ?? '')) / DAY_MS);
+
+/** Adds an "Any span content contains words" filter with the keyboard, like a person would. */
+const searchForWord = async (word: string) => {
+  const input = screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
+  const key = (k: string) => fireEvent.keyDown(input, { key: k });
+  input.focus();
+  fireEvent.change(input, { target: { value: 'Any span content' } });
+  await screen.findByRole('option', { name: 'Any span content' });
+  key('Enter');
+  await waitFor(() => expect(input.placeholder).not.toBe('Filter traces'));
+  if (input.placeholder !== 'Value') {
+    const operators = (await screen.findAllByRole('option')).map(option => option.textContent);
+    for (let i = 0; i < operators.indexOf('contains words'); i++) key('ArrowDown');
+    key('Enter');
+  }
+  await waitFor(() => expect(input.placeholder).toBe('Value'));
+  fireEvent.change(input, { target: { value: word } });
+  key('Enter');
+  key('Escape');
+};
+
+const WORD_TOKEN: TracesFilters['tokens'][number] = {
+  fieldId: 'spans.all',
+  operatorId: 'hasAllTokens',
+  value: 'refund',
+};
+
+/** Stands in for a host that recovers from the API's 422 `time_range_too_large`. */
+function NarrowForSearchButton() {
+  const { narrowRangeForSearch } = useTracesFilters();
+  return (
+    <button type="button" onClick={narrowRangeForSearch}>
+      Narrow for search
+    </button>
+  );
+}
+
+describe('TracesExplorer word search range limit', () => {
+  describe('when the host caps word search at 7 days', () => {
+    it('narrows a 30-day range to the last 7 days when a word is added, and says so', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-30d' },
+      });
+      await settle(queryClient);
+      expect(lastQueriedDays()).toBe(30);
+      expect(screen.queryByText(NARROWED_NOTE)).toBeNull();
+
+      await searchForWord('refund');
+
+      await waitFor(() => expect(lastQueriedDays()).toBe(7));
+      await settle(queryClient);
+      expect(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      expect(screen.getByText(NARROWED_NOTE).getAttribute('role')).toBe('status');
+    });
+
+    it('keeps a custom range end and narrows its start', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const dateTo = new Date(2026, 8, 20, 12, 0);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'custom', dateFrom: new Date(2026, 8, 1), dateTo },
+      });
+      await settle(queryClient);
+
+      await searchForWord('refund');
+
+      await waitFor(() =>
+        expect(lastQueriedRange()).toEqual({
+          from: new Date(dateTo.getTime() - 7 * DAY_MS).toISOString(),
+          to: dateTo.toISOString(),
+        }),
+      );
+      expect(screen.getByText(NARROWED_NOTE)).toBeTruthy();
+    });
+
+    it('leaves a range of 7 days or less alone', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-3d' },
+      });
+      await settle(queryClient);
+
+      await searchForWord('refund');
+
+      await waitFor(() =>
+        expect(onTraceQuery.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ where: expect.anything() })),
+      );
+      expect(lastQueriedDays()).toBe(3);
+      expect(screen.queryByText(NARROWED_NOTE)).toBeNull();
+    });
+
+    it('offers only ranges up to 7 days while a word is searched', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: [WORD_TOKEN] },
+      });
+      await settle(queryClient);
+
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' }));
+
+      const days14 = await screen.findByRole('menuitemradio', { name: /Last 14 days/ });
+      expect(days14.getAttribute('aria-disabled')).toBe('true');
+      expect(days14.textContent).toContain('Search covers at most 7 days');
+      expect(screen.getByRole('menuitemradio', { name: /Last 30 days/ }).getAttribute('aria-disabled')).toBe('true');
+      expect(screen.getByRole('menuitemradio', { name: 'Last 3 days' }).getAttribute('aria-disabled')).toBeNull();
+    });
+
+    it('keeps the narrowed range when the word is cleared, and offers longer ranges again', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-30d' },
+      });
+      await settle(queryClient);
+      await searchForWord('refund');
+      await screen.findByText(NARROWED_NOTE);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Any span content filter' }));
+
+      await waitFor(() => expect(screen.queryByText(NARROWED_NOTE)).toBeNull());
+      expect(lastQueriedDays()).toBe(7);
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' }));
+      expect(
+        (await screen.findByRole('menuitemradio', { name: 'Last 30 days' })).getAttribute('aria-disabled'),
+      ).toBeNull();
+    });
+
+    it('narrows on request, e.g. after the API rejects the range of a saved link', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({
+        searchMaxDays: 7,
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-30d', tokens: [WORD_TOKEN] },
+        tabs: <NarrowForSearchButton />,
+      });
+      await settle(queryClient);
+      expect(lastQueriedDays()).toBe(30);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Narrow for search' }));
+
+      await waitFor(() => expect(lastQueriedDays()).toBe(7));
+      expect(screen.getByText(NARROWED_NOTE)).toBeTruthy();
+    });
+  });
+
+  describe('when the host sets no cap', () => {
+    it('keeps a 30-day range when a word is added', async () => {
+      setExplorerHandlers(traceTokenSearchCapabilities);
+      const { queryClient } = renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, datePreset: 'last-30d' } });
+      await settle(queryClient);
+
+      await searchForWord('refund');
+
+      await waitFor(() =>
+        expect(onTraceQuery.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ where: expect.anything() })),
+      );
+      expect(lastQueriedDays()).toBe(30);
+      expect(screen.queryByText(NARROWED_NOTE)).toBeNull();
     });
   });
 });

@@ -4,6 +4,7 @@ import type { TraceDatePreset } from '../../types';
 import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
+import { SearchNarrowedNote } from '@/domains/observability/components/search-narrowed-note';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
@@ -93,7 +94,8 @@ export function TracesExplorerTimeRangeChip({
   minDate,
   maxRangeMs,
 }: TracesExplorerTimeRangeChipProps) {
-  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange, resetDateRange } = useTracesFilters();
+  const { filters, dateFrom, dateTo, setDatePreset, setDate, setDateRange, resetDateRange, searchRangeLimit } =
+    useTracesFilters();
   const { isLoading } = useTracesList();
 
   return (
@@ -110,6 +112,13 @@ export function TracesExplorerTimeRangeChip({
       onReset={() => resetDateRange(DEFAULT_TRACES_FILTERS.datePreset)}
       minDate={minDate}
       maxRangeMs={maxRangeMs}
+      rangeLimit={searchRangeLimit}
     />
   );
+}
+
+/** Says a word search narrowed the time range. Renders nothing otherwise; place it under the bar. */
+export function TracesExplorerSearchNote() {
+  const { searchNarrowed, searchMaxDays } = useTracesFilters();
+  return searchNarrowed ? <SearchNarrowedNote maxDays={searchMaxDays} /> : null;
 }

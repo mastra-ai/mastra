@@ -277,6 +277,50 @@ describe('DateTimeRangePicker (presets)', () => {
   });
 });
 
+describe('DateTimeRangePicker (range limit)', () => {
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+  const rangeLimit = { maxMs: SEVEN_DAYS, reason: 'Search covers at most 7 days' };
+
+  it('disables presets longer than the limit and says why', () => {
+    const onPresetChange = vi.fn();
+    render(
+      <DateTimeRangePicker
+        preset="last-7d"
+        onPresetChange={onPresetChange}
+        presets={TRACE_PRESETS}
+        rangeLimit={rangeLimit}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    const longer = screen.getByRole('menuitemradio', { name: /Last 14 days/ });
+    expect(longer.getAttribute('aria-disabled')).toBe('true');
+    expect(longer.textContent).toContain('Search covers at most 7 days');
+    expect(screen.getByRole('menuitemradio', { name: /Last 30 days/ }).getAttribute('aria-disabled')).toBe('true');
+    for (const name of ['Last 24 hours', 'Last 3 days', 'Last 7 days', 'Custom range...']) {
+      expect(screen.getByRole('menuitemradio', { name }).getAttribute('aria-disabled')).toBeNull();
+    }
+
+    fireEvent.click(longer);
+    expect(onPresetChange).not.toHaveBeenCalled();
+  });
+
+  it('caps a custom range at the limit', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 8, 20),
+      rangeLimit,
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Range cannot be longer than 7 days');
+    expect(onDateRangeChange).not.toHaveBeenCalled();
+  });
+});
+
 /** Applies "custom" at once but leaves other presets pending, like a router that commits URL changes later. */
 function SlowPicker({ onPendingPreset }: { onPendingPreset: (preset: DateRangePreset) => void }) {
   const [preset, setPreset] = useState<DateRangePreset>('last-3d');
