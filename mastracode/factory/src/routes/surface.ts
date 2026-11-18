@@ -78,6 +78,7 @@ import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { buildHeapSnapshotRoutes } from './heap-snapshot.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import type { IntakeRoutesDeps } from './intake.js';
@@ -943,6 +944,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
 
   return [
     ...factoryStatusRoutes(deps.factoryStorage),
+    ...buildHeapSnapshotRoutes({ auth: deps.auth }),
     ...buildFsRoutes({
       root: deps.fsRoot,
       sessionFs: {

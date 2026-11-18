@@ -100,3 +100,7 @@ om-reflector-fixture.json
 # Throwaway probe scripts
 *.local.mjs
 *.local.ts
+
+# Memory breakdown harness output (scripts/bench)
+bench-out/
+*.heapsnapshot
