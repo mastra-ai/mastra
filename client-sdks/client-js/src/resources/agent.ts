@@ -125,6 +125,17 @@ type SignalRuntimeOptionsEntry = {
  */
 type StreamedResponse = Response & { stopSource?: (reason?: unknown) => void };
 
+/**
+ * A consumer stream can be produced into by more than one request: a client-tool continuation
+ * starts a new request that keeps writing into the same stream. The channel is shared so that
+ * stopping reaches whichever request is producing right now, and `stopped` keeps the later
+ * guards from running another tool round or sending a continuation (#30788 review).
+ */
+type ProducerStopChannel = {
+  stop?: (reason: unknown) => void;
+  stopped: boolean;
+};
+
 const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
 const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
 
@@ -2339,6 +2350,7 @@ export class Agent extends BaseResource {
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
     signal?: AbortSignal,
+    producerStop?: ProducerStopChannel,
   ) {
     // Know the execution ID before the first chunk, including for early cancellation.
     const suppliedRunId = processedParams.runId;
@@ -2350,12 +2362,23 @@ export class Agent extends BaseResource {
     // cancel a stream the consumer owns: that detach also drops a pending run-abort
     // retry still waiting for the server's acknowledgement (#30788 review).
     const producerAbort = new AbortController();
+    // A client-tool continuation re-enters this method for the same consumer stream, so the
+    // stop channel is shared and re-pointed at the request producing right now. Stopping only
+    // the first request would leave the continuation running (#30788 review).
+    const stopChannel: ProducerStopChannel = producerStop ?? { stopped: false };
+    stopChannel.stop = reason => {
+      stopChannel.stopped = true;
+      producerAbort.abort(reason);
+    };
     const cancellationAbort = new AbortController();
     const detachSignal = signal;
     signal = mergeAbortSignals(detachSignal, transportAbort.signal);
     let cancellationTimer: ReturnType<typeof setTimeout> | undefined;
+    // True while a run-abort retry is still waiting for the server's acknowledgement.
+    let runAbortRetryPending = false;
     const stopCancellation = () => cancellationAbort.abort();
     const cancelExecution = () => {
+      runAbortRetryPending = true;
       cancellationTimer = setTimeout(
         () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
         10_000,
@@ -2393,17 +2416,20 @@ export class Agent extends BaseResource {
         } finally {
           clearTimeout(cancellationTimer);
           transportAbort.abort(callerSignal?.reason);
+          // The retry is over, so a later teardown may drop the detach listener again.
+          runAbortRetryPending = false;
+          detachSignal?.removeEventListener('abort', stopCancellation);
         }
       })();
     };
     const cleanupCancellation = () => {
       callerSignal?.removeEventListener('abort', cancelExecution);
-      detachSignal?.removeEventListener('abort', stopCancellation);
       // A run-abort retry belongs to the caller's abort, not to this stream: it keeps
-      // retrying until the server acknowledges it or the 10s cap fires. Tearing the
-      // stream down must not drop it, or a failed chunk handler would leave the run
-      // running with no acknowledgement (#30788 review). A consumer detaching the
-      // stream still stops it through the detach listener above.
+      // retrying until the server acknowledges it or the 10s cap fires. Tearing the stream
+      // down must not drop it, or a failed chunk handler would leave the run running with no
+      // acknowledgement (#30788 review). While a retry is still pending the detach listener
+      // stays registered, so a consumer detaching the stream can still stop it.
+      if (!runAbortRetryPending) detachSignal?.removeEventListener('abort', stopCancellation);
     };
     detachSignal?.addEventListener('abort', stopCancellation, { once: true });
     if (detachSignal?.aborted) stopCancellation();
@@ -2445,7 +2471,9 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
-    const isAborted = () => Boolean(signal?.aborted || callerSignal?.aborted);
+    // A stopped producer must not run another tool round or send a continuation, even when the
+    // response body is still readable because the stop could not reach the socket (#30788 review).
+    const isAborted = () => Boolean(stopChannel.stopped || signal?.aborted || callerSignal?.aborted);
     const isAbortError = (error: unknown) => isAborted() || (error as Error)?.name === 'AbortError';
     const safeClose = () => {
       try {
@@ -2796,6 +2824,9 @@ export class Agent extends BaseResource {
                   controller,
                   recursionRoute,
                   signal,
+                  // Hand the continuation the same channel: a handler failure while it is
+                  // producing must reach the continuation's request too (#30788 review).
+                  stopChannel,
                 );
               } catch (error) {
                 if (!isAbortError(error)) {
@@ -2858,7 +2889,12 @@ export class Agent extends BaseResource {
 
     // Let the caller stop the request that feeds this stream. Doing that instead of
     // cancelling the returned stream keeps a pending run-abort retry alive (#30788 review).
-    (response as StreamedResponse).stopSource = reason => producerAbort.abort(reason);
+    try {
+      (response as StreamedResponse).stopSource = reason => stopChannel.stop?.(reason);
+    } catch {
+      // A caller-supplied `fetch` can return a non-extensible Response. The reader then falls
+      // back to cancelling the stream, which is worse but must not fail the call (#30788 review).
+    }
     return response;
   }
 
@@ -2886,10 +2922,14 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
+    // Stops this request on its own. Cancelling the response body instead could stay pending
+    // behind a clone the caller still holds, leaving the request open (#30788 review).
+    const producerAbort = new AbortController();
     const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
       body: processedParams,
       stream: true,
+      signal: producerAbort.signal,
     });
 
     if (!response.body) {
@@ -2900,13 +2940,15 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
+    }) as StreamedResponse & {
       processDataStream: ({
         onChunk,
       }: {
         onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
       }) => Promise<void>;
     };
+
+    streamResponse.stopSource = reason => producerAbort.abort(reason);
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -2916,6 +2958,7 @@ export class Agent extends BaseResource {
       await processMastraNetworkStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        stopSource: streamResponse.stopSource,
       });
     };
 
@@ -2936,10 +2979,14 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
+    // Stops this request on its own. Cancelling the response body instead could stay pending
+    // behind a clone the caller still holds, leaving the request open (#30788 review).
+    const producerAbort = new AbortController();
     const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
       method: 'POST',
       body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
+      signal: producerAbort.signal,
     });
 
     if (!response.body) {
@@ -2950,13 +2997,15 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
+    }) as StreamedResponse & {
       processDataStream: ({
         onChunk,
       }: {
         onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
       }) => Promise<void>;
     };
+
+    streamResponse.stopSource = reason => producerAbort.abort(reason);
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -2966,6 +3015,7 @@ export class Agent extends BaseResource {
       await processMastraNetworkStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        stopSource: streamResponse.stopSource,
       });
     };
 
@@ -2988,10 +3038,14 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
+    // Stops this request on its own. Cancelling the response body instead could stay pending
+    // behind a clone the caller still holds, leaving the request open (#30788 review).
+    const producerAbort = new AbortController();
     const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
       method: 'POST',
       body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
+      signal: producerAbort.signal,
     });
 
     if (!response.body) {
@@ -3002,13 +3056,15 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
+    }) as StreamedResponse & {
       processDataStream: ({
         onChunk,
       }: {
         onChunk: Parameters<typeof processMastraNetworkStream>[0]['onChunk'];
       }) => Promise<void>;
     };
+
+    streamResponse.stopSource = reason => producerAbort.abort(reason);
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -3018,6 +3074,7 @@ export class Agent extends BaseResource {
       await processMastraNetworkStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        stopSource: streamResponse.stopSource,
       });
     };
 
@@ -3493,10 +3550,14 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    // Stops this request on its own. Cancelling the response body instead could stay pending
+    // behind a clone the caller still holds, leaving the request open (#30788 review).
+    const producerAbort = new AbortController();
     const response: Response = await this.request(`/agents/${this.agentId}/observe`, {
       method: 'POST',
       body: params,
       stream: true,
+      signal: producerAbort.signal,
     });
 
     if (!response.body) {
@@ -3507,13 +3568,15 @@ export class Agent extends BaseResource {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
-    }) as Response & {
+    }) as StreamedResponse & {
       processDataStream: ({
         onChunk,
       }: {
         onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
       }) => Promise<void>;
     };
+
+    streamResponse.stopSource = reason => producerAbort.abort(reason);
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -3523,6 +3586,7 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        stopSource: streamResponse.stopSource,
       });
     };
 
@@ -3627,23 +3691,29 @@ export class Agent extends BaseResource {
       versions: params.versions,
     };
 
+    // Stops this request on its own. Cancelling the response body instead could stay pending
+    // behind a clone the caller still holds, leaving the request open (#30788 review).
+    const producerAbort = new AbortController();
     const response: Response = await this.request(`/agents/${this.agentId}/recover`, {
       method: 'POST',
       body,
       stream: true,
+      signal: producerAbort.signal,
     });
 
     if (!response.body) {
       throw new Error('No response body');
     }
 
-    const streamResponse = response as Response & {
+    const streamResponse = response as StreamedResponse & {
       processDataStream: ({
         onChunk,
       }: {
         onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
       }) => Promise<void>;
     };
+
+    streamResponse.stopSource = reason => producerAbort.abort(reason);
 
     streamResponse.processDataStream = async ({
       onChunk,
@@ -3653,6 +3723,7 @@ export class Agent extends BaseResource {
       await processMastraStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
         onChunk,
+        stopSource: streamResponse.stopSource,
       });
     };
 

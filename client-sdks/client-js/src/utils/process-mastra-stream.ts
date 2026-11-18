@@ -13,9 +13,10 @@ async function sharedProcessMastraStream({
   /**
    * Stops whatever feeds `stream` when `onChunk` fails. Pass this when `stream` is not
    * the caller's own to cancel: cancelling a stream the caller owns has side effects
-   * beyond stopping the producer (#30788 review). Defaults to cancelling `stream`.
+   * beyond stopping the producer, and a stop that never settles would hold up the
+   * caller's error (#30788 review). Defaults to cancelling `stream`.
    */
-  stopSource?: (reason: unknown) => void;
+  stopSource?: (reason: unknown) => void | Promise<void>;
 }) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -63,7 +64,9 @@ async function sharedProcessMastraStream({
     if (!signal?.aborted) {
       if (stopSource) {
         try {
-          stopSource(error);
+          // A stop callback may be async, and its rejection is not the error the caller is
+          // waiting for, so it must not surface as an unhandled rejection either.
+          void Promise.resolve(stopSource(error)).catch(() => {});
         } catch {
           // The handler's error is what the caller needs to see.
         }
@@ -89,7 +92,7 @@ export async function processMastraNetworkStream({
   stream: globalThis.ReadableStream<Uint8Array>;
   onChunk: (chunk: NetworkChunkType) => void | Promise<void>;
   signal?: AbortSignal;
-  stopSource?: (reason: unknown) => void;
+  stopSource?: (reason: unknown) => void | Promise<void>;
 }) {
   return sharedProcessMastraStream({
     stream,
@@ -108,7 +111,7 @@ export async function processMastraStream({
   stream: globalThis.ReadableStream<Uint8Array>;
   onChunk: (chunk: ChunkType) => void | Promise<void>;
   signal?: AbortSignal;
-  stopSource?: (reason: unknown) => void;
+  stopSource?: (reason: unknown) => void | Promise<void>;
 }) {
   return sharedProcessMastraStream({
     stream,

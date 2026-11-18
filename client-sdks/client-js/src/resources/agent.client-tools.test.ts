@@ -32,6 +32,29 @@ function sseResponse(chunks: Array<object | string>, { status = 200 }: { status?
   });
 }
 
+// Helper to build an SSE response that sends its first chunk at once and the rest after a
+// delay, so a consumer can fail its chunk handler while the server is still producing.
+function delayedSseResponse(chunks: Array<object | string>) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const [first, ...rest] = chunks;
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(first)}\n\n`));
+      setTimeout(() => {
+        for (const chunk of rest) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+        controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+        controller.close();
+      }, 50);
+    },
+  });
+  return new Response(stream as unknown as ReadableStream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
 // Helper to build a Response in the legacy AI SDK data-stream protocol (used by streamLegacy)
 function legacyStreamResponse(parts: string[]) {
   const encoder = new TextEncoder();
@@ -172,6 +195,88 @@ describe('Agent client-side tools', () => {
     const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
     expect(recursiveMessagesJson).toContain('__mastraObservability');
     expect(recursiveMessagesJson).toContain(traceparent);
+  });
+
+  it('stream: a failing chunk handler stops the client-tool continuation (#30788 review)', async () => {
+    const toolCallId = 'call_stopped';
+    // The handler fails on the first chunk, so the tool-call and finish chunks arrive after
+    // the consumer has already stopped reading.
+    const firstCycle = [
+      { type: 'text-delta', payload: { text: 'working' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    (global.fetch as any).mockResolvedValueOnce(delayedSseResponse(firstCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await expect(
+      resp.processDataStream({
+        onChunk: () => {
+          throw new Error('handler failed');
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+
+    // Let the remaining chunks reach the branch that drives tool execution.
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stream: a failing chunk handler stops the continuation request already running (#30788 review)', async () => {
+    const toolCallId = 'call_running';
+    const firstCycle = [
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    // The continuation request is the one producing when the handler fails.
+    const secondCycle = [{ type: 'text-delta', payload: { text: 'second cycle' } }];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await expect(
+      resp.processDataStream({
+        onChunk: chunk => {
+          if (chunk.type === 'text-delta' && chunk.payload?.text === 'second cycle') {
+            throw new Error('handler failed');
+          }
+        },
+      }),
+    ).rejects.toThrow('handler failed');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // Stopping must reach the request producing right now, not the one that already finished.
+    expect((global.fetch as any).mock.calls[1][1].signal.aborted).toBe(true);
   });
 
   it('stream: executes tools from the offered set and refreshes visible tools for the continuation', async () => {

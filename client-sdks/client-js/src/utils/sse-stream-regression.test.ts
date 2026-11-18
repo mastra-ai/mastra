@@ -299,3 +299,60 @@ describe('MastraClient agent.stream SSE readers', () => {
     expect(chunks).toEqual([event('hé🙂'), event('final')]);
   });
 });
+
+// The network, observe and recover entry points build their own response, so each one must stop
+// its own request instead of cancelling the stream: a clone the caller holds keeps that stream
+// open, and nothing would end the request (#30788 review).
+describe('MastraClient streamed entry points stop their request (#30788 review)', () => {
+  const client = () => new MastraClient({ baseUrl: 'http://127.0.0.1:1', retries: 0 });
+
+  const openWire = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${sse('first')}\n\ndata: {`));
+        },
+      }) as unknown as ReadableStream,
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    );
+
+  const expectRequestStopped = async (
+    open: () => Promise<{ processDataStream: (options: { onChunk: (chunk: any) => void }) => Promise<void> }>,
+  ) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(openWire());
+    try {
+      const result = await open();
+      await expect(
+        result.processDataStream({
+          onChunk: () => {
+            throw new Error('handler failed');
+          },
+        }),
+      ).rejects.toThrow('handler failed');
+      const requestSignal = fetchSpy.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  };
+
+  it('stops the network request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').network('hi', {}));
+  });
+
+  it('stops the approve-network-tool-call request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').approveNetworkToolCall({ runId: 'run-1' }));
+  });
+
+  it('stops the decline-network-tool-call request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').declineNetworkToolCall({ runId: 'run-1' }));
+  });
+
+  it('stops the observe request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').observe({ runId: 'run-1' }));
+  });
+
+  it('stops the recover request when onChunk throws', async () => {
+    await expectRequestStopped(() => client().getAgent('a').recover({ runId: 'run-1' }));
+  });
+});
