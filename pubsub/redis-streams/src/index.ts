@@ -601,16 +601,17 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   /**
    * A new, unconnected client with this pubsub's connection options, for health checks that must
    * not queue behind pub/sub traffic. Commands fail fast while disconnected instead of queueing.
-   * The caller owns it: connect it, and close it when done.
+   * The caller owns it: connect it, and close it when done. Exposes whichever shape this pubsub
+   * uses: a standalone `RedisClientType`, or a `RedisClusterType` when it was configured with a
+   * cluster.
    */
-  createMonitorClient(): RedisClientType {
+  createMonitorClient(): RedisClientType | RedisClusterType {
     const cluster = this.#writeClient as unknown as Partial<Pick<RedisClusterType, '_options'>>;
     if (cluster._options) {
       // A cluster's node clients take their options from `defaults`, not the root.
-      const duplicate = (this.#writeClient as unknown as RedisClusterType).duplicate({
+      return (this.#writeClient as unknown as RedisClusterType).duplicate({
         defaults: { ...cluster._options.defaults, disableOfflineQueue: true },
       });
-      return duplicate as unknown as RedisClientType;
     }
     return this.#writeClient.duplicate({ disableOfflineQueue: true }) as RedisClientType;
   }

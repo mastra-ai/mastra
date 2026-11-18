@@ -507,6 +507,40 @@ describe('review follow-ups', () => {
     expect(records.find(r => r.name === 'mastra_factory_db_pool' && r.labels.state === 'total')?.value).toBe(1);
   });
 
+  it('logs a slow query first seen after the baseline sample', async () => {
+    const { postgresStatsCollector } = await import('./collectors/postgres.js');
+    let statements: Array<Record<string, unknown>> = [{ id: '1', calls: 10, total_exec_time: 100 }];
+    const pool = {
+      totalCount: 1,
+      idleCount: 1,
+      waitingCount: 0,
+      query: vi.fn(async (sql: string): Promise<{ rows: Array<Record<string, unknown>> }> => {
+        if (sql.includes('pg_extension')) return { rows: [{ installed: 1 }] };
+        if (sql.includes('pg_stat_statements')) return { rows: statements };
+        return { rows: [{}] };
+      }),
+    };
+    const info = vi.fn();
+    const collector = postgresStatsCollector(pool, 1000, 1, () => ({ info, warn: vi.fn() }));
+
+    // The first sample only sets the baseline.
+    await collector.collect({ emit: () => {} });
+    expect(info).not.toHaveBeenCalled();
+
+    // id 2 appears for the first time here. Its lifetime total is everything that happened since
+    // then, so it has to be ranked instead of dropped for having no baseline.
+    statements = [
+      { id: '1', calls: 11, total_exec_time: 110 },
+      { id: '2', calls: 1, total_exec_time: 900 },
+    ];
+    await collector.collect({ emit: () => {} });
+
+    expect(info).toHaveBeenCalledTimes(1);
+    const payload = info.mock.calls[0]![1] as { statements: Array<{ queryId: string; totalMs: number }> };
+    expect(payload.statements.map(statement => statement.queryId)).toEqual(['2', '1']);
+    expect(payload.statements[0]?.totalMs).toBe(900);
+  });
+
   it('sends event counts before gauges, so the cap drops gauges first', async () => {
     const metrics = new FactoryMetrics(
       resolveMetricsConfig({ groups: ['intake'], intervalMs: 15_000, maxRecordsPerMinute: 12 }, {}),

@@ -43,6 +43,7 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import { factoryMetrics } from './metrics/index.js';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
@@ -3526,6 +3527,39 @@ describe('MastraFactory.finalize', () => {
       expect(reconcile).not.toHaveBeenCalled();
     } finally {
       reconcile.mockRestore();
+    }
+  });
+
+  it('does not start metrics when finalize() finishes after shutdown() began', async () => {
+    let releaseControllerFinalize!: () => void;
+    const controllerFinalize = new Promise<void>(resolve => {
+      releaseControllerFinalize = resolve;
+    });
+    prepareMock.mockResolvedValueOnce({
+      base: { controller: controllerMock },
+      mastraArgs: {},
+      finalize: vi.fn(() => controllerFinalize),
+    } as never);
+
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      metrics: { groups: ['process'] },
+    });
+    await factory.prepare();
+    const start = vi.spyOn(factoryMetrics(), 'start');
+    try {
+      // finalize() parks on the controller's finalize until shutdown() has completed, so it
+      // resumes into a process that already cleaned up. Without the guard, metrics would start here.
+      const finalize = factory.finalize();
+      await factory.shutdown();
+      releaseControllerFinalize();
+      await finalize;
+
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      releaseControllerFinalize();
+      start.mockRestore();
     }
   });
 

@@ -325,7 +325,7 @@ export interface MastraFactoryConfig {
   /**
    * Factory health metrics, sent through `mastra.metrics` (off by default: every record counts
    * towards observability usage). Pick groups — `process`, `postgres`, `redis`, `sandbox`,
-   * `sessions`, `intake` — or `'all'`. Env overrides: `FACTORY_METRICS` (`all`, `0`, or a list
+   * `intake` — or `'all'`. Env overrides: `FACTORY_METRICS` (`all`, `0`, or a list
    * like `sandbox,intake`), `FACTORY_METRICS_INTERVAL_MS`, `FACTORY_METRICS_MAX_PER_MIN`.
    */
   metrics?: FactoryMetricsOptions;
@@ -676,6 +676,8 @@ export class MastraFactory {
   #shutdownPromise: Promise<void> | undefined;
   readonly #metrics: FactoryMetrics;
   #stopMetrics: (() => Promise<void>) | undefined;
+  /** Set before `shutdown()`'s first await, so a late `finalize()` cannot start collecting after cleanup. */
+  #shutdownStarted = false;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -2767,7 +2769,7 @@ export class MastraFactory {
   }
 
   #startMetrics(): void {
-    if (this.#stopMetrics) return;
+    if (this.#stopMetrics || this.#shutdownStarted) return;
     const getMastra = () => this.#prepared?.base.controller.getMastra();
     this.#stopMetrics = startFactoryMetrics(
       this.#metrics,
@@ -2784,6 +2786,7 @@ export class MastraFactory {
   /** Stop Factory-owned background work and channel transports before the host process shuts down. */
   async shutdown(): Promise<void> {
     if (this.#shutdownPromise) return this.#shutdownPromise;
+    this.#shutdownStarted = true;
 
     const channelShutdowns = this.#channelShutdowns;
     this.#channelShutdowns = [];
