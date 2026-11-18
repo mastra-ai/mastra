@@ -2,12 +2,13 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `CopyField` (`@mastra/playground-ui/components/CopyField`) for values people copy but never edit, like IDs, keys and URLs. Long values are cut in the middle so their start and end stay readable (`org_01KJGEY5…YY27PGS`) instead of being clipped mid-character, hovering shows the whole value, and copying, by the button or by selecting the text, copies the whole value. The copy button turns into a check in place instead of showing a toast. In a `SettingsRow` it hugs short values and stops at the row's field width for long ones.
+Settings now show read-only values one way across apps: `CopyField` for values people copy (IDs, keys, URLs) and `SettingsValue` for values they only read (name, email, versions).
 
-`CopyInput` is deprecated and now renders a `CopyField`; switch imports to `CopyField`.
+- `CopyField` (`@mastra/playground-ui/components/CopyField`): the field look with an inset copy button; long values are cut in the middle instead of clipped, and copying always copies the whole value. `CopyInput` is deprecated and now renders a `CopyField`.
+- `SettingsValue` (`@mastra/playground-ui/new/settings`): plain muted text that truncates; `mono` for versions.
 
 ```tsx
-import { CopyField } from '@mastra/playground-ui/components/CopyField';
-
-<CopyField value={organization.id} label="organization ID" />;
+<SettingsItem title="Organization ID" description="Useful when contacting support.">
+  <CopyField value={organization.id} label="organization ID" />
+</SettingsItem>
 ```

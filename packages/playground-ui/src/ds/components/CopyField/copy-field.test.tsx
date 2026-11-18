@@ -129,15 +129,4 @@ describe('CopyField', () => {
       expect(document.querySelector('[data-sonner-toast]')).toBeNull();
     });
   });
-
-  it('disables its copy button with the field', () => {
-    layoutWith(400);
-    render(
-      <TooltipProvider>
-        <CopyField value={ORG_ID} label="organization ID" disabled />
-      </TooltipProvider>,
-    );
-
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Copy organization ID' }).disabled).toBe(true);
-  });
 });

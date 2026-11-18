@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Too
 import { useMiddleTruncation } from './use-middle-truncation';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
-import type { ControlSize } from '@/ds/primitives/control-size';
 import { fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -15,8 +14,6 @@ export type CopyFieldProps = {
   value: string;
   /** What's being copied, e.g. "organization ID": names the field and its copy button. */
   label: string;
-  size?: ControlSize;
-  disabled?: boolean;
   className?: string;
 };
 
@@ -28,7 +25,7 @@ export type CopyFieldProps = {
  * Width follows `fieldTriggerWidthStyle`: it fills its container, or, where a layout sets `--field-width: auto`
  * (a `SettingsRow`), hugs the value up to `--field-max-width`.
  */
-export function CopyField({ value, label, size, disabled, className }: CopyFieldProps) {
+export function CopyField({ value, label, className }: CopyFieldProps) {
   const { ref, text, truncated } = useMiddleTruncation<HTMLSpanElement>(value);
   const { isCopied, handleCopy } = useCopyToClipboard({ text: value, showToast: false });
 
@@ -46,18 +43,14 @@ export function CopyField({ value, label, size, disabled, className }: CopyField
   // The app may set tooltips to open instantly; this field keeps the standard delay so hovering past it is quiet.
   return (
     <TooltipProvider>
-      <InputGroup size={size} aria-label={label} className={cn(fieldTriggerWidthStyle, 'flex-initial', className)}>
+      <InputGroup aria-label={label} className={cn(fieldTriggerWidthStyle, 'flex-initial', className)}>
         <Tooltip disabled={!truncated}>
           <TooltipTrigger
             render={<span />}
             data-slot="input-group-control"
             translate="no"
             onCopy={copyWholeValue}
-            className={cn(
-              inputGroupControlClassName,
-              'flex items-center font-mono font-normal text-muted-foreground',
-              disabled && 'cursor-not-allowed',
-            )}
+            className={cn(inputGroupControlClassName, 'flex items-center font-mono font-normal text-muted-foreground')}
           >
             {/* The whole value sizes the box (so it hugs short values); the visible line fits inside it. */}
             <span ref={ref} className="grid min-w-0 grid-cols-[minmax(0,max-content)]">
@@ -79,7 +72,7 @@ export function CopyField({ value, label, size, disabled, className }: CopyField
           <TooltipContent className="max-w-[min(32rem,90vw)] font-mono break-all">{value}</TooltipContent>
         </Tooltip>
         <InputGroupAddon align="inline-end">
-          <InputGroupButton onClick={handleCopy} disabled={disabled} tooltip="Copy" aria-label={`Copy ${label}`}>
+          <InputGroupButton onClick={handleCopy} tooltip="Copy" aria-label={`Copy ${label}`}>
             {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
           </InputGroupButton>
           <span role="status" className="sr-only">
