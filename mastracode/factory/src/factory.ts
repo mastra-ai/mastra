@@ -1549,7 +1549,7 @@ export class MastraFactory {
                   : undefined;
               },
             });
-            return async (args: Parameters<typeof notifyStageChange>[0]) => {
+            return async (args: Parameters<typeof notifyStageChange>[0] & Parameters<typeof endPhaseGoal>[0]) => {
               await Promise.all([notifyStageChange(args), endPhaseGoal(args)]);
             };
           })(),

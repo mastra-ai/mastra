@@ -1343,7 +1343,13 @@ export class FactoryDecisionDispatcher {
       throw new FactoryDispatchError('run_configuration_invalid', 'The Factory session has no storage to hold a goal.');
     }
     if (!item || !phaseKey) return objective;
-    const stamp = { phaseKey, goalId: record.id, threadId: binding.threadId, sessionId: binding.sessionId };
+    const stamp = {
+      phaseKey,
+      boardKey: boardForWorkItem(item),
+      goalId: record.id,
+      threadId: binding.threadId,
+      sessionId: binding.sessionId,
+    };
     if (phaseGoalOf(item.metadata)?.goalId !== record.id) {
       await this.#storage.update({
         orgId: record.orgId,
@@ -1352,9 +1358,10 @@ export class FactoryDecisionDispatcher {
         patch: { metadata: { [PHASE_GOAL_METADATA_KEY]: stamp } },
       });
     }
-    // A move that committed before the stamp landed found no goal to end: end it here instead.
+    // A move that committed before the stamp landed found no goal to end: end it here instead. A
+    // same-named phase on another board is a different phase, so the board counts as a move too.
     const after = await this.#storage.get({ orgId: record.orgId, id: item.id });
-    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey) {
+    if (after?.stages.length !== 1 || after.stages[0] !== phaseKey || boardForWorkItem(after) !== stamp.boardKey) {
       await endPhaseGoal(stamp, { agentFor: async () => session.machinery.getAgent(), store: async () => undefined });
       throw new FactoryDecisionSuperseded();
     }
