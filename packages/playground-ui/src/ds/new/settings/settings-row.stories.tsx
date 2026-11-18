@@ -210,7 +210,9 @@ export const DestructiveDisabled: Story = {
       tone="destructive"
       disabled
     >
-      <Button variant="destructive-ghost">Leave</Button>
+      <Button variant="destructive-ghost" disabled>
+        Leave
+      </Button>
     </SettingsRow>
   ),
 };
