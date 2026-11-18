@@ -2031,6 +2031,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const resumeSegment = openResumeSegment(runId, suspendedSnapshot, callbackOptions.requestContext);
       existingEntry.resumeAgentSpan = resumeSegment?.agentSpan;
       existingEntry.resumeModelSpan = resumeSegment?.modelSpan;
+      // Fresh spans capture their own first-chunk clock, never an earlier resume's.
+      existingEntry.resumeCompletionStartTime = undefined;
+      existingEntry.resumeTimeToFirstTokenMs = undefined;
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
