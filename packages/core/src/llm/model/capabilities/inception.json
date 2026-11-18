@@ -8,13 +8,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "mercury-3": [
+    "mercury-2": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "mercury-2": [
+    "mercury-3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
