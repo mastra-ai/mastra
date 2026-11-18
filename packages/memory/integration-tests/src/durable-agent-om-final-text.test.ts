@@ -40,7 +40,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   ENGINES,
@@ -104,11 +104,15 @@ describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, 
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
+      // The Observer prompt renders message timestamps, so a moving clock changes the request hash on every run
+      // and a recorded Observer call can never be replayed.
+      vi.useFakeTimers({ now: new Date('2026-01-01T12:00:00Z'), toFake: ['Date'] });
       recorder = recordProviderRequests();
     });
 
     afterEach(() => {
       recorder.restore();
+      vi.useRealTimers();
     });
 
     describe.each(Object.entries(VARIANTS))('%s variant', (variant, omConfig) => {
@@ -126,7 +130,21 @@ describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, 
             semanticRecall: false,
             generateTitle: false,
             workingMemory: { enabled: false },
-            observationalMemory: { enabled: true, model, scope: 'thread', ...omConfig },
+            observationalMemory: {
+              enabled: true,
+              model,
+              scope: 'thread',
+              ...omConfig,
+              // In replay, a buffered Observer request that has no recording can never match, so the block it would
+              // produce never reaches the next prompt. The default retry schedule (~247s) outlasts the 60s cell timeout,
+              // so fail fast instead; the cell then asserts only final-text persistence. Whether the buffered chunk lands
+              // before the next step is an un-awaited race (observation-turn/step.ts, `void om.trackBackgroundWork`), so
+              // this does NOT show the engines buffer alike. These cells only pass running the whole file, never with -t
+              // (the recorder's duplicate-hash counter is per engine, not per variant).
+              ...(variant === 'buffering' && engine !== 'plain'
+                ? { observation: { ...omConfig.observation, maxRetries: 0 } }
+                : {}),
+            },
           } as any,
         });
       });
