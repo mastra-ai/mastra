@@ -129,6 +129,19 @@ jobs:
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Notify linked issues (alpha available)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: alpha-released
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
       - name: Upload studio assets to R2 (production)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
@@ -153,19 +166,6 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
-      - name: Notify linked issues (alpha available)
-        if: ${{ !inputs.dry_run }}
-        continue-on-error: true
-        run: |
-          pnpm install --ignore-workspace --ignore-scripts
-          npx tsx index.ts
-        working-directory: scripts/release-issue-notification
-        env:
-          MODE: alpha-released
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -175,6 +175,8 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
+    outputs:
+      tagged: ${{ steps.add-tags.outputs.tagged }}
     permissions:
       contents: read
       id-token: write
@@ -286,6 +288,36 @@ jobs:
         run: |
           version=$(node -p 'require("./packages/cli/package.json").version')
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # Disabled: `npm dist-tag add` requires token authentication and cannot use npm OIDC.
+      # - name: Update alpha versions
+      #   if: ${{ !inputs.dry_run }}
+      #   run: node .github/scripts/publish-alpha-tags.js alpha
+
+      - name: Publish packages - dry run
+        if: ${{ inputs.dry_run }}
+        run: pnpm publish -r --dry-run --access public --no-git-checks
+
+      - name: Add tags
+        id: add-tags
+        if: ${{ !inputs.dry_run }}
+        run: |
+          pnpm changeset-cli tag
+          git push origin --tags
+          echo "tagged=true" >> "$GITHUB_OUTPUT"
+
+      - name: Notify linked issues (stable released)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: stable-released
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
       - name: Upload studio assets to R2 (production)
         if: ${{ !inputs.dry_run }}
         env:
@@ -311,34 +343,6 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
-      # Disabled: `npm dist-tag add` requires token authentication and cannot use npm OIDC.
-      # - name: Update alpha versions
-      #   if: ${{ !inputs.dry_run }}
-      #   run: node .github/scripts/publish-alpha-tags.js alpha
-
-      - name: Publish packages - dry run
-        if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public --no-git-checks
-
-      - name: Add tags
-        if: ${{ !inputs.dry_run }}
-        run: |
-          pnpm changeset-cli tag
-          git push origin --tags
-
-      - name: Notify linked issues (stable released)
-        if: ${{ !inputs.dry_run }}
-        continue-on-error: true
-        run: |
-          pnpm install --ignore-workspace --ignore-scripts
-          npx tsx index.ts
-        working-directory: scripts/release-issue-notification
-        env:
-          MODE: stable-released
-          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-
   enter_prerelease:
     needs: stable
     if: |
@@ -346,7 +350,7 @@ jobs:
       github.repository == 'mastra-ai/mastra' &&
       github.event_name == 'workflow_dispatch' &&
       (
-        (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
+        (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.outputs.tagged == 'true') ||
         github.event.inputs.publish_type == 'enter-prerelease'
       )
     runs-on: ubuntu-latest
