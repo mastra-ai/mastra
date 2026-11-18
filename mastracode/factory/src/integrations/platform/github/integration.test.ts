@@ -1336,15 +1336,12 @@ describe('PlatformGithubIntegration', () => {
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
-    // Events come through the deployment's events worker; without a Factory runtime there is nothing to reconcile.
-    expect(integration.workers(context)).toEqual([]);
-    expect(integration.platformTopicSubscriptions(context).map(subscription => subscription.topic)).toEqual([
-      'github-app',
-    ]);
+    // Without a Factory runtime there is nothing to reconcile, but legacy events are still read.
+    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-events']);
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
       endpointHost: 'platform.example.com',
-      events: { topics: ['github-app'] },
+      polling: { enabled: true },
       reconcile: {
         pullRequests: { enabled: true },
         issues: { enabled: true },
@@ -1755,7 +1752,9 @@ describe('PlatformGithubIntegration', () => {
     expect(new PlatformGithubIntegration().slug).toBeUndefined();
   });
 
-  it('can disable reconciliation and resolves collaborator permissions through the platform API', async () => {
+  it('can disable polling and resolves collaborator permissions through the platform API', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       json({
@@ -1774,7 +1773,7 @@ describe('PlatformGithubIntegration', () => {
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
       endpointHost: 'platform.example.com',
-      events: { topics: ['github-app'] },
+      polling: { enabled: false, intervalMs: 9_000 },
       reconcile: {
         pullRequests: { enabled: false },
         issues: { enabled: false },
@@ -1866,25 +1865,36 @@ describe('PlatformGithubIntegration', () => {
     } as unknown as IntegrationContext;
   }
 
-  it('runs one hourly reconcile worker under its own lease, not an event poller', async () => {
+  it('runs the legacy event poller and the reconcile worker, each under its own lease', async () => {
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
     const context = reconcileContext(seed);
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
 
     const workers = integration.workers(context);
-    expect(workers.map(worker => worker.name)).toEqual(['platform-github-reconcile']);
+    expect(workers.map(worker => worker.name)).toEqual(['platform-github-events', 'platform-github-reconcile']);
     expect(integration.diagnostics()).toMatchObject({
-      events: { topics: ['github-app'] },
+      polling: { enabled: true },
       reconcile: {
         pullRequests: { enabled: true },
         issues: { enabled: true },
       },
     });
-    expect(integration.diagnostics()).not.toHaveProperty('polling');
+  });
+
+  it('keeps the reconcile worker alive when polling is disabled', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const seed = await createPlatformStorageForTests();
+    const integration = createIntegration();
+    const context = reconcileContext(seed);
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+
+    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-reconcile']);
+    expect(integration.diagnostics()).toMatchObject({ polling: { enabled: false } });
   });
 
   it('allows issue reconciliation to override a disabled legacy reconcile switch', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
     const seed = await createPlatformStorageForTests();
@@ -1906,7 +1916,7 @@ describe('PlatformGithubIntegration', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
-    expect(integration.workers(reconcileContext(seed))).toEqual([]);
+    expect(integration.workers(reconcileContext(seed)).map(worker => worker.name)).toEqual(['platform-github-events']);
   });
 
   it('removes one issue label through the Platform proxy and surfaces a missing label as a 404', async () => {

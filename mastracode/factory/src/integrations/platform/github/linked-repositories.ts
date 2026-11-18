@@ -21,7 +21,7 @@ export interface LinkedGithubRepository {
 const DEFAULT_UNSHARED_TTL_MS = 30_000;
 
 /**
- * The repositories Factory projects link, by GitHub repository id. Topics
+ * The repositories Factory projects link, by GitHub repository id. Events
  * carry every repository an installation sees; only linked ones are Factory's.
  * Read once and again after a link change, or every `unsharedTtlMs` while
  * changes on other replicas can't reach this one.
@@ -45,6 +45,11 @@ export class LinkedGithubRepositories {
 
   async forRepository(repositoryId: number): Promise<LinkedGithubRepository[]> {
     return (await this.#load()).get(repositoryId) ?? [];
+  }
+
+  /** Every linked repository's id. */
+  async repositoryIds(): Promise<number[]> {
+    return [...(await this.#load()).keys()];
   }
 
   invalidate(): void {

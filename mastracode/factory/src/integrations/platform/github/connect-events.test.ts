@@ -8,7 +8,7 @@ import {
   FACTORY_GITHUB_PROVIDER_KEY,
   FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
 } from './connect-events.js';
-import { legacyGithubTopicSubscription } from './legacy-events.js';
+import { legacyGithubEventHandler } from './legacy-events.js';
 import { LinkedGithubRepositories } from './linked-repositories.js';
 import { PlatformGithubModes } from './mode.js';
 import type { PlatformGithubModeRecord, PlatformGithubModeStorage } from './mode.js';
@@ -120,7 +120,7 @@ function pullRequestPayload(action = 'opened', installationId = 900) {
 }
 
 describe('factory-github connect events', () => {
-  it('delivers a switched org’s events like the legacy topic does', async () => {
+  it('delivers a switched org’s events like the legacy event poller does', async () => {
     const { handle, dispatch, ingestFactoryEvent } = setup();
     await handle(
       connectEvent('pull_request.opened', pullRequestPayload(), { sourceEventId: 'gh-1', dedupeKey: 'gh-1' }),
@@ -260,21 +260,19 @@ describe('factory-github connect events', () => {
       dispatch,
     };
     const connect = connectGithubEventHandler({ delivery, repositories, modes });
-    const legacy = legacyGithubTopicSubscription({ delivery, repositories, modes, reconcile: vi.fn() });
+    const legacy = legacyGithubEventHandler({ delivery, repositories, modes });
 
     // GitHub sends each app its own copy of one comment, under its own delivery id.
     await connect(connectEvent('issue_comment.created', pullRequestPayload('created', 900)));
-    await legacy.route(
+    await legacy(
       {
         id: 'legacy-1',
         timestamp: SWITCHED_AT + 1,
-        fields: {
-          kind: 'issue_comment',
-          deliveryId: 'legacy-delivery-1',
-          payload: JSON.stringify(pullRequestPayload('created', 7)),
-        },
+        event: 'issue_comment',
+        deliveryId: 'legacy-delivery-1',
+        payload: pullRequestPayload('created', 7),
       },
-      { logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never },
+      { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
     );
 
     expect(woken).toEqual([['sub-org-1'], ['sub-org-2']]);

@@ -1,9 +1,9 @@
-import type { TopicEvent } from '@mastra/connect';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { dispatchGithubWebhook, GithubWebhookDispatchIntegration } from '../../github/webhook.js';
 import type { GithubEventDeliveryConfig } from './events.js';
-import { legacyGithubTopicSubscription, parseLegacyGithubTopicEvent } from './legacy-events.js';
+import { legacyGithubEventHandler } from './legacy-events.js';
+import type { LegacyGithubEvent } from './legacy-events.js';
 import { LinkedGithubRepositories } from './linked-repositories.js';
 import { PlatformGithubModes } from './mode.js';
 import type { PlatformGithubModeRecord, PlatformGithubModeStorage } from './mode.js';
@@ -62,20 +62,18 @@ function logger() {
 }
 
 let nextId = 0;
-function topicEvent(
-  kind: string,
-  payload: Record<string, unknown>,
-  options: { timestamp?: number; deliveryId?: string; rawPayload?: string } = {},
-): TopicEvent {
+function legacyEvent(
+  event: string,
+  payload: unknown,
+  options: { timestamp?: number; deliveryId?: string } = {},
+): LegacyGithubEvent {
   nextId += 1;
   return {
-    id: String(nextId),
+    id: `${nextId}-0`,
     timestamp: options.timestamp ?? 1_000,
-    fields: {
-      kind,
-      deliveryId: options.deliveryId ?? `delivery-${nextId}`,
-      payload: options.rawPayload ?? JSON.stringify(payload),
-    },
+    event,
+    deliveryId: options.deliveryId ?? `delivery-${nextId}`,
+    payload,
   };
 }
 
@@ -102,56 +100,41 @@ function setup(
   const { repositories, source } = linkedRepositories(
     options.links ?? [{ installationId: 7, repositoryId: 101, orgId: 'org-1' }],
   );
-  const reconcile = vi.fn();
   const onDependabotAlert = vi.fn();
-  const subscription = legacyGithubTopicSubscription({
+  const handle = legacyGithubEventHandler({
     delivery: { controller: {} as never, github, ingestFactoryEvent, dispatch },
     repositories,
     modes: new PlatformGithubModes(() => modeStorage(options.modes)),
-    reconcile,
     onDependabotAlert,
   });
   const log = logger();
   return {
-    subscription,
-    route: (event: TopicEvent) => subscription.route(event, { logger: log as never }),
+    route: (event: LegacyGithubEvent) => handle(event, log as never),
     dispatch,
     ingestFactoryEvent,
     github,
     source,
-    reconcile,
     onDependabotAlert,
     log,
   };
 }
 
-describe('legacy GitHub topic events', () => {
-  it('reads the github-app topic and reconciles through the integration', () => {
-    const { subscription, reconcile } = setup();
-    expect(subscription.topic).toBe('github-app');
-    subscription.reconcile?.();
-    expect(reconcile).toHaveBeenCalledTimes(1);
-  });
-
-  it('parses the published fields into the webhook Factory handles', () => {
-    const payload = repositoryPayload('opened');
-    expect(parseLegacyGithubTopicEvent(topicEvent('pull_request', payload, { deliveryId: 'd-1' }))).toEqual({
-      event: 'pull_request',
-      deliveryId: 'd-1',
-      payload,
-    });
-    expect(parseLegacyGithubTopicEvent(topicEvent('pull_request', {}, { rawPayload: 'not json' }))).toBeNull();
-    expect(parseLegacyGithubTopicEvent(topicEvent('pull_request', [] as never))).toBeNull();
-    expect(parseLegacyGithubTopicEvent(topicEvent('star', repositoryPayload('created')))).toBeNull();
-  });
-
-  it('skips malformed events without failing, so they do not block the topic', async () => {
+describe('legacy GitHub App events', () => {
+  it('skips malformed and unhandled events without failing, so they do not block the log', async () => {
     const { route, dispatch, ingestFactoryEvent, log } = setup();
-    await expect(route(topicEvent('pull_request', {}, { rawPayload: '{' }))).resolves.toBeUndefined();
+    for (const event of [
+      legacyEvent('pull_request', '{'),
+      legacyEvent('pull_request', []),
+      legacyEvent('pull_request', repositoryPayload('opened'), { deliveryId: '' }),
+      legacyEvent('star', repositoryPayload('created')),
+    ]) {
+      await expect(route(event)).resolves.toBeUndefined();
+    }
     expect(dispatch).not.toHaveBeenCalled();
     expect(ingestFactoryEvent).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledTimes(4);
     expect(log.warn).toHaveBeenCalledWith(
-      'Platform GitHub: skipped a malformed github-app event',
+      'Platform GitHub: skipped a malformed legacy GitHub App event',
       expect.objectContaining({ eventId: expect.any(String) }),
     );
   });
@@ -159,13 +142,13 @@ describe('legacy GitHub topic events', () => {
   it('forwards created PR comments and PR verdict edits to Factory rules, never issue comment edits', async () => {
     const { route, dispatch, ingestFactoryEvent } = setup();
     const events = [
-      topicEvent('pull_request_review', repositoryPayload('submitted'), { deliveryId: 'review' }),
-      topicEvent('issue_comment', repositoryPayload('created'), { deliveryId: 'comment' }),
-      topicEvent('issue_comment', repositoryPayload('edited'), { deliveryId: 'comment-edited' }),
-      topicEvent('issue_comment', repositoryPayload('edited', { issue: { pull_request: { url: 'pr' } } }), {
+      legacyEvent('pull_request_review', repositoryPayload('submitted'), { deliveryId: 'review' }),
+      legacyEvent('issue_comment', repositoryPayload('created'), { deliveryId: 'comment' }),
+      legacyEvent('issue_comment', repositoryPayload('edited'), { deliveryId: 'comment-edited' }),
+      legacyEvent('issue_comment', repositoryPayload('edited', { issue: { pull_request: { url: 'pr' } } }), {
         deliveryId: 'pr-comment-edited',
       }),
-      topicEvent('pull_request_review', repositoryPayload('edited'), { deliveryId: 'review-edited' }),
+      legacyEvent('pull_request_review', repositoryPayload('edited'), { deliveryId: 'review-edited' }),
     ];
     for (const event of events) await route(event);
 
@@ -181,10 +164,10 @@ describe('legacy GitHub topic events', () => {
   it("forwards issue label and assignee changes to Factory rules, so they reach the card's routes", async () => {
     const { route, ingestFactoryEvent } = setup();
     for (const action of ['labeled', 'unlabeled', 'assigned', 'unassigned', 'milestoned']) {
-      await route(topicEvent('issues', repositoryPayload(action), { deliveryId: `issue-${action}` }));
+      await route(legacyEvent('issues', repositoryPayload(action), { deliveryId: `issue-${action}` }));
     }
     for (const action of ['labeled', 'reopened', 'edited']) {
-      await route(topicEvent('pull_request', repositoryPayload(action), { deliveryId: `pr-${action}` }));
+      await route(legacyEvent('pull_request', repositoryPayload(action), { deliveryId: `pr-${action}` }));
     }
 
     expect(vi.mocked(ingestFactoryEvent!).mock.calls.map(([event]) => event.deliveryId)).toEqual([
@@ -199,17 +182,17 @@ describe('legacy GitHub topic events', () => {
 
   it('feeds default-branch pushes to Factory rules', async () => {
     const { route, ingestFactoryEvent } = setup();
-    await route(topicEvent('push', { ...repositoryPayload('push'), ref: 'refs/heads/main' }));
+    await route(legacyEvent('push', { ...repositoryPayload('push'), ref: 'refs/heads/main' }));
     expect(ingestFactoryEvent).toHaveBeenCalledWith(expect.objectContaining({ event: 'push' }), { orgIds: ['org-1'] });
   });
 
-  it('fails the event when Factory ingestion fails, so the events worker replays it', async () => {
+  it('fails the event when Factory ingestion fails, so the poller retries it', async () => {
     const ingestFactoryEvent = vi
       .fn<NonNullable<GithubEventDeliveryConfig['ingestFactoryEvent']>>()
       .mockRejectedValueOnce(new Error('storage down'))
       .mockResolvedValue({ status: 'committed' });
     const { route, dispatch } = setup({ ingestFactoryEvent });
-    const event = topicEvent('pull_request', repositoryPayload('opened'));
+    const event = legacyEvent('pull_request', repositoryPayload('opened'));
 
     await expect(route(event)).rejects.toThrow('storage down');
     expect(dispatch).not.toHaveBeenCalled();
@@ -224,8 +207,8 @@ describe('legacy GitHub topic events', () => {
       .mockRejectedValueOnce(new Error('storage down'))
       .mockResolvedValue({ status: 'committed' });
     const { route, dispatch, log } = setup({ ingestFactoryEvent });
-    const failed = topicEvent('pull_request', repositoryPayload('opened'), { deliveryId: 'failed-once' });
-    const handled = topicEvent('pull_request', repositoryPayload('opened'), { deliveryId: 'handled' });
+    const failed = legacyEvent('pull_request', repositoryPayload('opened'), { deliveryId: 'failed-once' });
+    const handled = legacyEvent('pull_request', repositoryPayload('opened'), { deliveryId: 'handled' });
 
     await expect(route(failed)).rejects.toThrow('storage down');
     await route(failed);
@@ -238,16 +221,16 @@ describe('legacy GitHub topic events', () => {
       'handled',
     ]);
     expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(log.debug).toHaveBeenCalledWith('Platform GitHub: skipped a replayed github-app delivery', {
+    expect(log.debug).toHaveBeenCalledWith('Platform GitHub: skipped a replayed legacy GitHub App delivery', {
       deliveryId: 'handled',
     });
   });
 
-  it('logs failed subscription deliveries without failing the event, so one bad target does not block the topic', async () => {
+  it('logs failed subscription deliveries without failing the event, so one bad target does not block the log', async () => {
     const { route, dispatch, log } = setup();
     dispatch.mockResolvedValueOnce({ delivered: 1, failed: 1, skipped: 0, ignored: false });
     await expect(
-      route(topicEvent('pull_request', repositoryPayload('synchronize'), { deliveryId: 'd-1' })),
+      route(legacyEvent('pull_request', repositoryPayload('synchronize'), { deliveryId: 'd-1' })),
     ).resolves.toBeUndefined();
     expect(log.warn).toHaveBeenCalledWith('Platform GitHub event completed with failed subscription deliveries', {
       deliveryId: 'd-1',
@@ -258,35 +241,35 @@ describe('legacy GitHub topic events', () => {
 
   it('hands the dispatch its integration, so a woken session can be attributed to its owner', async () => {
     const { route, dispatch, github } = setup();
-    await route(topicEvent('pull_request', repositoryPayload('synchronize')));
+    await route(legacyEvent('pull_request', repositoryPayload('synchronize')));
     expect(dispatch.mock.calls[0]?.[1].github).toBe(github);
   });
 
   describe('linked-project scoping', () => {
     it('drops events for repositories no Factory project links', async () => {
       const { route, dispatch, ingestFactoryEvent } = setup({ links: [] });
-      await route(topicEvent('pull_request', repositoryPayload('opened')));
+      await route(legacyEvent('pull_request', repositoryPayload('opened')));
       expect(dispatch).not.toHaveBeenCalled();
       expect(ingestFactoryEvent).not.toHaveBeenCalled();
     });
 
     it('drops events that name a different installation of a linked repository', async () => {
       const { route, dispatch } = setup();
-      await route(topicEvent('pull_request', repositoryPayload('opened', {}, 99)));
+      await route(legacyEvent('pull_request', repositoryPayload('opened', {}, 99)));
       expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('drops events whose payload names no repository or installation', async () => {
       const { route, dispatch } = setup();
-      await route(topicEvent('pull_request', { action: 'opened', installation: { id: 7 } }));
-      await route(topicEvent('pull_request', { action: 'opened', repository: { id: 101 } }));
+      await route(legacyEvent('pull_request', { action: 'opened', installation: { id: 7 } }));
+      await route(legacyEvent('pull_request', { action: 'opened', repository: { id: 101 } }));
       expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('reads the links once, not per event', async () => {
       const { route, source, dispatch } = setup();
-      await route(topicEvent('pull_request', repositoryPayload('opened')));
-      await route(topicEvent('pull_request', repositoryPayload('synchronize')));
+      await route(legacyEvent('pull_request', repositoryPayload('opened')));
+      await route(legacyEvent('pull_request', repositoryPayload('synchronize')));
       expect(dispatch).toHaveBeenCalledTimes(2);
       expect(source.listConfiguredExternalKeys).toHaveBeenCalledTimes(1);
     });
@@ -313,7 +296,7 @@ describe('legacy GitHub topic events', () => {
         links: [{ installationId: 300, repositoryId: 101, orgId: 'org-1' }],
         modes: { 'org-1': switched },
       });
-      await route(topicEvent('pull_request', repositoryPayload('opened'), { timestamp: 4_000 }));
+      await route(legacyEvent('pull_request', repositoryPayload('opened'), { timestamp: 4_000 }));
       expect(ingestFactoryEvent).toHaveBeenCalledWith(
         expect.objectContaining({ payload: expect.objectContaining({ installation: { id: 300 } }) }),
         { orgIds: ['org-1'] },
@@ -321,12 +304,12 @@ describe('legacy GitHub topic events', () => {
       expect(dispatch).toHaveBeenCalledTimes(1);
     });
 
-    it('drops a legacy event published after the switch: the connect topic delivers it', async () => {
+    it('drops a legacy event published after the switch: its factory-github connection delivers it', async () => {
       const { route, dispatch, ingestFactoryEvent } = setup({
         links: [{ installationId: 300, repositoryId: 101, orgId: 'org-1' }],
         modes: { 'org-1': switched },
       });
-      await route(topicEvent('pull_request', repositoryPayload('opened'), { timestamp: 5_000 }));
+      await route(legacyEvent('pull_request', repositoryPayload('opened'), { timestamp: 5_000 }));
       expect(dispatch).not.toHaveBeenCalled();
       expect(ingestFactoryEvent).not.toHaveBeenCalled();
     });
@@ -336,7 +319,7 @@ describe('legacy GitHub topic events', () => {
         links: [{ installationId: 300, repositoryId: 101, orgId: 'org-1' }],
         modes: { 'org-1': switched },
       });
-      await route(topicEvent('pull_request', repositoryPayload('opened', {}, 8), { timestamp: 4_000 }));
+      await route(legacyEvent('pull_request', repositoryPayload('opened', {}, 8), { timestamp: 4_000 }));
       expect(dispatch).not.toHaveBeenCalled();
     });
 
@@ -348,14 +331,14 @@ describe('legacy GitHub topic events', () => {
         ],
         modes: { 'org-1': switched },
       });
-      await route(topicEvent('pull_request', repositoryPayload('opened'), { timestamp: 9_000 }));
+      await route(legacyEvent('pull_request', repositoryPayload('opened'), { timestamp: 9_000 }));
       expect(dispatch).toHaveBeenCalledTimes(1);
     });
   });
 
   it('asks for a Dependabot sync when an alert changes, without dispatching it', async () => {
     const { route, onDependabotAlert, dispatch } = setup();
-    await route(topicEvent('dependabot_alert', repositoryPayload('created')));
+    await route(legacyEvent('dependabot_alert', repositoryPayload('created')));
     expect(onDependabotAlert).toHaveBeenCalledTimes(1);
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -377,7 +360,7 @@ describe('legacy GitHub topic events', () => {
 
     async function captureGate(github?: GithubWebhookDispatchIntegration) {
       const context = setup({ github });
-      await context.route(topicEvent('pull_request', repositoryPayload('synchronize')));
+      await context.route(legacyEvent('pull_request', repositoryPayload('synchronize')));
       const dependencies = context.dispatch.mock.calls[0]?.[1];
       if (!dependencies?.isAuthorizedSender) throw new Error('dispatch was not called with a sender gate');
       return { dependencies, log: context.log, github: context.github };
@@ -491,7 +474,7 @@ describe('legacy GitHub topic events', () => {
 
     // Published before org-switched's switch, read after it.
     await route(
-      topicEvent('pull_request', repositoryPayload('opened', { pull_request: { number: 5 } }), { timestamp: 5_000 }),
+      legacyEvent('pull_request', repositoryPayload('opened', { pull_request: { number: 5 } }), { timestamp: 5_000 }),
     );
 
     expect(ingested).toEqual([

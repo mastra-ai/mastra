@@ -114,15 +114,29 @@ async function storageForBackend() {
   return new LibSQLFactoryStorage({ url: ':memory:', id: 'platform-push-rebuild' });
 }
 
-/** A fake platform serving the legacy GitHub routes this lane reads at boot and the events service. */
-async function platformForGithub(): Promise<FakePlatform> {
+interface LegacyPlatform {
+  platform: FakePlatform;
+  /** The legacy GitHub App event log of repository 99, as the platform serves it. */
+  events: Array<{ id: string; deliveryId: string; event: string; payload: unknown }>;
+}
+
+/** A fake platform serving the legacy GitHub routes this lane reads at boot and repository 99's event log. */
+async function platformForGithub(): Promise<LegacyPlatform> {
   const platform = await startFakePlatform();
+  const events: LegacyPlatform['events'] = [];
+  const served = new Set<string>();
   platform.route = (method, path) => {
     if (method === 'GET' && path === '/v1/server/github-app/installations') {
       return { status: 200, body: { installations: [{ installationId: 7, usable: true, suspendedAt: null }] } };
     }
     if (method === 'GET' && path === '/v1/server/github-app/installations/7/repositories') {
       return { status: 200, body: { repositories: [{ id: 99, fullName: 'octo/hello' }] } };
+    }
+    if (method === 'GET' && path === '/v1/server/github-app/repositories/99/events') {
+      // Each event is served once, the way the cursor pages past it.
+      const page = events.filter(event => !served.has(event.id));
+      for (const event of page) served.add(event.id);
+      return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
     }
     // Boot-time reconcile sweeps read lists; nothing is open.
     if (path.startsWith('/v1/server/')) {
@@ -131,23 +145,21 @@ async function platformForGithub(): Promise<FakePlatform> {
     return undefined;
   };
   vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', platform.baseUrl);
-  vi.stubEnv('MASTRA_EVENTS_API_URL', platform.baseUrl);
   vi.stubEnv('MASTRA_PROJECT_ID', platform.projectId);
-  return platform;
+  vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '50');
+  return { platform, events };
 }
 
-/** Publishes a legacy GitHub App webhook the way the platform does, once the worker is reading. */
-async function publishLegacyWebhook(platform: FakePlatform, kind: string, deliveryId: string, payload: unknown) {
-  // Auto-installed Platform integrations also read `connect`; wait until every requested stream is open.
+/** Appends a legacy GitHub App webhook to repository 99's event log, once the poller is reading it. */
+async function publishLegacyWebhook(legacy: LegacyPlatform, event: string, deliveryId: string, payload: unknown) {
   await vi.waitFor(
-    () => {
-      const topics = new Set(platform.streamRequests.map(request => request.topic));
-      expect(topics.has('github-app')).toBe(true);
-      expect(platform.openStreams).toBe(topics.size);
-    },
+    () =>
+      expect(
+        legacy.platform.requests.some(request => request.path === '/v1/server/github-app/repositories/99/events'),
+      ).toBe(true),
     { timeout: 5_000 },
   );
-  return platform.publish('github-app', { kind, deliveryId, payload: JSON.stringify(payload) });
+  legacy.events.push({ id: `${Date.now() + 1_000}-${legacy.events.length}`, deliveryId, event, payload });
 }
 
 beforeEach(() => {
@@ -161,10 +173,10 @@ afterEach(() => {
 
 describe('Platform GitHub legacy events through the factory', () => {
   it(
-    'reads the github-app topic, wakes the subscribed session once, and releases its lease on stop',
+    'polls the legacy GitHub App event log, wakes the subscribed session once, and releases its lease on stop',
     { timeout: 20_000 },
     async () => {
-      const platform = await platformForGithub();
+      const legacy = await platformForGithub();
       const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'platform-github-legacy-events' });
       const pubsub = new EventEmitterPubSub();
       const releaseLease = vi.spyOn(pubsub, 'releaseLease');
@@ -179,18 +191,10 @@ describe('Platform GitHub legacy events through the factory', () => {
       try {
         const args = await factory.prepare();
         const worker = Array.isArray(args.workers)
-          ? args.workers.find(candidate => candidate.name === 'platform-events')
+          ? args.workers.find(candidate => candidate.name === 'platform-github-events')
           : undefined;
-        expect(worker?.name).toBe('platform-events');
+        expect(worker?.name).toBe('platform-github-events');
         expect(worker?.isRunning).toBe(false);
-        // The old per-repository poller is gone.
-        expect(
-          Array.isArray(args.workers) &&
-            args.workers.some(
-              candidate =>
-                candidate.name.startsWith('platform-github') && candidate.name !== 'platform-github-reconcile',
-            ),
-        ).toBe(false);
 
         const projects = storage.getDomain<FactoryProjectsStorage>('projects');
         const factoryProject = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'App' } });
@@ -251,7 +255,7 @@ describe('Platform GitHub legacy events through the factory', () => {
         await factory.finalize();
         expect(worker?.isRunning).toBe(true);
 
-        await publishLegacyWebhook(platform, 'pull_request', 'delivery-1', {
+        await publishLegacyWebhook(legacy, 'pull_request', 'delivery-1', {
           action: 'synchronize',
           installation: { id: 7 },
           repository: { id: 99, full_name: 'octo/hello' },
@@ -269,9 +273,8 @@ describe('Platform GitHub legacy events through the factory', () => {
         );
         const requestContext = harness.controller.createSession.mock.calls[0]![0].requestContext;
         expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
-        const leaseKey = 'platform-events:platform-events';
+        const leaseKey = 'platform-github-events:github';
         expect(await pubsub.getLeaseOwner(leaseKey)).toEqual(expect.any(String));
-        expect(platform.streamRequests.map(request => request.topic)).toContain('github-app');
 
         await mastra.stopWorkers();
 
@@ -279,7 +282,6 @@ describe('Platform GitHub legacy events through the factory', () => {
         expect(harness.sendNotificationSignal).toHaveBeenCalledOnce();
         expect(releaseLease).toHaveBeenCalledWith(leaseKey, expect.any(String));
         expect(await pubsub.getLeaseOwner(leaseKey)).toBeUndefined();
-        await vi.waitFor(() => expect(platform.openStreams).toBe(0));
       } finally {
         await harness.controller.getMastra()?.stopWorkers();
         await storage.close();
@@ -290,14 +292,14 @@ describe('Platform GitHub legacy events through the factory', () => {
 
 describe('Platform GitHub push rebuilds the environment template', () => {
   // Shipyard: build-on-push on, 60-minute debounce, GitHub through the Platform
-  // lane (events arrive only through the github-app topic). The push must reach
+  // lane (events arrive only through the legacy event poller). The push must reach
   // `GithubRules.#handOffPush` with the `onRepositoryPush` hook, or
   // `last_push_build_at` never moves.
   it(
     'starts a template build when the default branch of an environment repository is pushed',
     { timeout: 30_000 },
     async () => {
-      const platform = await platformForGithub();
+      const legacy = await platformForGithub();
       const storage = await storageForBackend();
       const github = new PlatformGithubIntegration();
       const sandbox = new TemplateBuildingSandbox();
@@ -345,7 +347,7 @@ describe('Platform GitHub push rebuilds the environment template', () => {
         new Mastra(args);
         await factory.finalize();
 
-        await publishLegacyWebhook(platform, 'push', 'delivery-push', {
+        await publishLegacyWebhook(legacy, 'push', 'delivery-push', {
           ref: 'refs/heads/main',
           after: SHA_NEW,
           installation: { id: 7 },
