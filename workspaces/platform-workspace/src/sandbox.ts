@@ -29,7 +29,7 @@ import {
 import { AuthenticationError, TimeoutError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient, resolveSandboxProvider } from './client.js';
-import { COMPUTER_VIEWER_PORT, createPlatformComputer } from './computer.js';
+import { COMPUTER_VIEWER_PORT, createLazyPlatformComputer } from './computer-loader.js';
 import type { PlatformComputer } from './computer.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
@@ -796,20 +796,23 @@ export class PlatformSandbox extends MastraSandbox {
       ) {
         throw new Error('PlatformSandbox computer needs the desktop in its template: add .desktop() to the template');
       }
-      this.computer = this._platformComputer = createPlatformComputer({
-        exec: (command, args, opts) =>
-          this._executeCommand(command, args, { timeout: opts.timeout, env: opts.env }, { once: opts.once }),
-        viewerUrl: async () => {
-          const base = await this._networking.getPortUrl(COMPUTER_VIEWER_PORT);
-          if (!base) return null;
-          const url = new URL('vnc.html', base);
-          url.searchParams.set('autoconnect', '1');
-          url.searchParams.set('resize', 'scale');
-          url.searchParams.set('path', 'websockify');
-          return url.toString();
+      this.computer = createLazyPlatformComputer(
+        {
+          exec: (command, args, opts) =>
+            this._executeCommand(command, args, { timeout: opts.timeout, env: opts.env }, { once: opts.once }),
+          viewerUrl: async () => {
+            const base = await this._networking.getPortUrl(COMPUTER_VIEWER_PORT);
+            if (!base) return null;
+            const url = new URL('vnc.html', base);
+            url.searchParams.set('autoconnect', '1');
+            url.searchParams.set('resize', 'scale');
+            url.searchParams.set('path', 'websockify');
+            return url.toString();
+          },
+          template: template !== undefined && typeof template !== 'function' ? 'builder' : 'prebuilt',
         },
-        template: template !== undefined && typeof template !== 'function' ? 'builder' : 'prebuilt',
-      });
+        computer => (this._platformComputer = computer),
+      );
     }
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');

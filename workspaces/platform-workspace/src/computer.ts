@@ -8,12 +8,12 @@ import type {
 
 import {
   ACCESSIBILITY_HELPER,
-  ACCESSIBILITY_HELPER_PATH,
-  ACCESSIBILITY_HELPER_SHA256,
+  accessibilityHelperFile,
   createComputerAccessibility,
   DESKTOP_DIR,
   DESKTOP_ENV,
 } from './computer-accessibility.js';
+import { COMPUTER_VIEWER_PORT } from './computer-loader.js';
 
 export interface ComputerExecOptions {
   once: boolean;
@@ -38,7 +38,6 @@ export interface PlatformComputerDeps {
   template: 'builder' | 'prebuilt';
 }
 
-export const COMPUTER_VIEWER_PORT = 6080;
 const CAPABILITY_TIMEOUT_MS = 35_000;
 const HASH_TIMEOUT_MS = 5_000;
 const UPLOAD_TIMEOUT_MS = 10_000;
@@ -224,16 +223,17 @@ export function createPlatformComputer({ exec: rawExec, viewerUrl, template }: P
       );
     }
 
-    const hash = await exec('sha256sum', ['--', ACCESSIBILITY_HELPER_PATH], {
+    const helper = accessibilityHelperFile();
+    const hash = await exec('sha256sum', ['--', helper.path], {
       once: false,
       timeout: HASH_TIMEOUT_MS,
       env,
     });
-    if (hash.exitCode !== 0 || hash.timedOut || hash.stdout.split(/\s/)[0] !== ACCESSIBILITY_HELPER_SHA256) {
+    if (hash.exitCode !== 0 || hash.timedOut || hash.stdout.split(/\s/)[0] !== helper.sha256) {
       const base64 = Buffer.from(ACCESSIBILITY_HELPER, 'utf8').toString('base64');
       check(
         'accessibility helper upload',
-        await exec('bash', ['-c', UPLOAD_SCRIPT, 'upload', ACCESSIBILITY_HELPER_PATH, base64], {
+        await exec('bash', ['-c', UPLOAD_SCRIPT, 'upload', helper.path, base64], {
           once: false,
           timeout: UPLOAD_TIMEOUT_MS,
           env,
@@ -241,7 +241,7 @@ export function createPlatformComputer({ exec: rawExec, viewerUrl, template }: P
       );
     }
 
-    const probe = await exec('bash', ['-c', PROBE_SCRIPT, 'probe', ACCESSIBILITY_HELPER_PATH], {
+    const probe = await exec('bash', ['-c', PROBE_SCRIPT, 'probe', helper.path], {
       once: false,
       timeout: PROBE_TIMEOUT_MS,
       env,

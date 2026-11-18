@@ -39,9 +39,18 @@ export const DESKTOP_ENV: Readonly<Record<string, string>> = {
  * application, never by child position.
  */
 export const ACCESSIBILITY_HELPER: string = helperSource;
-export const ACCESSIBILITY_HELPER_SHA256 = createHash('sha256').update(ACCESSIBILITY_HELPER, 'utf8').digest('hex');
-/** Content-addressed, so a changed helper is a new file and an old one is never run by mistake. */
-export const ACCESSIBILITY_HELPER_PATH = `${DESKTOP_DIR}/a11y-${ACCESSIBILITY_HELPER_SHA256}.py`;
+let helperFile: { sha256: string; path: string } | undefined;
+/**
+ * The helper's SHA-256 and its content-addressed path, so a changed helper is a
+ * new file and an old one is never run by mistake. Hashed on first use.
+ */
+export function accessibilityHelperFile(): { sha256: string; path: string } {
+  if (!helperFile) {
+    const sha256 = createHash('sha256').update(ACCESSIBILITY_HELPER, 'utf8').digest('hex');
+    helperFile = { sha256, path: `${DESKTOP_DIR}/a11y-${sha256}.py` };
+  }
+  return helperFile;
+}
 
 const TREE_TIMEOUT_MS = 20_000;
 const ACTION_TIMEOUT_MS = 10_000;
@@ -87,7 +96,7 @@ export function createComputerAccessibility({
     const timeout = once ? ACTION_TIMEOUT_MS : TREE_TIMEOUT_MS;
     let result: CommandResult;
     try {
-      result = await exec(PYTHON, [ACCESSIBILITY_HELPER_PATH, JSON.stringify({ op, ...request })], {
+      result = await exec(PYTHON, [accessibilityHelperFile().path, JSON.stringify({ op, ...request })], {
         once,
         timeout,
         env: { ...DESKTOP_ENV },

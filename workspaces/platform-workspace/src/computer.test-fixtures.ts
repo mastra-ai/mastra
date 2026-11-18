@@ -1,6 +1,6 @@
 import type { CommandResult } from '@mastra/core/workspace';
 
-import { ACCESSIBILITY_HELPER_PATH, ACCESSIBILITY_HELPER_SHA256 } from './computer-accessibility.js';
+import { accessibilityHelperFile } from './computer-accessibility.js';
 import type { ComputerExecOptions } from './computer.js';
 import { CAPABILITY_SCRIPT, PROBE_SCRIPT, UPLOAD_SCRIPT } from './computer.js';
 
@@ -56,7 +56,7 @@ export function fakeDesktop(
           ? result({ exitCode: 1, stderr: `sha256sum: ${args![1]}: No such file or directory` })
           : result(ok(`${desktop.helper}  ${args![1]}\n`));
       case 'upload':
-        desktop.helper = ACCESSIBILITY_HELPER_SHA256;
+        desktop.helper = accessibilityHelperFile().sha256;
         return result(ok());
       case 'probe':
         return result(ok(`{"ok": true, "generation": "${desktop.generation}"}\n`));
@@ -74,6 +74,6 @@ export function fakeDesktop(
     /** How many readiness checks started (one capability probe each). */
     checks: () => of('capability').length,
     uploads: () => of('upload'),
-    helperPath: ACCESSIBILITY_HELPER_PATH,
+    helperPath: accessibilityHelperFile().path,
   };
 }

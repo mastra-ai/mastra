@@ -14,7 +14,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import type { AccessibilityNode } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACCESSIBILITY_HELPER_PATH } from './computer-accessibility.js';
+import { accessibilityHelperFile } from './computer-accessibility.js';
 import { PlatformSandbox } from './sandbox.js';
 import { Template } from './template.js';
 
@@ -97,7 +97,7 @@ describe.skipIf(!STAGING)('PlatformSandbox computer on staging', () => {
         const screen = await sandbox.computer!.getScreenSize();
         log(`screen ${screen.width}x${screen.height}`);
         const health = await sh(
-          `systemctl is-active mastra-desktop && xdpyinfo -display :1 >/dev/null && echo x=ok; /usr/bin/python3 ${ACCESSIBILITY_HELPER_PATH} '{"op":"ping"}'`,
+          `systemctl is-active mastra-desktop && xdpyinfo -display :1 >/dev/null && echo x=ok; /usr/bin/python3 ${accessibilityHelperFile().path} '{"op":"ping"}'`,
         );
         expect(health.stdout).toContain('x=ok');
         expect(health.stdout).toContain('"ok": true');

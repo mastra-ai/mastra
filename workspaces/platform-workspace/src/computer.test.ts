@@ -300,7 +300,7 @@ describe('createPlatformComputer', () => {
 
     it('skips the upload when the helper is already there with the right hash', async () => {
       const { computer, desktop, steps } = setup();
-      desktop.helper = (await import('./computer-accessibility.js')).ACCESSIBILITY_HELPER_SHA256;
+      desktop.helper = (await import('./computer-accessibility.js')).accessibilityHelperFile().sha256;
       await computer.moveMouse(1, 1);
       expect(steps()).toEqual(['capability', 'hash', 'probe', 'work']);
     });
@@ -403,7 +403,7 @@ describe('createPlatformComputer', () => {
       const { computer, desktop, steps } = setup(undefined, undefined, 'builder', {
         hash: () => ({ exitCode: 0, timedOut: true, stdout: `${desktop.helper ?? ''}  x\n` }),
       });
-      desktop.helper = (await import('./computer-accessibility.js')).ACCESSIBILITY_HELPER_SHA256;
+      desktop.helper = (await import('./computer-accessibility.js')).accessibilityHelperFile().sha256;
       await computer.moveMouse(1, 1);
       expect(steps()).toEqual(['capability', 'hash', 'upload', 'probe', 'work']);
     });

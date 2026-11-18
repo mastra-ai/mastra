@@ -2,7 +2,7 @@ import { AccessibilityRefError } from '@mastra/core/workspace';
 import type { CommandResult } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 
-import { ACCESSIBILITY_HELPER, ACCESSIBILITY_HELPER_PATH, DESKTOP_ENV } from './computer-accessibility.js';
+import { ACCESSIBILITY_HELPER, accessibilityHelperFile, DESKTOP_ENV } from './computer-accessibility.js';
 import { createPlatformComputer } from './computer.js';
 import { fakeDesktop, readinessStep, result } from './computer.test-fixtures.js';
 import type { Call } from './computer.test-fixtures.js';
@@ -81,7 +81,10 @@ describe('PlatformSandbox computer accessibility', () => {
       expect(helperCalls()).toEqual([
         {
           command: '/usr/bin/python3',
-          args: [ACCESSIBILITY_HELPER_PATH, JSON.stringify({ op: 'tree', app: 'gedit', maxDepth: 3, maxNodes: 50 })],
+          args: [
+            accessibilityHelperFile().path,
+            JSON.stringify({ op: 'tree', app: 'gedit', maxDepth: 3, maxNodes: 50 }),
+          ],
           opts: { once: false, timeout: 20_000, env: { ...DESKTOP_ENV } },
         },
       ]);
@@ -99,11 +102,11 @@ describe('PlatformSandbox computer accessibility', () => {
       await accessibility.setText('g.s.2', 'hi');
       expect(helperCalls().map(c => [c.args, c.opts])).toEqual([
         [
-          [ACCESSIBILITY_HELPER_PATH, JSON.stringify({ op: 'act', ref: 'g.s.1', action: 'click' })],
+          [accessibilityHelperFile().path, JSON.stringify({ op: 'act', ref: 'g.s.1', action: 'click' })],
           { once: true, timeout: 10_000, env: { ...DESKTOP_ENV } },
         ],
         [
-          [ACCESSIBILITY_HELPER_PATH, JSON.stringify({ op: 'setText', ref: 'g.s.2', text: 'hi' })],
+          [accessibilityHelperFile().path, JSON.stringify({ op: 'setText', ref: 'g.s.2', text: 'hi' })],
           { once: true, timeout: 10_000, env: { ...DESKTOP_ENV } },
         ],
       ]);
@@ -261,7 +264,7 @@ describe('PlatformSandbox computer accessibility', () => {
       const { createHash } = await import('node:crypto');
       const source = await readFile(new URL('./computer-accessibility-helper.py', import.meta.url), 'utf8');
       expect(ACCESSIBILITY_HELPER).toBe(source);
-      expect(ACCESSIBILITY_HELPER_PATH).toBe(
+      expect(accessibilityHelperFile().path).toBe(
         `/tmp/.mastra-desktop/a11y-${createHash('sha256').update(source).digest('hex')}.py`,
       );
     });
