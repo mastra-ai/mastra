@@ -426,6 +426,10 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
+  protected override async _closeFilteredSpan(args: { span: BraintrustTrackedSpan; endTime: Date }): Promise<void> {
+    args.span.span.end({ endTime: args.endTime.getTime() / 1000 });
+  }
+
   protected override async _abortSpan(args: { span: BraintrustTrackedSpan; reason: SpanErrorInfo }): Promise<void> {
     const { span: spanData, reason } = args;
     spanData.span.log({

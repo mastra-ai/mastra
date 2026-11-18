@@ -2331,6 +2331,19 @@ export type TracingEvent =
   | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
 
 /**
+ * Sent when `spanFilter` drops the end of a span whose start was exported.
+ * It carries no span data. Exporters that open a span on its start event use
+ * it to close that span. Exporters that only act on span ends can ignore it.
+ */
+export interface SpanFilteredEvent {
+  type: 'span_filtered';
+  traceId: string;
+  spanId: string;
+  /** When the span ended */
+  endTime: Date;
+}
+
+/**
  * Interface for span processors
  */
 export interface SpanOutputProcessor {

@@ -10,6 +10,7 @@
 
 import type {
   TracingEvent,
+  SpanFilteredEvent,
   AnyExportedSpan,
   ModelGenerationAttributes,
   ToolCallAttributes,
@@ -240,6 +241,17 @@ export class SentryExporter extends BaseExporter {
         await this.handleSpanEnded(exportedSpan);
         break;
     }
+  }
+
+  /** `spanFilter` dropped this span's end. End the Sentry span, so it does not stay open. */
+  async onSpanFilteredEvent(event: SpanFilteredEvent): Promise<void> {
+    this.skippedSpans.delete(event.spanId);
+
+    const spanData = this.spanMap.get(event.spanId);
+    if (!spanData) return;
+
+    spanData.span.end(event.endTime.getTime());
+    this.spanMap.delete(event.spanId);
   }
 
   private handleEventSpan(span: AnyExportedSpan): void {

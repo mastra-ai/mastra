@@ -36,6 +36,7 @@ import type {
   StartSpanOptions,
   TracingContext,
   TracingEvent,
+  SpanFilteredEvent,
 } from './tracing';
 
 // ============================================================================
@@ -170,6 +171,7 @@ export interface ObservabilityEventBus<TEvent> {
  */
 export type ObservabilityEvent =
   | TracingEvent
+  | SpanFilteredEvent
   | LogEvent
   | MetricEvent
   | ScoreEvent
@@ -596,6 +598,9 @@ export interface InitBridgeOptions {
 export interface ObservabilityEvents {
   /** Handle tracing events */
   onTracingEvent?(event: TracingEvent): void | Promise<void>;
+
+  /** Close a span whose end `spanFilter` dropped; unsupported exporters ignore it. */
+  onSpanFilteredEvent?(event: SpanFilteredEvent): void | Promise<void>;
 
   /** Handle log events */
   onLogEvent?(event: LogEvent): void | Promise<void>;

@@ -6,7 +6,7 @@
  */
 
 import { TracingEventType } from '@mastra/core/observability';
-import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, SpanErrorInfo, SpanFilteredEvent } from '@mastra/core/observability';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 
@@ -92,6 +92,8 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
   #waitingForRoot: QueuedEvent[];
   /** Events waiting for specific parent spans, keyed by parentSpanId */
   #waitingForParent: Map<string, QueuedEvent[]>;
+  /** End times of spans whose end `spanFilter` dropped before their start was built */
+  #filteredBeforeBuilt = new Map<string, Date>();
 
   /** When this trace data was created, used for cap enforcement */
   readonly createdAt: Date;
@@ -335,6 +337,25 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
    */
   endSpan(args: { spanId: string }): void {
     this.#activeSpanIds.delete(args.spanId);
+  }
+
+  /**
+   * Remember a dropped span end that arrived before the span was built.
+   * @param args.spanId - The span ID
+   * @param args.endTime - When the span ended
+   */
+  closeWhenBuilt(args: { spanId: string; endTime: Date }): void {
+    this.#filteredBeforeBuilt.set(args.spanId, args.endTime);
+  }
+
+  /**
+   * Remove and return the end time of a span that must close as soon as it is built.
+   * @param args.spanId - The span ID
+   */
+  takeCloseWhenBuilt(args: { spanId: string }): Date | undefined {
+    const endTime = this.#filteredBeforeBuilt.get(args.spanId);
+    this.#filteredBeforeBuilt.delete(args.spanId);
+    return endTime;
   }
 
   /**
@@ -1093,6 +1114,21 @@ export abstract class TrackingExporter<
     reason: SpanErrorInfo;
   }): Promise<void>;
 
+  /**
+   * Close a span whose end `spanFilter` dropped (called on span_filtered events).
+   * No end-time span data exists, so only end the vendor span at `endTime`.
+   * The default does nothing, which suits vendors that send a span when it ends.
+   *
+   * @param args.span - The vendor-specific span object to close
+   * @param args.endTime - When the span ended
+   * @param args.traceData - The trace data container
+   */
+  protected async _closeFilteredSpan(_args: {
+    span: TSpanData;
+    endTime: Date;
+    traceData: TraceData<TRootData, TSpanData, TEventData, TMetadata>;
+  }): Promise<void> {}
+
   // ============================================================================
   // Behavior Flags (Override in subclass as needed)
   // ============================================================================
@@ -1236,6 +1272,10 @@ export abstract class TrackingExporter<
               spanId: exportedSpan.id,
             });
             traceData.addSpan({ spanId: exportedSpan.id, spanData });
+            const filteredEndTime = traceData.takeCloseWhenBuilt({ spanId: exportedSpan.id });
+            if (filteredEndTime) {
+              await this.#closeFilteredSpan({ traceData, spanId: exportedSpan.id, endTime: filteredEndTime });
+            }
             // Mark root as processed for skipBuildRootTask exporters
             if (exportedSpan.isRootSpan) {
               traceData.markRootSpanProcessed();
@@ -1296,6 +1336,44 @@ export abstract class TrackingExporter<
     }
 
     await this._postExportTracingEvent();
+  }
+
+  /**
+   * `spanFilter` dropped the end of a span this exporter saw start. Close the
+   * span, so it does not stay open and keep its trace from being cleaned up.
+   */
+  async onSpanFilteredEvent(event: SpanFilteredEvent): Promise<void> {
+    if (this.isDisabled || this.#shutdownStarted) return;
+
+    const traceData = this.#traceMap.get(event.traceId);
+    if (!traceData) return;
+
+    if (!traceData.hasSpan({ spanId: event.spanId })) {
+      traceData.closeWhenBuilt({ spanId: event.spanId, endTime: event.endTime });
+      return;
+    }
+
+    await this.#closeFilteredSpan({ traceData, spanId: event.spanId, endTime: event.endTime });
+    if (traceData.activeSpanCount() === 0) {
+      this.#scheduleCleanup(event.traceId);
+    }
+  }
+
+  async #closeFilteredSpan(args: {
+    traceData: TraceData<TRootData, TSpanData, TEventData, TMetadata>;
+    spanId: string;
+    endTime: Date;
+  }): Promise<void> {
+    const { traceData, spanId, endTime } = args;
+    const span = traceData.getSpan({ spanId });
+    if (!span || !traceData.isActiveSpan({ spanId })) return;
+
+    traceData.endSpan({ spanId });
+    try {
+      await this._closeFilteredSpan({ span, endTime, traceData });
+    } catch (error) {
+      this.logger.error(`${this.name}: exporter error`, { error, spanId, method: 'closeFilteredSpan' });
+    }
   }
 
   // ============================================================================

@@ -964,6 +964,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return;
     }
 
+    // `spanFilter` dropped the end of a span exporters saw start. Tell them, so
+    // an exporter that opened the span on its start event can close it.
+    if (unfilteredSpan && !span.isEvent && !(span instanceof BaseSpan && span.isStartFiltered)) {
+      this.observabilityBus.emit({
+        type: 'span_filtered',
+        traceId: unfilteredSpan.traceId,
+        spanId: unfilteredSpan.id,
+        endTime: unfilteredSpan.endTime ?? new Date(),
+      });
+    }
+
     // The span ended but was filtered out, so no bridge will see its end event.
     // Tell the bridge directly so it can drop the state it created for this span.
     this.releaseBridgeSpan(span);
