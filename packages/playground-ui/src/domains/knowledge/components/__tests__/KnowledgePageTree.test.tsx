@@ -13,7 +13,7 @@ import { bodyHeadings } from '../../lib/bodyHeadings';
 import type { KnowledgeNotePayload, KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageDetail } from '../KnowledgePageDetail';
 import { KnowledgePageTree } from '../KnowledgePageTree';
-import { scopeLabelsGraph } from './fixtures/scope-labels';
+import { emptyScopeGraph, labeledScopeGraph, scopeLabelsGraph } from './fixtures/scope-labels';
 
 const client = new MastraClient({ baseUrl: TEST_BASE_URL });
 
@@ -134,21 +134,17 @@ describe('KnowledgePageTree scope rows and pins', () => {
     expect(screen.getByRole('treeitem', { name: /Roadmap/ })).toBeTruthy();
   });
 
-  it('renders API scope labels without losing the canonical address', () => {
-    const named = page('org', null, 'a0', { name: 'org:acme', address: 'org:acme', displayLabel: 'Acme' });
-    renderWithProviders(<KnowledgePageTree pages={[named]} onSelect={() => {}} />);
-    const row = screen.getByRole('treeitem', { name: /Acme/ });
+  it('renders API scope labels without losing the canonical address', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(labeledScopeGraph)));
+    renderWithProviders(<RouteTree />);
+    const row = await screen.findByRole('treeitem', { name: /Acme/ });
     expect(row.textContent).toBe('Acmeorg:acme');
   });
 
-  it('gives an empty scope a folder icon without making it expandable', () => {
-    renderWithProviders(
-      <KnowledgePageTree
-        pages={[page('empty', null, 'a0', { address: 'project:empty' }), refundsPage]}
-        onSelect={() => {}}
-      />,
-    );
-    const row = screen.getByRole('treeitem', { name: /empty/ });
+  it('gives an empty scope a folder icon without making it expandable', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(emptyScopeGraph)));
+    renderWithProviders(<RouteTree />);
+    const row = await screen.findByRole('treeitem', { name: /empty/ });
     expect(row.querySelector('[data-central-icon="IconFolder1"]')).toBeTruthy();
     expect(row.querySelector('[data-central-icon="IconFileText"]')).toBeNull();
     expect(row.hasAttribute('aria-expanded')).toBe(false);

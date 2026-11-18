@@ -9,3 +9,36 @@ export const scopeLabelsGraph = {
   pinnedIds: [],
   truncated: false,
 } satisfies KnowledgeGraphResponse;
+
+export const labeledScopeGraph = {
+  ...scopeLabelsGraph,
+  pages: [
+    {
+      id: 'org',
+      scopeId: 'org',
+      parentId: null,
+      isScope: true,
+      position: 'a0',
+      name: 'org:acme',
+      address: 'org:acme',
+      displayLabel: 'Acme',
+      version: 1,
+      createdBy: { author: 'host' },
+      updatedBy: { author: 'host' },
+      createdAt: '2026-10-28T00:00:00.000Z',
+      updatedAt: '2026-10-28T00:00:00.000Z',
+    },
+  ],
+} satisfies KnowledgeGraphResponse;
+
+export const emptyScopeGraph = {
+  ...labeledScopeGraph,
+  pages: labeledScopeGraph.pages.map(page => ({
+    ...page,
+    id: 'empty',
+    scopeId: 'empty',
+    name: 'empty',
+    address: 'project:empty',
+    displayLabel: undefined,
+  })),
+} satisfies KnowledgeGraphResponse;
