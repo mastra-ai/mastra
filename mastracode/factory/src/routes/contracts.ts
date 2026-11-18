@@ -23,6 +23,7 @@ import {
   SESSION_ROW_WINDOW_MAX,
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
+  sessionRowSourceSchema,
 } from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
@@ -1137,6 +1138,8 @@ export const sessionRowsQuerySchema = z.object({
   owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
   status: z.enum(SESSION_ROW_STATUSES).optional(),
   updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
+  /** `board:<board id>`, `user` or `slack`: keeps the rows that start there. */
+  source: sessionRowSourceSchema.optional(),
   /** `true` lists a card's other sessions under its row. */
   children: z.enum(['true']).optional(),
   /** Repeatable. Sessions listed before every other one of their group. */

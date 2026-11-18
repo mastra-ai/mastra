@@ -500,6 +500,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "owner",
       "pin",
       "sort",
+      "source",
       "status",
       "updated",
       "window"
@@ -4978,6 +4979,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "24h",
             "7d",
             "30d"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "user",
+                "slack"
+              ]
+            },
+            {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^board:.+$"
+            }
           ]
         },
         "children": {
