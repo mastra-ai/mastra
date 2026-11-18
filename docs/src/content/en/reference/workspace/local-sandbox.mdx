@@ -79,9 +79,18 @@ const response = await agent.generate('Run npm install')
   {
     name: 'timeout',
     type: 'number',
-    description: 'Default timeout for operations in milliseconds',
+    description:
+      'Default timeout in milliseconds for foreground commands. Does not apply to background processes started with `processes.spawn`; use the `backgroundProcesses` `defaultTimeoutMs` and `maxTimeoutMs` tool options to limit those.',
     isOptional: true,
     defaultValue: '30000',
+  },
+  {
+    name: 'killGraceMs',
+    type: 'number',
+    description:
+      'How long, in milliseconds, a process that exceeded its timeout gets to exit after `SIGTERM` before it is sent `SIGKILL`.',
+    isOptional: true,
+    defaultValue: '2000',
   },
   {
     name: 'isolation',

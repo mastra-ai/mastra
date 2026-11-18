@@ -804,13 +804,13 @@ The `execute_command` tool accepts these options:
   content={[
   {
     name: 'backgroundProcesses',
-    type: 'BackgroundProcessesConfig',
+    type: 'BackgroundProcessConfig',
     description:
       'Configuration for handling background processes. Only applicable if the sandbox supports background execution.',
     isOptional: true,
     properties: [
       {
-        type: 'BackgroundProcessesConfig',
+        type: 'BackgroundProcessConfig',
         parameters: [
           {
             name: 'onStdout',
@@ -829,7 +829,7 @@ The `execute_command` tool accepts these options:
             name: 'onExit',
             type: '(meta: BackgroundProcessExitMeta) => void',
             description:
-              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, and killedByAbort (true when the abort signal killed the process, false for a normal exit or kill_process).',
+              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, timedOut (true when its lifetime limit stopped it), and killedByAbort (true when the abort signal killed the process, false for a normal exit or kill_process).',
             isOptional: true,
           },
           {
@@ -837,6 +837,20 @@ The `execute_command` tool accepts these options:
             type: 'AbortSignal | null | false',
             description:
               "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+            isOptional: true,
+          },
+          {
+            name: 'defaultTimeoutMs',
+            type: 'number',
+            description:
+              'Lifetime limit, in milliseconds, applied to a background process when the agent omits `timeout`. `0` or unset means no default, so the process runs until it exits or the agent stops it.',
+            isOptional: true,
+          },
+          {
+            name: 'maxTimeoutMs',
+            type: 'number',
+            description:
+              'Hard ceiling, in milliseconds, for a background process. Caps a larger `timeout`, a larger `defaultTimeoutMs`, and also an explicit `timeout: 0` or an omitted `timeout` with no default, so a configured ceiling always applies. `0` or unset means no ceiling.',
             isOptional: true,
           },
         ],
