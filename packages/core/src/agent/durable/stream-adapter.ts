@@ -1027,21 +1027,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
             // watchdog at the top, and a slow callback (> idleTimeoutMs) would
             // otherwise let it fire and emit a spurious idle error on an
-            // already-closing run. safeClose in `finally` so a throwing callback
-            // can't skip closure.
+            // already-closing run.
             markTerminated();
             try {
               await onSuspended?.(data);
             } finally {
+              // Both in `finally` so a throwing callback can't skip them. Closing
+              // ends this reader only, and queued chunks stay readable. But a
+              // consumer that never drains the closed stream (`output.text`,
+              // `getFullOutput()`) would leave the subscription live forever, so
+              // tear it down once the frames already published have been delivered.
               safeClose(controller);
+              void waitForEventDelivery()
+                .catch(() => {})
+                .then(cleanup);
             }
-            // Closing ends this reader only, and queued chunks stay readable. But
-            // a consumer that never drains the closed stream (`output.text`,
-            // `getFullOutput()`) would leave the subscription live forever, so
-            // tear it down once the frames already published have been delivered.
-            void waitForEventDelivery()
-              .catch(() => {})
-              .then(cleanup);
           } else {
             // Settlement must precede resumed events, but a callback may await those events itself.
             if (releaseSettlement) {
