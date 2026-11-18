@@ -687,7 +687,7 @@ const liteProvider = createVoyageReranker('rerank-2.5-lite')
 const defaultProvider = voyage.reranker
 ```
 
-The scorer sends requests to the Voyage AI platform endpoint, `https://api.voyageai.com/v1`, by default. A model API key created in MongoDB Atlas only works with the Atlas Embedding and Reranking API, so set `baseUrl` to `https://ai.mongodb.com/v1` when you use one. A key scoped to a geography needs that geography's endpoint, such as `https://eu.ai.mongodb.com/v1`.
+The scorer sends requests to the Voyage AI platform endpoint, `https://api.voyageai.com/v1`, by default. A model API key created in MongoDB Atlas only works with the Atlas Embedding and Reranking API, so set `baseUrl` to `https://ai.mongodb.com/v1` when you use one. A key scoped to a geography needs that geography's endpoint, such as `https://eu.ai.mongodb.com/v1`. Geography endpoints don't serve every model: `rerank-2` and `rerank-2-lite` are only available on `https://ai.mongodb.com/v1`, so use `rerank-2.5` or `rerank-2.5-lite` with a scoped key. See MongoDB's [model lifecycle page](https://www.mongodb.com/docs/voyageai/models/lifecycle/) for which endpoints serve each model.
 
 ```ts
 import { createVoyageReranker } from '@mastra/voyageai'
