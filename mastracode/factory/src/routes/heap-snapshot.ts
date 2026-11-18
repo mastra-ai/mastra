@@ -9,8 +9,8 @@
  * the handler. It is off by default and gated twice —
  *
  *   1. the `FACTORY_HEAP_SNAPSHOT` env flag must be `1`/`true` (case-insensitive);
- *      with the flag absent or anything else the route 404s so it is
- *      indistinguishable from a route that does not exist;
+ *      with the flag absent or anything else the route 404s before any auth
+ *      check, so an unconfigured deployment exposes no snapshot capability;
  *   2. tenant-mode callers must administer the organization, following the
  *      same `isOrganizationAdmin` check used by {@link AutomationRunRoutes}
  *      in `./automation-runs.ts`. Local (no-auth) deployments only require

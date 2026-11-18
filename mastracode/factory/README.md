@@ -129,7 +129,7 @@ Every record has a `service` label read from `MASTRA_WORKERS`: `api` when it's `
 
 Factory exposes an on-demand heap-snapshot download at `GET /web/admin/heap-snapshot`. It is off by default and gated twice so the surface is inert without an explicit opt-in:
 
-1. `FACTORY_HEAP_SNAPSHOT=1` must be set on the process. With the variable absent or any other value the route 404s so it is indistinguishable from a route that does not exist.
+1. `FACTORY_HEAP_SNAPSHOT=1` must be set on the process. With the variable absent or any other value the route 404s before any authentication or authorization runs, so an unconfigured deployment exposes no snapshot capability.
 2. In tenant mode the caller must be an organization administrator, following the same `isOrganizationAdmin` check as the automation-runs ingress. Non-admins get 403, anonymous callers 401. Local (no-auth) deployments require only the env flag.
 
 When enabled, the endpoint streams `v8.getHeapSnapshot()` as `application/octet-stream` with `Content-Disposition: attachment; filename="factory-<iso>.heapsnapshot"`. Load the downloaded file into Chrome DevTools → Memory → Load profile to walk retainers.
