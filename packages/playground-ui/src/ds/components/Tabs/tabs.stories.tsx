@@ -8,7 +8,7 @@ import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
 import { IconChart3 } from '@/ds/icons/central/IconChart3';
 import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -118,7 +118,7 @@ function ContainedExample({
             )}
             {visibleTabs.includes('settings') && (
               <Tab value="settings" onClose={closeHandler('settings')}>
-                <IconSettingsGear1 aria-hidden="true" className="size-4" />
+                <IconSettingsGear5 aria-hidden="true" className="size-4" />
                 Settings
               </Tab>
             )}

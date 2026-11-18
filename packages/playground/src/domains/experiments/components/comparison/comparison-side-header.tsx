@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
-import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconClock } from '@mastra/playground-ui/icons/central/IconClock';
 import { IconCoins } from '@mastra/playground-ui/icons/central/IconCoins';
 import { IconExclamationCircle } from '@mastra/playground-ui/icons/central/IconExclamationCircle';
@@ -88,7 +88,7 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: 
             render={
               <Button size="sm" className="max-w-full min-w-0">
                 <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-                <IconChevronBottom aria-hidden />
+                <IconChevronDownMedium aria-hidden />
               </Button>
             }
           />

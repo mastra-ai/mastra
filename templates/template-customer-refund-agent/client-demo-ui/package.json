@@ -20,6 +20,6 @@
   "dependencies": {
     "@hono/node-server": "2.1.6",
     "@libsql/client": "0.17.4",
-    "hono": "4.13.11"
+    "hono": "4.13.18"
   }
 }

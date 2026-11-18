@@ -307,13 +307,13 @@ const workspace = new Workspace({
 })
 ```
 
-`owner` sets the uid and gid of the files inside the mount, so the `user` running commands can read and write them. Without it, the mount is owned by the user that mounted it. Create the user in the template first; E2B runs a command as that user but doesn't create it.
+`owner` sets the uid and gid of the files inside the mount, so the `user` running commands can read and write them. Without it, the mount is owned by the user that mounted it. Create the user in the template first. E2B runs a command as that user but doesn't create it.
 
 ## Custom templates
 
 By default, when no template is specified, E2BSandbox automatically builds a template with `s3fs` installed for S3 mounting support, a current Node.js LTS installed over the base image's older runtime, and corepack enabled so `pnpm` and `yarn` resolve to whatever a repository's `packageManager` field pins. This template is cached and reused across sandbox instances.
 
-The Node.js version is pinned exactly and is part of the template's identity. Pass `nodeVersion` to `createDefaultMountableTemplate()` to select a different release; changing it builds a new template.
+The Node.js version is pinned exactly and is part of the template's identity. Pass `nodeVersion` to `createDefaultMountableTemplate()` to select a different release. Changing it builds a new template.
 
 For GCS mounting, `gcsfuse` is automatically installed at mount time if not already present. For additional tools or faster cold starts, use custom templates.
 
@@ -415,11 +415,11 @@ const sandbox = new E2BSandbox({
 `getRepositoryAccess` supplies the clone URL and, for private repositories, a
 credential. It's the only source of the clone URL, so what gets cloned and
 what the template is identified by can't drift apart. When it's `undefined`,
-`createRepoTemplate` returns `undefined` — which is how a session with no
+`createRepoTemplate` returns `undefined`, which is how a session with no
 repository asks for the provider's default template without a conditional at
 the call site.
 
-There is exactly one template per repository and setup command: the template
+Exactly one template exists per repository and setup command: the template
 name carries the repo slug plus a short hash of the inputs, and the commit
 sha rides as a tag on that name
 (`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). The spec pins itself to the
@@ -431,11 +431,11 @@ as prunable build history instead of piling up as stale templates. If the
 head can't be resolved, the ref degrades to the stable `current` tag and the
 build clones whatever the default branch is at build time.
 
-Resolution is lazy and only ever blocks on a template's very first build.
+Resolution is lazy and blocks only on a template's first build.
 Every successful build also moves a stable `current` tag, so when the head
 moves, the next sandbox boots immediately from the previous build while the
 fresh sha ref builds in the background on E2B's side (its runtime setup
-`git fetch` fast-forwards the slightly stale checkout — freshness never
+`git fetch` fast-forwards the slightly stale checkout, so freshness never
 depends on the template). A changed setup command hashes to a new template
 name.
 
@@ -518,14 +518,14 @@ name alongside the repository and setup command, so resizing builds a new
 template instead of silently reusing one built at the old size. When a repo
 template's build fails and the sandbox falls back to the default mountable
 template, the fallback builds at the requested size too, so setup never
-lands in a smaller machine than it asked for. Account tier limits apply to
+runs in a smaller machine than it asked for. Account tier limits apply to
 the values E2B accepts.
 
-To warm templates proactively instead of waiting for the first session
+To warm templates ahead of time instead of waiting for the first session
 after a merge, call `refreshRepoTemplate` with the same options from a
 scheduled job or a merge-to-main event handler. It performs the same
-resolution as sandbox start — resolves the current head, reuses the build
-when it already exists, and otherwise builds it (moving `current`) — and
+resolution as sandbox start. It resolves the current head, reuses the build
+when it already exists, and otherwise builds it (moving `current`), then
 reports `{ ref, action, sha }`:
 
 ```typescript
@@ -542,7 +542,7 @@ const result = await refreshRepoTemplate({
 
 The template layers on top of the default mountable base (E2B's `base`
 image, so git and common tooling are present, plus `s3fs`/FUSE for mount
-support). The clone lands in the build user's home directory at
+support). The clone goes into the build user's home directory at
 `$HOME/<repo>`, derived from the clone URL. Build steps and runtime commands
 both run as the sandbox's non-root `user` in its home, so no directory prep
 is needed, runtime file ownership stays correct, and a runtime `$HOME` probe
@@ -573,10 +573,11 @@ const sandbox = new E2BSandbox({
 ```
 
 Private repositories build warm templates when `getRepositoryAccess` returns
-an `authorization` alongside the clone URL — a fresh, short-lived credential
-(such as a GitHub App installation token) minted per template resolution.
+an `authorization` alongside the clone URL: a fresh, short-lived credential
+(such as a GitHub App installation token) created at each template
+resolution.
 The credential authenticates the head lookup and the build's clone through
-an in-shell `http.extraheader` — it enters the template definition's
+an in-shell `http.extraheader`. It enters the template definition's
 environment (visible to build steps but not persisted into runtime sandbox
 environments) and never touches the image filesystem, so no captured layer
 can contain it. It's set as `GH_TOKEN`, the same variable a session installs
@@ -584,7 +585,7 @@ before running setup, so a
 command that shells out to `gh` or authenticated https behaves the same in
 the build as it does in a session.
 
-Only pass short-lived credentials — the value stays in the template
+Only pass short-lived credentials: the value stays in the template
 definition until the next rebuild, so its expiry is what bounds the
 exposure. Note that the cloned repository contents become part of a
 team-visible template image. When the access call returns no credential the
@@ -592,22 +593,22 @@ clone is tokenless: public repositories build fine, and a private
 repository's build degrades to the fallback, where the session's own runtime
 setup (with runtime-injected auth) does the clone.
 
-Setup commands that need their own credentials — a registry token, a private
-index URL — take them through `buildEnv`, which accepts a record or an async
-resolver. Those values are part of the template's identity, so changing one
+Setup commands that need their own credentials, such as a registry token or
+a private index URL, take them through `buildEnv`, which accepts a record or
+an async resolver. Those values are part of the template's identity, so changing one
 produces a new template. To keep values out of the template name, also pass a
 `buildEnvRevision`. The values still reach the build steps like the clone
 credential, but only the revision names the template. Change the revision
 whenever the values change.
 
 `repoTemplateRef` computes the tagged ref for a spec without building
-anything — useful for pruning old sha tags with the E2B CLI.
+anything, useful for pruning old sha tags with the E2B CLI.
 
 ### Per-session sandboxes
 
 Hosts that construct one sandbox per session, such as Mastra Factory's
 `sandbox` config, use `E2BFactorySandbox`: sandbox identity is the session id
-(id-keyed getOrCreate, so the sandbox pauses on E2B's idle timeout and resumes
+(id-keyed getOrCreate: the sandbox pauses on E2B's idle timeout and resumes
 by id), the repo template comes from `createRepoTemplate` over the session's
 repositories, and the project's `cpuCount` and `memoryMb` settings flow into
 the template. See the [FactorySandbox reference](/reference/workspace/factory-sandbox).
@@ -626,7 +627,7 @@ is also supported: factory sees it as a custom provider with no settings to
 tune. Either way, factory attaches its own session setup to the
 sandbox it gets back.
 
-## Using with Code Mode
+## Using with Code mode
 
 [Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` provides `E2BCodeModeTransport` for this. Pass it as the second argument to `createCodeMode`:
 

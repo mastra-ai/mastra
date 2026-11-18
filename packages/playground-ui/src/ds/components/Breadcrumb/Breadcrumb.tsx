@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -159,7 +159,7 @@ export const Crumb = ({
         // A 5px box (the chevron's ink) with 6px margins: 14px from the ink to each neighbor.
         <li role="separator" className="mx-1.5 flex h-full w-[5px] items-center justify-center overflow-visible">
           <Icon size="xs" className="shrink-0 text-placeholder">
-            <IconChevronRight />
+            <IconChevronRightMedium />
           </Icon>
         </li>
       )}

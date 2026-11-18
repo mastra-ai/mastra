@@ -21,9 +21,9 @@ import {
 } from '../../../../hooks/usePlatformConnections';
 import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
-import { IntegrationItem } from './IntegrationItem';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 const platformIcons = {
   gitlab: 'gitlab',
@@ -213,15 +213,14 @@ export function PlatformConnectionActions({
   );
 }
 
-export function AddPlatformAccountRow({ provider }: { provider: PlatformConnectProviderId }) {
+export function AddPlatformAccountButton({ provider }: { provider: PlatformConnectProviderId }) {
   return (
-    <IntegrationItem {...platformIntegration(provider)} description="Another account">
-      <ProviderConnectControl
-        provider={provider}
-        label={`Connect another ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} account`}
-        buttonLabel="Connect"
-        icon={<IconChainLink3 />}
-      />
-    </IntegrationItem>
+    <ProviderConnectControl
+      provider={provider}
+      label={`Add account to ${PLATFORM_CONNECT_PROVIDERS[provider].displayName}`}
+      buttonLabel="Add account"
+      variant="ghost"
+      icon={<IconPlusMedium />}
+    />
   );
 }

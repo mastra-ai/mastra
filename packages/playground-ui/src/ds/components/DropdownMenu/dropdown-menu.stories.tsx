@@ -6,8 +6,8 @@ import { DropdownMenu } from './dropdown-menu';
 import type { DropdownMenuRadioOption } from './dropdown-menu';
 import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
-import { IconArrowTopBottom } from '@/ds/icons/central/IconArrowTopBottom';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
+import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
@@ -15,7 +15,7 @@ import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
 import { IconKeyboard } from '@/ds/icons/central/IconKeyboard';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
 import { IconUser } from '@/ds/icons/central/IconUser';
 import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
@@ -67,7 +67,7 @@ export const Variants: Story = {
           ))}
           <DropdownMenu>
             <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
-              <IconSettingsGear1 />
+              <IconSettingsGear5 />
             </DropdownMenu.Trigger>
             {menuItems}
           </DropdownMenu>
@@ -97,7 +97,7 @@ export const Compact: Story = {
           Profile
         </DropdownMenu.Item>
         <DropdownMenu.Item size="sm">
-          <IconSettingsGear1 />
+          <IconSettingsGear5 />
           Settings
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -130,7 +130,7 @@ export const WithIcons: Story = {
           <span>Profile</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <IconSettingsGear1 />
+          <IconSettingsGear5 />
           <span>Settings</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
@@ -170,7 +170,7 @@ export const WithLabelsAndGroups: Story = {
             <DropdownMenu.Shortcut>Ctrl+B</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <IconSettingsGear1 />
+            <IconSettingsGear5 />
             <span>Settings</span>
             <DropdownMenu.Shortcut>Ctrl+S</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -291,7 +291,7 @@ export const WithRadioSubs: Story = {
         <DropdownMenu.Content align="end">
           <DropdownMenu.RadioSub
             label="Sort"
-            icon={<IconArrowTopBottom aria-hidden />}
+            icon={<IconArrowsUpDown aria-hidden />}
             options={listSortOptions}
             value={sort}
             onValueChange={setSort}
@@ -338,7 +338,7 @@ export const WithSubMenu: Story = {
           <span>Email</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <IconBubbleWide />
+          <IconChatBubble7 />
           <span>Message</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
@@ -353,7 +353,7 @@ export const WithSubMenu: Story = {
               <span>Email</span>
             </DropdownMenu.Item>
             <DropdownMenu.Item>
-              <IconBubbleWide />
+              <IconChatBubble7 />
               <span>Message</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
@@ -475,7 +475,7 @@ export const KitchenSink: Story = {
                 <span>Email</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <IconBubbleWide />
+                <IconChatBubble7 />
                 <span>Message</span>
               </DropdownMenu.Item>
             </DropdownMenu.SubContent>

@@ -153,7 +153,13 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
+import {
+  isMastraTool,
+  isProviderTool,
+  isApprovalExempt,
+  markAgentWorkflowTool,
+  markApprovalExempt,
+} from '../tools/toolchecks';
 import type {
   CoreTool,
   MastraToolInvocationOptions,
@@ -989,6 +995,8 @@ export class Agent<
   readonly #durable?: AgentDurableOption;
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
+  /** Forks share the fallback transport without making it override Mastra registration. */
+  #defaultStreamPubsub?: PubSub;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   #legacyHandler?: AgentLegacyHandler;
@@ -1769,39 +1777,38 @@ export class Agent<
    *
    * @internal
    */
-  __getStreamBus(): AgentStreamBus | undefined {
-    return this.#ownStreamBus();
-  }
-
-  /**
-   * Whether runs this class executes publish through the plain Agent stream
-   * publisher. DurableAgent returns false: it publishes on its own bus, so the
-   * plain bus (and its abort requests and run records) must not exist for it.
-   * @internal
-   */
-  protected __ownsPlainStreamPublisher(): boolean {
-    return true;
-  }
-
-  // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
-  // but runs it executes never go through this class's publisher.
-  #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher()) return undefined;
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+  __getStreamBus(force = false): AgentStreamBus | undefined {
+    if (!force && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
       const config = agentStreamsConfig(this.#durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
           getMastra: () => this.#mastra,
-          // Plain agent runs execute and publish in this process.
-          usesSharedRunLog: () => false,
+          usesSharedRunLog: () => this.__usesSharedRunLog(),
           warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
         },
+        (this.#defaultStreamPubsub ??= new EventEmitterPubSub()),
       );
       if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
     }
     return this.#streamBus;
+  }
+
+  /** Whether run frames are published by workers on Mastra's shared log. @internal */
+  __usesSharedRunLog(): boolean {
+    return false;
+  }
+
+  /** Whether this class executes through the plain Agent publisher. @internal */
+  protected __ownsPlainStreamPublisher(): boolean {
+    return true;
+  }
+
+  // Sharing transport does not opt durable execution into plain run records or abort checks.
+  #ownStreamBus(): AgentStreamBus | undefined {
+    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    return this.__getStreamBus();
   }
 
   /**
@@ -1846,7 +1853,8 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
     // A resume may still find its own finishing publisher here: the suspension is
@@ -1870,7 +1878,8 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
@@ -1910,7 +1919,7 @@ export class Agent<
       const { resourceId, threadId } = local;
       return { agentId: this.id, runId, resourceId, threadId, status: 'running', updatedAt: Date.now() };
     }
-    const bus = this.#ownStreamBus();
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     return readAgentRunRecord(bus.runRecordCache, this.id, runId);
   }
@@ -1931,9 +1940,10 @@ export class Agent<
    * topic. Best-effort: a failed publish is logged, and a request nobody hears
    * is a no-op, like aborting a finished run.
    */
-  async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
+  protected async requestRemoteAbort(runId: string, bus = this.__getStreamBus()): Promise<void> {
+    if (!bus) return;
     try {
-      await publishAbortRequest(bus.pubsub, runId);
+      await publishAbortRequest(bus.forRun(this.__usesSharedRunLog()).pubsub, runId);
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
     }
@@ -2539,6 +2549,8 @@ export class Agent<
         // Internal processor workflows are transient and non-resumable, so they must never
         // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
         shouldPersistSnapshot: () => false,
+        // Never stored, so only the agent call that owns it can cancel it.
+        localCancellationOnly: true,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
@@ -4520,6 +4532,7 @@ export class Agent<
     }
 
     fork.#inheritedPubSub = this.#inheritedPubSub;
+    fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
     // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
@@ -7472,13 +7485,10 @@ export class Agent<
           agentBackgroundConfig: this.#backgroundTasks,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
-          toolObj,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
+        const workflowTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+        // Its results are marked `mastra.workflowTool` so tracing can show them (#30219).
+        markAgentWorkflowTool(workflowTool);
+        convertedWorkflowTools[`workflow-${workflowName}`] = workflowTool;
       }
     }
 
@@ -10646,17 +10656,16 @@ export class Agent<
   }
 
   abortRunStream(runId: string): boolean {
-    const aborted = this.#abortLocalRun(runId);
+    const aborted = this.__abortLocalRun(runId);
     if (aborted) return true;
     // A published run may be executing in another process; it listens on its
     // control topic.
-    const bus = this.#ownStreamBus();
-    if (bus) void this.#requestStreamAbort(bus, runId);
+    void this.requestRemoteAbort(runId);
     return false;
   }
 
   /** Abort `runId` if this process executes it or holds it parked. */
-  #abortLocalRun(runId: string): boolean {
+  protected __abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
@@ -10675,8 +10684,8 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    if (this.#abortLocalRun(runId)) return true;
-    const bus = this.#ownStreamBus();
+    if (this.__abortLocalRun(runId)) return true;
+    const bus = this.__getStreamBus();
     if (!bus) return false;
     return requestAcknowledgedAbort(bus.pubsub, runId);
   }
@@ -10702,9 +10711,7 @@ export class Agent<
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       await Promise.all(
-        [...workflowNames].map(workflowName =>
-          workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 }),
-        ),
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
       );
       return true;
     } catch (error) {
@@ -10853,6 +10860,10 @@ export class Agent<
     const routingRequirement = {
       requireClaimedOwner: target.ifIdle?.requireClaimedOwner === true,
       scopes: target.scopes,
+      // A persist-only send must stay persist-only when the delivery is delayed:
+      // the deferred dispatch would otherwise wake the idle thread the caller
+      // explicitly asked not to wake.
+      ...(target.ifIdle?.behavior === 'persist' ? { idleBehavior: 'persist' as const } : {}),
     };
     for (const notification of inputs) {
       records.push(
@@ -12671,7 +12682,7 @@ export class Agent<
       cleanup: detach,
       detach,
       abort: async () => {
-        await this.#requestStreamAbort(bus, runId);
+        await this.requestRemoteAbort(runId, bus);
       },
     };
   }

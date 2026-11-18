@@ -15,7 +15,7 @@ import {
 } from './thinking-level-story-data';
 import type { Level } from './thinking-level-story-data';
 import type { ThinkingLevelOption } from './use-thinking-level-stop';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 
 const meta: Meta<typeof ThinkingLevelPicker> = {
   title: 'Elements/ThinkingLevel/Picker',
@@ -102,7 +102,7 @@ function GroupedWithModel({ model, options, initial, unavailableReason }: Groupe
     <ButtonsGroup size="sm" aria-label="Model and thinking">
       <Button variant="ghost" size="sm">
         {model}
-        <IconChevronBottom aria-hidden size={12} />
+        <IconChevronDownMedium aria-hidden size={12} />
       </Button>
       <ThinkingLevelPicker
         options={options}

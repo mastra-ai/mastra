@@ -8,11 +8,11 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Vercel Sandboxes
+# Vercel sandboxes
 
 Run commands in isolated Vercel environments with either persistent Sandbox microVMs or stateless Serverless Functions.
 
-## Vercel Sandbox
+## Vercel sandbox
 
 Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
@@ -41,7 +41,7 @@ The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when no explici
     vercel env pull
     ```
 
-    On Vercel, authentication is handled automatically — no configuration needed.
+    On Vercel, authentication is handled automatically. No configuration needed.
   </TabItem>
 
   <TabItem value="env-file" label="Access token (.env)">
@@ -312,7 +312,7 @@ The Mastra adapter doesn't implement the Workspace filesystem mounting API. The 
 
 See the [Vercel Sandbox documentation](https://vercel.com/docs/vercel-sandbox) for current limits and pricing.
 
-## Vercel Serverless Sandbox
+## Vercel serverless sandbox
 
 `VercelServerlessSandbox` executes commands as [Vercel](https://vercel.com) serverless functions. It provides globally distributed, zero-infrastructure execution with automatic scaling. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
 

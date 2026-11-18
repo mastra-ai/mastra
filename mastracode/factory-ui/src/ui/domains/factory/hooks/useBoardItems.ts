@@ -2,11 +2,7 @@ import { boardLoop, boardOf } from '../boardFlow';
 import { useRef, useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import {
-  useDeleteWorkItemMutation,
-  useTransitionWorkItemMutation,
-  useUpdateWorkItemMutation,
-} from '../../../../hooks/useWorkItems';
+import { useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
@@ -16,7 +12,6 @@ import type { BoardStageId } from '../stages';
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
-  repositorySlug?: string;
 }
 
 /** The moves that rewrite a board's persisted cards, for a caller that holds the cards it acts on. */
@@ -36,13 +31,18 @@ export function useBoardItems({
   onFailure?: (message: string) => void;
 }) {
   const catalog = useBoardCatalog(factoryProjectId);
-  const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const movingRef = useRef<Set<string>>(new Set());
 
-  const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
+  const requestTransition = (
+    item: WorkItem,
+    toBoard: string,
+    toStage: string,
+    options: MoveOptions = {},
+    onSettled?: () => void,
+  ) => {
     setTransitionReasons(current => {
       if (!(item.id in current)) return current;
       const next = { ...current };
@@ -58,7 +58,7 @@ export function useBoardItems({
     void transition
       .mutateAsync({
         item,
-        board: itemBoard(item),
+        board: toBoard,
         stage: toStage,
         cause: options.cause ?? 'card_action',
         ...(item.stages.length === 1 && item.stages[0] === toStage ? { reenter: true } : {}),
@@ -83,26 +83,17 @@ export function useBoardItems({
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
     movingRef.current.add(id);
-    const release = () => movingRef.current.delete(id);
-    if (!options.repositorySlug) {
-      requestTransition(item, toStage, options, release);
-      return;
-    }
-    // The patch bumps the revision, so the move has to ride the item it returned.
-    void update
-      .mutateAsync({
-        id,
-        patch: {
-          metadata: item.workItem
-            ? { repository: options.repositorySlug }
-            : { ...item.metadata, repository: options.repositorySlug },
-        },
-      })
-      .then(patched => requestTransition(patched, toStage, options, release))
-      .catch(error => {
-        release();
-        onFailure?.(error instanceof Error ? error.message : 'The card could not be updated.');
-      });
+    requestTransition(item, itemBoard(item), toStage, options, () => movingRef.current.delete(id));
+  };
+
+  /** Moves a card to a phase on another board; the server keeps its id, history, and sessions. */
+  const moveToBoard = (id: string, toBoard: string, toStage: string) => {
+    const item = all.find(candidate => candidate.id === id);
+    if (!item || movingRef.current.has(id)) return;
+    if (itemBoard(item) === toBoard) return move(id, toStage);
+    // No declared-move gate here: the destination board's rules are the server's to judge.
+    movingRef.current.add(id);
+    requestTransition(item, toBoard, toStage, { cause: 'move_to_board' }, () => movingRef.current.delete(id));
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
@@ -116,6 +107,7 @@ export function useBoardItems({
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     move,
+    moveToBoard,
     remove: (id: string) => remove.mutate(id),
     handleDrop,
   };

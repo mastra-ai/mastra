@@ -32,7 +32,7 @@ SENTRY_ENVIRONMENT=production
 SENTRY_RELEASE=1.0.0
 ```
 
-### Zero-Config Setup
+### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -53,7 +53,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit Configuration
+### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -82,7 +82,7 @@ export const mastra = new Mastra({
 
 ## Configuration options
 
-### Complete Configuration
+### Complete configuration
 
 ```typescript
 new SentryExporter({
@@ -107,7 +107,7 @@ new SentryExporter({
 })
 ```
 
-### Sampling Configuration
+### Sampling configuration
 
 Control the percentage of transactions sent to Sentry. This is useful for high-volume applications:
 

@@ -6,7 +6,7 @@ packages:
   - '@mastra/client-js'
 ---
 
-# Agent Controller
+# Agent controller
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
@@ -14,7 +14,7 @@ packages:
 
 When the agent you host works in a codebase, build it with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) instead of `new Agent()`. It returns a standard `Agent` that already has a workspace, task tracking, and retries for transient model errors, which are the defaults Mastra Code runs on.
 
-## When to use the Agent Controller
+## When to use the agent controller
 
 Use the Agent Controller when your application needs:
 
@@ -220,7 +220,7 @@ await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__')
 console.log(session.model.get())
 ```
 
-### Select Observational Memory models
+### Select observational Memory models
 
 Observer and reflector model choices are independent. Each role can use an explicit model or an automatic selection that the host resolves from the active main model and session state.
 
@@ -519,6 +519,8 @@ subscription.unsubscribe()
 `subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect. A rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff. A connection that stays open but stops delivering data, for example after the device sleeps, counts as a drop once no data, including server heartbeats, arrives for `idleTimeoutMs` (default `60000`).
 
 The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
+
+A client that reads slower than the session emits, for example on a poor network, gets every event in order but only the newest `display_state_changed` snapshot, because each snapshot holds the full display state. When 5,000 events are waiting for the client, or one has waited more than 60 seconds, the server closes the stream. With `reconnect: true` the client reconnects and receives the current display state first. Mastra reports both through `mastra.metrics` as `mastra_agent_controller_sse_snapshots_dropped_total` and `mastra_agent_controller_sse_slow_client_closes_total`, which has a `reason` label set to `max_pending` or `max_wait`.
 
 Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
 

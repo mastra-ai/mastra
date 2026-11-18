@@ -13,26 +13,21 @@ import type { ChatThinkingApi } from './ChatThinkingContext';
 import { useChatModels } from './useChatModels';
 import { useChatSessionContext } from './useChatSessionContext';
 
-interface ChatThinkingProviderProps {
-  children: ReactNode;
-}
-
+/** One provider for a draft and its thread, so a Start keeps the thinking control mounted. */
 export function ChatThinkingProvider({
   children,
   initialDraftThinkingLevel,
-}: ChatThinkingProviderProps & { initialDraftThinkingLevel?: ThinkingLevelSetting }) {
+}: {
+  children: ReactNode;
+  initialDraftThinkingLevel?: ThinkingLevelSetting;
+}) {
   const { draftSessionId } = useChatSessionContext();
-  return draftSessionId ? (
-    <DraftChatThinkingProvider initialOverride={initialDraftThinkingLevel}>{children}</DraftChatThinkingProvider>
-  ) : (
-    <LiveChatThinkingProvider>{children}</LiveChatThinkingProvider>
-  );
+  const draft = useDraftThinking(initialDraftThinkingLevel);
+  const live = useLiveThinking();
+  return <ChatThinkingContext.Provider value={draftSessionId ? draft : live}>{children}</ChatThinkingContext.Provider>;
 }
 
-function DraftChatThinkingProvider({
-  children,
-  initialOverride,
-}: ChatThinkingProviderProps & { initialOverride?: ThinkingLevelSetting }) {
+function useDraftThinking(initialOverride: ThinkingLevelSetting | undefined): ChatThinkingApi {
   const { catalogTarget, modelScope } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const defaultModelQuery = useDefaultModelQuery();
@@ -45,7 +40,7 @@ function DraftChatThinkingProvider({
     personalDefault: defaultModelQuery.data?.thinkingLevel,
     personalDefaultError: defaultModelQuery.error,
   });
-  const value: ChatThinkingApi = {
+  return {
     level,
     thinkingDefault,
     loadError,
@@ -57,11 +52,9 @@ function DraftChatThinkingProvider({
       setOverride(undefined);
     },
   };
-
-  return <ChatThinkingContext.Provider value={value}>{children}</ChatThinkingContext.Provider>;
 }
 
-function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
+function useLiveThinking(): ChatThinkingApi {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { catalogTarget, modelScope, sessionModelsQuery } = useChatModelScope();
   const { activeModelId } = useChatModels();
@@ -83,11 +76,10 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
     personalDefaultError: sessionModelsQuery.error,
   });
   const settingsLoaded = settingsQuery.data !== undefined;
-  const settingsLoadError = settingsQuery.error ?? undefined;
-  const value: ChatThinkingApi = {
+  return {
     level: settingsLoaded ? effective.level : undefined,
     thinkingDefault: effective.thinkingDefault,
-    loadError: settingsLoaded ? effective.loadError : settingsLoadError,
+    loadError: settingsLoaded ? effective.loadError : (settingsQuery.error ?? undefined),
     override,
     setLevel: async next => {
       await updateSettings({ thinkingLevel: next });
@@ -96,6 +88,4 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
       await updateSettings({ thinkingLevel: null });
     },
   };
-
-  return <ChatThinkingContext.Provider value={value}>{children}</ChatThinkingContext.Provider>;
 }

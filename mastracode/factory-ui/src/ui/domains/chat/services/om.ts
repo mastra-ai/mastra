@@ -4,13 +4,7 @@ import type { ChatRuntimeState } from './runtime';
 
 export type OMBudgets = Pick<
   AgentControllerOMProgress,
-  | 'status'
-  | 'pendingTokens'
-  | 'threshold'
-  | 'thresholdPercent'
-  | 'observationTokens'
-  | 'reflectionThreshold'
-  | 'reflectionThresholdPercent'
+  'pendingTokens' | 'threshold' | 'observationTokens' | 'reflectionThreshold'
 >;
 
 export type OMWork = 'idle' | 'background' | 'blocking';

@@ -44,7 +44,7 @@ export function JiraLabelEditor({
                 onClick={() => onChange(labels.filter(existing => existing !== label))}
                 className="disabled:opacity-40"
               >
-                <IconCrossMedium className="size-3" aria-hidden />
+                <IconCrossMedium className="size-icon-xs" aria-hidden />
               </button>
             </span>
           </Badge>

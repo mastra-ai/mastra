@@ -154,6 +154,7 @@ describe('step-finish token usage extraction', () => {
             totalTokens: 2,
             raw: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
           },
+          total: expect.objectContaining({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }),
         },
         {
           type: 'usage_update',
@@ -163,6 +164,7 @@ describe('step-finish token usage extraction', () => {
             totalTokens: 7,
             raw: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
           },
+          total: session.getTokenUsage(),
         },
       ]);
       expect(session.getTokenUsage()).toEqual({
@@ -240,6 +242,7 @@ describe('step-finish token usage extraction', () => {
     expect(events.find(event => event.type === 'usage_update')).toEqual({
       type: 'usage_update',
       usage: expectedUsage,
+      total: expectedUsage,
     });
   });
 

@@ -72,7 +72,7 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   return (
     <>
       <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <IconShareAndroid className="size-5 text-muted-foreground" />
+        <IconShareAndroid className="text-muted-foreground" />
       </Button>
 
       <NetworkChoiceMetadata

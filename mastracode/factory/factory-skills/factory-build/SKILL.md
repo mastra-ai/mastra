@@ -24,7 +24,7 @@ The `factory-work-item` signal describes the card: its source issue and the tool
 
 ## Repository Guard
 
-The Factory system prompt identifies the **Target repository**. Before the first edit and again immediately before every push, run `git rev-parse --show-toplevel` and `git remote get-url origin`, and confirm the remote is the Target repository (normalize SSH and HTTPS URLs to `owner/repository`, ignoring a trailing `.git`). If it is missing or does not match, stop without editing or pushing and report the expected target and the observed remote and root.
+The Factory system prompt either identifies the **Target repository** or says the card names no repository and lists the repositories in this sandbox. When it names none, the plan names the repository it was made for; otherwise determine it from the card (title, description, linked issues, file paths) before the first edit, and treat it as the Target repository from then on. Work in that repository's checkout (the environment lists each repository's directory). Before the first edit and again immediately before every push, run `git rev-parse --show-toplevel` and `git remote get-url origin` there, and confirm the remote is the Target repository (normalize SSH and HTTPS URLs to `owner/repository`, ignoring a trailing `.git`). When the Target repository is not the session's own (the source-control tools default to it), pass it as `repository` to every `source_control_*` call; the first push or change request records it on the card. If the card clearly belongs to a repository that is not in this sandbox, the card gives no way to tell, or the remote does not match, stop without editing or pushing and report the expected target and the observed remote and root.
 
 ## Phase 1: Find the plan
 

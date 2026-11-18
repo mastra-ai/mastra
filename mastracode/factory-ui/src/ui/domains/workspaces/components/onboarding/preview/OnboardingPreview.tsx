@@ -59,7 +59,7 @@ function OnboardingCodebasePreview({ repository }: Pick<OnboardingPreviewProps, 
           {repository?.fullName ?? 'Your repository'}
         </Txt>
         <div className="text-muted-foreground mt-2 flex items-center gap-2">
-          <IconBranch className="size-3 shrink-0" />
+          <IconBranch className="size-icon-xs shrink-0" />
           <Txt variant="meta" tone="muted">
             {repository?.defaultBranch ?? 'Selected branch'}
           </Txt>

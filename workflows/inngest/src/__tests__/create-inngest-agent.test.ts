@@ -70,6 +70,20 @@ describe('createInngestAgent factory function', () => {
     baseUrl: `http://localhost:${INNGEST_PORT}`,
   });
 
+  it('advertises detached streams when the wrapped Agent has streams disabled', () => {
+    const agent = new Agent({
+      id: 'detached-streams',
+      name: 'Detached streams',
+      instructions: 'Test',
+      model: createMockModel() as any,
+      durable: false,
+    });
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(agent.hasResumableStreams()).toBe(false);
+    expect(durableAgent.hasResumableStreams()).toBe(true);
+  });
+
   it('should create an InngestAgent from a regular Agent', () => {
     const agent = new Agent({
       id: 'factory-test',

@@ -18,11 +18,11 @@ function measureCapsule(capsule: HTMLDivElement) {
 
 export function WorkspacePanelDock({ children }: { children: ReactNode }) {
   const panel = useWorkspacePanel();
-  const Dock = panel.workspacePath ? 'aside' : 'div';
+  const Dock = panel.hasContent ? 'aside' : 'div';
 
   return (
     <Dock
-      aria-label={panel.workspacePath ? 'Session panel' : undefined}
+      aria-label={panel.hasContent ? 'Session panel' : undefined}
       className={cn(
         'relative flex justify-self-end',
         '[--dock-overhang:--spacing(1)] [--capsule-height:calc(var(--spacing-control-sm)+--spacing(1))]',
@@ -35,7 +35,7 @@ export function WorkspacePanelDock({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
-      {panel.workspacePath && <WorkspacePanelDockCard key={workspacePanelKey(panel)} />}
+      {panel.hasContent && <WorkspacePanelDockCard key={workspacePanelKey(panel)} />}
     </Dock>
   );
 }
