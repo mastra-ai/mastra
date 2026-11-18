@@ -166,6 +166,7 @@ export const sessionReadHandlers = [
       owner: url.searchParams.get('owner') ?? undefined,
       status: url.searchParams.get('status') ?? undefined,
       updated: url.searchParams.get('updated') ?? undefined,
+      source: url.searchParams.get('source') ?? undefined,
       children: url.searchParams.get('children') ?? undefined,
       pin: queryValues(url, 'pin'),
       open: url.searchParams.get('open') ?? undefined,

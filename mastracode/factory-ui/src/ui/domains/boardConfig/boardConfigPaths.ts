@@ -5,7 +5,7 @@ export interface BoardConfigLocation {
   boardId: string;
   /** The phase being configured; unset on the board's General page. */
   phaseKey?: string;
-  /** The factory skills page, opened from this board's settings. Skills are factory-wide; the board only keeps the sidebar in place. */
+  /** The factory skills page or one of its skill pages, opened from this board's settings. Skills are factory-wide; the board only keeps the sidebar in place. */
   skills?: true;
   /** The board's rules: what it takes when an item arrives and where its cards move. */
   rules?: true;
@@ -25,6 +25,15 @@ export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: s
  */
 export function boardSkillsPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/skills`;
+}
+
+export function boardSkillPath(factoryId: string, boardId: string, skillName: string): string {
+  return `${boardSkillsPath(factoryId, boardId)}/${encodeURIComponent(skillName)}`;
+}
+
+/** The form that creates a skill. Not under `skills/`, where `new` could be a skill's name. */
+export function newSkillPath(factoryId: string, boardId: string): string {
+  return `${boardPath(factoryId, boardId)}/new-skill`;
 }
 
 /** The board's rules. Outside `config/` for the same reason as the skills page. */
@@ -54,7 +63,7 @@ export function newBoardPath(factoryId: string): string {
 }
 
 const BOARD_CONFIG_PATH =
-  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills)|(rules)|(intake))\/?$/;
+  /^\/factories\/([^/]+)\/(?:(work)|boards\/([^/]+))\/(?:config(?:\/([^/]+))?|(skills(?:\/[^/]+)?|new-skill)|(rules)|(intake))\/?$/;
 
 /** Reads a board configuration path, so the sidebar outside the page outlet knows what is open. */
 export function parseBoardConfigPath(pathname: string): BoardConfigLocation | undefined {

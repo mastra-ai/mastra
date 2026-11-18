@@ -109,7 +109,7 @@ type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
 
 ### Strategy Behaviors
 
-- **realtime**: Immediately persists each event to storage
+- **realtime**: Immediately persists each event to storage. Use it only in single-process local development. It isn't supported with durable execution: when a durable agent or an Inngest, Temporal, or evented workflow is registered, the exporter logs one warning and runs `batch-with-updates`.
 - **batch-with-updates**: Batches creates and updates separately, applies in order
 - **insert-only**: Only processes SPAN_ENDED events, ignores updates
 

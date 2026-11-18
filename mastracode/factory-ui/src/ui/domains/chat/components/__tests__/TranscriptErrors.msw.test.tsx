@@ -57,7 +57,7 @@ function ErrorSession({
     initialMessages: messages,
   });
   useEffect(() => {
-    if (liveEvent) onEvent(liveEvent);
+    if (liveEvent) onEvent(liveEvent, false);
   }, [liveEvent, onEvent]);
   const session = (
     <ChatSessionContext.Provider

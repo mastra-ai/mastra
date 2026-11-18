@@ -13,8 +13,9 @@
  */
 import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
-import type { RouteObject } from 'react-router';
+import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
+import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
@@ -31,6 +32,7 @@ import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
+  loadSessionFrame,
   prefetchBoard,
   prefetchCardDraft,
   prefetchComposer,
@@ -40,6 +42,7 @@ import {
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
   prefetchSidebar,
+  reloadOnAnotherThread,
   retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
@@ -49,22 +52,28 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage), <AppPageLoader />);
+const SessionPage = lazyPage(() =>
+  import('./pages/SessionPage').then(module => {
+    SessionLayout.preload().catch(() => undefined);
+    return module.SessionPage;
+  }),
+);
+// Card drafts and threads share this frame and page, and a draft's first prompt opens its thread.
+const SessionLayout = lazyPage(
+  () =>
+    import('./layouts/SessionLayout').then(module => {
+      // A failed preload retries on the visit.
+      SessionPage.preload().catch(() => undefined);
+      return module.SessionLayout;
+    }),
+  <AppPageLoader />,
+);
 // A new session opens its thread on the first prompt, so that page loads right after.
 const NewPage = lazyPage(
   () =>
     import('./pages/NewPage').then(module => {
-      // A failed preload retries on the visit.
-      ThreadPage.preload().catch(() => undefined);
+      SessionLayout.preload().catch(() => undefined);
       return module.NewPage;
-    }),
-  <AppPageLoader />,
-);
-const CardDraftPage = lazyPage(
-  () =>
-    import('./pages/CardDraftPage').then(module => {
-      ThreadPage.preload().catch(() => undefined);
-      return module.CardDraftPage;
     }),
   <AppPageLoader />,
 );
@@ -78,6 +87,10 @@ const SettingsPage = lazyPage(
 );
 const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
+  <AppPageLoader />,
+);
+const FactorySkillPage = lazyPage(
+  () => import('./pages/FactorySkillPage').then(module => module.FactorySkillPage),
   <AppPageLoader />,
 );
 const BoardIntakePage = lazyPage(
@@ -239,11 +252,11 @@ function CardDraftRedirect() {
   return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services);
-  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
+export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?: () => boolean): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services, holdsNavigation);
+  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch, shouldRevalidate?: ShouldRevalidateFunction) => ({
     element: <Page />,
-    ...loadOnEntry(prefetch, Page),
+    ...loadOnEntry(prefetch, Page, shouldRevalidate),
   });
 
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
@@ -270,7 +283,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.
-                  ...loadOnEntry(prefetchSidebar, ThreadPage),
+                  ...loadOnEntry(prefetchSidebar, SessionLayout),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
@@ -278,17 +291,28 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                       children: [
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
-                        { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
-                        { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
                         {
                           path: 'cards/:workItemId',
                           element: <CardDraftRedirect />,
-                          ...loadOnEntry(prefetchCardDraft, CardDraftPage),
+                          ...loadOnEntry(prefetchCardDraft, SessionPage),
                         },
                         {
-                          path: 'cards/:workItemId/new/:draftSessionId',
-                          ...lazyRoute(CardDraftPage, prefetchCardDraft),
+                          ...lazyRoute(SessionLayout),
+                          children: [
+                            {
+                              path: 'workspaces/:sessionId/threads/:threadId',
+                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                            },
+                            {
+                              path: 'user/threads/:threadId',
+                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                            },
+                            {
+                              path: 'cards/:workItemId/new/:draftSessionId',
+                              ...lazyRoute(SessionPage, prefetchCardDraft),
+                            },
+                          ],
                         },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
@@ -305,6 +329,10 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
+                        { path: 'work/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'work/new-skill', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/new-skill', ...lazyRoute(FactorySkillPage) },
                         { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
                         { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
@@ -354,6 +382,17 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   ];
 }
 
-export function createAppRouter(services: RouteLoaderServices) {
-  return createBrowserRouter(createAppRoutes(services));
+export function createAppRouter(
+  services: RouteLoaderServices,
+  createRouter: (routes: RouteObject[]) => DataRouter = createBrowserRouter,
+) {
+  // The first load's loaders can run inside `createRouter`, before `router` is assigned.
+  let router: DataRouter | undefined;
+  router = createRouter(createAppRoutes(services, () => holdsNavigation(router)));
+  return router;
+}
+
+/** A prompt handoff continues the page on screen, so only other in-app navigations wait for their reads. */
+function holdsNavigation(router: DataRouter | undefined): boolean {
+  return router?.state.initialized === true && !opensWithPrompt(router.state.navigation.location?.state);
 }

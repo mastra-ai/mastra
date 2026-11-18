@@ -11,10 +11,7 @@ const connectionString =
 
 describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1560)', engine => {
   for (const scenario of ['abort', 'local-abort', 'reuse', 'resume']) {
-    // COR-1565: remote evented approval runs the tool but never finishes, even with A alive.
-    // Also reproduced on the prerequisite branch, 3a23fe1ac5a; do not fix its resume protocol here.
-    const test = engine === 'evented' && scenario === 'resume' ? it.fails : it;
-    test(`keeps lifecycle authority across servers during ${scenario}`, async () => {
+    it(`keeps lifecycle authority across servers during ${scenario}`, async () => {
       const suffix = randomUUID().replaceAll('-', '');
       const prefix = `publisher-${suffix}`;
       const schemaName = `publisher_${suffix}`;
@@ -114,9 +111,24 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
           await expect
             .poll(() => processes.some(child => child.stdout.includes('publisher-tool-executed')), { timeout: 10_000 })
             .toBe(true);
-          await expect
+          const resumedCompletion = expect
             .poll(async () => (await request(1, '/state')).result.text, { timeout: 30_000 })
             .toBe('The answer is 42.');
+          if (engine === 'evented') {
+            // COR-1565: the remote approved tool executes, but its reader never finishes.
+            // Pin only that completion assertion; setup and ownership must still pass.
+            await expect(resumedCompletion).rejects.toThrow("expected undefined to be 'The answer is 42.'");
+            const resumed = (await request(1, '/state')).record;
+            expect(resumed).toMatchObject({ status: 'running', publisherId: expect.any(String) });
+            expect(resumed.publisherId).not.toBe(original!.publisherId);
+            await request(0, '/cleanup');
+            expect((await request(1, '/state')).record).toMatchObject({
+              publisherId: resumed.publisherId,
+              status: 'running',
+            });
+            return;
+          }
+          await resumedCompletion;
           await expect
             .poll(async () => (await request(0, '/state')).result.text, { timeout: 30_000 })
             .toBe('The answer is 42.');
@@ -155,10 +167,17 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
               .poll(async () => (await request(1, '/state')).record, { timeout: 30_000 })
               .toMatchObject({ publisherId: owner.publisherId, status: 'finished' });
             if (scenario === 'abort') {
+              // Cleanup drains owner-local publications; keep only the remote worker paused.
+              await request(0, '/release-terminal');
               await request(0, '/cleanup');
               await expect.poll(async () => (await request(1, '/state')).record).toBeUndefined();
             }
             await Promise.all([request(0, '/release-terminal'), request(1, '/release-terminal')]);
+            await expect
+              .poll(() => processes.some(child => child.stdout.includes('publisher-worker-settled')), {
+                timeout: 30_000,
+              })
+              .toBe(true);
           }
           if (engine !== 'evented' || scenario !== 'abort') {
             await expect
