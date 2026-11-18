@@ -20,6 +20,7 @@ import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry } from '../../run-registry';
+import { segmentOwnsStep } from '../../segment-spans';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -226,8 +227,14 @@ export function createDurableLLMMappingStep() {
         | undefined;
       if (llmOutput.stepSpanData) {
         try {
-          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-          stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          const initData = getInitData() as DurableAgenticWorkflowInput;
+          const modelSpanData = (registryEntry?.resumeModelSpanData ?? initData.modelSpanData) as
+            | ExportedSpan<SpanType.MODEL_GENERATION>
+            | undefined;
+          if (segmentOwnsStep({ modelSpanData }, llmOutput.stepSpanData)) {
+            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          }
         } catch {
           // Span bookkeeping must never break the merge step.
         }

@@ -75,6 +75,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { segmentOwnsStep } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -528,7 +529,13 @@ export function createDurableToolCallStep() {
                   timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
                 },
           );
-          if (typedInput.stepSpanData) {
+          if (
+            typedInput.stepSpanData &&
+            segmentOwnsStep(
+              { modelSpanData: modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined },
+              typedInput.stepSpanData,
+            )
+          ) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
               output,
               outcome: 'suspend',
