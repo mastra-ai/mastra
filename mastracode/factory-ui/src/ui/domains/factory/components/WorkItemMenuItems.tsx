@@ -1,7 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
-import { externalLinkLabel } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardLoop } from '../boardFlow';
 import { itemBoard, itemStageOptions } from '../boardStages';
@@ -9,6 +8,7 @@ import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
+import { CARD_SOURCES } from '../cardSources';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -108,7 +108,7 @@ export function WorkItemMenuItems({
       {item.url !== null && (
         <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
           <IconArrowUpRight aria-hidden />
-          <span>{externalLinkLabel(item.source)}</span>
+          <span>{CARD_SOURCES[item.source].linkLabel}</span>
         </DropdownMenu.Item>
       )}
       {stages

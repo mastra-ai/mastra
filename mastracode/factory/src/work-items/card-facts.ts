@@ -1,8 +1,7 @@
 import { hasPullRequest } from '../boards/semantics.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { workItemBranchSource } from '../work-item-branch.js';
-import type { WorkItemBranchSource } from '../work-item-branch.js';
+import { workItemBoardSource } from '../work-item-branch.js';
 import { metadataLabels } from './card-labels.js';
 import { factoryParticipantId, providerPeople } from './card-people.js';
 import type { BoardRelations, ProviderPerson, ProviderPersonRole } from './card-people.js';
@@ -59,9 +58,7 @@ function humanActorIds(card: Card): string[] {
 export function cardFacts(card: Card): CardFacts {
   let facts = factsByCard.get(card);
   if (facts) return facts;
-  // A Slack thread is its own source on the board, not a card filed by hand.
-  const source: WorkItemBranchSource =
-    card.externalSource?.integrationId === 'slack' ? 'slack-thread' : workItemBranchSource(card.externalSource);
+  const source = workItemBoardSource(card.externalSource);
   const metadata = sourceMetadata(card);
   const people = providerPeople({ source, metadata });
   const actorIds = humanActorIds(card);

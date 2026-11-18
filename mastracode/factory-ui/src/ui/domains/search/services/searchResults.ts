@@ -4,8 +4,8 @@ import type { CardContextSession } from '@mastra/factory/work-items/card-context
 import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
+import { CARD_SOURCES } from '../../factory/cardSources';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { threadPath } from '../../workspaces/services/factoryPaths';
@@ -188,7 +188,7 @@ function searchedNumber(item: WorkItem): string | undefined {
 
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
-  const sourceLabel = SOURCE_LABELS[item.source];
+  const sourceLabel = CARD_SOURCES[item.source].label;
   const stage = currentItemStageLabel(item, board);
 
   return {
