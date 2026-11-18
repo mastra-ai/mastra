@@ -929,7 +929,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!options.controller || !options.renameThread) {
           return c.json({ error: 'Renaming sessions is not available on this server.' }, 503);
         }
-        const threads = await listFactorySessionThreads(options.controller, row, options.workItems);
+        // A session id is chosen by its creator, so threads found only because their resource
+        // matches it may be someone else's. Only the session's own thread, or one stamped with
+        // its id, takes a typed title.
+        const threads = (await listFactorySessionThreads(options.controller, row, options.workItems)).filter(
+          candidate => candidate.id === sessionId || candidate.metadata?.factorySessionId === sessionId,
+        );
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         // The first reply names a new conversation, which would replace a title set before it.
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);

@@ -538,6 +538,50 @@ describe('source-control session routes', () => {
     });
   });
 
+  it("does not rename another Factory's conversation through a session id that matches its project", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const other = await seed.projects.create({ orgId: 'org-1', userId: 'user-2', input: { name: 'Other Factory' } });
+    // The session's id is its creator's choice; here it is the other Factory's project id.
+    const sessionId = other.id;
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/borrowed-id',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const storage = new InMemoryStore({ id: 'factory-rename-borrowed-id' });
+    const controller = await startOwnershipController('factory-rename-borrowed-id', storage);
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: 'their-conversation',
+        resourceId: other.id,
+        title: 'Their title',
+        metadata: { factorySessionId: 'their-session' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const renameThread = vi.fn<NonNullable<RouteOptions['renameThread']>>(async () => {});
+    const app = buildApp([sourceControl], seed, controller, noRuns, user, undefined, renameThread);
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Mine now' }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(renameThread).not.toHaveBeenCalled();
+    await expect(controller.queryThreadById({ threadId: 'their-conversation' })).resolves.toMatchObject({
+      title: 'Their title',
+    });
+  });
+
   it('refuses a typed title for a session with no conversation yet', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const sessionId = 'factory-rename-no-thread';
