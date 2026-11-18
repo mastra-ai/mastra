@@ -21,11 +21,15 @@ import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 import { linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearConnectionWorkspace, LinearWorkspaceListingError } from '../../linear/routes.js';
+import { attachLinearRules } from '../../linear/rules.js';
+import type { LinearRulesIngress } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
+import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
 import { logPlatformBootInfo, logPlatformInfo } from '../logging.js';
 import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
+import { handleLinearConnectEvent } from './connect-events.js';
 import { PLATFORM_MANAGED_CONNECTION_TOKEN, PlatformLinearIntake } from './intake.js';
 import type { LinearWorkspace } from './intake.js';
 import { PlatformLinearMigration } from './migration.js';
@@ -49,8 +53,8 @@ export interface PlatformLinearIntegrationConfig {
  * Workspaces the platform still holds legacy OAuth tokens for are migrated
  * into Connect automatically: at boot and on every reconcile interval, under
  * a lease so only one replica migrates. Migration links each new connection
- * to the Factory project, so the workspace's webhooks reach the project's
- * `connect` topic from then on. Until a workspace is migrated, Platform
+ * to the Factory project, and the workspace's webhooks land in the
+ * connection's platform event log from then on. Until a workspace is migrated, Platform
  * Linear reports `migration_required` for it; there is no legacy fallback.
  */
 export class PlatformLinearIntegration extends PlatformConnectIntegration {
@@ -58,6 +62,9 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
   readonly #rules: LinearEventRules;
   readonly #endpointHost: string;
   readonly #migration: PlatformLinearMigration;
+  readonly #ingest = new WeakMap<IntegrationContext, ((input: LinearRulesIngress) => Promise<unknown>) | null>();
+  readonly #recentEventKeys = new Set<string>();
+  #unverifiedEventsDropped = 0;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
 
@@ -241,6 +248,32 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
     return attachLinearIssueReconciler(this, ctx) ?? null;
   }
 
+  /**
+   * Linear webhooks of migrated workspaces, from their connections' event logs. The
+   * route exists from boot, before any workspace is migrated, so a workspace
+   * migrated later gets its events without a restart.
+   */
+  protected override async handleConnectEvent(
+    event: PlatformConnectEventDelivery,
+    ctx: IntegrationContext,
+  ): Promise<void> {
+    let ingest = this.#ingest.get(ctx);
+    if (ingest === undefined) {
+      ingest = attachLinearRules(this, ctx) ?? null;
+      this.#ingest.set(ctx, ingest);
+    }
+    const workItems = ctx.runtime?.workItems;
+    if (!ingest || !workItems) return;
+    await handleLinearConnectEvent(event, {
+      connectionWorkspace: connectionId => this.intake.connectionWorkspace(connectionId),
+      projects: ctx.storage.projects,
+      workItems,
+      ingest,
+      recentKeys: this.#recentEventKeys,
+      onUnverifiedDropped: () => (this.#unverifiedEventsDropped += 1),
+    });
+  }
+
   /** The reconcile worker, plus the migration worker that moves legacy workspaces onto Connect. */
   workers(ctx: IntegrationContext): MastraWorker[] {
     const migrationWorker = new LinearMigrationWorker(this.#migration, this.reconcileIntervalMs);
@@ -288,6 +321,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
       ...super.diagnostics(),
       endpointHost: this.#endpointHost,
       migration: { required, pending, skipped, ...(lastError ? { lastError } : {}) },
+      ...(this.#unverifiedEventsDropped > 0 ? { unverifiedEventsDropped: this.#unverifiedEventsDropped } : {}),
     };
   }
 

@@ -198,6 +198,14 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     return { workspaces, duplicates, unusable };
   }
 
+  /** The workspace an active project connection serves, or null when the project lists no such connection. */
+  async connectionWorkspace(connectionId: string): Promise<LinearIdentity | null> {
+    const connection = (await this.#integration.listConnections()).find(
+      candidate => candidate.id === connectionId && candidate.status === 'active',
+    );
+    return connection ? this.#identity(connection) : null;
+  }
+
   /** Connected workspaces, one per workspace. */
   async listWorkspaces(): Promise<LinearWorkspace[]> {
     return (await this.inventory()).workspaces;
