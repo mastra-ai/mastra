@@ -1013,7 +1013,8 @@ export const boardPhasesQuerySchema = z.object({
   sort: z.enum(BOARD_PHASES_SORTS).default('recent'),
   /**
    * Words the card must all answer: each one in its title, key, number or source id, or in the key of
-   * a pull request attached to it, or naming its id or one of its branches whole. A pasted link finds
+   * a pull request attached to it, or naming its id or one of its branches whole. A number or key with
+   * its `#` or `!` (`#12`, `acme/app#12`) is read whole: it never finds `#123`. A pasted link finds
    * the card carrying the issue or pull request it names, whatever page of it the link opens; a link
    * to a repository or project finds the cards it holds; a link to a Factory card finds that card.
    */

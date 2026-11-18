@@ -68,13 +68,21 @@ export function searchableCard(card: SearchedCard): SearchableCard {
 
 /** One word of a typed search, and what else than the card's text finds a card for it. */
 export type SearchTerm =
+  /** Anywhere in the card's text: `log` finds `login`, `34` finds `#345`. */
   | { kind: 'word'; word: string }
+  /** A whole number or key (`#12`, `acme/app#12`, `group/project!7`): never the start of a longer one. */
+  | { kind: 'reference'; word: string }
   /** A link to a Factory card. */
   | { kind: 'card'; word: string; id: string }
   /** Any other link; `sourceKey` when it names an issue or pull request. */
   | { kind: 'link'; word: string; url: string; sourceKey: string | null };
 
 const LINK = /^https?:\/\//i;
+/**
+ * `#12`, `owner/repo#12`, `group/project!7`: what names an issue or pull request by its number.
+ * Tracker keys (`ENG-42`) stay words: they read like `gpt-4` and `utf-8`, which should find `gpt-4o`.
+ */
+const NUMBERED_REFERENCE = /^(?:[\w.-]+(?:\/[\w.-]+)+)?[#!]\d+$/;
 /** A link pasted without its scheme: `github.com/acme/app/pull/3`. */
 const BARE_LINK = /^(?:[a-z0-9-]+\.)+[a-z]{2,}\//i;
 /** A Factory card's page, `/factories/<project>/cards/<card id>`: not any link with a `/cards/<uuid>` in it. */
@@ -83,7 +91,7 @@ const CARD_LINK =
 
 function searchTerm(word: string): SearchTerm {
   const link = LINK.test(word) ? word : BARE_LINK.test(word) ? `https://${word}` : undefined;
-  if (link === undefined) return { kind: 'word', word };
+  if (link === undefined) return { kind: NUMBERED_REFERENCE.test(word) ? 'reference' : 'word', word };
   const card = CARD_LINK.exec(link)?.[1];
   if (card !== undefined) return { kind: 'card', word, id: card };
   return {
@@ -101,6 +109,19 @@ export function searchTerms(query: string): SearchTerm[] {
 
 const SLASH = '/'.charCodeAt(0);
 
+function isAlphanumeric(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+}
+
+/** `word` is in `text` with no letter or digit right after it: `#12` in `#12 ` or `#12.`, not in `#123`. */
+function hasWhole(text: string, word: string): boolean {
+  for (let at = text.indexOf(word); at !== -1; at = text.indexOf(word, at + 1)) {
+    const next = at + word.length;
+    if (next === text.length || !isAlphanumeric(text.charCodeAt(next))) return true;
+  }
+  return false;
+}
+
 /** `inner` is `outer` or a page under it: `…/pull/3/files` under `…/pull/3`, never `…/pull/30`. */
 function isAtOrUnder(inner: string, outer: string): boolean {
   if (inner.length === outer.length) return inner === outer;
@@ -109,10 +130,14 @@ function isAtOrUnder(inner: string, outer: string): boolean {
 }
 
 function matchesTerm(card: SearchableCard, term: SearchTerm): boolean {
-  // A word in a title, or a whole id or branch, still finds the card, whatever else the word could
-  // name: `user.name/fix-login` reads as a link, and is a branch too.
-  if (card.text.includes(term.word) || card.ids.includes(term.word)) return true;
-  if (term.kind === 'word') return false;
+  // A whole id or branch finds the card, whatever else the word could name: `user.name/fix-login`
+  // reads as a link, and is a branch too.
+  if (card.ids.includes(term.word)) return true;
+  if (term.kind === 'word') return card.text.includes(term.word);
+  // Its own number or key, an attached one, or the same named in its title: `Follow-up to #12`.
+  if (term.kind === 'reference') return hasWhole(card.text, term.word);
+  // A title holding the pasted link.
+  if (card.text.includes(term.word)) return true;
   if (term.kind === 'card') return card.ids.includes(term.id);
   // A link to the issue or pull request, to a page of it, or to a repository or project holding it.
   return (

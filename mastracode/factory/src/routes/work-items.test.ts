@@ -3495,8 +3495,10 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       ['a Linear link with another title in it', 'https://linear.app/acme/issue/ENG-42/renamed-since', ['linear']],
       ['a repository’s link', 'https://github.com/acme/app', ['issue', 'pull request']],
       ['a link and a word', 'https://github.com/acme/app login', ['issue']],
-      // Typed words read as text, so a key also finds the longer keys it starts.
-      ['a pull request’s key, typed', 'acme/app#307', ['issue', 'pull request']],
+      ['an attached pull request’s key, never one it starts', 'acme/app#307', ['issue']],
+      ['an attached pull request’s number, never one it starts', '#307', ['issue']],
+      // Bare digits read as a word: they find the numbers holding them.
+      ['digits of a number', '307', ['issue', 'pull request']],
       ['a branch, whole', 'octo.cat/login-redirect', ['issue']],
       // Every GitHub issue link holds `issues`; only one title does.
       ['a word of links but of one title', 'issues', ['other repository']],

@@ -13,9 +13,13 @@ const card = (overrides: Partial<SearchableCard> = {}): SearchableCard => ({
 const finds = (searched: SearchableCard, query: string) => matchesSearch(searched, searchTerms(query));
 
 describe('searchTerms', () => {
-  it.each(['v1.2.3', 'package.json', 'node.js', 'acme/app#12', 'ENG-42', 'e.g/foo'])(
+  it.each(['v1.2.3', 'package.json', 'node.js', 'ENG-42', 'gpt-4', 'e.g/foo', '12'])(
     'reads %s as a word, not a link',
     word => expect(searchTerms(word)).toEqual([{ kind: 'word', word: word.toLowerCase() }]),
+  );
+
+  it.each(['#12', 'acme/app#12', 'group/sub/project!7'])('reads %s as a whole reference', word =>
+    expect(searchTerms(word)).toEqual([{ kind: 'reference', word }]),
   );
 
   it('reads a link pasted without its scheme as a link', () => {
@@ -31,6 +35,17 @@ describe('searchTerms', () => {
 });
 
 describe('matchesSearch', () => {
+  it('finds a number or key only whole, in a key or a title, and bare digits anywhere', () => {
+    const searched = card({ text: 'follow up on #12. #345 acme/app#30772' });
+
+    expect(finds(searched, '#12')).toBe(true);
+    expect(finds(searched, '#34')).toBe(false);
+    expect(finds(searched, '#345')).toBe(true);
+    expect(finds(searched, 'acme/app#307')).toBe(false);
+    expect(finds(searched, 'acme/app#30772')).toBe(true);
+    expect(finds(searched, '34')).toBe(true);
+  });
+
   it('finds a card whose title holds the pasted link, whatever the link names', () => {
     const searched = card({ text: 'crash on https://example.com/pricing' });
 
