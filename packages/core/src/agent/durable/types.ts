@@ -1069,6 +1069,11 @@ export interface RunRegistryEntry {
    */
   workflowExecution?: Promise<unknown>;
   /**
+   * Set by shutdown while this run's tool calls finish: the next model request calls it and stops there, once the
+   * tool results are checkpointed. See `abandonDurableAgentExecutions`.
+   */
+  shutdownBoundary?: () => void;
+  /**
    * Execution lease claimed by the `stream()` / `generate()` / `resume()` /
    * `recover()` call currently driving this run in this process. Settled when
    * that execution segment ends.

@@ -3,6 +3,8 @@ import type { MastraScorer } from '../../evals/base';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../../loop/shared/tool-abort-grace';
+import { settledOrElapsed } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
@@ -251,19 +253,78 @@ export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): 
   return !!entry && entry.mastra === mastra && detachesOnShutdown(mastra, entry);
 }
 
+/** The tool calls each run's execution is running now, keyed by its registry entry. */
+const toolCallsInFlight = new WeakMap<RunRegistryEntry, number>();
+
+/** Marks a tool call of this run as running. Call the returned function once its body has settled. */
+export function startToolCall(entry: RunRegistryEntry | undefined): () => void {
+  if (!entry) return () => {};
+  toolCallsInFlight.set(entry, (toolCallsInFlight.get(entry) ?? 0) + 1);
+  let settled = false;
+  return () => {
+    if (settled) return;
+    settled = true;
+    const count = (toolCallsInFlight.get(entry) ?? 1) - 1;
+    if (count > 0) toolCallsInFlight.set(entry, count);
+    else toolCallsInFlight.delete(entry);
+  };
+}
+
+/**
+ * Called by the durable LLM step before it starts a model request. A run that shutdown asked to stop once its tool
+ * calls finished stops here: its tool results were checkpointed by the steps before this one.
+ */
+export async function stopAtShutdownBoundary(
+  entry: RunRegistryEntry | undefined,
+  ownership: { composeSignal(signal: AbortSignal | undefined): AbortSignal; throwIfLost(): void } | undefined,
+): Promise<void> {
+  const reached = entry?.shutdownBoundary;
+  if (!reached || !ownership) return;
+  const lost = ownership.composeSignal(undefined);
+  const stopped = new Promise<void>(resolve => {
+    if (lost.aborted) resolve();
+    else lost.addEventListener('abort', () => resolve(), { once: true });
+  });
+  reached();
+  await stopped;
+  ownership.throwIfLost();
+}
+
+/**
+ * How long shutdown keeps an execution's claim, past its drain deadline, for tool calls still running. A tool that
+ * finishes in time has its result checkpointed and is not run again on recovery.
+ */
+export const SHUTDOWN_TOOL_SETTLE_MS = TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS;
+
 /**
  * Abandon the durable-agent executions `mastra` is still running: each stops
  * without writing and releases its run, so recovery can take it right away.
  * Executions that already settled are left alone.
+ *
+ * An execution running a tool call is first given up to `toolSettleMs` to finish it and reach its next model
+ * request, so the tool's result is checkpointed rather than discarded and the tool run again on recovery. One whose
+ * tool call is still running after that keeps its claim until the claim expires, so recovery can't run the tool a
+ * second time while this process may still be running it.
  */
-export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
+export async function abandonDurableAgentExecutions(
+  mastra: Mastra,
+  { toolSettleMs = SHUTDOWN_TOOL_SETTLE_MS }: { toolSettleMs?: number } = {},
+): Promise<void> {
   await stopDurableExecutionParticipants(mastra);
   await Promise.allSettled(
     registryEntries().map(async entry => {
-      if (entry.mastra !== mastra || !entry.executionFence) return;
+      const fence = entry.executionFence;
+      if (entry.mastra !== mastra || !fence) return;
       // A broker does not prove that this is the only executing process.
-      if (detachesOnShutdown(mastra, entry)) entry.executionFence.detach();
-      else await entry.executionFence.abandon();
+      if (detachesOnShutdown(mastra, entry)) return fence.detach();
+      if (toolCallsInFlight.has(entry)) {
+        const boundary = new Promise<void>(resolve => (entry.shutdownBoundary = resolve));
+        await settledOrElapsed(
+          Promise.race([boundary, fence.whenSettled, ...(entry.workflowExecution ? [entry.workflowExecution] : [])]),
+          toolSettleMs,
+        );
+      }
+      await fence.abandon({ release: !toolCallsInFlight.has(entry) });
     }),
   );
 }

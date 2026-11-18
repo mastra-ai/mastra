@@ -1,0 +1,110 @@
+/**
+ * COR-1503: a graceful shutdown must not make a durable agent run a tool to completion twice. A tool call still
+ * running at the drain deadline keeps the run claimed while it finishes, so its result is checkpointed instead of
+ * discarded and recovery continues past it. One still running after that keeps the claim until it expires, so
+ * recovery can't run it beside this process.
+ */
+import { afterEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { buildAgreementGraph, createScriptModel, toolResults, waitFor } from './restart-agreement-support';
+import { createGate, loadGraph } from './restart-harness';
+
+const live: any[] = [];
+afterEach(async () => {
+  for (const gen of live.splice(0)) {
+    await Promise.race([gen.mastra.shutdown({ drainTimeout: 0 }), new Promise(resolve => setTimeout(resolve, 2000))]);
+  }
+});
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+describe.each(['auto', 'off'] as const)('durable agent shutdown with a tool call in flight (recovery=%s)', mode => {
+  async function setup(runId: string) {
+    const { InMemoryStore } = await loadGraph();
+    const storage = new InMemoryStore();
+    const gate = createGate();
+    const executions: number[] = [];
+    let toolStarted = false;
+
+    const build = ({ core, generation, memory }: any) => {
+      const sideEffect = core.createTool({
+        id: 'sideEffect',
+        description: 'Has a side effect that must happen once',
+        inputSchema: z.object({}),
+        // Ignores its abort signal, like most tools that call an external API.
+        execute: async () => {
+          toolStarted = true;
+          if (generation === 1) await gate.wait();
+          executions.push(generation);
+          return { ok: true };
+        },
+      });
+      const model = createScriptModel(prompt =>
+        toolResults(prompt).length === 0 ? { tools: [{ name: 'sideEffect' }] } : { text: 'done' },
+      );
+      return new core.Agent({
+        id: 'shutdown-tool',
+        name: 'shutdown-tool',
+        instructions: 'x',
+        model,
+        tools: { sideEffect },
+        memory,
+      });
+    };
+    const start = (generation: number) =>
+      buildAgreementGraph({
+        storage,
+        id: 'shutdown-tool',
+        engine: 'durable',
+        generation,
+        build,
+        mastraExtra: () => (mode === 'off' ? { recovery: undefined } : {}),
+      });
+
+    const gen1: any = await start(1);
+    live.push(gen1);
+    const result = await gen1.runner.stream('go', { runId, memory: { thread: 't', resource: 'r' }, maxSteps: 5 });
+    void (async () => {
+      try {
+        for await (const _ of result.fullStream) void _;
+      } catch {}
+    })();
+    await waitFor(() => toolStarted);
+    return { storage, gate, executions, gen1, start };
+  }
+
+  it('checkpoints a tool that returns after the drain deadline and does not run it again on recovery', async () => {
+    const runId = `shutdown-tool-late-${mode}`;
+    const { gate, executions, gen1, start } = await setup(runId);
+
+    const shutdown = gen1.mastra.shutdown({ drainTimeout: 200 });
+    // Past the drain deadline, within the time shutdown keeps the claim for a running tool.
+    setTimeout(() => gate.release(), 350);
+    await shutdown;
+    expect(executions).toEqual([1]);
+
+    const gen2: any = await start(2);
+    live.push(gen2);
+    const recovered = await gen2.runner.recover(runId);
+    let text = '';
+    for await (const chunk of recovered.fullStream) if (chunk.type === 'text-delta') text += chunk.payload.text;
+
+    expect(text).toBe('done');
+    expect(executions).toEqual([1]);
+  }, 30_000);
+
+  it('keeps the run claimed while a tool is still running after shutdown, so recovery cannot run it beside it', async () => {
+    const runId = `shutdown-tool-stuck-${mode}`;
+    const { storage, gate, executions, gen1 } = await setup(runId);
+
+    await gen1.mastra.shutdown({ drainTimeout: 100 });
+    const workflows = await storage.getStore('workflows');
+    const ownership = await workflows.getRunOwnership({ runId });
+    expect(ownership?.leaseExpiresAt).not.toBeNull();
+    expect(ownership?.leaseExpiresAt?.getTime?.() ?? Number(ownership?.leaseExpiresAt)).toBeGreaterThan(Date.now());
+
+    gate.release();
+    await sleep(50);
+    expect(executions).toEqual([1]);
+  }, 30_000);
+});

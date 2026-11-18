@@ -83,7 +83,7 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getRunRegistryEntry, markRunActive, stopAtShutdownBoundary } from '../../run-registry';
 import {
   createStepStartChunk,
   emitChunkEvent,
@@ -308,6 +308,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
+      await stopAtShutdownBoundary(getRunRegistryEntry(runId, mastra as Mastra | undefined), ownership);
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
       // 1. Resolve runtime dependencies (tools from Mastra)

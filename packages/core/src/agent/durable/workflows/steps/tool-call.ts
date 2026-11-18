@@ -80,7 +80,13 @@ import {
   runFencedToClaim,
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import {
+  clearResumeInFlight,
+  getRunRegistryEntry,
+  globalRunRegistry,
+  markRunActive,
+  startToolCall,
+} from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -2228,6 +2234,8 @@ export function createDurableToolCallStep() {
       // A run that loses its thread lease while this call runs lets it finish before it stops. The step stays
       // running until the tool body settles, even after the abort grace hands control back to the loop.
       const settleRunTool = startRunStep(registryEntry);
+      // Shutdown keeps the run's claim while a tool body runs, so a result it returns in time is checkpointed.
+      const settleToolCall = startToolCall(registryEntry);
       let outcomeRecorded!: () => void;
       const outcomeRecordedPromise = new Promise<void>(resolve => (outcomeRecorded = resolve));
       // An outcome that settles in time is recorded for the deadline save only after mapping and the output
@@ -2238,6 +2246,7 @@ export function createDurableToolCallStep() {
         try {
           ownership?.throwIfLost();
         } catch (error) {
+          settleToolCall();
           settleRunTool();
           throw error;
         }
@@ -2255,10 +2264,12 @@ export function createDurableToolCallStep() {
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           // Settles once the tool body has settled and its outcome below is recorded where needed, which the deadline save waits for.
-          onToolSettled: () =>
+          onToolSettled: () => {
+            settleToolCall();
             void outcomeRecordedPromise.then(() => {
               if (!recordedAtStepEnd || stepEnded) settleRunTool();
-            }),
+            });
+          },
           logger: logger as any,
         })
           .then(async settled => {
