@@ -228,4 +228,18 @@ describe('AgentController: answering a prompt whose run can no longer be resumed
     // The run stays parked for the call it still holds.
     expect(events.some(event => event.type === 'agent_end')).toBe(false);
   });
+
+  it('keeps the other prompts on the run when storage cannot say which calls the agent holds', async () => {
+    const { session, events, parked, runId, registeredAgent } = await setup('confirmAction');
+    vi.spyOn(registeredAgent, 'listSuspendedRuns').mockRejectedValue(new Error('storage unavailable'));
+
+    await session.respondToToolSuspension({ toolCallId: parked.toolCallId, resumeData: { confirmed: true } });
+
+    const cancelled = events.filter(event => event.type === 'tool_suspension_cancelled');
+    expect(cancelled.map(event => event.toolCallId)).toEqual([parked.toolCallId]);
+    expect(session.suspensions.has({ toolCallId: 'same-run-sibling', runId })).toBe(true);
+    const prompts = [...session.displayState.get().pendingSuspensions.values()].map(prompt => prompt.toolCallId);
+    expect(prompts.sort()).toEqual(['other-run-call', 'same-run-sibling']);
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
+  });
 });

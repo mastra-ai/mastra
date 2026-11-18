@@ -376,6 +376,9 @@ function applyEvent(
         args: event.args,
         suspendPayload: event.suspendPayload,
       });
+    case 'tool_suspension_cancelled':
+      // The server retracted the prompt (its run ended or can no longer be resumed).
+      return { ...state, entries: state.entries.filter(e => e.id !== `suspension-${event.toolCallId}`) };
 
     case 'mode_changed':
     case 'model_changed':

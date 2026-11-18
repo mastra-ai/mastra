@@ -27,6 +27,7 @@ import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../stora
 import { decisionOvertaken } from './decision-applicability.js';
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryTransitionServiceOptions } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
@@ -3279,7 +3280,10 @@ describe('a stale agent move into the phase the card already reached', () => {
     });
 
   /** An agent's move, parked for approval, while another run already took the card into Review. */
-  async function overtakenCard(transitionPolicy?: BoardTransitionPolicy) {
+  async function overtakenCard(
+    transitionPolicy?: BoardTransitionPolicy,
+    { onTerminalStage }: Pick<FactoryTransitionServiceOptions, 'onTerminalStage'> = {},
+  ) {
     const seed = await createFactoryStorageForTests();
     const read = await createItem(seed.workItems, {
       board: 'ship',
@@ -3291,6 +3295,7 @@ describe('a stale agent move into the phase the card already reached', () => {
       storage: seed.workItems,
       boards: createBoardRegistry({ boards: [shipBoard(transitionPolicy)] }),
       audit: seed.audit,
+      onTerminalStage,
     });
     await service.transition({
       ...request(read, { board: 'ship', stage: 'review', expectedRevision: read.revision }),
@@ -3315,7 +3320,7 @@ describe('a stale agent move into the phase the card already reached', () => {
       });
     const audited = async () =>
       (await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events.map(event => event.action);
-    return { read, current, storage: seed.workItems, parkedMove, audited };
+    return { read, current, service, storage: seed.workItems, parkedMove, audited };
   }
 
   it('commits as a same-phase move instead of a stale move to retry', async () => {
@@ -3334,6 +3339,58 @@ describe('a stale agent move into the phase the card already reached', () => {
       revision: current.revision,
     });
     expect(await audited()).toEqual(before);
+  });
+
+  it('leaves the consent on the card alone, since the card never moves', async () => {
+    const { storage, parkedMove } = await overtakenCard();
+    // An approval can arm the card in its resting phase without moving its revision; the
+    // retry must not disarm it the way entering a resting phase would.
+    const commitTransition = vi.spyOn(storage, 'commitTransition');
+
+    await expect(parkedMove('review')).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+
+    expect(commitTransition).toHaveBeenCalledTimes(2);
+    expect(commitTransition.mock.calls[0]![0]).toMatchObject({ autonomy: 'disarm' });
+    expect(commitTransition.mock.calls[1]![0].autonomy).toBeUndefined();
+  });
+
+  it('does not release a finished card a second time', async () => {
+    const onTerminalStage = vi.fn();
+    const { read, service, storage, parkedMove } = await overtakenCard(undefined, { onTerminalStage });
+    const inReview = (await storage.get({ orgId: 'org-1', id: read.id }))!;
+    await expect(
+      service.transition({
+        ...request(inReview, { board: 'ship', stage: 'done', expectedRevision: inReview.revision }),
+        actor: { type: 'agent', bindingId: 'other-run', role: 'review' },
+        ingress: { type: 'agent', identity: 'other-run-done' },
+        cause: 'Merged.',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+    expect(onTerminalStage).toHaveBeenCalledTimes(1);
+
+    await expect(parkedMove('done')).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+
+    expect(onTerminalStage).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a board policy's own stale rejection instead of retrying it", async () => {
+    let evaluations = 0;
+    const { current, service } = await overtakenCard(context => {
+      if (context.fromStage !== context.toStage) return undefined;
+      evaluations += 1;
+      // A check the policy waits on finishes between the two evaluations.
+      return evaluations === 1 ? { type: 'reject', code: 'stale', reason: 'Checks are still running.' } : undefined;
+    });
+
+    await expect(
+      service.transition({
+        ...request(current, { board: 'ship', stage: 'review', expectedRevision: current.revision }),
+        actor: { type: 'agent', bindingId: 'current-run', role: 'review' },
+        ingress: { type: 'agent', identity: 'policy-stale-move' },
+        cause: 'Build complete.',
+      }),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'stale' });
+    expect(evaluations).toBe(1);
   });
 
   it('keeps the real rejection of a stale move the board would not allow anyway', async () => {

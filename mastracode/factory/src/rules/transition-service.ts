@@ -404,16 +404,19 @@ export class FactoryTransitionService {
     let from = item;
     if (isStale(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
-      if (current && reachedTarget(request, current)) {
+      // Only a revision conflict is retried; a policy's own `stale` stands.
+      if (current && current.revision !== request.expectedRevision && reachedTarget(request, current)) {
         // Another move already took the card where this one was going (e.g. an approval
         // that waited while a later run moved it on). Retrying at the old revision would
         // only go stale again, so evaluate the move once more against the card as it is:
-        // it commits as a same-phase move, or is rejected for a real reason.
+        // it commits as a same-phase move, or is rejected for a real reason. The card
+        // never moves, so whatever consent or cleanup the earlier move applied stands.
         from = current;
         result = await this.#evaluateAndCommit(
           { ...request, expectedRevision: current.revision },
           transitionId,
           current,
+          { reachedTarget: true },
         );
         if (isStale(result)) {
           // Lost a second race: report where the card is now, not where it was.
@@ -511,6 +514,7 @@ export class FactoryTransitionService {
     request: FactoryTransitionRequest,
     transitionId: string,
     item: Card,
+    { reachedTarget = false }: { reachedTarget?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const boards = await this.#boards.load(request);
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
@@ -813,9 +817,10 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
+        ? { ...(reachedTarget ? {} : consentEffect(request, entersWorking, humanMove)), ...evaluation.intents }
         : {},
-      boards,
+      // The card stays put, so the move it lost to already released what it left.
+      reachedTarget ? undefined : boards,
       fromStage,
     );
   }
