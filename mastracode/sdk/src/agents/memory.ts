@@ -217,6 +217,19 @@ export { LOCAL_KNOWLEDGE_ORG_ID };
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
+/**
+ * Core's default title instructions, asking for a few words instead of capping
+ * the title at 80 characters: session lists show one narrow line per title.
+ */
+export const TITLE_INSTRUCTIONS = `
+  - you will generate a short title based on a conversation transcript between a user and an assistant
+  - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+  - always produce a title, even when the transcript is only a greeting or trivial exchange
+  - the title must be 3 to 5 words long
+  - the title should name the topic of the user's message, not repeat or answer it
+  - do not use quotes or colons, and do not end with a period
+  - the entire text you return will be used as the title`;
+
 export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,
@@ -319,6 +332,7 @@ export function getDynamicMemory(
           process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
+                instructions: TITLE_INSTRUCTIONS,
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {
