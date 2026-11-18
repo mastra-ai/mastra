@@ -6234,6 +6234,7 @@ export class AgentThreadStreamRuntime {
     return queue;
   }
 
+  /** Resolves `'reserved'` when this call reserved the thread for `runId`. The caller then owns the reservation. */
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
     options: {
@@ -6248,7 +6249,7 @@ export class AgentThreadStreamRuntime {
       untilSuspended?: boolean;
     },
     pubsub?: PubSub,
-  ): Promise<'suspended' | undefined> {
+  ): Promise<'suspended' | 'reserved' | undefined> {
     const { threadId, resourceId } = this.#getThreadTarget(options);
     if (!threadId) return;
 
@@ -6263,6 +6264,8 @@ export class AgentThreadStreamRuntime {
     const key = this.#threadKey(resourceId, threadId);
     const control = this.#ensureThreadControlSubscription(state, pubsub, key);
     control.references++;
+    // A run in another process whose end this wait already saw; its lease release may still be in flight.
+    let endedRemoteRunId: string | undefined;
     try {
       await control.ready;
       while (true) {
@@ -6287,6 +6290,27 @@ export class AgentThreadStreamRuntime {
           if (options.runId) {
             state.activeThreadRunIds.set(key, options.runId);
             state.threadKeysByRunId.set(options.runId, key);
+            // The local map only knows this process. Take the cross-process lease too, before the
+            // run reads or writes anything, so a run in another process is waited for (#30069).
+            let holder: string | undefined;
+            try {
+              holder = await this.#takeReservedThreadLease(state, agent, pubsub, key, options.runId, endedRemoteRunId);
+            } catch (error) {
+              this.releaseThreadRunReservation(options.runId, pubsub);
+              throw error;
+            }
+            if (holder) {
+              this.releaseThreadRunReservation(options.runId, pubsub);
+              if (holder === endedRemoteRunId) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+                continue;
+              }
+              const outcome = await this.#waitForRemoteRunToFinish(pubsub, key, holder, options.untilSuspended);
+              if (options.untilSuspended && outcome === 'suspended') return 'suspended';
+              endedRemoteRunId = holder;
+              continue;
+            }
+            return 'reserved';
           }
           return;
         }
@@ -6342,6 +6366,55 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * Takes the cross-process lease for a thread this process just reserved for `runId`. Returns the
+   * run holding the thread in another process, which the caller waits for, or `undefined` when this
+   * run may start. Rejects when the backend can't answer: a run started without the lease runs beside
+   * whatever holds the thread, and is stopped one lease TTL later anyway.
+   */
+  async #takeReservedThreadLease(
+    state: AgentThreadRuntimeState,
+    agent: Agent<any, any, any, any>,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    endedRunId?: string,
+  ): Promise<string | undefined> {
+    const resolved = this.#getPubSub(pubsub);
+    const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
+    if (isFallback) return undefined;
+    const owner = this.#threadLeaseOwner(resolved, runId);
+    let lease: { acquired: boolean; owner?: string };
+    try {
+      lease = await this.#waitForRetakeOwner(
+        provider,
+        key,
+        await this.#acquireThreadLease(resolved, key, runId, owner),
+      );
+    } catch (error) {
+      throw new Error(`Cannot start run ${runId}: the thread lease backend did not answer`, { cause: error });
+    }
+    if (lease.acquired) {
+      this.#startLeaseRenewal(resolved, key, runId, owner);
+      return undefined;
+    }
+    const holder = lease.owner && !isRetakeLeaseOwner(lease.owner) ? threadLeaseRunId(lease.owner) : undefined;
+    // Held under this run id, the caller continues a run another process started (a resume).
+    if (!holder || holder === runId) return undefined;
+    // A run seen to end is not parked; its lease release is still in flight.
+    if (holder === endedRunId) return holder;
+    // A parked run keeps its lease while it waits on a person. A new run on the thread takes it
+    // over at registration, as it does for a run parked in this process.
+    if (
+      this.#isSuspendedRun(state, holder) ||
+      this.#isSweptLeaseOwner(state, holder) ||
+      (await this.#readStoredRunStatus(agent, holder)) === 'suspended'
+    ) {
+      return undefined;
+    }
+    return holder;
+  }
+
+  /**
    * Releases a thread reservation made by `waitForCrossAgentThreadRun` when the
    * run fails before reaching `registerRun`. No-op once the run has registered
    * (registration owns cleanup from then on) or if the reservation was already
@@ -6374,7 +6447,18 @@ export class AgentThreadStreamRuntime {
       const activeRunId = state.activeThreadRunIds.get(key);
       const wasAborted =
         state.abortedRunIds.has(runId) || state.preparedRunsById.get(runId)?.abortController.signal.aborted;
-      if (activeRunId !== runId && (activeRunId || !wasAborted)) return;
+      // A reservation that took the thread lease gives it back unless a queued run takes it over. That holds
+      // when another run displaced the reservation too: the lease would otherwise keep renewing with no run behind it.
+      const heldLease = state.leaseRenewalTimers.has(runId);
+      const giveBackLease = () => {
+        if (heldLease && state.leaseRenewalTimers.has(runId) && !state.threadKeysByRunId.has(runId)) {
+          this.#releaseThreadLease(pubsub, key, runId);
+        }
+      };
+      if (activeRunId !== runId && (activeRunId || !wasAborted)) {
+        giveBackLease();
+        return;
+      }
       state.activeThreadRunIds.delete(key);
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
@@ -6385,9 +6469,12 @@ export class AgentThreadStreamRuntime {
           threadId: target.threadId,
           resourceId: target.resourceId,
           runId,
-        });
+        }).then(giveBackLease, giveBackLease);
       } else {
-        void this.#drainPendingIdleSignals(state, pubsub, key);
+        void this.#drainPendingIdleSignals(state, pubsub, key, heldLease ? runId : undefined).then(
+          giveBackLease,
+          giveBackLease,
+        );
       }
     } finally {
       this.#cleanupPreparedRun(state, runId, expectedPreparedRun);

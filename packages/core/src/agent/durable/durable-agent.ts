@@ -3352,10 +3352,55 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it, so a run that is already executing
-    // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, false, () =>
+      this.#startStream(messages, options, runId, requestContext),
+    );
+  }
+
+  /**
+   * Takes the run's thread before `start` reads or writes anything, as `Agent.stream()` does, so a
+   * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
+   * A registered run owns the thread from then on. `generate()` never registers, so it gives the
+   * thread back once it settles.
+   */
+  async #onReservedThread<T>(
+    runId: string,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    releaseWhenSettled: boolean,
+    start: () => Promise<T>,
+  ): Promise<T> {
+    const pubsub = this.getPubSub();
+    // The same options registerRun reads, so both name the same thread.
+    const reserved =
+      (await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as unknown as Agent<any, any, any, any>,
+        { memory: options?.memory, requestContext: options?.requestContext, runId },
+        pubsub,
+      )) === 'reserved';
+    let started = false;
+    try {
+      const result = await start();
+      started = true;
+      return result;
+    } finally {
+      // A thread already held under this run id belongs to whoever started the run: a signal wake,
+      // a queued message, or an earlier call with the same run id. It stays theirs to release.
+      if (reserved && (!started || releaseWhenSettled)) {
+        agentThreadStreamRuntime.releaseThreadRunReservation(runId, pubsub);
+      }
+    }
+  }
+
+  async #startStream(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    // 1. Claim the run before preparing it, so a run that is already executing
+    // fails before any span or memory write is made for this call.
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
@@ -4984,9 +5029,20 @@ export class DurableAgent<
 
     validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
-    // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
+    return this.#onReservedThread(runId, options, true, () =>
+      this.#runGenerate(messages, options, runId, requestContext),
+    );
+  }
+
+  async #runGenerate(
+    messages: MessageListInput,
+    options: DurableAgentStreamOptions<TOutput> | undefined,
+    runId: string,
+    requestContext: RequestContext,
+  ): Promise<FullOutput<TOutput>> {
+    // 1. Claim the run before preparing it — see stream().
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
