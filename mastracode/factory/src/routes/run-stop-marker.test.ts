@@ -2,16 +2,22 @@ import { ABORT_AGENT_CONTROLLER_SESSION_ROUTE } from '@mastra/server/handlers/ag
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createRunStopMarker } from './run-stop-marker.js';
 
 const ORG_ID = 'org-1';
 const ABORT_ROUTE = `/api${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path}`;
 
-async function setup() {
-  const { workItems } = await createFactoryStorageForTests();
+const signedInToOrg1 = {
+  enabled: () => true,
+  ensureUser: async () => undefined,
+  tenant: () => ({ orgId: ORG_ID, userId: 'user-1' }),
+};
+
+async function bindSession(workItems: WorkItemsStorage, orgId: string) {
   const { binding } = await workItems.prepareRunStart({
-    orgId: ORG_ID,
+    orgId,
     userId: 'user-1',
     factoryProjectId: 'project-1',
     workItem: { input: { title: 'Fix login', stages: ['execute'], sessions: {}, metadata: {} } },
@@ -21,12 +27,15 @@ async function setup() {
     kickoffKey: 'kickoff-1',
     kickoffMessage: 'Start.',
   });
+  return binding;
+}
+
+async function setup() {
+  const { workItems } = await createFactoryStorageForTests();
+  const binding = await bindSession(workItems, ORG_ID);
   const aborted: string[] = [];
   const app = new Hono();
-  app.use(
-    '*',
-    createRunStopMarker(() => workItems),
-  );
+  app.use('*', createRunStopMarker({ auth: signedInToOrg1, workItems: () => workItems }));
   app.post(ABORT_ROUTE, c => {
     aborted.push(c.req.param('sessionId'));
     return c.json({ success: true });
@@ -34,7 +43,7 @@ async function setup() {
   app.get(ABORT_ROUTE, c => c.json({}));
   const stopRequested = () => workItems.runBindingStopRequested({ orgId: ORG_ID, bindingId: binding.id });
   const startRun = () => workItems.clearRunBindingStopRequest({ orgId: ORG_ID, bindingId: binding.id });
-  return { app, aborted, stopRequested, startRun };
+  return { app, aborted, workItems, stopRequested, startRun };
 }
 
 describe('createRunStopMarker', () => {
@@ -66,16 +75,28 @@ describe('createRunStopMarker', () => {
     expect(await stopRequested()).toBe(false);
   });
 
+  it("leaves another organization's run with the same session id unmarked", async () => {
+    const { app, workItems } = await setup();
+    const otherOrgBinding = await bindSession(workItems, 'org-2');
+
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+
+    expect(await workItems.runBindingStopRequested({ orgId: 'org-2', bindingId: otherOrgBinding.id })).toBe(false);
+  });
+
   it('still aborts when the stop cannot be recorded', async () => {
     const aborted: string[] = [];
     const app = new Hono();
     app.use(
       '*',
-      createRunStopMarker(() => ({
-        requestRunBindingStop: async () => {
-          throw new Error('storage down');
-        },
-      })),
+      createRunStopMarker({
+        auth: signedInToOrg1,
+        workItems: () => ({
+          requestRunBindingStop: async () => {
+            throw new Error('storage down');
+          },
+        }),
+      }),
     );
     app.post(ABORT_ROUTE, c => {
       aborted.push(c.req.param('sessionId'));

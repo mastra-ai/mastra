@@ -2469,9 +2469,10 @@ export class MastraFactory {
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
           const sessionActivity = createSessionActivityMiddleware(() => this.#sessionUnloader);
-          const runStopMarker = createRunStopMarker(() =>
-            storage.isDomainReady('work-items') ? workItemsStorage : undefined,
-          );
+          const runStopMarker = createRunStopMarker({
+            auth: routeAuth,
+            workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
+          });
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.

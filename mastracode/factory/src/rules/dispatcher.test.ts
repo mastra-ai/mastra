@@ -4378,7 +4378,7 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffKey: 'kickoff-null',
         kickoffMessage: null,
       });
-      const stop = () => storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      const stop = () => storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
       if (!stoppedDuringRun) await stop();
       const { controller, session } = createSession(undefined, {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
@@ -4442,7 +4442,7 @@ describe('FactoryDecisionDispatcher', () => {
       endRunAfterDroppedSignal: true,
       acceptRedeliveredSignal: true,
       beforeRunEnd: async () => {
-        await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+        await storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
       },
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -7644,7 +7644,7 @@ describe('FactoryDecisionDispatcher', () => {
     const send = sendNotificationSignal.getMockImplementation()!;
     sendNotificationSignal.mockImplementation(async (input, options) => {
       const result = await send(input, options);
-      await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      await storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
       return result;
     });
     const { transitionService } = await preparePromptKickoff(storage);
@@ -7709,7 +7709,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, sendNotificationSignal } = createSession(undefined, { agentEndReason: 'aborted' });
     const send = sendNotificationSignal.getMockImplementation()!;
     sendNotificationSignal.mockImplementation(async (input, options) => {
-      if (stopped) await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      if (stopped) await storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
       return send(input, options);
     });
     const { transitionService } = await preparePromptKickoff(storage);
@@ -9612,7 +9612,7 @@ describe('review status comment lifecycle', () => {
     const { controller, session } = createSession(undefined, { agentEndReason: 'aborted' });
     const send = session.sendSignal.getMockImplementation()!;
     session.sendSignal.mockImplementation((input, options) => {
-      const stopped = storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      const stopped = storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
       const result = send(input, options);
       return { ...result, accepted: stopped.then(() => result.accepted) };
     });

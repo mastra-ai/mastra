@@ -3628,13 +3628,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   /**
    * A client asked to stop the session's run on purpose. Stored, not held in memory: the dispatcher
-   * watching that run can be on another replica. Keyed by session alone: the abort request was
-   * already authorized for this session.
+   * watching that run can be on another replica. Scoped to the caller's org, since the access guard
+   * lets through a session id it has no row for.
    */
-  async requestRunBindingStop(input: { sessionId: string; at: Date }): Promise<void> {
+  async requestRunBindingStop(input: { orgId: string; sessionId: string; at: Date }): Promise<void> {
     await this.#db.updateMany(
       'factory_run_bindings',
-      { session_id: input.sessionId, status: 'active' },
+      { org_id: input.orgId, session_id: input.sessionId, status: 'active' },
       { stop_requested_at: input.at },
     );
   }
