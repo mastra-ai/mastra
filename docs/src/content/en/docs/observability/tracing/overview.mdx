@@ -118,7 +118,7 @@ The `sampling` option allows you to control which traces are collected, helping 
    }
    ```
 
-1. **Ratio-Based Sampling**: Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
+1. **Ratio-Based Sampling**: Samples a random percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
 
    ```ts oxfmt:false
    sampling: {
@@ -725,7 +725,7 @@ Async formatters add latency to span export. Keep async operations fast (under 1
 
 ## Serialization options
 
-Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.
+Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, nested objects, or when you need to optimize trace storage.
 
 ### Configuration
 

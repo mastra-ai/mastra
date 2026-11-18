@@ -363,7 +363,7 @@ Both methods use case-insensitive literal substring search and accept an empty s
 
 Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
 
-A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, completely ranked responses.
+A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, fully ranked responses.
 
 ## Deleting traces
 
