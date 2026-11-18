@@ -98,7 +98,7 @@ export interface SandboxTemplateBuilder {
    * noVNC viewer, supervised by systemd and restarted if any part exits. E2B
    * only; Railway rejects it. Part of the template identity.
    *
-   * @experimental Used only when `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   * @experimental Throws unless `MASTRA_EXPERIMENTAL_COMPUTER=true`.
    */
   desktop(): SandboxTemplateBuilder;
   /** Start or reuse this template's provider build without provisioning a sandbox. */

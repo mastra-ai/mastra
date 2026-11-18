@@ -4243,7 +4243,14 @@ describe('PlatformSandbox computer', () => {
       expect(() => new PlatformSandbox({ ...base, computer: true, template: Template().docker() })).toThrow(
         /add \.desktop\(\) to the template/,
       );
-      expect(new PlatformSandbox({ ...base, computer: true, seedCheckpointName: 'ckpt' }).computer).toBeDefined();
+      // A checkpoint alone carries no desktop op, so the create-time desktop env would be missing.
+      expect(() => new PlatformSandbox({ ...base, computer: true, seedCheckpointName: 'ckpt' })).toThrow(
+        /Template\(\)\.desktop\(\)/,
+      );
+      expect(
+        new PlatformSandbox({ ...base, computer: true, seedCheckpointName: 'ckpt', template: desktopTemplate() })
+          .computer,
+      ).toBeDefined();
       expect(
         new PlatformSandbox({ ...base, computer: true, template: async () => desktopTemplate() }).computer,
       ).toBeDefined();

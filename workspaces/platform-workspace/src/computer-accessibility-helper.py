@@ -230,8 +230,12 @@ def resolve(Atspi, ref):
         records = snapshot['nodes']
         if not isinstance(records, list):
             raise ValueError('bad nodes')
+        stored = snapshot.get('generation')
     except Exception:
         refuse(ref, 'snapshot-missing', 'Accessibility ref %s belongs to a snapshot that no longer exists; read the tree again' % ref)
+    # The ref's own generation is caller text: only the snapshot's stored one proves the session.
+    if stored != gen:
+        refuse(ref, 'generation', 'Accessibility ref %s is from an earlier desktop session; read the tree again' % ref)
     record = records[n] if n < len(records) else None
     if not valid_record(record):
         refuse(ref, 'malformed', 'Accessibility ref %s names no node in its snapshot; read the tree again' % ref)

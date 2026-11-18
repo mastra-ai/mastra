@@ -151,7 +151,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * `.desktop()`: screenshots, mouse, keyboard and the accessibility tree,
    * exposed as `sandbox.computer` and the workspace
    * `mastra_workspace_computer_*` tools. Needs a `template` (a builder with
-   * `.desktop()`, a template resolver, or a `seedCheckpointName`); E2B only.
+   * `.desktop()` or a template resolver; a `seedCheckpointName` alone is not
+   * enough); E2B only.
    * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
    *
    * Give the agent `defaultOptions: { toolCallConcurrency: 1 }`: by default the tool calls of
@@ -783,7 +784,8 @@ export class PlatformSandbox extends MastraSandbox {
         throw new Error('PlatformSandbox computer requires the e2b sandbox provider');
       }
       const template = options.template;
-      if (template === undefined && options.seedCheckpointName === undefined) {
+      // The desktop env is set at create time from the template's desktop op, so a checkpoint alone is not enough.
+      if (template === undefined) {
         throw new Error('PlatformSandbox computer needs a template with the desktop: template: Template().desktop()');
       }
       if (
