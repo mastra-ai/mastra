@@ -101,11 +101,13 @@ function setup(
     options.links ?? [{ installationId: 7, repositoryId: 101, orgId: 'org-1' }],
   );
   const onDependabotAlert = vi.fn();
+  const onLateSwitchedOrgEvent = vi.fn();
   const handle = legacyGithubEventHandler({
     delivery: { controller: {} as never, github, ingestFactoryEvent, dispatch },
     repositories,
     modes: new PlatformGithubModes(() => modeStorage(options.modes)),
     onDependabotAlert,
+    onLateSwitchedOrgEvent,
   });
   const log = logger();
   return {
@@ -115,6 +117,7 @@ function setup(
     github,
     source,
     onDependabotAlert,
+    onLateSwitchedOrgEvent,
     log,
   };
 }
@@ -291,8 +294,8 @@ describe('legacy GitHub App events', () => {
       ],
     };
 
-    it('runs a legacy event published before the switch, attributed to the re-pointed installation', async () => {
-      const { route, dispatch, ingestFactoryEvent } = setup({
+    it('runs a legacy event published before the switch, attributed to the re-pointed installation, then reconciles', async () => {
+      const { route, dispatch, ingestFactoryEvent, onLateSwitchedOrgEvent } = setup({
         links: [{ installationId: 300, repositoryId: 101, orgId: 'org-1' }],
         modes: { 'org-1': switched },
       });
@@ -302,6 +305,8 @@ describe('legacy GitHub App events', () => {
         { orgIds: ['org-1'] },
       );
       expect(dispatch).toHaveBeenCalledTimes(1);
+      // It may land after the switch's reconcile; another one repairs anything it made stale.
+      expect(onLateSwitchedOrgEvent).toHaveBeenCalledTimes(1);
     });
 
     it('drops a legacy event published after the switch: its factory-github connection delivers it', async () => {
@@ -324,7 +329,7 @@ describe('legacy GitHub App events', () => {
     });
 
     it('still runs the event for another org that links the repository and has not switched', async () => {
-      const { route, dispatch } = setup({
+      const { route, dispatch, onLateSwitchedOrgEvent } = setup({
         links: [
           { installationId: 300, repositoryId: 101, orgId: 'org-1' },
           { installationId: 7, repositoryId: 101, orgId: 'org-2' },
@@ -333,6 +338,7 @@ describe('legacy GitHub App events', () => {
       });
       await route(legacyEvent('pull_request', repositoryPayload('opened'), { timestamp: 9_000 }));
       expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(onLateSwitchedOrgEvent).not.toHaveBeenCalled();
     });
   });
 

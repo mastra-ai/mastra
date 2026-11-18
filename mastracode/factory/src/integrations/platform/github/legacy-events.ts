@@ -31,6 +31,11 @@ export interface LegacyGithubEventsConfig {
   modes: PlatformGithubModes;
   /** A Dependabot alert changed: re-sync alerts soon (requests are debounced). */
   onDependabotAlert?(): void;
+  /**
+   * A pre-switch event reached an org that has since switched. It may land
+   * after the switch's reconcile, so reconcile again (requests are debounced).
+   */
+  onLateSwitchedOrgEvent?(): void;
 }
 
 /**
@@ -72,6 +77,7 @@ export function legacyGithubEventHandler(
     }
     for (const delivery of accepted) await deliverGithubEvent(config.delivery, delivery.event, delivery.orgIds, logger);
     remember(handled, parsed.deliveryId);
+    if (accepted.some(delivery => delivery.late)) config.onLateSwitchedOrgEvent?.();
   };
 }
 
@@ -87,23 +93,27 @@ async function acceptLegacyGithubEvent(
   config: Pick<LegacyGithubEventsConfig, 'repositories' | 'modes'>,
   event: ParsedGithubWebhook,
   timestamp: number,
-): Promise<{ event: ParsedGithubWebhook; orgIds: string[] }[]> {
+): Promise<{ event: ParsedGithubWebhook; orgIds: string[]; late: boolean }[]> {
   const repositoryId = githubEventRepositoryId(event);
   const installationId = githubEventInstallationId(event);
   if (repositoryId === undefined || installationId === undefined) return [];
-  const deliveries: { event: ParsedGithubWebhook; orgIds: string[] }[] = [];
+  const deliveries: { event: ParsedGithubWebhook; orgIds: string[]; late: boolean }[] = [];
   const links = await config.repositories.forRepository(repositoryId);
 
   const legacy = new Set<string>();
+  let late = false;
   for (const link of links.filter(link => link.installationId === installationId)) {
     for (const orgId of link.orgIds) {
       const record = await config.modes.get(orgId);
-      if (record.mode === 'legacy' || (record.switchedAt !== undefined && timestamp < record.switchedAt)) {
+      if (record.mode === 'legacy') {
         legacy.add(orgId);
+      } else if (record.switchedAt !== undefined && timestamp < record.switchedAt) {
+        legacy.add(orgId);
+        late = true;
       }
     }
   }
-  if (legacy.size > 0) deliveries.push({ event, orgIds: [...legacy] });
+  if (legacy.size > 0) deliveries.push({ event, orgIds: [...legacy], late });
   for (const link of links.filter(link => link.installationId !== installationId)) {
     const repointed = new Set<string>();
     for (const orgId of link.orgIds) {
@@ -118,7 +128,11 @@ async function acceptLegacyGithubEvent(
     }
     if (repointed.size > 0) {
       // Each copy reaches only its own orgs' projects, whose ingress is keyed per org and project.
-      deliveries.push({ event: withGithubEventInstallation(event, link.installationId), orgIds: [...repointed] });
+      deliveries.push({
+        event: withGithubEventInstallation(event, link.installationId),
+        orgIds: [...repointed],
+        late: true,
+      });
     }
   }
   return deliveries;
