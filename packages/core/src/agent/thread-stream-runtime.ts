@@ -1248,6 +1248,47 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  /**
+   * @internal Keep a thread lease this run has already claimed alive until the
+   * run hands it to the engine or gives it back. `claimDurableThreadLease`
+   * only restarts renewal for a run that already has a timer, so the
+   * pre-persist claim — the one that keeps a rejected message from being
+   * saved — would otherwise lapse one TTL after it is taken, while the run is
+   * still writing its input and no workflow worker exists to renew it.
+   */
+  holdDurableThreadLease(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId: string | undefined,
+    generation: number | undefined,
+    executionId?: string,
+  ): void {
+    this.#startLeaseRenewal(
+      pubsub,
+      this.#threadKey(resourceId, threadId),
+      runId,
+      threadLeaseOwner(runId, generation, executionId),
+    );
+  }
+
+  /**
+   * @internal Stop renewing a suspended run's thread lease once the suspended-run
+   * window passes, in the process that owns the renewal timer.
+   *
+   * A suspended run keeps its lease so a resume can take the thread back, and a
+   * registered run is bounded by the suspended-run sweep. A run that never
+   * registered — an evented `generate()` — is not, so bound its renewal here.
+   */
+  boundSuspendedRunLeaseRenewal(pubsub: PubSub, runId: string): void {
+    const timer = setTimeout(() => {
+      if (this.#getState(pubsub).threadRunsById.has(runId)) return;
+      this.#stopLeaseRenewal(pubsub, runId);
+    }, AGENT_SUSPENDED_RUN_TTL_MS);
+    // A parked run must never hold the process open.
+    timer.unref?.();
+  }
+
   /** @internal Renew only the captured execution's thread lease; never acquire or transfer it. */
   async renewDurableThreadLease(
     pubsub: PubSub,
