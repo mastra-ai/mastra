@@ -10,7 +10,7 @@ export const CardGrid = ({ children, columns = 2 }: { children: React.ReactNode;
   }[columns]
 
   return (
-    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4`}>
+    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} mb-6 gap-4`}>
       {children}
     </div>
   )

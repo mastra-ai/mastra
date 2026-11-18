@@ -5,7 +5,7 @@ description: "Mastra Gateway is one OpenAI- and Anthropic-compatible API for man
 
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
-import { ArrowRightLeft, Blocks, ChartColumn, Code, Gauge, Globe, KeyRound, Receipt, Rocket, Route, ShieldCheck, Shuffle, Wallet } from "lucide-react"
+import { ArrowRightLeft, Blocks, ChartColumn, Code, Globe, KeyRound, Receipt, Rocket, Route, ShieldCheck, Shuffle, Wallet } from "lucide-react"
 import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 
 # Gateway
@@ -131,13 +131,6 @@ Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing S
     logo={<Wallet size={28} strokeWidth={1.5} />}
     href="/docs/mastra-platform/gateway/usage-and-limits#spend-caps"
     description="An organization spend cap rejects new requests with 402 when it's reached. Per-key limits are rolling out."
-  />
-
-  <CardGridItem
-    title="Rate limits"
-    logo={<Gauge size={28} strokeWidth={1.5} />}
-    href="/docs/mastra-platform/gateway/usage-and-limits#rate-limits"
-    description="Per-key request limits. 429 responses include retry-after and name the limit that was hit."
   />
 
   <CardGridItem
