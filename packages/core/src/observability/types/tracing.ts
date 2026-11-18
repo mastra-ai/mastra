@@ -1723,6 +1723,11 @@ export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType
   traceState?: TraceState;
   /** Version of the span's own entity, `null` when it has none. Absent in snapshots from older versions. */
   ownEntityVersionId?: string | null;
+  /**
+   * @internal Parent ids to export when `spanFilter` dropped the start of an ancestor.
+   * `parentSpanId` stays the parent the span was created under, which is what `spanFilter` sees.
+   */
+  reparented?: { parentSpanId?: string; externalParentSpanId?: string };
 }
 
 /**

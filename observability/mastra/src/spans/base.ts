@@ -338,6 +338,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    */
   protected restoredLineage?: SpanEntityLineage;
   private restoredIsRootSpan?: boolean;
+  /** Parent ids restored by `rebuildSpan()` for export past ancestors whose start `spanFilter` dropped */
+  private restoredReparented?: SpanSnapshot<SpanType>['reparented'];
   /**
    * Version declared for this span's own entity, or inherited from a parent span
    * of the same entity. Unlike `metadata.entityVersionId`, never an ancestor's
@@ -652,6 +654,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Get the closest parent spanId that will reach exporters (unless includeInternalSpans) */
   public getParentSpanId(includeInternalSpans?: boolean, pastFilteredStarts = false): string | undefined {
     if (!this.parent) {
+      if (pastFilteredStarts && this.restoredReparented) return this.restoredReparented.parentSpanId;
       // Return parent span ID if available (for root spans with external parent)
       return this.parentSpanId;
     }
@@ -674,6 +677,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     pastFilteredStarts = false,
   ): string | undefined {
     if (!this.parent) {
+      if (pastFilteredStarts && this.restoredReparented) return this.restoredReparented.externalParentSpanId;
       return this.externalParentSpanId;
     }
     if (this.getParentSpan(includeInternalSpans, pastFilteredStarts)) {
@@ -713,12 +717,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * rebuilt (durable execution), so it and its new children keep their lineage.
    */
   public restoreEntityLineage(
-    cached: SpanEntityLineage & Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId'> & { isRootSpan?: boolean },
+    cached: SpanEntityLineage &
+      Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId' | 'reparented'> & { isRootSpan?: boolean },
   ): void {
     // Snapshots from older versions lack this. Their metadata version may belong to an
     // ancestor entity, so treat ownership as unknown rather than guess.
     this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
     this.restoredIsRootSpan = cached.isRootSpan;
+    this.restoredReparented = cached.reparented;
     const lineage = definedLineage(cached);
     if (Object.keys(lineage).length > 0) {
       this.restoredLineage = lineage;
@@ -876,13 +882,20 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public snapshot(): SpanSnapshot<TType> {
     const includeInternalSpans = this.observabilityInstance.getConfig().includeInternalSpans;
     const exportedSpan = this.exportSpan(includeInternalSpans);
-    // The rebuilt span has no live parent, so it can only export the parent ids saved here.
-    this.reparentPastFilteredStarts(exportedSpan, includeInternalSpans);
+    // The rebuilt span has no live parent, so the parent ids to export past filtered starts travel with it.
+    const reparented = {
+      parentSpanId: this.getParentSpanId(includeInternalSpans, true),
+      externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans, true),
+    };
+    const isReparented =
+      reparented.parentSpanId !== exportedSpan.parentSpanId ||
+      reparented.externalParentSpanId !== exportedSpan.externalParentSpanId;
     return {
       ...exportedSpan,
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),
+      ...(isReparented ? { reparented } : {}),
     };
   }
 

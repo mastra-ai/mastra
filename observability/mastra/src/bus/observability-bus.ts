@@ -17,6 +17,7 @@ import type {
   ObservabilityDropEvent,
   SerializationOptions,
 } from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
 
 import type { DeepCleanOptions } from '../spans/serialization';
 import { deepClean, mergeSerializationOptions } from '../spans/serialization';
@@ -73,6 +74,12 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   /** In-flight handler promises from routeToHandler. Self-cleaning via .finally(). */
   private pendingHandlers: Set<Promise<void>> = new Set();
+
+  /**
+   * Span starts still being handled, per handler that can close a filtered span.
+   * A span_filtered event for one of these spans waits for that handler's start.
+   */
+  private pendingSpanStarts = new WeakMap<ObservabilityHandler, Map<string, Promise<void>>>();
 
   private handlerBufferFlushDepth = 0;
   private dropEventsEmittedDuringHandlerFlush = 0;
@@ -167,31 +174,41 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // construction, so cleanEvent() returns them unchanged.
     const cleaned = cleanEvent(event, this.deepCleanOptions);
 
-    // A span_filtered event closes a span that a handler opened on its start
-    // event. Handlers work asynchronously, so deliver it after the work already
-    // handed to them. Otherwise it can arrive before the span's start is handled.
-    if (cleaned.type === 'span_filtered' && this.pendingHandlers.size > 0) {
-      const inFlight = [...this.pendingHandlers];
-      this.trackPromise(Promise.allSettled(inFlight).then(() => this.deliver(cleaned, shouldHandle)));
-      return;
-    }
-
-    this.deliver(cleaned, shouldHandle);
-  }
-
-  private deliver(cleaned: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
-      if (!shouldHandle || shouldHandle(exporter)) this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
+      if (!shouldHandle || shouldHandle(exporter)) this.trackPromise(this.route(exporter, cleaned));
     }
 
     // Route to bridge (same routing logic as exporters)
     if (this.bridge && (!shouldHandle || shouldHandle(this.bridge))) {
-      this.trackPromise(routeToHandler(this.bridge, cleaned, this.logger));
+      this.trackPromise(this.route(this.bridge, cleaned));
     }
 
     // Deliver to subscribers (base class tracks its own pending promises)
     super.emit(cleaned);
+  }
+
+  /**
+   * Route one event to one handler. A span_filtered event closes a span the
+   * handler opened on its start event. Handlers work asynchronously, so the
+   * close waits for that handler's work on that span's start. Otherwise it
+   * can arrive before the handler knows the span.
+   */
+  private route(handler: ObservabilityHandler, event: ObservabilityEvent): void | Promise<void> {
+    if (event.type === 'span_filtered') {
+      const started = this.pendingSpanStarts.get(handler)?.get(`${event.traceId}:${event.spanId}`);
+      if (started) return started.then(() => routeToHandler(handler, event, this.logger));
+    }
+
+    const result = routeToHandler(handler, event, this.logger);
+    if (result && event.type === TracingEventType.SPAN_STARTED && handler.onSpanFilteredEvent) {
+      const key = `${event.exportedSpan.traceId}:${event.exportedSpan.id}`;
+      const starts = this.pendingSpanStarts.get(handler) ?? new Map<string, Promise<void>>();
+      this.pendingSpanStarts.set(handler, starts);
+      starts.set(key, result);
+      void result.finally(() => starts.delete(key));
+    }
+    return result;
   }
 
   /**

@@ -454,7 +454,8 @@ describe('Span Filtering', () => {
         name: "tool: 'my_tool'",
         attributes: { toolId: 'my_tool', toolType: 'function' },
       });
-      toolSpan.end();
+      // Durable engines end a span from its snapshot. The filter must see the same parent there too.
+      tracing.rebuildSpan(toolSpan.snapshot!()).end();
       agentSpan.end();
       runSpan.end();
 
