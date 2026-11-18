@@ -96,7 +96,7 @@ See [Health metrics](https://factory.mastra.ai/configure/metrics) for what each 
 new MastraFactory({
   // ...
   metrics: {
-    groups: ['process', 'postgres', 'sandbox'], // or 'all'
+    groups: ['process', 'postgres', 'sandbox', 'session'], // or 'all'
     intervalMs: 60_000, // default 60s, minimum 15s
     maxRecordsPerMinute: 500, // default 500 per process
   },

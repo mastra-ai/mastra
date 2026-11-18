@@ -411,12 +411,12 @@ describe('review follow-ups', () => {
     return { sandbox, gate };
   }
 
-  it('times a session start, the first wait on it, and reports starts in flight', async () => {
-    const { instrumentSandboxStart, markEagerSandboxStart, sessionStartsCollector } = await import('./sandbox.js');
+  it('times a sandbox start, the first wait on it, and reports starts in flight', async () => {
+    const { instrumentSandboxStart, markEagerSandboxStart, sandboxStartsCollector } = await import('./sandbox.js');
     const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sandbox'] }, {}), 'all');
     installFactoryMetrics(metrics);
     const { records, targets } = capture();
-    metrics.start(targets, [sessionStartsCollector()]);
+    metrics.start(targets, [sandboxStartsCollector()]);
 
     const { sandbox, gate } = fakeSandbox();
     instrumentSandboxStart(sandbox, 'platform', false);
