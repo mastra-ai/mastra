@@ -8,7 +8,6 @@ import { accountName } from '../services/accountName';
 import type { FactoryAuthState } from '../services/auth';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
-import { SidebarSettingsLinkSkeleton } from './SidebarSettingsLinkSkeleton';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export function SidebarSettingsLink() {
@@ -19,8 +18,6 @@ export function SidebarSettingsLink() {
   const { state: sidebarState, setOpenMobile } = useSidebar();
 
   if (!factoryId) return null;
-
-  if (auth.isLoading) return <SidebarSettingsLinkSkeleton label="Checking sign-in" />;
 
   const account = auth.data;
   const userName = signedInName(account);

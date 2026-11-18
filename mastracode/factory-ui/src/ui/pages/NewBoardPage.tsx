@@ -99,6 +99,7 @@ export function NewBoardPage() {
           <form
             className="flex flex-col gap-6"
             aria-label="New board"
+            inert={access.isPending}
             onSubmit={event => {
               event.preventDefault();
               create.mutate(
@@ -173,7 +174,7 @@ export function NewBoardPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={access.isPending || pending || name.trim() === '' || invalidKey !== undefined}
+                disabled={pending || name.trim() === '' || invalidKey !== undefined}
               >
                 {create.isPending ? 'Creating…' : 'Create board'}
               </Button>

@@ -1,5 +1,4 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -12,8 +11,8 @@ import { useBoardRulesQuery, useIntakeRoutesQuery, useIntakeRouteWrites } from '
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { boardRulesPath, RULES_INTO_PARAM, RULES_LEAVING_PARAM } from '../../boardConfig/boardConfigPaths';
 import { boardFlow } from '../boardFlow';
-import { phaseName, phaseOptions, reorderWithin } from '../ruleTargets';
-import { arrivalFallback, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
+import { phaseOptions, reorderWithin } from '../ruleTargets';
+import { arrivalFooter, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { BoardRulesSkeleton } from './BoardRulesSkeleton';
 import { IncomingRules } from './IncomingRules';
@@ -45,7 +44,7 @@ export function BoardRules({ factoryId, boardId }: { factoryId: string; boardId:
   const catalog = useBoardCatalog(factoryId);
   const board = catalog.data?.find(candidate => candidate.id === boardId);
 
-  if (catalog.isPending) return <BoardRulesSkeleton />;
+  if (catalog.isPending) return <BoardRulesSkeleton factoryId={factoryId} boardId={boardId} board={undefined} />;
   if (catalog.isError) return <Notice variant="destructive">Boards didn’t load.</Notice>;
   if (!board) return <Notice variant="warning">This board isn’t installed.</Notice>;
   // Keyed so an open rule never outlives the board it belongs to when the page moves to another one.
@@ -92,7 +91,9 @@ function BoardLanes({
   const only = flow && new Set((leaving ? flow.leaving : (flow.into.get(into ?? '') ?? [])).map(rule => rule.id));
   const shows = (lane: readonly IntakeRouteInfo[]) => !only || lane.some(rule => only.has(rule.id));
 
-  if (query.isPending || (focused && projectRules.isPending)) return <BoardRulesSkeleton />;
+  if (query.isPending || (focused && projectRules.isPending)) {
+    return <BoardRulesSkeleton factoryId={factoryId} boardId={board.id} board={board} />;
+  }
   if (query.isError) return <Notice variant="destructive">This board’s rules didn’t load.</Notice>;
 
   const run = (changes: RouteWrite[]) => writes.mutateAsync(changes).catch(error => toast.error(failureMessage(error)));
@@ -184,10 +185,7 @@ function BoardLanes({
     await writes.mutateAsync([{ kind: 'reorder', boardKey: board.id, ids: reorderWithin(fresh, ids, at, above) }]);
   };
 
-  const arrivalFooter =
-    order.data?.evaluator === 'route-list'
-      ? 'Otherwise: the old route list decides'
-      : arrivalFallback(order.data?.boards, board.id);
+  const footer = arrivalFooter(order.data, board.id);
 
   return (
     <div className="flex flex-col gap-8">
@@ -197,7 +195,8 @@ function BoardLanes({
       {focused && (
         <IntoFilter
           count={only?.size}
-          into={leaving || !into ? 'other boards' : (phaseName(board, into) ?? into)}
+          board={board}
+          into={into}
           leaving={leaving}
           showAll={boardRulesPath(factoryId, board.id)}
         />
@@ -209,20 +208,7 @@ function BoardLanes({
           key={section.title}
           title={section.title}
           events={section.events}
-          chain={
-            order.isPending ? (
-              <SkeletonText line="text-caption" className="w-64 max-w-full motion-reduce:before:animate-none" />
-            ) : (
-              order.data && (
-                <IntakeChain
-                  factoryId={factoryId}
-                  boardKey={board.id}
-                  order={order.data.boards}
-                  evaluator={order.data.evaluator}
-                />
-              )
-            )
-          }
+          chain={<IntakeChain factoryId={factoryId} boardKey={board.id} />}
         >
           {section.events.map(event => {
             const opened = isOpenedLane(event);
@@ -239,7 +225,7 @@ function BoardLanes({
                 phaseOptions={options}
                 canEdit={canEdit}
                 skips={skips}
-                footer={opened ? arrivalFooter : undefined}
+                footer={opened ? footer : undefined}
                 only={only}
                 incoming={
                   arriving.length ? (

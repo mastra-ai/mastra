@@ -5,18 +5,22 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ComponentProps, ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardFlow } from '../../boardRules/boardFlow';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { boardConfigPath, boardRulesPath } from '../boardConfigPaths';
-import { PhaseRunnerCard } from './PhaseRunnerCard';
 import { Muted } from './PhaseTimeline';
-import { outlineOfStored, PhaseWalkthrough } from './PhaseWalkthrough';
+import { PhaseWalkthrough } from './PhaseWalkthrough';
+import type { PhaseOutline } from './PhaseWalkthrough';
 import { RuleCountCard } from './RuleCountCard';
 import { SettingsColumn } from './SettingsColumn';
-import { StartsToggle } from './StartsToggle';
+
+export interface MapPhase {
+  outline: PhaseOutline;
+  starts: ReactNode;
+  agent: ReactNode;
+}
 
 /**
  * Lines the first column's content up with the settings column above it (42rem wide, centered), and leaves the same
@@ -53,24 +57,18 @@ export function BoardOverview({
   factoryId,
   boardId,
   phases,
-  skills,
   action,
-  onAutoStart,
 }: {
   factoryId: string;
   boardId: string;
-  phases: readonly StoredPhaseInfo[];
-  /** Undefined until the factory's skills load. */
-  skills: FactorySkillInfo[] | undefined;
+  phases: readonly MapPhase[];
   action?: ReactNode;
-  /** Switches starting on its own in the draft; left out when the board can't be edited. */
-  onAutoStart?: (phaseKey: string, on: boolean) => void;
 }) {
   const catalog = useBoardCatalog(factoryId);
   const routes = useIntakeRoutesQuery(factoryId);
   const loading = catalog.isPending || routes.isPending;
-  const start = catalog.data?.find(board => board.id === boardId)?.initialPhase ?? phases[0]?.key;
-  const outlines = phases.map(phase => outlineOfStored(phase, phases));
+  const outlines = phases.map(phase => phase.outline);
+  const start = catalog.data?.find(board => board.id === boardId)?.initialPhase ?? outlines[0]?.key;
   const flow =
     routes.data && start ? boardFlow(routes.data.intakeRoutes, { key: boardId, initialPhase: start }) : undefined;
 
@@ -103,7 +101,7 @@ export function BoardOverview({
         </SettingsColumn>
       )}
       <PhaseMap aria-label="Phases">
-        {phases.map(phase => {
+        {phases.map(({ outline: phase, starts, agent }) => {
           const kind = phaseIconKind(boardId, phase.kind);
           const arriving = flow?.into.get(phase.key) ?? [];
           return (
@@ -124,7 +122,7 @@ export function BoardOverview({
             >
               <PhaseWalkthrough
                 boardId={boardId}
-                phase={outlineOfStored(phase, phases)}
+                phase={phase}
                 phases={outlines}
                 arrivals={
                   <>
@@ -148,15 +146,8 @@ export function BoardOverview({
                     {phase.key === start && <Muted>New cards start here</Muted>}
                   </>
                 }
-                starts={
-                  <StartsToggle
-                    label={phase.name}
-                    autoStart={phase.autoStart ?? false}
-                    autoStartWhen={phase.autoStartWhen}
-                    onChange={onAutoStart && (on => onAutoStart(phase.key, on))}
-                  />
-                }
-                agent={<PhaseRunnerCard factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />}
+                starts={starts}
+                agent={agent}
               />
             </PhaseColumn>
           );

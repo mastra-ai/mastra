@@ -6,7 +6,6 @@ import {
   usePendingFactoryModelScope,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { SettingsSubsection } from '../../SettingsSubsection';
 import { savedModelScope } from './model-routes';
@@ -28,6 +27,7 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
   const error = setModelScope.error ?? projectQuery.error;
+  const showRouting = modelScope !== undefined || projectQuery.isPending;
 
   const pickScope = (scope: FactoryModelScope) => {
     if (scope === modelScope || saving) return;
@@ -44,11 +44,7 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
       scope="factory"
       title="Model routing"
       description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={
-        (modelScope !== undefined || projectQuery.isPending) && (
-          <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />
-        )
-      }
+      action={showRouting && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
     >
       <div className="flex flex-col gap-6">
         {error && (
@@ -56,8 +52,7 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
             {error.message}
           </Txt>
         )}
-        {projectQuery.isPending && <ModelRoutingSkeleton />}
-        {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
+        {showRouting && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
         {modelScope && (
           <ModelRoutingChangeDialog
             from={modelScope}

@@ -42,12 +42,14 @@ export function AppSidebarLayout({
   search,
   navLabel,
   footer,
+  inert = false,
   children,
 }: {
   switcher: ReactNode;
   search: ReactNode;
   navLabel: string;
   footer: ReactNode;
+  inert?: boolean;
   children: ReactNode;
 }) {
   const pageHeaderOwnsToggle = useSidebar().desktopState === 'collapsed';
@@ -61,8 +63,10 @@ export function AppSidebarLayout({
           {!pageHeaderOwnsToggle && <Sidebar.Trigger />}
         </div>
       </Sidebar.CommandHeader>
-      <Sidebar.Nav aria-label={navLabel}>{children}</Sidebar.Nav>
-      <Sidebar.Footer aria-label="Account and settings">
+      <Sidebar.Nav inert={inert} aria-label={navLabel}>
+        {children}
+      </Sidebar.Nav>
+      <Sidebar.Footer inert={inert} aria-label="Account and settings">
         <Sidebar.NavList>{footer}</Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>

@@ -1,11 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  KnowledgeExplorerToolbar,
-  KnowledgePageExplorer,
-  KnowledgeSearchBox,
-} from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
   KnowledgeExplorerView,
@@ -23,7 +19,6 @@ import {
   useKnowledgeTreeLevels,
 } from '../../hooks/useKnowledgeGraph';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { KnowledgeLoadingSkeleton } from '../domains/factory/components/knowledge/KnowledgeLoadingSkeleton';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -86,25 +81,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) {
-    return (
-      <KnowledgeLoadingSkeleton
-        label="Loading knowledge"
-        view={view}
-        pageOpen={view === 'page' && selectedPageId !== null}
-        toolbar={
-          <KnowledgeExplorerToolbar
-            view={view}
-            selectedPageId={selectedPageId}
-            onViewChange={next => update({ view: next })}
-            search={<KnowledgeSearchBox source={source} onSelect={pageId => update({ page: pageId })} />}
-          />
-        }
-      />
-    );
-  }
   if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
-  if (graph.data.pages.length === 0) {
+  if (graph.data?.pages.length === 0) {
     return (
       <Txt tone="muted" as="p" variant="body">
         No knowledge in this project yet. Pages appear here as factory sessions write them.

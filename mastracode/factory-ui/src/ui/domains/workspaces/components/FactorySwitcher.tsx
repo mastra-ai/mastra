@@ -9,13 +9,8 @@ import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 
 export const FACTORY_SWITCHER_TRIGGER = '-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1';
-
-export function FactoryNameSkeleton() {
-  return <SkeletonText line="text-caption" className="w-20 motion-reduce:before:animate-none" />;
-}
 
 export function FactorySwitcherTriggerContent({ children }: { children: ReactNode }) {
   return (
@@ -55,15 +50,9 @@ export function FactorySwitcher() {
         className={FACTORY_SWITCHER_TRIGGER}
       >
         <FactorySwitcherTriggerContent>
-          {factoryId && activeFactoryQuery.isPending ? (
-            <span role="status" aria-label="Loading factory">
-              <FactoryNameSkeleton />
-            </span>
-          ) : (
-            <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
-              {activeFactory?.name ?? 'Select a factory…'}
-            </Txt>
-          )}
+          <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
+            {activeFactory?.name ?? 'Select a factory…'}
+          </Txt>
         </FactorySwitcherTriggerContent>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">

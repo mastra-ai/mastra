@@ -21,8 +21,6 @@ import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
-import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
-import { RunQueueIndicator } from '../../domains/factory/components/RunQueueIndicator';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
 import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
@@ -347,17 +345,13 @@ export function BoardContent({
         onDrop={drop}
         toolbar={
           <BoardViewControls
+            factoryId={factoryProjectId}
+            boardId={definition.id}
             reviewsPullRequests={reviewsPullRequests}
             view={boardView}
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={
-              <div className="flex items-center gap-2">
-                <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />
-                <ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />
-              </div>
-            }
           />
         }
       />

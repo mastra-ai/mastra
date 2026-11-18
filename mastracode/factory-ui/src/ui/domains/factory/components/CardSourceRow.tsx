@@ -1,7 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { SOURCE_LABELS, cardLabels, sourceMetadata } from '../boardItems';
 import { workItemReference } from '../services/relationships';
@@ -10,28 +8,6 @@ import type { WorkItem } from '../services/workItems';
 import { MetadataLabels } from './BoardCardParts';
 import { outboundArrowClass } from './ChangeRequestLink';
 import { SourceStateBadge } from './SourceStateBadge';
-
-const sourceRowClass = 'flex min-w-0 flex-col gap-1';
-const referenceRowClass = 'flex min-w-0 items-center gap-1.5';
-const labelsRowClass = 'px-2';
-const PLACEHOLDER_LABELS = ['w-16', 'w-20', 'w-24'];
-
-export function CardSourceRowSkeleton() {
-  return (
-    <div aria-hidden className={sourceRowClass}>
-      <div className={referenceRowClass}>
-        <Skeleton className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
-      </div>
-      <div className={labelsRowClass}>
-        <div className="flex items-center gap-1.5">
-          {PLACEHOLDER_LABELS.map(width => (
-            <Skeleton key={width} className={cn('h-5 rounded-full motion-reduce:before:animate-none', width)} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function CardSourceRow({
   item,
@@ -49,9 +25,9 @@ export function CardSourceRow({
 
   const reference = workItemReference(item, repository) ?? SOURCE_LABELS[item.source];
   return (
-    <div className={sourceRowClass}>
+    <div className="flex min-w-0 flex-col gap-1">
       {url || state ? (
-        <div className={referenceRowClass}>
+        <div className="flex min-w-0 items-center gap-1.5">
           {url ? (
             <Button
               render={<a href={url} target="_blank" rel="noreferrer" />}
@@ -68,7 +44,7 @@ export function CardSourceRow({
         </div>
       ) : null}
       {labelled ? (
-        <div className={labelsRowClass}>
+        <div className="px-2">
           <MetadataLabels metadata={metadata} />
         </div>
       ) : null}

@@ -11,7 +11,11 @@ import { boardPath, orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
-import { SidebarNavigationSkeleton, SidebarNavRowSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import {
+  SidebarIconButtonSkeleton,
+  SidebarNavigationSkeleton,
+  SidebarNavRowSkeleton,
+} from '../../../ui/SidebarNavigationSkeleton';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
@@ -38,18 +42,22 @@ export function FactorySection() {
   return (
     <FactorySectionLayout
       headerAction={
-        configured && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Board settings"
-            tooltip="Board settings"
-            render={
-              <NavLink to={boardConfigPath(factoryId, configured.id)} onClick={() => overlays.close('sidebar')} />
-            }
-          >
-            <IconSettingsSliderHor aria-hidden />
-          </Button>
+        catalog.isPending ? (
+          <SidebarIconButtonSkeleton />
+        ) : (
+          configured && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Board settings"
+              tooltip="Board settings"
+              render={
+                <NavLink to={boardConfigPath(factoryId, configured.id)} onClick={() => overlays.close('sidebar')} />
+              }
+            >
+              <IconSettingsSliderHor aria-hidden />
+            </Button>
+          )
         )
       }
       after={

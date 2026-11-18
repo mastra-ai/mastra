@@ -88,9 +88,9 @@ export function useThreadFrame(): SessionFrameSlots {
   const openContext =
     currentItem && sessionId && threadId ? openSessionContext(currentItem, boardEntry, sessionId, threadId) : undefined;
   const switchable = openContext && openContext.sessions.length > 1 ? openContext : undefined;
-  // Loading until the card is known: the session's own title would flash, then go.
-  const titleLoading = !currentItem && (cardLoading || sessionLoading);
-  const title = currentItem ? switchable && `${switchable.label} session` : sessionTitle;
+  // No title until the card is known: the session's own would flash, then go.
+  const title = currentItem ? switchable && `${switchable.label} session` : cardLoading ? undefined : sessionTitle;
+  const titleLoading = !currentItem && !cardLoading && sessionLoading;
   const stageNote = stageUnavailable(boardEntry, boards, boardsFailed, factoryQuery.isLoadingError);
   const stageLoading = cardLoading || Boolean(currentItem && (boardsLoading || factoryQuery.isPending));
 

@@ -25,7 +25,7 @@ import { CustomProviderRow } from './CustomProviderRow';
 import { ProviderRows } from './ProviderRows';
 import { ProviderRowsSkeleton } from './ProviderRowsSkeleton';
 
-export const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
+const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 
 const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
   label: SIGN_IN_EXPIRED_LABEL,

@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -11,16 +10,12 @@ import {
   InputNumberIncrement,
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Link } from 'react-router';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
-import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import {
   DEFAULT_SESSION,
@@ -35,18 +30,15 @@ import {
 import type { RuleField } from '../boardDraft';
 import { RestingPhaseLayout, WorkingPhaseLayout } from './PhaseConfigLayout';
 import { PhaseMoves } from './PhaseMoves';
-import { SkillBadges } from './skills/SkillBadges';
-import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
-import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { APPROVE_ON_ITS_OWN, GOAL_PLACEHOLDER, phaseLabels } from './phaseLabels';
+import { PhaseSkill } from './PhaseSkill';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
-const NO_SKILL = '__none__';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
 
 /** Markdown written straight into a card, with room to click into while empty. */
-function MarkdownEditor({
+export function MarkdownEditor({
   label,
   value,
   placeholder,
@@ -119,9 +111,7 @@ export function PhaseConfig({
   const objective = goal?.objective ?? '';
   const tools = phase.tools ?? [];
   const exitToolId = phase.exitTool?.id ?? '';
-  const skillName = phase.runner?.skill;
-  const skill = skillName ? skills?.find(candidate => candidate.name === skillName) : undefined;
-  const skillMissing = skillName !== undefined && skills !== undefined && skill === undefined;
+  const labels = phaseLabels(phase.name);
 
   const setRunner = (runner: Partial<NonNullable<StoredPhaseInfo['runner']>>) => {
     const merged = { ...phase.runner, ...runner };
@@ -156,11 +146,11 @@ export function PhaseConfig({
 
   return (
     <WorkingPhaseLayout
-      label={`How ${phase.name} runs`}
+      label={labels.runs}
       disabled={disabled}
       autoStart={
         <Switch
-          aria-label={`${phase.name}: start on its own`}
+          aria-label={labels.autoStart}
           checked={phase.autoStart ?? false}
           disabled={disabled}
           onCheckedChange={checked => {
@@ -199,9 +189,9 @@ export function PhaseConfig({
       instructionsError={instructions.length > MAX_INSTRUCTIONS ? 'Too long to save.' : undefined}
       goal={
         <MarkdownEditor
-          label={`${phase.name} goal`}
+          label={labels.goal}
           value={objective}
-          placeholder="Describe what done looks like"
+          placeholder={GOAL_PLACEHOLDER}
           disabled={disabled}
           onChange={text => setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined })}
         />
@@ -245,7 +235,7 @@ export function PhaseConfig({
       }
       session={
         <Input
-          aria-label={`${phase.name} session`}
+          aria-label={labels.session}
           value={phase.runner?.context ?? ''}
           placeholder={DEFAULT_SESSION}
           disabled={disabled}
@@ -253,64 +243,20 @@ export function PhaseConfig({
         />
       }
       skill={
-        <>
-          <div className="flex min-w-0 items-center gap-2">
-            <Select
-              value={skillName ?? NO_SKILL}
-              disabled={disabled}
-              onValueChange={value => setRunner({ skill: value === NO_SKILL ? undefined : String(value) })}
-            >
-              <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
-                <span className="flex min-w-0 items-center gap-2">
-                  <IconBook aria-hidden className="text-muted-foreground size-icon-md shrink-0" />
-                  <span className="truncate">{skillName ?? 'No skill'}</span>
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SKILL}>None</SelectItem>
-                {(skills ?? []).map(candidate => (
-                  <SelectItem key={candidate.name} value={candidate.name}>
-                    {candidate.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {skillMissing && <Badge variant="destructive">Not found</Badge>}
-            {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
-            {skill && <SkillBadges skill={skill} />}
-            {skill && (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={skillsEditable ? <IconPencil /> : <IconFileText />}
-                aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
-                className="ml-auto"
-                render={<Link to={boardSkillPath(factoryId, boardId, skill.name)} />}
-              >
-                {skillsEditable ? 'Edit' : 'View'}
-              </Button>
-            )}
-          </div>
-          {skill?.error ? (
-            <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
-              Agents can't load this skill: {skill.error}
-            </Txt>
-          ) : skillMissing ? (
-            <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
-              This factory has no {skillName} skill, so cards entering {phase.name} fail to start.
-            </Txt>
-          ) : (
-            skill?.description && (
-              <Txt as="p" variant="caption" tone="muted">
-                {skill.description}
-              </Txt>
-            )
-          )}
-        </>
+        <PhaseSkill
+          factoryId={factoryId}
+          boardId={boardId}
+          phaseName={phase.name}
+          skillName={phase.runner?.skill}
+          skills={skills}
+          skillsEditable={skillsEditable}
+          disabled={disabled}
+          onChange={skill => setRunner({ skill })}
+        />
       }
       toolSwitch={tool => (
         <Switch
-          aria-label={`${phase.name}: ${tool.label}`}
+          aria-label={labels.tool(tool.label)}
           checked={tools.includes(tool.id)}
           disabled={disabled}
           onCheckedChange={checked => {
@@ -323,7 +269,7 @@ export function PhaseConfig({
       )}
       exitTool={
         <Input
-          aria-label={`${phase.name} exit tool`}
+          aria-label={labels.exitTool}
           value={exitToolId}
           disabled={disabled}
           onChange={event => {
@@ -336,9 +282,9 @@ export function PhaseConfig({
       exitApproval={
         exitToolId !== '' && (
           <SettingsContainer>
-            <SettingsRow label="Approve on its own" disabled={disabled}>
+            <SettingsRow label={APPROVE_ON_ITS_OWN} disabled={disabled}>
               <Switch
-                aria-label={`${phase.name}: approve ${exitToolId} on its own`}
+                aria-label={labels.approve(exitToolId)}
                 checked={phase.exitTool?.autoApprove ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {

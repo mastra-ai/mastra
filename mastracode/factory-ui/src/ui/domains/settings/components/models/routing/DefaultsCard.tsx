@@ -65,29 +65,21 @@ export function DefaultsCard({
             )}
           </header>
           <CollapsibleContent className="flex flex-col gap-4 pt-4">
-            <DefaultsCardFields model={model} providers={providers} />
+            <Field className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2">
+              <FieldLabel size="smaller" className="h-control-sm text-muted-foreground">
+                Model
+              </FieldLabel>
+              {model}
+            </Field>
+            <div className="flex flex-col gap-2">
+              <Txt as="span" variant="caption" tone="muted">
+                Providers
+              </Txt>
+              {providers}
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </section>
     </SettingsContainer>
-  );
-}
-
-function DefaultsCardFields({ model, providers }: { model: ReactNode; providers: ReactNode }) {
-  return (
-    <>
-      <Field className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2">
-        <FieldLabel size="smaller" className="h-control-sm text-muted-foreground">
-          Model
-        </FieldLabel>
-        {model}
-      </Field>
-      <div className="flex flex-col gap-2">
-        <Txt as="span" variant="caption" tone="muted">
-          Providers
-        </Txt>
-        {providers}
-      </div>
-    </>
   );
 }

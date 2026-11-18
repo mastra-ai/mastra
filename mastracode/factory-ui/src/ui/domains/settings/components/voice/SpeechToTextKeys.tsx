@@ -39,7 +39,13 @@ function voiceKeyConnection(status: VoiceKeyStatus, provider: ProviderInfo): Pro
     : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
 }
 
-export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scope: VoiceSettingsResponse['scope'] }) {
+export function SpeechToTextKeys({
+  keys,
+  scope,
+}: {
+  keys: VoiceKeyStatus[] | undefined;
+  scope: VoiceSettingsResponse['scope'] | undefined;
+}) {
   const providersQuery = useProvidersQuery();
   const { authEnabled, requestScope, actionsDisabled, memberReason } = useCredentialAccess(
     scope === 'factory' ? 'org' : 'user',
@@ -47,11 +53,11 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   const [addOpen, setAddOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  if (providersQuery.isPending) {
-    const savedCount = keys.filter(status => status.saved).length;
+  if (!keys || providersQuery.isPending) {
+    const savedCount = keys?.filter(status => status.saved).length;
     return (
       <SpeechToTextKeyList count={savedCount} addDisabled={actionsDisabled} addInert>
-        <SettingsSkeleton label="Loading providers" variant="item" rows={savedCount} />
+        {savedCount !== 0 && <SettingsSkeleton label="Loading providers" variant="item" rows={savedCount ?? 1} />}
         <MemberReasonRow reason={memberReason} />
       </SpeechToTextKeyList>
     );
@@ -104,13 +110,13 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
 
 function SpeechToTextKeyList({
   count,
-  addDisabled = false,
+  addDisabled,
   addInert = false,
   onAdd,
   children,
 }: {
   count: number | undefined;
-  addDisabled?: boolean;
+  addDisabled: boolean;
   addInert?: boolean;
   onAdd?: () => void;
   children: ReactNode;
@@ -150,13 +156,5 @@ function MemberReasonRow({ reason }: { reason: string | undefined }) {
         {reason}
       </Txt>
     </SettingsNoticeRow>
-  );
-}
-
-export function SpeechToTextKeysSkeleton() {
-  return (
-    <SpeechToTextKeyList count={undefined} addInert>
-      <SettingsSkeleton label="Loading providers" variant="item" rows={1} />
-    </SpeechToTextKeyList>
   );
 }

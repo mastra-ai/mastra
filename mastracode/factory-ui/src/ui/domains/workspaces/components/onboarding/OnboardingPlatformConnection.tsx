@@ -16,15 +16,12 @@ const PLATFORMS = {
   },
 };
 
-export function OnboardingPlatformConnectionSkeleton({ provider }: { provider: 'jira' | 'incident-io' }) {
-  return <OnboardingConnectionSkeleton label={`Loading ${WORK_SOURCE_NAME[provider]} connections`} />;
-}
-
 export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 'incident-io' }) {
   const query = usePlatformConnectionsQuery(provider);
   const name = WORK_SOURCE_NAME[provider];
   const { Icon, purpose } = PLATFORMS[provider];
-  if (query.isPending) return <OnboardingPlatformConnectionSkeleton provider={provider} />;
+  if (query.isPending)
+    return <OnboardingConnectionSkeleton label={`Loading ${name} connections`} icon={<Icon />} name={name} />;
   if (isPlatformConnectUnavailableError(query.error)) return null;
   const active = query.data?.filter(connection => connection.status === 'active') ?? [];
   if (active.length) {

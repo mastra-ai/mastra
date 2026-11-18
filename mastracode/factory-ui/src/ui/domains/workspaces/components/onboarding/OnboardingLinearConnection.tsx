@@ -5,15 +5,10 @@ import { useLinearStatusQuery } from '../../../../../hooks/useLinearData';
 import { OnboardingConnectionSkeleton } from './OnboardingConnectionSkeleton';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
-export function OnboardingLinearConnectionSkeleton() {
-  return (
-    <OnboardingConnectionSkeleton label="Loading Linear status" known={{ icon: <LinearIcon />, name: 'Linear' }} />
-  );
-}
-
 export function OnboardingLinearConnection({ onConnect }: { onConnect: () => void }) {
   const query = useLinearStatusQuery();
-  if (query.isPending) return <OnboardingLinearConnectionSkeleton />;
+  if (query.isPending)
+    return <OnboardingConnectionSkeleton label="Loading Linear status" icon={<LinearIcon />} name="Linear" />;
   const status = query.data;
   if (status?.connected)
     return (

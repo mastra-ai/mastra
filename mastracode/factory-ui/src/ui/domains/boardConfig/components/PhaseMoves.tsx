@@ -23,6 +23,8 @@ export function PhaseMovesSkeleton() {
   );
 }
 
+export type MovePhase = Pick<StoredPhaseInfo, 'key' | 'name' | 'kind'>;
+
 /**
  * The board's phases in board order, the way the board lays them out, each showing whether cards in this phase can
  * go there. Pressing a phase allows or stops the move; moves Factory's code makes are locked on.
@@ -36,9 +38,9 @@ export function PhaseMoves({
   disabled,
   onChange,
 }: {
-  phase: StoredPhaseInfo;
-  phases: StoredPhaseInfo[];
-  next: string[];
+  phase: MovePhase;
+  phases: readonly MovePhase[];
+  next: readonly string[];
   required: Set<string>;
   boardId: string;
   disabled: boolean;

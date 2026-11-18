@@ -33,7 +33,7 @@ export function AddPhaseButton({
 }: {
   factoryId: string;
   boardId: string;
-  board: StoredBoardInfo;
+  board: StoredBoardInfo | undefined;
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -50,7 +50,9 @@ export function AddPhaseButton({
       >
         Add phase
       </Button>
-      {open && <AddPhaseDialog factoryId={factoryId} boardId={boardId} board={board} onClose={() => setOpen(false)} />}
+      {open && board && (
+        <AddPhaseDialog factoryId={factoryId} boardId={boardId} board={board} onClose={() => setOpen(false)} />
+      )}
     </>
   );
 }

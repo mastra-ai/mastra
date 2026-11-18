@@ -9,5 +9,3 @@ export const ONBOARDING_PINNED_PRIMARY =
   'max-[899px]:fixed max-[899px]:inset-x-0 max-[899px]:bottom-0 max-[899px]:z-20 max-[899px]:bg-linear-to-b max-[899px]:from-transparent max-[899px]:to-background max-[899px]:to-40% max-[899px]:px-4 max-[899px]:pt-8 max-[899px]:pb-[max(1rem,env(safe-area-inset-bottom))] max-[899px]:[&>button]:h-12 max-[899px]:[&>button]:w-full';
 
 export const ONBOARDING_REPOSITORY_ROW = 'flex items-center gap-3 rounded-lg px-3 py-2.5';
-
-export const ONBOARDING_CHOICE_ROW = 'flex min-w-0 items-start gap-3 rounded-lg p-3';

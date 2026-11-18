@@ -64,7 +64,7 @@ export function ConnectToolsSection() {
         </Notice>
       )}
       {query.isPending ? (
-        <SettingsListSkeleton label="Loading Mastra Connect tools" />
+        <SettingsListSkeleton label="Loading Mastra Connect tools" action={<ManageLink projectId={undefined} />} />
       ) : offReason ? (
         <Notice variant="info">
           <Notice.Message>
@@ -254,11 +254,16 @@ function statusLabel(status: string): string | undefined {
   return 'Unavailable';
 }
 
-function ManageLink({ projectId }: { projectId: string }) {
+function ManageLink({ projectId }: { projectId: string | undefined }) {
   const auth = useFactoryAuth();
-  const href = platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
+  const href = projectId && platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
   return (
-    <Button size="sm" iconEnd={<IconSquareArrowTopRight />} render={<a href={href} target="_blank" rel="noreferrer" />}>
+    <Button
+      size="sm"
+      inert={!href}
+      iconEnd={<IconSquareArrowTopRight />}
+      render={<a href={href} target="_blank" rel="noreferrer" />}
+    >
       Manage in Platform
     </Button>
   );

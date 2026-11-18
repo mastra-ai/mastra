@@ -1,12 +1,13 @@
-import { SourceDescriptionPlaceholder } from './BoardCardDetails';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+
+import { SourceDescriptionLoading } from './BoardCardDetails';
 import { overviewSectionClass } from './CardOverview';
-import { CardSourceRowSkeleton } from './CardSourceRow';
 
 export function CardOverviewSkeleton() {
   return (
     <div role="status" aria-label="Loading overview" className={overviewSectionClass}>
-      <CardSourceRowSkeleton />
-      <SourceDescriptionPlaceholder />
+      <Skeleton aria-hidden className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
+      <SourceDescriptionLoading />
     </div>
   );
 }

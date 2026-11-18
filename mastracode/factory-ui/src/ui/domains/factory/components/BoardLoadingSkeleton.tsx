@@ -1,24 +1,32 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useSearchParams } from 'react-router';
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { useParams } from 'react-router';
 
-import { boardLayoutFromParams } from '../boardLayout';
-import { BOARD_VIEW_QUERY } from '../boardSavedViews';
-import { BOARD_SEARCH_QUERY } from '../hooks/useBoardView';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { boardPersonIdentity } from '../boardPeople';
+import type { BoardParticipant } from '../boardPeople';
+import { useBoardView } from '../hooks/useBoardView';
 import { BoardColumnHeaderSkeleton, BoardColumnSkeleton } from './BoardColumn';
 import { BOARD_COLUMNS_CLASS, BOARD_LIST_BODY_CLASS, BoardFrame } from './BoardFrame';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { BoardList, BoardListGroupSkeleton } from './BoardList';
-import { BoardPropertiesMenuPlaceholder } from './BoardPropertiesMenu';
-import { BoardDefaultViewTabs, BoardLayoutToggle, BoardSearchInput } from './BoardViewControls';
-import { BoardViewControlsLayout } from './BoardViewControlsLayout';
+import { BoardViewControls } from './BoardViewControls';
 
 const WORK_BOARD_PHASE_COUNT = 6;
 const STAGE_PLACEHOLDERS = Array.from({ length: WORK_BOARD_PHASE_COUNT }, (_, index) => index);
+const NO_PARTICIPANTS: readonly BoardParticipant[] = [];
+const NO_LABELS: readonly string[] = [];
 
 export function BoardLoadingSkeleton() {
-  const [params] = useSearchParams();
-  const layout = boardLayoutFromParams(params);
-  const inView = params.has(BOARD_VIEW_QUERY);
+  const { factoryId = '', boardId = DEFAULT_BOARD_ID } = useParams<{ factoryId: string; boardId: string }>();
+  const currentUserId = useFactoryAuth().data?.user?.userId;
+  const view = useBoardView({
+    factoryProjectId: factoryId,
+    kind: boardId,
+    reviewsPullRequests: false,
+    currentUserId,
+    personId: boardPersonIdentity(currentUserId, undefined),
+  });
+  const { layout } = view;
 
   return (
     <BoardFrame
@@ -27,12 +35,14 @@ export function BoardLoadingSkeleton() {
       layout={layout}
       toolbar={
         <div inert className="flex w-full min-w-0">
-          <BoardViewControlsLayout
-            tabs={<BoardDefaultViewTabs selected={!inView} />}
-            layoutToggle={<BoardLayoutToggle value={layout} />}
-            properties={<BoardPropertiesMenuPlaceholder />}
-            search={<BoardSearchInput value={params.get(BOARD_SEARCH_QUERY) ?? ''} inView={inView} />}
-            aside={<Skeleton aria-hidden className="size-control-sm rounded-full motion-reduce:before:animate-none" />}
+          <BoardViewControls
+            factoryId={factoryId}
+            boardId={boardId}
+            reviewsPullRequests={false}
+            view={view}
+            participants={NO_PARTICIPANTS}
+            availableLabels={NO_LABELS}
+            currentUserId={currentUserId}
           />
         </div>
       }

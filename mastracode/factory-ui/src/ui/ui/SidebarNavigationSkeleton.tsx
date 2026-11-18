@@ -35,3 +35,12 @@ export function SidebarNavRowSkeleton(props: Omit<ComponentProps<typeof Sidebar.
     />
   );
 }
+
+export function SidebarIconButtonSkeleton() {
+  return (
+    <Skeleton
+      aria-hidden
+      className="h-control-sm w-control-sm shrink-0 rounded-full motion-reduce:before:animate-none"
+    />
+  );
+}

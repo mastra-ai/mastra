@@ -1,29 +1,28 @@
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
-
 import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
-import { CreateFactoryInput, CreateFactoryPaletteLayout, CreateFactoryStepBars } from './CreateFactoryPalette';
+import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
+import { CreateFactoryNameRows } from './CreateFactoryNameRows';
+import { CreateFactoryPalette } from './CreateFactoryPalette';
 
 export function CreateFactoryWizardSkeleton({ label }: { label: string }) {
+  const flow = useCreateFactoryFlow();
+  const { step } = flow.draft;
   return (
-    <CreateFactoryPaletteLayout
-      label={label}
-      titleRow={
-        <>
-          <span aria-hidden className="min-w-0 flex-1">
-            <SkeletonText line="text-body" className="w-48 max-w-full motion-reduce:before:animate-none" />
-          </span>
-          <span aria-hidden className="contents">
-            <CreateFactoryStepBars />
-          </span>
-        </>
-      }
-      input={
-        <div inert className="contents">
-          <CreateFactoryInput searchable={false} />
-        </div>
-      }
-    >
-      <PaletteRowsSkeleton label={label} />
-    </CreateFactoryPaletteLayout>
+    <div role="status" aria-label={label} className="contents">
+      <div inert className="contents">
+        <CreateFactoryPalette
+          step={step}
+          value={flow.stepValue}
+          onValueChange={() => undefined}
+          onBack={flow.canGoBack ? () => undefined : undefined}
+          onSkip={() => undefined}
+        >
+          {step === 'name' ? (
+            <CreateFactoryNameRows name={flow.stepValue} onSubmit={() => undefined} />
+          ) : (
+            <PaletteRowsSkeleton label={label} />
+          )}
+        </CreateFactoryPalette>
+      </div>
+    </div>
   );
 }

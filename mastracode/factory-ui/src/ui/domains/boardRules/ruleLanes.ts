@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import type { IntakeRouteInfo } from '../../../api/types';
+import type { IntakeOrderResponse, IntakeRouteInfo } from '../../../api/types';
 
 /** An event a rule can trigger on. */
 export type RuleEvent = IntakeRouteInfo['on'][number];
@@ -261,6 +261,12 @@ export function arrivalFallback(order: readonly { boardKey: string; name: string
   if (!order || at === -1) return 'Otherwise: the next board is asked';
   const next = order[at + 1]?.name;
   return next ? `Otherwise: ${next} is asked next` : 'Otherwise: Not routed';
+}
+
+export function arrivalFooter(order: IntakeOrderResponse | undefined, boardKey: string) {
+  return order?.evaluator === 'route-list'
+    ? 'Otherwise: the old route list decides'
+    : arrivalFallback(order?.boards, boardKey);
 }
 
 const FILLER_WORDS = new Set([

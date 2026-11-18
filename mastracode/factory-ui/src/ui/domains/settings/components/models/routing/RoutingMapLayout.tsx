@@ -39,11 +39,13 @@ function measureConnectorLayout(svg: SVGSVGElement, anchors: ConnectorAnchors): 
 
 /** Connector ends follow the cards they join, so they are measured rather than laid out in CSS. */
 export function RoutingMapLayout({
-  connectors,
+  anchors,
+  routes,
   lanes,
   defaults,
 }: {
-  connectors?: { anchors: ConnectorAnchors; routes: Record<ModelLane, ModelDefaults> };
+  anchors: ConnectorAnchors;
+  routes: Record<ModelLane, ModelDefaults> | undefined;
   lanes: ReactNode;
   defaults: ReactNode;
 }) {
@@ -51,12 +53,10 @@ export function RoutingMapLayout({
   const svgRef = useRef<SVGSVGElement>(null);
   const defaultsRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<ConnectorLayout>();
-  const anchors = connectors?.anchors;
-  const routes = connectors?.routes;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
-    if (!svg || !anchors) return;
+    if (!svg) return;
     const measure = () => setLayout(measureConnectorLayout(svg, anchors));
     measure();
     const observer = new ResizeObserver(measure);

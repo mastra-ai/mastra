@@ -7,10 +7,11 @@ import type { ReactNode } from 'react';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsItem, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
+import { PendingField } from '../../../ui/PendingField';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
@@ -84,9 +85,9 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
         name={ACCOUNT_VALUE_SKELETON}
         email={ACCOUNT_VALUE_SKELETON}
         authentication={ACCOUNT_VALUE_SKELETON}
-      >
-        <SettingsSkeleton label="Loading your account" rows={2} />
-      </ProfileItems>
+        accountId=""
+        organizationId=""
+      />
     );
   }
 
@@ -110,18 +111,9 @@ function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }
       name={<AccountValue>{user?.name ?? 'Not provided'}</AccountValue>}
       email={<AccountValue>{user?.email ?? 'Not provided'}</AccountValue>}
       authentication={<AccountValue>{authProviderLabel(state.provider)}</AccountValue>}
-    >
-      {user?.userId && (
-        <SettingsItem title="Account ID" description="Useful when contacting support.">
-          <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
-        </SettingsItem>
-      )}
-      {user?.organizationId && (
-        <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
-          <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
-        </SettingsItem>
-      )}
-    </ProfileItems>
+      accountId={user?.userId}
+      organizationId={user?.organizationId}
+    />
   );
 }
 
@@ -129,12 +121,14 @@ function ProfileItems({
   name,
   email,
   authentication,
-  children,
+  accountId,
+  organizationId,
 }: {
   name: ReactNode;
   email: ReactNode;
   authentication: ReactNode;
-  children: ReactNode;
+  accountId: string | undefined;
+  organizationId: string | undefined;
 }) {
   return (
     <SettingsSubsection scope="personal" title="Profile" description={PROFILE_DESCRIPTION}>
@@ -148,7 +142,20 @@ function ProfileItems({
         <SettingsItem title="Authentication" description="How you signed in.">
           {authentication}
         </SettingsItem>
-        {children}
+        {accountId !== undefined && (
+          <SettingsItem title="Account ID" description="Useful when contacting support.">
+            <PendingField pending={!accountId} className="w-full sm:w-55">
+              <CopyInput value={accountId} label="account ID" />
+            </PendingField>
+          </SettingsItem>
+        )}
+        {organizationId !== undefined && (
+          <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
+            <PendingField pending={!organizationId} className="w-full sm:w-55">
+              <CopyInput value={organizationId} label="organization ID" />
+            </PendingField>
+          </SettingsItem>
+        )}
       </SettingsContainer>
     </SettingsSubsection>
   );

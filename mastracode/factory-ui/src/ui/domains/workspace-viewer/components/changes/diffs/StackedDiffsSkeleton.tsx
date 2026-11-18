@@ -1,3 +1,4 @@
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -16,7 +17,7 @@ export function StackedDiffsSkeleton() {
         <div key={path} aria-hidden className="border-border bg-card border-b">
           <div className="flex items-start gap-2 py-2 pr-3 pl-2">
             <span className="flex h-5 shrink-0 items-center gap-1.5">
-              <span className="size-icon-md" />
+              <DisclosureChevron direction="right" open className="text-muted-foreground size-icon-md" />
               <Skeleton className={cn('size-icon-md rounded-sm', barClass)} />
             </span>
             <SkeletonText className={cn(path, barClass)} />

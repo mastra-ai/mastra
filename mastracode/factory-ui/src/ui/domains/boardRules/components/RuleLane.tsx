@@ -4,17 +4,7 @@ import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  CircleDashed,
-  GripVertical,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, GripVertical, MoreHorizontal, Trash2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeSkippedResponse } from '../../../../api/types';
@@ -36,7 +26,7 @@ import type { RuleEvent } from '../ruleLanes';
 import { boardName, phaseName } from '../ruleTargets';
 import { ConditionChips } from './ConditionChips';
 import { RuleTarget } from './RuleTarget';
-import { LaneCard, LaneFooter } from './RuleLaneFrame';
+import { LaneCard, LaneEnd } from './RuleLaneFrame';
 
 /** The part of a rule the builder opens at: its conditions or its destination. */
 export type RuleFocus = 'conditions' | 'action';
@@ -318,21 +308,7 @@ export function RuleLane({
             );
           })}
 
-          {!only && (
-            <li className="flex flex-wrap items-center gap-3">
-              {catchAll < 0 && (
-                <LaneFooter>
-                  <CircleDashed className="size-icon-md shrink-0" aria-hidden />
-                  {fallback}
-                </LaneFooter>
-              )}
-              {canEdit && (
-                <Button variant="ghost" size="sm" icon={<Plus />} onClick={onAdd}>
-                  Add rule
-                </Button>
-              )}
-            </li>
-          )}
+          {!only && <LaneEnd fallback={catchAll < 0 ? fallback : undefined} onAdd={canEdit ? onAdd : undefined} />}
         </ol>
         {incoming}
       </div>

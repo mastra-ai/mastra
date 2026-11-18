@@ -4,7 +4,7 @@ import { CommandPaletteInput } from '@mastra/playground-ui/components/CommandPal
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { CREATE_FACTORY_STEPS } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
@@ -13,18 +13,42 @@ import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRig
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
-  title: string;
-  placeholder: string;
-  /** The name step types into the field instead of searching it. */
-  searchable?: boolean;
   value: string;
   onValueChange: (value: string) => void;
   /** Back navigation to the previous step. Omitted on the first step. */
   onBack?: () => void;
   /** Steps that can be left out show it as chrome, so it never scrolls away with the rows. */
-  onSkip?: () => void;
+  onSkip: () => void;
   children: ReactNode;
 }
+
+interface StepChrome {
+  title: string;
+  placeholder: string;
+  searchable?: boolean;
+  skippable?: boolean;
+}
+
+const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
+  name: {
+    title: 'Name your new Factory',
+    placeholder: 'e.g. Mastra',
+    searchable: false,
+  },
+  vcs: {
+    title: 'Choose your codebase',
+    placeholder: 'Search repositories',
+  },
+  'project-management': {
+    title: 'Connect the work behind the code',
+    placeholder: 'Search options',
+    skippable: true,
+  },
+  'model-provider': {
+    title: 'Choose your Factory model',
+    placeholder: 'Search models and providers',
+  },
+};
 
 const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none';
 
@@ -34,61 +58,81 @@ const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 m
  */
 export function CreateFactoryPalette({
   step,
-  title,
-  placeholder,
-  searchable = true,
   value,
   onValueChange,
   onBack,
   onSkip,
   children,
 }: CreateFactoryPaletteProps) {
+  const { title, placeholder, searchable = true, skippable = false } = STEP_CHROME[step];
+  const stepIndex = CREATE_FACTORY_STEPS.indexOf(step);
+
   return (
-    <CreateFactoryPaletteLayout
+    <Command
+      loop
+      shouldFilter={false}
       label={title}
-      titleRow={
-        <>
-          {onBack && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onMouseDown={event => event.preventDefault()}
-              onClick={onBack}
-              aria-label="Go back to previous step"
-            >
-              <IconArrowLeft aria-hidden="true" />
-              Back
-            </Button>
-          )}
-          <Txt
-            tone="ink"
-            key={step}
-            as="p"
-            aria-hidden="true"
-            variant="body"
-            className={cn('min-w-0 flex-1 truncate', stepTransition)}
-          >
-            {title}
-          </Txt>
-          {onSkip && (
-            <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
-              Skip
-              <IconArrowRight aria-hidden="true" />
-            </Button>
-          )}
-          <CreateFactoryStepBars step={step} />
-        </>
-      }
-      input={
-        <CreateFactoryInput
-          autoFocus
-          placeholder={placeholder}
-          searchable={searchable}
-          value={value}
-          onValueChange={onValueChange}
-        />
-      }
+      className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
     >
+      <div className="flex shrink-0 items-center gap-3">
+        {onBack && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onBack}
+            aria-label="Go back to previous step"
+          >
+            <IconArrowLeft aria-hidden="true" />
+            Back
+          </Button>
+        )}
+        <Txt
+          tone="ink"
+          key={step}
+          as="p"
+          aria-hidden="true"
+          variant="body"
+          className={cn('min-w-0 flex-1 truncate', stepTransition)}
+        >
+          {title}
+        </Txt>
+        {skippable && (
+          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
+            Skip
+            <IconArrowRight aria-hidden="true" />
+          </Button>
+        )}
+        <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
+          {CREATE_FACTORY_STEPS.map((item, index) => (
+            <li
+              key={item}
+              aria-current={item === step ? 'step' : undefined}
+              className={cn(
+                'h-1 w-6 rounded-full transition-colors',
+                index <= stepIndex ? 'bg-success-indicator' : 'bg-fill',
+              )}
+            />
+          ))}
+        </ol>
+      </div>
+
+      <CommandPaletteInput
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onValueChange={onValueChange}
+        rightSlot={<Kbd size="sm">Esc</Kbd>}
+        wrapperClassName={cn('h-14 px-4', !searchable && '[&>svg]:hidden')}
+      />
+
+      <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">
+        <Kbd size="sm">↑</Kbd>
+        <Kbd size="sm">↓</Kbd>
+        <Kbd size="sm">↵</Kbd>
+        <Kbd size="sm">Esc</Kbd>
+      </div>
+
       <CommandList
         scrollArea
         aria-label={title}
@@ -100,74 +144,7 @@ export function CreateFactoryPalette({
           {children}
         </div>
       </CommandList>
-    </CreateFactoryPaletteLayout>
-  );
-}
-
-export function CreateFactoryPaletteLayout({
-  label,
-  titleRow,
-  input,
-  children,
-}: {
-  label: string;
-  titleRow: ReactNode;
-  input: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-0 flex-col gap-2 pt-6">
-      <Command
-        loop
-        shouldFilter={false}
-        label={label}
-        className="flex max-h-[34rem] w-full flex-col gap-2 overflow-visible bg-transparent"
-      >
-        <div className="flex shrink-0 items-center gap-3">{titleRow}</div>
-        {input}
-        <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">
-          <Kbd size="sm">↑</Kbd>
-          <Kbd size="sm">↓</Kbd>
-          <Kbd size="sm">↵</Kbd>
-          <Kbd size="sm">Esc</Kbd>
-        </div>
-        {children}
-      </Command>
-    </div>
-  );
-}
-
-export function CreateFactoryStepBars({ step }: { step?: CreateFactoryFlowStep }) {
-  const stepIndex = step ? CREATE_FACTORY_STEPS.indexOf(step) : -1;
-
-  return (
-    <ol className="flex shrink-0 gap-1" aria-label={step && `Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
-      {CREATE_FACTORY_STEPS.map((item, index) => (
-        <li
-          key={item}
-          aria-current={item === step ? 'step' : undefined}
-          className={cn(
-            'h-1 w-6 rounded-full transition-colors',
-            index <= stepIndex ? 'bg-success-indicator' : 'bg-fill',
-          )}
-        />
-      ))}
-    </ol>
-  );
-}
-
-export function CreateFactoryInput({
-  searchable = true,
-  ...props
-}: Omit<ComponentPropsWithoutRef<typeof CommandPaletteInput>, 'rightSlot' | 'wrapperClassName'> & {
-  searchable?: boolean;
-}) {
-  return (
-    <CommandPaletteInput
-      {...props}
-      rightSlot={<Kbd size="sm">Esc</Kbd>}
-      wrapperClassName={cn('h-14 px-4', !searchable && '[&>svg]:hidden')}
-    />
+    </Command>
   );
 }
 

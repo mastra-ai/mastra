@@ -3,7 +3,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import type { ReactNode } from 'react';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import {
@@ -12,15 +11,18 @@ import {
   useSetDefaultModel,
 } from '../../../../../../hooks/use-default-model';
 import { ModelCombobox } from '../../ModelCombobox';
+import { PendingField } from '../../../../../ui/PendingField';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
+  loading,
   savedModelId,
   savedThinkingLevel,
   models,
   fallbackModelId,
 }: {
+  loading: boolean;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
@@ -31,6 +33,7 @@ export function PersonalDefaultModelPicker({
   const applyDefaultModel = useApplyDefaultModel();
 
   const busy = setDefaultModel.isPending || clearDefaultModel.isPending || applyDefaultModel.isPending;
+  const actionsDisabled = busy || (!loading && !savedModelId);
   const unavailableModelId =
     savedModelId && models && !models.some(model => model.id === savedModelId) ? savedModelId : undefined;
   const errorText = (setDefaultModel.error ?? clearDefaultModel.error ?? applyDefaultModel.error)?.message;
@@ -47,27 +50,36 @@ export function PersonalDefaultModelPicker({
   };
 
   return (
-    <PersonalDefaultModelFields
-      model={
-        <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
+    <div inert={loading} className="flex min-w-0 flex-col gap-2">
+      <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
+        <PendingField pending={loading} className="min-w-0 flex-1">
           <ModelCombobox
             models={models ?? []}
             value={savedModelId ?? ''}
             onValueChange={saveDefaultModel}
             fallbackModelId={fallbackModelId}
             placeholder="Select a model"
+            pending={loading}
             aria-label="Personal default model"
             size="sm"
-            className="min-w-0 flex-1"
             disabled={busy}
           />
-          <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
-        </ButtonsGroup>
-      }
-      actionsDisabled={busy || !savedModelId}
-      onApply={() => applyDefaultModel.mutate()}
-      onClear={clearDefault}
-    >
+        </PendingField>
+        <PersonalThinkingControl
+          loading={loading}
+          savedModelId={savedModelId}
+          savedThinkingLevel={savedThinkingLevel}
+          saving={busy}
+        />
+      </ButtonsGroup>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={actionsDisabled} onClick={() => applyDefaultModel.mutate()}>
+          Apply to my running chats
+        </Button>
+        <Button size="sm" variant="ghost" disabled={actionsDisabled} onClick={clearDefault}>
+          Clear
+        </Button>
+      </div>
       {unavailableModelId && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           None of your connected accounts can run {formatModelName(unavailableModelId)}. Choose another model or connect
@@ -80,37 +92,6 @@ export function PersonalDefaultModelPicker({
         </Txt>
       )}
       {applyDefaultModel.data && <AppliedSessionsSummary result={applyDefaultModel.data} />}
-    </PersonalDefaultModelFields>
-  );
-}
-
-export function PersonalDefaultModelFields({
-  model,
-  actionsDisabled = false,
-  actionsInert = false,
-  onApply,
-  onClear,
-  children,
-}: {
-  model: ReactNode;
-  actionsDisabled?: boolean;
-  actionsInert?: boolean;
-  onApply?: () => void;
-  onClear?: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-2">
-      {model}
-      <div inert={actionsInert} className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={actionsDisabled} onClick={onApply}>
-          Apply to my running chats
-        </Button>
-        <Button size="sm" variant="ghost" disabled={actionsDisabled} onClick={onClear}>
-          Clear
-        </Button>
-      </div>
-      {children}
     </div>
   );
 }

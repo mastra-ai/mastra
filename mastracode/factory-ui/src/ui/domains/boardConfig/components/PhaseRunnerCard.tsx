@@ -38,7 +38,7 @@ export function PhaseRunnerCard({
 }: {
   factoryId: string;
   boardId: string;
-  phase: StoredPhaseInfo;
+  phase: Pick<StoredPhaseInfo, 'key' | 'name' | 'runner'>;
   /** Undefined until the factory's skills load, so a skill is never called missing early. */
   skills: FactorySkillInfo[] | undefined;
 }) {

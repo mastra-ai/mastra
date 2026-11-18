@@ -23,8 +23,6 @@ import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconC
 import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 
-const neighbourLabelClass = 'hidden @2xl:inline';
-
 export function CardStageBar({
   item,
   sessionItems,
@@ -150,7 +148,6 @@ export function CardStageBarSkeleton() {
   return (
     <div role="status" aria-label="Loading card stage" className={headerCapsuleClass}>
       <div aria-hidden className="contents">
-        <Skeleton className="h-control-sm w-control-sm rounded-full motion-reduce:before:animate-none @2xl:w-24" />
         <Skeleton className="h-control-sm w-28 rounded-full motion-reduce:before:animate-none" />
         <Skeleton className="h-control-sm w-control-sm rounded-full motion-reduce:before:animate-none @2xl:w-24" />
       </div>
@@ -184,7 +181,7 @@ function NeighbourButton({
       onClick={() => onMove(step.phase.id)}
     >
       {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
-      <span className={neighbourLabelClass}>{name}</span>
+      <span className="hidden @2xl:inline">{name}</span>
       {direction === 'next' ? <IconChevronRightMedium aria-hidden /> : null}
     </Button>
   );

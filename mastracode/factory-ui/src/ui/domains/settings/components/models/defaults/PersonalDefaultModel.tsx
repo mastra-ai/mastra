@@ -3,20 +3,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDefaultModelQuery } from '../../../../../../hooks/use-default-model';
 import { useFallbackModelQuery, usePersonalAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
 import { PersonalDefaultModelPicker } from './PersonalDefaultModelPicker';
-import { PersonalDefaultModelSkeleton } from './PersonalDefaultModelSkeleton';
 
 export function PersonalDefaultModel() {
   const defaultModelQuery = useDefaultModelQuery();
   const modelsQuery = usePersonalAvailableModelsQuery();
   const fallbackModelQuery = useFallbackModelQuery({ scope: 'user' });
 
-  if (defaultModelQuery.isPending) {
-    return (
-      <div role="status" aria-label="Loading your default model" className="min-w-0">
-        <PersonalDefaultModelSkeleton />
-      </div>
-    );
-  }
   if (defaultModelQuery.error) {
     return (
       <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
@@ -27,8 +19,9 @@ export function PersonalDefaultModel() {
 
   return (
     <PersonalDefaultModelPicker
-      savedModelId={defaultModelQuery.data.modelId ?? undefined}
-      savedThinkingLevel={defaultModelQuery.data.thinkingLevel}
+      loading={defaultModelQuery.isPending}
+      savedModelId={defaultModelQuery.data?.modelId ?? undefined}
+      savedThinkingLevel={defaultModelQuery.data?.thinkingLevel ?? null}
       models={modelsQuery.data}
       fallbackModelId={fallbackModelQuery.data}
     />

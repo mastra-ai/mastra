@@ -1,13 +1,12 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsItem } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
-import { DebugSectionSkeleton } from './DebugSectionSkeleton';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
 
@@ -42,25 +41,31 @@ export function DebugSection() {
       title="Running versions"
       description="The Mastra packages this Factory server was built with. Include them when you report an issue."
       action={
-        query.isPending ? (
-          <Skeleton aria-hidden className="size-control-sm rounded-full motion-reduce:before:animate-none" />
-        ) : (
-          query.data && (
+        !query.isError && (
+          <div inert={query.isPending}>
             <CopyButton
-              content={formatVersions(query.data)}
+              content={query.data ? formatVersions(query.data) : ''}
               tooltip="Copy versions"
               variant="ghost"
               size="icon-sm"
               showToast={false}
             />
-          )
+          </div>
         )
       }
     >
       {query.isPending ? (
         <div role="status" aria-label="Loading versions">
           <VersionsList
-            packages={<DebugSectionSkeleton />}
+            packages={Array.from({ length: 5 }, (_, index) => (
+              <SettingsItem
+                key={index}
+                aria-hidden
+                title={<SkeletonText line="text-label" className="w-40 max-w-full motion-reduce:before:animate-none" />}
+              >
+                <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />
+              </SettingsItem>
+            ))}
             nodeVersion={
               <span aria-hidden>
                 <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />

@@ -8,7 +8,7 @@ import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useParams } from 'react-router';
 
-import { useBoardQuery } from '../../hooks/useBoardEditor';
+import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardConfigPath, boardSkillPath, boardSkillsPath } from '../domains/boardConfig/boardConfigPaths';
@@ -30,7 +30,7 @@ export function FactorySkillPage() {
   const openedInApp = historyKey !== 'default' && navigationType !== NavigationType.Replace;
   const { isMobile, desktopState } = useSidebar();
   const sidebarHidden = isMobile || desktopState === 'collapsed';
-  const board = useBoardQuery(factory.id, boardId).data?.board;
+  const board = useBoardCatalog(factory.id).data?.find(other => other.id === boardId);
   const skillsPath = boardSkillsPath(factory.id, boardId);
 
   const goBack = () => {
@@ -43,7 +43,7 @@ export function FactorySkillPage() {
       sidebarHidden && board ? (
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
           <Crumb as={Link} to={boardConfigPath(factory.id, boardId)}>
-            {board.name}
+            {board.name ?? board.title}
           </Crumb>
           <Crumb as={Link} to={skillsPath}>
             Skills
@@ -74,7 +74,15 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   const skills = useFactorySkillsQuery(factoryId);
   const skillsPath = boardSkillsPath(factoryId, boardId);
 
-  if (skills.isPending) return <SkillEditorSkeleton toolbar={skillName !== undefined} />;
+  if (skills.isPending) {
+    return skillName === undefined ? (
+      <div role="status" aria-label="Loading skills" inert>
+        <NewSkillEditor factoryId={factoryId} onCreated={() => undefined} />
+      </div>
+    ) : (
+      <SkillEditorSkeleton name={skillName} />
+    );
+  }
   if (skills.isLoadingError) {
     return (
       <LoadErrorState

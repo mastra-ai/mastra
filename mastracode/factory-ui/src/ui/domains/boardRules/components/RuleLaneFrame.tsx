@@ -1,5 +1,7 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { CircleDashed, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { isOpenedLane, laneText } from '../ruleLanes';
@@ -50,11 +52,21 @@ export function LaneCard({
   );
 }
 
-export function LaneFooter({ children }: { children: ReactNode }) {
+export function LaneEnd({ fallback, onAdd }: { fallback: ReactNode; onAdd: (() => void) | undefined }) {
   return (
-    <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
-      {children}
-    </Txt>
+    <li className="flex flex-wrap items-center gap-3">
+      {fallback !== undefined && (
+        <Txt as="span" variant="caption" tone="muted" className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+          <CircleDashed className="size-icon-md shrink-0" aria-hidden />
+          {fallback}
+        </Txt>
+      )}
+      {onAdd && (
+        <Button variant="ghost" size="sm" icon={<Plus />} onClick={onAdd}>
+          Add rule
+        </Button>
+      )}
+    </li>
   );
 }
 

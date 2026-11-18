@@ -4,13 +4,14 @@ import { useLocation } from 'react-router';
 
 import { useVoiceSettings } from '../../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
-import { SpeechToTextKeys, SpeechToTextKeysSkeleton } from './SpeechToTextKeys';
+import { SpeechToTextKeys } from './SpeechToTextKeys';
 import { VoiceInputLayout } from './VoiceInputLayout';
 import { VoiceModelSettings, VoiceModelSettingsSkeleton } from './VoiceModelSettings';
 
 export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
   const settingsQuery = useVoiceSettings(factoryId);
   const settings = settingsQuery.data;
+  const scope = settings?.scope;
   const { hash, key } = useLocation();
   const anchorRef = useRef<HTMLElement>(null);
 
@@ -22,7 +23,7 @@ export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
     return (
       <VoiceInputLayout
         anchorRef={anchorRef}
-        scope={undefined}
+        scope={scope}
         models={
           <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
             {settingsQuery.error.message}
@@ -33,23 +34,18 @@ export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
     );
   }
 
-  if (!settings) {
-    return (
-      <VoiceInputLayout
-        anchorRef={anchorRef}
-        scope={undefined}
-        models={<VoiceModelSettingsSkeleton />}
-        keys={<SpeechToTextKeysSkeleton />}
-      />
-    );
-  }
-
   return (
     <VoiceInputLayout
       anchorRef={anchorRef}
-      scope={settings.scope}
-      models={<VoiceModelSettings factoryId={factoryId} settings={settings} />}
-      keys={<SpeechToTextKeys keys={settings.keys} scope={settings.scope} />}
+      scope={scope}
+      models={
+        settings ? (
+          <VoiceModelSettings factoryId={factoryId} settings={settings} />
+        ) : (
+          <VoiceModelSettingsSkeleton scope={scope} />
+        )
+      }
+      keys={<SpeechToTextKeys keys={settings?.keys} scope={scope} />}
     />
   );
 }

@@ -1,13 +1,16 @@
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+
+import { GitLabIcon } from '../../../../ui/icons';
 import { OnboardingConnectionRowSkeleton } from './OnboardingConnectionSkeleton';
 import { OnboardingInset } from './OnboardingInset';
 
 export function OnboardingHostRowsSkeleton({ label }: { label: string }) {
   return (
     <OnboardingInset>
-      <SkeletonRows label={label} rows={2} className="gap-0.5">
-        <OnboardingConnectionRowSkeleton />
-      </SkeletonRows>
+      <div role="status" aria-label={label} className="flex flex-col gap-0.5">
+        <OnboardingConnectionRowSkeleton icon={<GithubIcon />} name="GitHub" />
+        <OnboardingConnectionRowSkeleton icon={<GitLabIcon />} name="GitLab" />
+      </div>
     </OnboardingInset>
   );
 }

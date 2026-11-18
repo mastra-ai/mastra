@@ -14,7 +14,6 @@ import type { OnboardingModelScope } from '../../services/onboardingFlow';
 import { createBlockedReason } from '../../services/createBlockedReason';
 import { modelSectionIndex } from '../../services/onboardingSteps';
 import { OnboardingAccountLanes } from './OnboardingAccountLanes';
-import { OnboardingChoiceRowsSkeleton } from './OnboardingChoiceRowsSkeleton';
 import { OnboardingCreateNotice } from './OnboardingCreateNotice';
 import { OnboardingInset } from './OnboardingInset';
 import { OnboardingPageAction } from './OnboardingPageAction';
@@ -73,37 +72,25 @@ export function OnboardingModelSection({
             )
           }
         >
-          {loading ? (
-            <OnboardingChoiceRowsSkeleton label="Loading account options" rows={3} />
-          ) : (
-            <OnboardingScopeChoice
-              scope={setup.scope}
-              companyLocked={setup.companyLocked}
-              // A personal gateway connect that lands after a switch to hybrid would select a gateway it can't use.
-              disabled={creating || setup.personal.connection.connectingGateway}
-              onScopeChange={next => {
-                // Hybrid sessions can't run on the gateway, so a personal lane left on it starts over.
-                const { connection } = setup.personal;
-                if (
-                  next === 'hybrid' &&
-                  connection.gatewayProvider &&
-                  connection.provider === connection.gatewayProvider
-                )
-                  connection.clear();
-                onScopeChange(next);
-              }}
-            />
-          )}
+          <OnboardingScopeChoice
+            scope={loading ? undefined : setup.scope}
+            companyLocked={setup.companyLocked}
+            // A personal gateway connect that lands after a switch to hybrid would select a gateway it can't use.
+            disabled={creating || setup.personal.connection.connectingGateway}
+            onScopeChange={next => {
+              // Hybrid sessions can't run on the gateway, so a personal lane left on it starts over.
+              const { connection } = setup.personal;
+              if (next === 'hybrid' && connection.gatewayProvider && connection.provider === connection.gatewayProvider)
+                connection.clear();
+              onScopeChange(next);
+            }}
+          />
         </AccountsCard>
       )}
       <OnboardingStepCard
         section="model"
         index={modelSectionIndex(local)}
-        headerEnd={
-          <SectionDetail key={local ? 'local' : setup.scope}>
-            {local ? 'Local connection' : ACCOUNT_DETAILS[setup.scope]}
-          </SectionDetail>
-        }
+        headerEnd={<ModelDetail local={local} scope={loading ? undefined : setup.scope} />}
       >
         {loading ? (
           <LoadingInset label="Loading model providers" rows={1} />
@@ -146,12 +133,9 @@ export function OnboardingModelSectionSkeleton() {
   return (
     <>
       <AccountsCard>
-        <OnboardingChoiceRowsSkeleton label="Loading account options" rows={3} />
+        <OnboardingScopeChoice companyLocked={false} disabled={false} onScopeChange={() => undefined} />
       </AccountsCard>
-      <OnboardingStepCard
-        section="model"
-        headerEnd={<SkeletonText line="text-meta" className="w-40 motion-reduce:before:animate-none" />}
-      >
+      <OnboardingStepCard section="model" headerEnd={<ModelDetail local={false} />}>
         <LoadingInset label="Loading model providers" rows={1} />
       </OnboardingStepCard>
       <OnboardingPageAction>
@@ -182,6 +166,12 @@ function SectionDetail({ children }: { children: ReactNode }) {
       {children}
     </Txt>
   );
+}
+
+function ModelDetail({ local, scope }: { local: boolean; scope?: OnboardingModelScope }) {
+  if (local) return <SectionDetail key="local">Local connection</SectionDetail>;
+  if (!scope) return <SkeletonText line="text-meta" className="w-40 motion-reduce:before:animate-none" />;
+  return <SectionDetail key={scope}>{ACCOUNT_DETAILS[scope]}</SectionDetail>;
 }
 
 function LoadingInset({ label, rows }: { label: string; rows: number }) {

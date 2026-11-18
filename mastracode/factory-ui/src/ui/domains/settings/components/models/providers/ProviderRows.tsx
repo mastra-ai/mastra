@@ -15,12 +15,12 @@ export const ROW_TITLE = 'flex min-w-0 flex-1 flex-col';
 
 export function ProviderRows({
   children,
-  addDisabled = false,
+  addDisabled,
   addInert = false,
   onAdd,
 }: {
-  children?: ReactNode;
-  addDisabled?: boolean;
+  children: ReactNode;
+  addDisabled: boolean;
   addInert?: boolean;
   onAdd?: () => void;
 }) {

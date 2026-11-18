@@ -2,11 +2,13 @@ import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleto
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
+import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { unattended } from '../phaseSummary';
-import { PhaseColumn, PhaseMap } from './BoardOverview';
-import { PhaseRunnerCardSkeleton } from './PhaseRunnerCard';
-import { WalkthroughSteps } from './PhaseWalkthrough';
-import { StartsToggleSkeleton } from './StartsToggle';
+import { AddPhaseButton } from './AddPhaseButton';
+import { BoardOverview, PhaseColumn, PhaseMap } from './BoardOverview';
+import { PhaseRunnerCard, PhaseRunnerCardSkeleton } from './PhaseRunnerCard';
+import { outlineOfInstalled, WalkthroughSteps } from './PhaseWalkthrough';
+import { StartsToggle, StartsToggleSkeleton } from './StartsToggle';
 
 const BAR = 'motion-reduce:before:animate-none';
 
@@ -14,11 +16,65 @@ function CaptionPlaceholder({ width }: { width: string }) {
   return <SkeletonText line="text-caption" className={cn(width, BAR)} />;
 }
 
-export function BoardOverviewSkeleton({ columns = 4 }: { columns?: number }) {
+export function BoardOverviewSkeleton({
+  factoryId,
+  boardId,
+  board,
+  skills,
+  sidebarHidden,
+}: {
+  factoryId: string;
+  boardId: string;
+  board: InstalledBoardInfo | undefined;
+  skills: FactorySkillInfo[] | undefined;
+  sidebarHidden: boolean;
+}) {
+  if (board) {
+    return (
+      <div role="status" aria-label="Loading board" inert>
+        <BoardOverview
+          factoryId={factoryId}
+          boardId={boardId}
+          action={
+            sidebarHidden ? (
+              <AddPhaseButton factoryId={factoryId} boardId={boardId} board={undefined} disabled={false} />
+            ) : undefined
+          }
+          phases={board.phases.map(phase => {
+            const name = phase.name ?? phase.title;
+            return {
+              outline: { ...outlineOfInstalled(phase), runs: phase.kind === 'working' },
+              starts: (
+                <StartsToggle
+                  label={name}
+                  autoStart={phase.autoStart ?? false}
+                  autoStartWhen={phase.autoStartWhen}
+                  onChange={() => undefined}
+                />
+              ),
+              agent: (
+                <PhaseRunnerCard
+                  factoryId={factoryId}
+                  boardId={boardId}
+                  phase={{
+                    key: phase.id,
+                    name,
+                    runner: { skill: phase.skill, goal: phase.goal, context: phase.context },
+                  }}
+                  skills={skills}
+                />
+              ),
+            };
+          })}
+        />
+      </div>
+    );
+  }
+
   return (
     <div role="status" aria-label="Loading board">
       <PhaseMap aria-hidden>
-        {Array.from({ length: columns }, (_, index) => (
+        {Array.from({ length: 4 }, (_, index) => (
           <PhaseColumn
             key={index}
             head={

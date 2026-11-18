@@ -24,7 +24,7 @@ export function BoardListGroupSkeleton({ children }: { children: ReactNode }) {
     <DataList.Group aria-hidden className={GROUP_CLASS}>
       <div className={GROUP_HEADER_CLASS}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Skeleton className="size-3.5 shrink-0 motion-reduce:before:animate-none" />
+          <DisclosureChevron direction="right" open className="size-3.5" />
           <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
           <SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />
           <Skeleton className={GROUP_COUNT_SKELETON_CLASS} />

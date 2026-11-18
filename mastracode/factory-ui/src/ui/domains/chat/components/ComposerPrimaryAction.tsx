@@ -9,14 +9,6 @@ interface ComposerPrimaryActionProps {
   onAbort: () => void;
 }
 
-export function ComposerSendButton({ disabled, title }: { disabled: boolean; title?: string }) {
-  return (
-    <Button type="submit" variant="primary" size="icon-sm" disabled={disabled} aria-label="Send message" title={title}>
-      <IconArrowUp />
-    </Button>
-  );
-}
-
 export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAbort }: ComposerPrimaryActionProps) {
   if (showAbort) {
     return (
@@ -36,5 +28,16 @@ export function ComposerPrimaryAction({ showAbort, sendDisabled, sendTitle, onAb
     );
   }
 
-  return <ComposerSendButton disabled={sendDisabled} title={sendTitle} />;
+  return (
+    <Button
+      type="submit"
+      variant="primary"
+      size="icon-sm"
+      disabled={sendDisabled}
+      aria-label="Send message"
+      title={sendTitle}
+    >
+      <IconArrowUp />
+    </Button>
+  );
 }

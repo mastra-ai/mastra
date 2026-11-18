@@ -1,8 +1,10 @@
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight, ListOrdered } from 'lucide-react';
 import { Fragment } from 'react';
 import { Link } from 'react-router';
 
+import { useIntakeOrderQuery } from '../../../../hooks/useIntakeOrder';
 import { boardIntakePath, boardRulesPath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
 
 /**
@@ -10,22 +12,17 @@ import { boardIntakePath, boardRulesPath, INTAKE_ORDER_ANCHOR } from '../../boar
  * and an item no board takes ends in Not routed. Each other board links to its rules; the order is changed on Routing.
  * While intake still runs the old route list, the order decides nothing yet, so none is drawn.
  */
-export function IntakeChain({
-  factoryId,
-  boardKey,
-  order,
-  evaluator,
-}: {
-  factoryId: string;
-  boardKey: string;
-  order: readonly { boardKey: string; name: string }[];
-  evaluator: 'route-list' | 'intake-order';
-}) {
+export function IntakeChain({ factoryId, boardKey }: { factoryId: string; boardKey: string }) {
+  const query = useIntakeOrderQuery(factoryId);
+  if (!query.data && !query.isPending) return null;
+  const order = query.data?.boards ?? [];
   const listed = order.some(board => board.boardKey === boardKey);
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      {evaluator === 'route-list' ? (
+      {!query.data ? (
+        <SkeletonText line="text-caption" className="w-64 max-w-full motion-reduce:before:animate-none" />
+      ) : query.data.evaluator === 'route-list' ? (
         <Txt as="p" variant="caption" tone="muted">
           Intake still files new issues and pull requests by the old route list, not by board.
         </Txt>

@@ -63,7 +63,6 @@ function changesName(changes: WorkspaceChangesSummary): string {
 }
 
 const rowClass = 'flex h-control-sm min-w-0 items-center gap-1.5';
-const detailsRowClass = cn(rowClass, 'gap-3 px-2');
 
 const branchIcon = <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />;
 
@@ -142,14 +141,11 @@ export function WorkspaceSection({
         )}
         <span className="ml-auto flex shrink-0">{action}</span>
       </div>
-      {loading ? (
-        <div aria-hidden className={detailsRowClass}>
-          <SkeletonText line="text-caption" className="h-3 w-32 max-w-full motion-reduce:before:animate-none" />
-          <SkeletonText line="text-caption" className="h-3 w-20 motion-reduce:before:animate-none" />
-        </div>
-      ) : workspace ? (
-        <div className={detailsRowClass}>
-          {workspace.repository ? (
+      {loading || workspace ? (
+        <div className={cn(rowClass, 'gap-3 px-2')}>
+          {loading ? (
+            <SkeletonText line="text-caption" className="h-3 w-32 max-w-full motion-reduce:before:animate-none" />
+          ) : workspace?.repository ? (
             <Txt as="span" variant="caption" tone="muted" className="flex min-w-0 items-center gap-1.5">
               {ProviderIcon ? (
                 <span aria-hidden className="flex shrink-0">
@@ -161,7 +157,12 @@ export function WorkspaceSection({
           ) : null}
           <Txt as="span" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1.5">
             <IconMerged aria-hidden className="size-icon-sm" />
-            into {workspace.baseBranch}
+            into{' '}
+            {workspace ? (
+              workspace.baseBranch
+            ) : (
+              <SkeletonText line="text-caption" className="h-3 w-12 motion-reduce:before:animate-none" />
+            )}
           </Txt>
         </div>
       ) : null}

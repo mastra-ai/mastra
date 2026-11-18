@@ -1,5 +1,6 @@
 import { readOnboardingDraft, readOnboardingStep } from '../services/onboardingFlow';
 import { restoredOnboardingStep } from '../services/onboardingSteps';
+import { OnboardingAccountsNextRow } from './onboarding/OnboardingAccountsRow';
 import { OnboardingCodebaseRow } from './onboarding/OnboardingCodebaseRow';
 import { OnboardingFrame } from './onboarding/OnboardingFrame';
 import { OnboardingHostRowsSkeleton } from './onboarding/OnboardingHostRowsSkeleton';
@@ -8,7 +9,7 @@ import { OnboardingSlot } from './onboarding/OnboardingSlot';
 import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 import { OnboardingNextRow } from './onboarding/OnboardingStepRow';
 import { OnboardingWorkRow } from './onboarding/OnboardingWorkRow';
-import { ProjectManagementFactoryStepSkeleton } from './ProjectManagementFactoryStep';
+import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 
 function OnboardingStepsSkeleton({ label }: { label: string }) {
   const draft = readOnboardingDraft();
@@ -29,7 +30,14 @@ function OnboardingStepsSkeleton({ label }: { label: string }) {
       </OnboardingSlot>
       <OnboardingSlot>
         {openStep === 'project-management' ? (
-          <ProjectManagementFactoryStepSkeleton repository={draft.repository} codeHostSync={draft.codeHostSync} />
+          <div inert>
+            <ProjectManagementFactoryStep
+              onConnect={() => undefined}
+              onContinue={() => undefined}
+              repository={draft.repository}
+              codeHostSync={draft.codeHostSync}
+            />
+          </div>
         ) : (
           <div inert>
             <OnboardingWorkRow
@@ -47,7 +55,7 @@ function OnboardingStepsSkeleton({ label }: { label: string }) {
           <OnboardingModelSectionSkeleton />
         ) : (
           <>
-            <OnboardingNextRow section="accounts" />
+            <OnboardingAccountsNextRow />
             <OnboardingNextRow section="model" />
           </>
         )}

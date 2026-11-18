@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
 import {
   InputNumber,
@@ -8,8 +9,9 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import {
@@ -19,8 +21,8 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { PendingField } from '../../../ui/PendingField';
 import { ModelCombobox } from './ModelCombobox';
-import { OMFlow } from './OMRow';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 type OMRole = 'observer' | 'reflector';
@@ -37,38 +39,9 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   return 'auto';
 }
 
-const CONTROL_SKELETON = <Skeleton aria-hidden className="h-control-sm w-full motion-reduce:before:animate-none" />;
-
-function AttachmentsControl({
-  value,
-  disabled,
-  onValueChange,
-}: {
-  value: AttachmentChoice | undefined;
-  disabled: boolean;
-  onValueChange?: (choice: AttachmentChoice) => void;
-}) {
-  return (
-    <SegmentedControl<AttachmentChoice | ''>
-      aria-label="Observe attachments"
-      size="sm"
-      value={value ?? ''}
-      disabled={disabled}
-      inert={value === undefined}
-      onValueChange={choice => {
-        if (choice) onValueChange?.(choice);
-      }}
-    >
-      <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
-      <SegmentedControlItem value="on">On</SegmentedControlItem>
-      <SegmentedControlItem value="off">Off</SegmentedControlItem>
-    </SegmentedControl>
-  );
-}
-
 // Stays editable while saving: disabling would drop focus mid-edit.
-function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
-  const [draft, setDraft] = useState<number | null>(value);
+function TokenThresholdInput({ value, onCommit }: { value: number | undefined; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(value ?? null);
   // Compared with what was sent, not a saved value whose response may still be in flight.
   const [sent, setSent] = useState(value);
   const [editing, setEditing] = useState(false);
@@ -77,7 +50,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   if (syncedValue !== value) {
     setSyncedValue(value);
     if (!editing) {
-      setDraft(value);
+      setDraft(value ?? null);
       setSent(value);
     }
   }
@@ -85,7 +58,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   const commit = (next: number | null) => {
     const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(sent);
+      setDraft(sent ?? null);
       return;
     }
     setDraft(rounded);
@@ -95,34 +68,36 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   };
 
   return (
-    <InputNumber
-      value={draft}
-      min={1}
-      step={1000}
-      largeStep={10000}
-      format={{ maximumFractionDigits: 0 }}
-      onValueChange={setDraft}
-      onValueCommitted={(next, details) => {
-        // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
-        if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
-      }}
-      className="w-full"
-    >
-      <InputNumberGroup
-        size="sm"
-        onFocus={() => setEditing(true)}
-        onBlur={event => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+    <PendingField pending={value === undefined}>
+      <InputNumber
+        value={draft}
+        min={1}
+        step={1000}
+        largeStep={10000}
+        format={{ maximumFractionDigits: 0 }}
+        onValueChange={setDraft}
+        onValueCommitted={(next, details) => {
+          // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
+          if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
         }}
+        className="w-full"
       >
-        <InputNumberInput onBlur={() => commit(draft)} />
-        <InputGroupAddon align="inline-end" variant="flush">
-          <InputGroupText className="mr-2">tokens</InputGroupText>
-          <InputNumberDecrement />
-          <InputNumberIncrement />
-        </InputGroupAddon>
-      </InputNumberGroup>
-    </InputNumber>
+        <InputNumberGroup
+          size="sm"
+          onFocus={() => setEditing(true)}
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+          }}
+        >
+          <InputNumberInput onBlur={() => commit(draft)} />
+          <InputGroupAddon align="inline-end" variant="flush">
+            <InputGroupText className="mr-2">tokens</InputGroupText>
+            <InputNumberDecrement />
+            <InputNumberIncrement />
+          </InputGroupAddon>
+        </InputNumberGroup>
+      </InputNumber>
+    </PendingField>
   );
 }
 
@@ -164,21 +139,7 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) {
-    return (
-      <div role="status" aria-label="Loading observational-memory settings">
-        <OMFlow
-          observeAfter={CONTROL_SKELETON}
-          observer={CONTROL_SKELETON}
-          reflectAfter={CONTROL_SKELETON}
-          reflector={CONTROL_SKELETON}
-          attachments={<AttachmentsControl value={undefined} disabled={false} />}
-        />
-      </div>
-    );
-  }
-
-  if (omQuery.data === undefined) {
+  if (omQuery.isLoadingError) {
     return (
       <Txt as="p" variant="caption" className="text-destructive-foreground">
         {omQuery.error.message}
@@ -186,12 +147,13 @@ export function OMSection({
     );
   }
 
-  const { config } = omQuery.data;
+  const config = omQuery.data?.config;
   const modelsAvailable =
-    config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
+    !config || (config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available');
 
+  const attachmentChoice = config ? attachmentToChoice(config.observeAttachments) : '';
   return (
-    <div className="flex flex-col gap-4">
+    <div inert={!config} className="flex flex-col gap-4">
       {error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
@@ -209,51 +171,146 @@ export function OMSection({
         </div>
       )}
 
-      <OMFlow
-        observeAfter={
-          <TokenThresholdInput
-            value={config.observationThreshold}
-            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
-          />
-        }
-        observer={
-          <ModelCombobox
-            models={models}
-            value={config.observer.model}
-            auto={{ effectiveModelId: config.observer.effectiveModelId }}
-            placeholder="Select observer model"
-            aria-label="Observer model"
+      <div className="@container flex flex-col gap-3">
+        <ol className="flex flex-col">
+          <OMRow as="li" rail="node" label="Messages" />
+          <OMRow as="li" rail="edge" label="Observe after" info="Message tokens processed before the observer runs.">
+            <TokenThresholdInput
+              value={config?.observationThreshold}
+              onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+            />
+          </OMRow>
+          <OMRow as="li" rail="node" label="Observer" info="Summarizes the conversation into observations.">
+            <PendingField pending={!config}>
+              <ModelCombobox
+                models={models}
+                value={config?.observer.model ?? ''}
+                auto={config && { effectiveModelId: config.observer.effectiveModelId }}
+                placeholder="Select observer model"
+                pending={!config}
+                aria-label="Observer model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('observer', modelId)}
+              />
+            </PendingField>
+          </OMRow>
+          <OMRow
+            as="li"
+            rail="edge"
+            label="Reflect after"
+            info="Observation tokens accumulated before the reflector runs."
+          >
+            <TokenThresholdInput
+              value={config?.reflectionThreshold}
+              onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+            />
+          </OMRow>
+          <OMRow as="li" rail="node" label="Reflector" info="Distills observations into longer-term memory.">
+            <PendingField pending={!config}>
+              <ModelCombobox
+                models={models}
+                value={config?.reflector.model ?? ''}
+                auto={config && { effectiveModelId: config.reflector.effectiveModelId }}
+                placeholder="Select reflector model"
+                pending={!config}
+                aria-label="Reflector model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('reflector', modelId)}
+              />
+            </PendingField>
+          </OMRow>
+        </ol>
+        <OMRow
+          rail="none"
+          label="Attachments"
+          info="Whether attached files are included in observations."
+          controlNamesItself
+        >
+          <SegmentedControl
+            aria-label="Observe attachments"
             size="sm"
+            value={attachmentChoice}
             disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-          />
-        }
-        reflectAfter={
-          <TokenThresholdInput
-            value={config.reflectionThreshold}
-            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
-          />
-        }
-        reflector={
-          <ModelCombobox
-            models={models}
-            value={config.reflector.model}
-            auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-            placeholder="Select reflector model"
-            aria-label="Reflector model"
-            size="sm"
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-          />
-        }
-        attachments={
-          <AttachmentsControl
-            value={attachmentToChoice(config.observeAttachments)}
-            disabled={busy}
-            onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-          />
-        }
-      />
+            onValueChange={choice => {
+              if (choice) attachmentsMutation.mutate({ value: choiceToAttachment(choice) });
+            }}
+          >
+            <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+            <SegmentedControlItem value="on">On</SegmentedControlItem>
+            <SegmentedControlItem value="off">Off</SegmentedControlItem>
+          </SegmentedControl>
+        </OMRow>
+      </div>
     </div>
+  );
+}
+
+type RailMark = 'node' | 'edge' | 'none';
+
+const RAIL_MARKS: Record<RailMark, ReactNode> = {
+  node: (
+    <>
+      <span className="bg-border-strong h-1.5 w-px shrink-0 group-first/row:invisible @min-[30rem]:h-auto @min-[30rem]:flex-1" />
+      <span className="bg-muted-foreground size-2 shrink-0 rounded-full" />
+      <span className="bg-border-strong w-px flex-1 group-last/row:invisible" />
+    </>
+  ),
+  edge: <span className="bg-border-strong w-px flex-1" />,
+  none: null,
+};
+
+type OMRowCellsProps = {
+  label: string;
+  info?: string;
+  controlNamesItself?: boolean;
+  children?: ReactNode;
+};
+
+function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
+  return (
+    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
+      <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
+        {RAIL_MARKS[rail]}
+      </span>
+      <OMRowCells muted={rail !== 'node'} {...cells} />
+    </Row>
+  );
+}
+
+function OMRowCells({
+  label,
+  info,
+  muted,
+  controlNamesItself = false,
+  children,
+}: OMRowCellsProps & { muted: boolean }) {
+  const plainLabel = (
+    <span className="flex w-fit items-center gap-1">
+      <Txt as="span" variant="column" tone={muted ? 'muted' : undefined}>
+        {label}
+      </Txt>
+      {info ? <InfoTooltip aria-label={`About ${label}`}>{info}</InfoTooltip> : null}
+    </span>
+  );
+  if (!children) return plainLabel;
+
+  const control = <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>;
+  if (controlNamesItself) {
+    return (
+      <>
+        {plainLabel}
+        {control}
+      </>
+    );
+  }
+  return (
+    <Field className="contents">
+      <FieldLabel size="smaller" info={info} className={muted ? 'text-muted-foreground' : undefined}>
+        {label}
+      </FieldLabel>
+      {control}
+    </Field>
   );
 }

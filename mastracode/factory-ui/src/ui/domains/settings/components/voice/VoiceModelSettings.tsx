@@ -1,6 +1,6 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import type { VoiceChoice, VoiceSettingsResponse } from '../../../../../api/types';
 import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
 import type { VoiceModel } from '../../../../../hooks/use-voice-settings';
+import { PendingValue } from '../../../../ui/PendingField';
 
 const AUTO = 'auto';
 const AUTO_LABEL = 'Auto';
@@ -70,13 +71,9 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
 
   return (
     <VoiceModelRows
-      inUse={
-        <Txt as="span" variant="caption">
-          {inUseLabel(settings)}
-        </Txt>
-      }
-    >
-      <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
+      label={row.label}
+      description={modelHint(settings, needsKey)}
+      picker={
         <Select value={selectedValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
           <SelectTrigger size="sm" aria-label={row.picker}>
             {voiceModelLabel(models, selected) ?? AUTO_LABEL}
@@ -90,42 +87,58 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
             ))}
           </SelectContent>
         </Select>
-      </SettingsRow>
-    </VoiceModelRows>
+      }
+      inUse={inUseLabel(settings)}
+    />
   );
 }
 
-function VoiceModelRows({ inUse, children }: { inUse: ReactNode; children: ReactNode }) {
+function VoiceModelRows({
+  label,
+  description,
+  picker,
+  inUse,
+}: {
+  label: ReactNode;
+  description: ReactNode;
+  picker: ReactNode;
+  inUse: ReactNode;
+}) {
   return (
     <SettingsContainer>
-      {children}
+      <SettingsRow label={label} description={description}>
+        {picker}
+      </SettingsRow>
       <SettingsItem title="In use for you" description="What the mic uses right now">
-        {inUse}
+        <Txt as="span" variant="caption">
+          {inUse}
+        </Txt>
       </SettingsItem>
     </SettingsContainer>
   );
 }
 
-export function VoiceModelSettingsSkeleton() {
+export function VoiceModelSettingsSkeleton({ scope }: { scope: VoiceSettingsResponse['scope'] | undefined }) {
   return (
     <div role="status" aria-label="Loading voice input">
       <VoiceModelRows
-        inUse={
-          <span aria-hidden>
-            <SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />
-          </span>
+        label={
+          scope ? (
+            MODEL_ROW[scope].label
+          ) : (
+            <SkeletonText line="text-label" className="w-28 motion-reduce:before:animate-none" />
+          )
         }
-      >
-        <SettingsRow
-          aria-hidden
-          label={<SkeletonText line="text-label" className="w-28 motion-reduce:before:animate-none" />}
-          description={
-            <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
-          }
-        >
-          <Skeleton className="h-control-sm w-28 max-w-full rounded-full motion-reduce:before:animate-none" />
-        </SettingsRow>
-      </VoiceModelRows>
+        description={<SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />}
+        picker={
+          <Select value="">
+            <SelectTrigger size="sm" inert aria-busy aria-label={scope && MODEL_ROW[scope].picker}>
+              <PendingValue />
+            </SelectTrigger>
+          </Select>
+        }
+        inUse={<SkeletonText line="text-caption" className="w-24 motion-reduce:before:animate-none" />}
+      />
     </div>
   );
 }

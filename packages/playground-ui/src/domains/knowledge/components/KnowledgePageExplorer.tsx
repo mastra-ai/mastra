@@ -1,6 +1,6 @@
 import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode, Ref } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
@@ -146,7 +146,7 @@ export interface KnowledgeExplorerSource {
 }
 
 export interface KnowledgePageExplorerProps {
-  graph: KnowledgeExplorerGraph;
+  graph: KnowledgeExplorerGraph | undefined;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
   /** `null` clears the selection: a click on empty graph canvas. */
@@ -254,6 +254,7 @@ type InsetStyle = CSSProperties & {
   '--knowledge-tree-drawer-inset': string;
   '--knowledge-drawer-inset': string;
 };
+const PENDING_GRAPH: KnowledgeExplorerGraph = { pages: [], edges: [], pinnedIds: [], truncated: true };
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
@@ -337,6 +338,30 @@ function TreeRowsSkeleton({ label, rows }: { label: string; rows: number }) {
           <SkeletonText className={width} />
         </div>
       ))}
+    </div>
+  );
+}
+
+function GraphSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading graph"
+      className="absolute inset-0 flex items-center justify-center gap-8 pr-(--knowledge-drawer-inset) pl-(--knowledge-tree-inset)"
+    >
+      <div className="flex flex-col items-center gap-16">
+        <Skeleton className="size-5 rounded-full" />
+        <Skeleton className="size-8 rounded-full" />
+      </div>
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-px w-8" />
+        <Skeleton className="size-12 rounded-full" />
+        <Skeleton className="h-px w-8" />
+      </div>
+      <div className="flex flex-col items-center gap-16">
+        <Skeleton className="size-8 rounded-full" />
+        <Skeleton className="size-5 rounded-full" />
+      </div>
     </div>
   );
 }
@@ -778,13 +803,7 @@ function linkLists(pageId: string, { edges, pages }: KnowledgeExplorerPageLinks)
   return { out: side('fromPageId', 'toPageId'), in: side('toPageId', 'fromPageId') };
 }
 
-export function KnowledgeSearchBox({
-  source,
-  onSelect,
-}: {
-  source: KnowledgeExplorerSource;
-  onSelect: (pageId: string) => void;
-}) {
+function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSelect: (pageId: string) => void }) {
   const [query, setQuery] = useState('');
   const search = source.useSearch(query);
   const results = query.trim().length >= MIN_SEARCH_LENGTH ? (search.data?.results ?? []) : [];
@@ -834,65 +853,6 @@ export function KnowledgeSearchBox({
         </div>
       ) : null}
     </div>
-  );
-}
-
-const VIEWS: ReadonlyArray<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly: boolean }> = [
-  { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
-  { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
-  { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
-];
-
-export function KnowledgeExplorerToolbar({
-  tabsRef,
-  view: requestedView,
-  selectedPageId,
-  onViewChange,
-  search,
-  end,
-  flush = false,
-}: {
-  tabsRef?: Ref<HTMLDivElement>;
-  view: KnowledgeExplorerView;
-  selectedPageId: string | null;
-  onViewChange: (view: KnowledgeExplorerView) => void;
-  search: ReactNode;
-  end?: ReactNode;
-  flush?: boolean;
-}) {
-  const narrow = useIsMobile(1024);
-  const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
-  const tabValue = explorerTab(view, view === 'page' && !!selectedPageId);
-  return (
-    <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
-      <ActionRow.Start>
-        <Tabs<KnowledgeExplorerView>
-          ref={tabsRef}
-          value={tabValue}
-          defaultTab={tabValue}
-          onValueChange={next => onViewChange(next)}
-          aria-label="View"
-        >
-          <TabList variant="pill-ghost" size="sm">
-            {VIEWS.map(option => (
-              <Tab
-                key={option.value}
-                value={option.value}
-                disabled={option.value === 'page' && !selectedPageId}
-                className={option.narrowOnly ? 'lg:hidden' : undefined}
-              >
-                <Icon size="xs">{option.icon}</Icon>
-                <Txt variant="caption" className="text-inherit">
-                  {option.label}
-                </Txt>
-              </Tab>
-            ))}
-          </TabList>
-        </Tabs>
-        {search}
-      </ActionRow.Start>
-      {end ? <ActionRow.End>{end}</ActionRow.End> : null}
-    </ActionRow>
   );
 }
 
@@ -1013,7 +973,7 @@ function useLazyTree(
  * page instead.
  */
 export function KnowledgePageExplorer({
-  graph,
+  graph: hostGraph,
   source,
   selectedPageId,
   onSelect,
@@ -1022,6 +982,7 @@ export function KnowledgePageExplorer({
   toolbarEnd,
   flush = false,
 }: KnowledgePageExplorerProps) {
+  const graph = hostGraph ?? PENDING_GRAPH;
   const narrow = useIsMobile(1024);
   const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
@@ -1321,6 +1282,13 @@ export function KnowledgePageExplorer({
   // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
+  const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
+    { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
+    { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
+    { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
+  ];
+
+  const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
@@ -1391,7 +1359,7 @@ export function KnowledgePageExplorer({
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
-        {source.useTreeLevels && lazy.rootsPending ? (
+        {(source.useTreeLevels ? lazy.rootsPending : !hostGraph) ? (
           <div className="p-2">
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
@@ -1422,16 +1390,36 @@ export function KnowledgePageExplorer({
   return (
     <KnowledgePagesByRef.Provider value={fetchedPages}>
       <div className={`flex min-h-0 flex-1 flex-col ${flush ? '' : 'gap-2'}`}>
-        <KnowledgeExplorerToolbar
-          tabsRef={viewTabs}
-          view={requestedView}
-          selectedPageId={selectedPageId}
-          onViewChange={onViewChange}
-          search={<KnowledgeSearchBox source={source} onSelect={selectFromSearch} />}
-          end={toolbarEnd}
-          flush={flush}
-        />
-        {!lazyMode && graph.truncated && !showPage ? (
+        <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
+          <ActionRow.Start>
+            <Tabs<KnowledgeExplorerView>
+              ref={viewTabs}
+              value={tabValue}
+              defaultTab={tabValue}
+              onValueChange={next => onViewChange(next)}
+              aria-label="View"
+            >
+              <TabList variant="pill-ghost" size="sm">
+                {views.map(option => (
+                  <Tab
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.value === 'page' && !selectedPageId}
+                    className={option.narrowOnly ? 'lg:hidden' : undefined}
+                  >
+                    <Icon size="xs">{option.icon}</Icon>
+                    <Txt variant="caption" className="text-inherit">
+                      {option.label}
+                    </Txt>
+                  </Tab>
+                ))}
+              </TabList>
+            </Tabs>
+            <SearchBox source={source} onSelect={selectFromSearch} />
+          </ActionRow.Start>
+          {toolbarEnd ? <ActionRow.End>{toolbarEnd}</ActionRow.End> : null}
+        </ActionRow>
+        {!lazyMode && hostGraph?.truncated && !showPage ? (
           <Txt variant="caption" tone="muted" className={flush ? 'px-3 pt-2' : undefined}>
             The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
           </Txt>
@@ -1541,7 +1529,8 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown && !pageOverGraph ? (
+              {graphShown && !pageOverGraph && !hostGraph ? <GraphSkeleton /> : null}
+              {graphShown && !pageOverGraph && hostGraph ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}

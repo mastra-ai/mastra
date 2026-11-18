@@ -4,9 +4,13 @@ import { FactorySectionLayout } from './domains/factory/components/FactorySectio
 import { SidebarGlobalSearchTrigger } from './domains/search/components/SidebarGlobalSearchButton';
 import { FactorySwitcherSkeleton } from './domains/workspaces/components/FactorySwitcherSkeleton';
 import { SessionRowsSkeleton } from './domains/workspaces/components/SessionRowsSkeleton';
-import { SessionsSectionLayout } from './domains/workspaces/components/SessionsSection';
+import { SessionsPropertiesMenu, SessionsSectionLayout } from './domains/workspaces/components/SessionsSection';
 import { useSessionListView } from './domains/workspaces/hooks/useSessionListView';
-import { SidebarNavigationSkeleton, SidebarNavListSkeleton } from './ui/SidebarNavigationSkeleton';
+import {
+  SidebarIconButtonSkeleton,
+  SidebarNavigationSkeleton,
+  SidebarNavListSkeleton,
+} from './ui/SidebarNavigationSkeleton';
 
 export function AppSidebarSkeleton() {
   const { view } = useSessionListView();
@@ -21,17 +25,22 @@ export function AppSidebarSkeleton() {
       }
       navLabel="Main"
       footer={<SidebarSettingsLinkSkeleton />}
+      inert
     >
       <MainNavigationLayout
         newSession={<SidebarNavListSkeleton />}
         sections={
           <>
-            <FactorySectionLayout>
+            <FactorySectionLayout headerAction={<SidebarIconButtonSkeleton />}>
               <li>
                 <SidebarNavigationSkeleton label="Loading boards" rows={1} />
               </li>
             </FactorySectionLayout>
-            <SessionsSectionLayout list={<SessionRowsSkeleton label="Loading sessions" compact={view.compact} />} />
+            <SessionsSectionLayout
+              newSession={<SidebarIconButtonSkeleton />}
+              properties={<SessionsPropertiesMenu />}
+              list={<SessionRowsSkeleton label="Loading sessions" compact={view.compact} />}
+            />
           </>
         }
       />

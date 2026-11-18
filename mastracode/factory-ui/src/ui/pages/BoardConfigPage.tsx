@@ -32,21 +32,23 @@ export function BoardConfigPage() {
   const sidebarHidden = isMobile || desktopState === 'collapsed';
   const query = useBoardQuery(factory.id, boardId);
   const skills = useFactorySkillsQuery(factory.id);
-  const installedPhases = useBoardCatalog(factory.id).data?.find(other => other.id === boardId)?.phases;
-  const installedKind = installedPhases?.find(phase => phase.id === phaseKey)?.kind;
+  const installed = useBoardCatalog(factory.id).data?.find(other => other.id === boardId);
 
   const board = query.data?.board;
   // Phases added but not yet saved have pages too.
   const shownDraft = useShownDraft(factory.id, boardId, board);
   const shownPhase = phaseKey ? shownDraft?.phases.find(phase => phase.key === phaseKey) : undefined;
   const generalPath = boardConfigPath(factory.id, boardId);
+  const pendingPhase = query.isPending ? installed?.phases.find(phase => phase.id === phaseKey) : undefined;
+  const boardName = shownDraft?.name || board?.name || installed?.name || installed?.title;
+  const phaseName = shownPhase?.name ?? pendingPhase?.name ?? pendingPhase?.title;
 
   const slots = useSidebarHeaderSlots({
     breadcrumbs:
-      sidebarHidden && board ? (
+      sidebarHidden && boardName ? (
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
           <Crumb as={Link} to={boardPath(factory.id, boardId)}>
-            {shownDraft?.name || board.name}
+            {boardName}
           </Crumb>
           {phaseKey ? (
             <Crumb as={Link} to={generalPath}>
@@ -57,9 +59,9 @@ export function BoardConfigPage() {
               Configure
             </Crumb>
           )}
-          {shownPhase && (
+          {phaseName && (
             <Crumb as="span" isCurrent>
-              {shownPhase.name}
+              {phaseName}
             </Crumb>
           )}
         </Breadcrumb>
@@ -69,7 +71,7 @@ export function BoardConfigPage() {
   const headerColumn = cn(SETTINGS_COLUMN, phaseKey ? 'pb-8' : 'pb-3');
   const header = query.isPending ? (
     <div className={headerColumn}>
-      <BoardConfigHeaderSkeleton phase={phaseKey !== undefined} />
+      <BoardConfigHeaderSkeleton boardId={boardId} phaseKey={phaseKey} board={installed} />
     </div>
   ) : query.isSuccess && (!phaseKey || shownPhase) ? (
     <div className={headerColumn}>
@@ -88,9 +90,22 @@ export function BoardConfigPage() {
       <div className={phaseKey || query.isError ? cn(SETTINGS_COLUMN, !phaseKey && 'px-4') : OVERVIEW_SURFACE}>
         {query.isPending ? (
           phaseKey ? (
-            <PhaseConfigSkeleton working={installedKind === undefined || installedKind === 'working'} />
+            <PhaseConfigSkeleton
+              factoryId={factory.id}
+              boardId={boardId}
+              phaseKey={phaseKey}
+              phases={installed?.phases}
+              skills={skills.data?.skills}
+              skillsEditable={skills.data?.canEdit ?? false}
+            />
           ) : (
-            <BoardOverviewSkeleton columns={installedPhases?.length} />
+            <BoardOverviewSkeleton
+              factoryId={factory.id}
+              boardId={boardId}
+              board={installed}
+              skills={skills.data?.skills}
+              sidebarHidden={sidebarHidden}
+            />
           )
         ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
           <EmptyState

@@ -162,41 +162,44 @@ export function SourcePicker(props: SourcePickerProps) {
   return (
     <Drawer {...sidePanel} open={open} onOpenChange={setOpen}>
       <div role="group" aria-label={label} className="flex min-w-0 flex-col">
-        {selected.length > 0 && (
-          <ul className="contents">
-            {selected.map(({ item, groupLabel }) => {
-              const details = itemDetails?.(item);
-              return (
-                <li key={item.id} className={SELECTED_SOURCE_ROW}>
-                  <SourceItemSummary
-                    item={item}
-                    icon={itemIcon}
-                    context={[groupLabel, item.hint]}
-                    description={itemDescription?.(item.id)}
-                  />
-                  <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
-                    {itemActions?.(item)}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      icon={<TrashIcon />}
-                      aria-label={`Remove ${sourcePickerItemText(item)}`}
-                      onClick={() => {
-                        onToggleItem(item.id);
-                        requestAnimationFrame(() => trigger.current?.focus());
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                  {details && <div className="min-w-0 basis-full">{details}</div>}
-                </li>
-              );
-            })}
-          </ul>
+        {loading ? (
+          <SelectedSourcesSkeleton label={label} icon={itemIcon} ids={selectedIds ?? []} />
+        ) : (
+          selected.length > 0 && (
+            <ul className="contents">
+              {selected.map(({ item, groupLabel }) => {
+                const details = itemDetails?.(item);
+                return (
+                  <li key={item.id} className={SELECTED_SOURCE_ROW}>
+                    <SourceItemSummary
+                      item={item}
+                      icon={itemIcon}
+                      context={[groupLabel, item.hint]}
+                      description={itemDescription?.(item.id)}
+                    />
+                    <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
+                      {itemActions?.(item)}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<TrashIcon />}
+                        aria-label={`Remove ${sourcePickerItemText(item)}`}
+                        onClick={() => {
+                          onToggleItem(item.id);
+                          requestAnimationFrame(() => trigger.current?.focus());
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    {details && <div className="min-w-0 basis-full">{details}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          )
         )}
-        {loading && <SelectedSourcesSkeleton label={label} icon={itemIcon} />}
-        <div className={cn('flex items-center gap-2', (selected.length > 0 || loading) && 'pt-1')}>
+        <div className={cn('flex items-center gap-2', selected.length > 0 && 'pt-1')}>
           <DrawerTrigger
             render={
               <Button

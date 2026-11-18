@@ -7,7 +7,13 @@ import {
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import {
   Composer as ComposerRoot,
+  ComposerActions,
+  ComposerActionsEnd,
+  ComposerActionsStart,
+  ComposerAttachMenu,
+  ComposerBox,
   ComposerHeader,
+  ComposerInput,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
@@ -42,7 +48,6 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { mergeDictation } from '../services/dictation';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
-import { AttachImagesMenu, ComposerLayout, MessageInput } from './ComposerLayout';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
@@ -147,7 +152,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
     ? 'Give feedback on this plan'
     : liveRun
       ? 'Steer the agent'
-      : undefined;
+      : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = sendTitleFor({
     waitsOnConnection: connectionLost && !onDraft && blocked,
@@ -320,30 +325,32 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
           {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
         </ComposerHeader>
         <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
-          <ComposerLayout
-            top={
-              <>
-                <ComposerSuggestions {...commandMenu.suggestionsProps} />
-                <ComposerAnnotations />
-                <ComposerImageAttachments images={images} onRemove={removeImage} />
-              </>
-            }
-            input={
-              <MessageInput
-                {...commandMenu.inputProps}
-                ref={inputRef}
-                onKeyDown={onComposerKeyDown}
-                onPaste={onPaste}
-                placeholder={placeholder}
-                disabled={textareaDisabled}
-                readOnly={preview !== undefined}
-                style={preview ? { height: preview.height } : undefined}
-                variant={variant}
-              />
-            }
-            attach={<AttachImagesMenu onFiles={addFiles} disabled={attachDisabled} />}
-            actions={
-              <>
+          <ComposerBox>
+            <ComposerSuggestions {...commandMenu.suggestionsProps} />
+            <ComposerAnnotations />
+            <ComposerImageAttachments images={images} onRemove={removeImage} />
+            <ComposerInput
+              {...commandMenu.inputProps}
+              ref={inputRef}
+              onKeyDown={onComposerKeyDown}
+              onPaste={onPaste}
+              placeholder={placeholder}
+              disabled={textareaDisabled}
+              readOnly={preview !== undefined}
+              style={preview ? { height: preview.height } : undefined}
+              variant={variant}
+              aria-label="Message"
+            />
+            <ComposerActions>
+              <ComposerActionsStart>
+                <ComposerAttachMenu
+                  onFiles={addFiles}
+                  accept="image/*"
+                  disabled={attachDisabled}
+                  label="Attach images"
+                />
+              </ComposerActionsStart>
+              <ComposerActionsEnd role="group" aria-label="Composer actions">
                 <ModelPicker />
                 {factoryId && (
                   <ComposerVoiceButton
@@ -358,9 +365,9 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
                   sendTitle={sendTitle}
                   onAbort={() => void abortMutation.mutateAsync()}
                 />
-              </>
-            }
-          />
+              </ComposerActionsEnd>
+            </ComposerActions>
+          </ComposerBox>
         </ComposerRing>
       </ComposerRoot>
     </>

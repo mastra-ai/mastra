@@ -18,33 +18,23 @@ function formatBytes(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const fileDetailsClass = 'border-border flex shrink-0 items-center gap-3 border-b px-3 py-2';
 const fileCodeClass = 'border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono';
 
 const SKELETON_LINES = ['w-1/3', 'w-2/3', 'w-1/2', 'w-3/4', 'w-2/5', 'w-5/6', 'w-1/2', 'w-3/5', 'w-1/4', 'w-2/3'];
 
 function WorkspaceFileViewerSkeleton() {
   return (
-    <>
-      <div aria-hidden className={fileDetailsClass}>
-        <SkeletonText line="text-caption" className="h-3 w-40 max-w-full motion-reduce:before:animate-none" />
-        <span className="ml-auto flex items-center gap-3">
-          <SkeletonText line="text-caption" className="h-3 w-10 max-w-full motion-reduce:before:animate-none" />
-          <SkeletonText line="text-caption" className="h-3 w-28 max-w-full motion-reduce:before:animate-none" />
-        </span>
+    <div role="status" aria-label="Loading file" className="min-h-0 flex-1 overflow-hidden p-3">
+      <div aria-hidden className={cn(fileCodeClass, 'flex flex-col')}>
+        {SKELETON_LINES.map((width, line) => (
+          <SkeletonText
+            key={line}
+            line="text-caption"
+            className={cn('h-3 max-w-full motion-reduce:before:animate-none', width)}
+          />
+        ))}
       </div>
-      <div role="status" aria-label="Loading file" className="min-h-0 flex-1 overflow-hidden p-3">
-        <div aria-hidden className={cn(fileCodeClass, 'flex flex-col')}>
-          {SKELETON_LINES.map((width, line) => (
-            <SkeletonText
-              key={line}
-              line="text-caption"
-              className={cn('h-3 max-w-full motion-reduce:before:animate-none', width)}
-            />
-          ))}
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -104,17 +94,26 @@ export function WorkspaceFileViewer({
         </div>
       </div>
 
-      {file ? (
-        <div className={fileDetailsClass}>
+      {file || isLoading ? (
+        <div className="border-border flex shrink-0 items-center gap-3 border-b px-3 py-2">
           <Txt tone="muted" as="span" variant="caption" className="min-w-0 truncate">
-            {file.path}
+            {file?.path ?? filePath}
           </Txt>
-          <Txt tone="muted" as="span" variant="caption" className="ml-auto shrink-0">
-            {formatBytes(file.size)}
-          </Txt>
-          <Txt tone="muted" as="span" variant="caption" className="shrink-0">
-            {new Date(file.updatedAt).toLocaleString()}
-          </Txt>
+          {file ? (
+            <>
+              <Txt tone="muted" as="span" variant="caption" className="ml-auto shrink-0">
+                {formatBytes(file.size)}
+              </Txt>
+              <Txt tone="muted" as="span" variant="caption" className="shrink-0">
+                {new Date(file.updatedAt).toLocaleString()}
+              </Txt>
+            </>
+          ) : (
+            <span aria-hidden className="ml-auto flex items-center gap-3">
+              <SkeletonText line="text-caption" className="h-3 w-10 max-w-full motion-reduce:before:animate-none" />
+              <SkeletonText line="text-caption" className="h-3 w-28 max-w-full motion-reduce:before:animate-none" />
+            </span>
+          )}
         </div>
       ) : null}
 

@@ -14,17 +14,18 @@ export function useCardDraftFrame(workItemId: string | undefined): SessionFrameS
   const factoryQuery = useFactoryQuery(factoryId);
   const factory = factoryQuery.data;
   if (!workItemId) return undefined;
-  const pending = card.isPending || catalog.isPending || factoryQuery.isPending;
+  const draft = card.data;
+  const pending = card.isPending || factoryQuery.isPending;
 
   return {
     panel:
-      item && factory
+      draft && factory
         ? {
-            subject: lead => <PanelSubject lead={lead} title={item.title} />,
+            subject: lead => <PanelSubject lead={lead} title={draft.title} />,
             overview: () => (
               <CardDraftOverview
                 factory={factory}
-                item={item}
+                item={draft}
                 boards={catalog.data}
                 boardsFailed={catalog.isLoadingError}
               />
@@ -39,7 +40,7 @@ export function useCardDraftFrame(workItemId: string | undefined): SessionFrameS
     headerCenter:
       item && board && factory ? (
         <CardStageBar item={item} sessionItems={[item]} board={board} factory={factory} />
-      ) : pending ? (
+      ) : pending || catalog.isPending ? (
         <CardStageBarSkeleton />
       ) : undefined,
   };

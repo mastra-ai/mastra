@@ -16,7 +16,7 @@ export function CreateFactoryPageFrame({ children }: { children: ReactNode }) {
         </PageHeader>
       }
     >
-      {children}
+      <div className="flex min-h-0 flex-col gap-2 pt-6">{children}</div>
     </PageLayout>
   );
 }

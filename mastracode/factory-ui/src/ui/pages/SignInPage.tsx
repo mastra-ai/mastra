@@ -207,58 +207,56 @@ export function SignInPage() {
     return <Navigate to={returnTo} replace />;
   }
 
+  const options = customDomainBlocked ? (
+    <CustomDomainAuthError hostname={window.location.hostname} />
+  ) : credentialForm ? (
+    <CredentialSignIn returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
+  ) : (
+    <Button
+      variant="primary"
+      size="lg"
+      className={HOSTED_SIGN_IN_BUTTON_CLASS}
+      disabled={redirecting || auth.isPending}
+      onClick={() => {
+        setRedirecting(true);
+        redirectToLogin(baseUrl, returnTo);
+      }}
+    >
+      {studioAuth ? <LogoWithoutText className="w-4" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
+      {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+    </Button>
+  );
+
   return (
     <SignInLayout>
+      {authError && !customDomainBlocked ? (
+        <Notice
+          variant="destructive"
+          role="alert"
+          title={accessDenied ? 'Access denied' : 'Sign-in failed'}
+          className="mb-6"
+        >
+          {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
+          {accessDenied ? (
+            <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
+          ) : null}
+        </Notice>
+      ) : null}
       {checking ? (
         <SignInContentSkeleton label="Checking sign-in">
-          {credentialForm ? (
-            <CredentialSignIn returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
-          ) : null}
+          {auth.data && !canReturnToApp ? options : null}
         </SignInContentSkeleton>
+      ) : failed ? (
+        <div role="alert" className="space-y-3">
+          <Txt as="p" variant="body" tone="muted">
+            Unable to check your sign-in status. Check your connection and try again.
+          </Txt>
+          <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+            Try again
+          </Button>
+        </div>
       ) : (
-        <>
-          {authError && !customDomainBlocked ? (
-            <Notice
-              variant="destructive"
-              role="alert"
-              title={accessDenied ? 'Access denied' : 'Sign-in failed'}
-              className="mb-6"
-            >
-              {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
-              {accessDenied ? (
-                <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
-              ) : null}
-            </Notice>
-          ) : null}
-          {failed ? (
-            <div role="alert" className="space-y-3">
-              <Txt as="p" variant="body" tone="muted">
-                Unable to check your sign-in status. Check your connection and try again.
-              </Txt>
-              <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
-                Try again
-              </Button>
-            </div>
-          ) : customDomainBlocked ? (
-            <CustomDomainAuthError hostname={window.location.hostname} />
-          ) : credentialForm ? (
-            <CredentialSignIn returnTo={returnTo} signUpDisabled={auth.data?.signUpDisabled === true} />
-          ) : (
-            <Button
-              variant="primary"
-              size="lg"
-              className={HOSTED_SIGN_IN_BUTTON_CLASS}
-              disabled={redirecting || auth.isPending}
-              onClick={() => {
-                setRedirecting(true);
-                redirectToLogin(baseUrl, returnTo);
-              }}
-            >
-              {studioAuth ? <LogoWithoutText className="w-4" aria-hidden="true" /> : <GithubIcon aria-hidden="true" />}
-              {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
-            </Button>
-          )}
-        </>
+        options
       )}
     </SignInLayout>
   );
