@@ -22,6 +22,7 @@ export type EmptyStateProps = {
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
+  /** Renders below the actions, for a cost note or live progress. */
   statusSlot?: React.ReactNode;
   className?: string;
   as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
@@ -32,6 +33,10 @@ export type EmptyStateProps = {
    * `fill` centers it in the full height of its parent — the parent must have a definite height.
    */
   variant?: 'inline' | 'fill';
+  /**
+   * `stacked` (default) centers the artwork above the text.
+   * `split` places the artwork beside the text from the `@2xl` container width up.
+   */
   layout?: 'stacked' | 'split';
 };
 
