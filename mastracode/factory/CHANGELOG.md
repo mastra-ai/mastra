@@ -1,5 +1,21 @@
 # @mastra/factory
 
+## 0.29.1-alpha.2
+
+### Patch Changes
+
+- Fixed Stop on a card's run being undone a few seconds later. The Factory used to restart the run and post the stage-move message again, such as "This work was moved from the intake stage to the pr-review stage." A stopped run now stays stopped, even when the Stop request reaches a different server than the one running it, and it is not reported as a failure: no error on the card, no failed review status, no failure report to the lead. Runs that end for other reasons, such as a server restart, still retry on their own. ([#30745](https://github.com/mastra-ai/mastra/pull/30745))
+
+- Added a `source` filter to `GET /web/factory/projects/:id/session-rows`. It keeps the sessions from one place: `board:<board id>` for a board's cards, `user` for sessions a person started, or `slack` for sessions started from Slack. These are the same keys that `groupBy=board` groups by. ([#30764](https://github.com/mastra-ai/mastra/pull/30764))
+
+  ```
+  GET /web/factory/projects/:id/session-rows?source=slack
+  ```
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/code-sdk@1.19.2-alpha.1
+
 ## 0.29.1-alpha.1
 
 ### Patch Changes
