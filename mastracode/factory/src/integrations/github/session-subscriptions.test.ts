@@ -279,7 +279,11 @@ describe('GitHub subscription entry points', () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
     const inject = vi.fn();
     const requestContext = authenticatedRequestContext();
-    registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1', sandboxAuth: () => auth });
+    registerGithubRefreshTarget(requestContext, {
+      orgId: 'org-1',
+      repositoryId: 'repository-1',
+      sandboxAuth: () => auth,
+    });
     registerGithubTokenInjector(requestContext, inject);
     const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
 

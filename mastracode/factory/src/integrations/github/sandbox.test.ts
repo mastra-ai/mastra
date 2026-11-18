@@ -483,7 +483,12 @@ describe('credential-vault sandboxes', () => {
       return OK;
     });
 
-    await checkoutSessionBranch(sandbox, '/workspace/repo', { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-123', repoFullName: 'octocat/hello' });
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      branch: 'factory/pr-1',
+      baseBranch: 'main',
+      token: 'tok-123',
+      repoFullName: 'octocat/hello',
+    });
 
     expect(sandbox.calls.join('\n')).not.toContain('config credential.helper !');
     expect(sandbox.calls.some(call => call.includes('--unset-all credential.helper'))).toBe(true);
@@ -503,7 +508,13 @@ describe('credential-vault sandboxes', () => {
         ? { exitCode: 0, stdout: 'https://github.com/octocat/hello/pull/7\n', stderr: '' }
         : OK,
     );
-    await createPullRequest(sandbox, '/workspace/repo', { token: 'tok-123', base: 'main', head: 'feat/x', title: 't', body: 'b' });
+    await createPullRequest(sandbox, '/workspace/repo', {
+      token: 'tok-123',
+      base: 'main',
+      head: 'feat/x',
+      title: 't',
+      body: 'b',
+    });
 
     const gh = sandbox.executions.find(entry => entry.command === 'gh' && entry.args[0] === 'pr')!;
     expect(gh.options?.env?.GH_TOKEN).toBeUndefined();
