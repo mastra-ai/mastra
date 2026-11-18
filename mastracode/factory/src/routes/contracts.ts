@@ -903,7 +903,7 @@ const workItemListQuerySchema = z
     scope: z.enum(['sessions']).optional(),
     /** `false` narrows the list to the cards that hold no session, most recently updated first. */
     started: z.enum(['false']).optional(),
-    /** With `started=false`: words that must all be in the card's title, key, number or source id. */
+    /** With `started=false`: words the card must all answer, as the phases' `q` reads them. */
     q: z.string().max(200).optional(),
     /** With `started=false`: how many cards to send. */
     limit: boundedLimitSchema(20, 50),
@@ -1011,7 +1011,13 @@ const phaseWindowSchema = z
 export const boardPhasesQuerySchema = z.object({
   /** `recent-mine` puts the cards the signed-in user last moved into the phase before the others. */
   sort: z.enum(BOARD_PHASES_SORTS).default('recent'),
-  /** Words that must all be in the card's title, key, number or source id. */
+  /**
+   * Words the card must all answer: each one in its title, key, number or source id, or in the key of
+   * a pull request attached to it, or naming its id or one of its branches whole. A number or key with
+   * its `#` or `!` (`#12`, `acme/app#12`) is read whole: it never finds `#123`. A pasted link finds
+   * the card carrying the issue or pull request it names, whatever page of it the link opens; a link
+   * to a repository or project finds the cards it holds; a link to a Factory card finds that card.
+   */
   q: z.string().max(200).optional(),
   /** A provider (`github`, `linear`, `manual`…), or `pull-request` for every card that has one. */
   source: pickedValuesSchema,

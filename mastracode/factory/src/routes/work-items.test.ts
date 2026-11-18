@@ -2728,6 +2728,32 @@ describe('run activity on the work-item listing', () => {
       expect((await unstarted('&q=login')).total).toBe(2);
     });
 
+    it('finds the card a pasted link names, as the board’s search does', async () => {
+      await createCard('github:7:issue:12', {
+        title: 'Fix the login flow',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:12',
+          url: 'https://github.com/acme/app/issues/12',
+        },
+        metadata: { number: 12 },
+      });
+      await createCard('github:7:issue:120', {
+        title: 'Rework the login palette',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:7:issue:120',
+          url: 'https://github.com/acme/app/issues/120',
+        },
+        metadata: { number: 120 },
+      });
+
+      const pasted = encodeURIComponent('https://github.com/acme/app/issues/12#issuecomment-1');
+      expect(await unstarted(`&q=${pasted}`)).toEqual({ titles: ['Fix the login flow'], total: 1 });
+    });
+
     it('never lists a card holding a session, whatever is typed', async () => {
       await startRun('session-mine');
       await createCard('1', { title: 'Work nobody started' });
@@ -3394,6 +3420,102 @@ describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
       expect(body.matchingTotal).toBe(expected.length);
       // The board's own count ignores the search and the filters.
       expect(body.boardTotal).toBe(5);
+    });
+  });
+
+  describe('a search for a pasted link or a whole name', () => {
+    const github = (type: 'issue' | 'pull-request', repository: string, number: number) => ({
+      integrationId: 'github',
+      type,
+      externalId: `github:${repository}:${type}:${number}`,
+      url: `https://github.com/${repository}/${type === 'issue' ? 'issues' : 'pull'}/${number}`,
+    });
+    const fileLinkedBoard = async () => {
+      // Its pull request was opened from its session, so the pull request rides on the issue's card.
+      const issue = await file('', {
+        externalSource: github('issue', 'acme/app', 12),
+        title: 'Fix the login flow',
+        metadata: { number: 12 },
+      });
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: github('pull-request', 'acme/app', 307),
+        metadata: { githubPullRequestNumber: 307, headBranch: 'octo.cat/login-redirect' },
+      });
+      // Its number starts with the attached pull request's.
+      const pullRequest = await file('', {
+        externalSource: github('pull-request', 'acme/app', 30772),
+        title: 'Tidy the palette',
+        metadata: { number: 30772 },
+      });
+      const linear = await file('', {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'linear:issue-uuid',
+          url: 'https://linear.app/acme/issue/ENG-42/slow-sync',
+        },
+        title: 'Slow sync',
+        metadata: { identifier: 'ENG-42' },
+      });
+      const otherRepository = await file('', {
+        externalSource: github('issue', 'acme/web', 5),
+        title: 'List open issues in the sidebar',
+        metadata: { number: 5 },
+      });
+      return {
+        issue,
+        names: new Map([
+          [issue.id, 'issue'],
+          [pullRequest.id, 'pull request'],
+          [linear.id, 'linear'],
+          [otherRepository.id, 'other repository'],
+        ]),
+      };
+    };
+    const found = async (names: Map<string, string>, q: string) => {
+      const body = await read(`q=${encodeURIComponent(q)}`);
+      expect(body.matchingTotal).toBe(under(body, 'intake').total);
+      return under(body, 'intake')
+        .ids.map(id => names.get(id))
+        .sort();
+    };
+
+    it.each([
+      ['a link to a pull request attached to an issue’s card', 'https://github.com/acme/app/pull/307', ['issue']],
+      ['a link to a page of it, in any case', 'https://GitHub.com/Acme/App/pull/307/files#diff-1a2b', ['issue']],
+      ['a link without its scheme', 'github.com/acme/app/pull/307?tab=checks', ['issue']],
+      ['the issue link GitHub gives the same number', 'https://github.com/acme/app/issues/307', ['issue']],
+      [
+        'a link to a pull request, never to one whose number starts the same',
+        'https://github.com/acme/app/pull/30772',
+        ['pull request'],
+      ],
+      ['a Linear link with another title in it', 'https://linear.app/acme/issue/ENG-42/renamed-since', ['linear']],
+      ['a repository’s link', 'https://github.com/acme/app', ['issue', 'pull request']],
+      ['a link and a word', 'https://github.com/acme/app login', ['issue']],
+      ['an attached pull request’s key, never one it starts', 'acme/app#307', ['issue']],
+      ['an attached pull request’s number, never one it starts', '#307', ['issue']],
+      // Bare digits read as a word: they find the numbers holding them.
+      ['digits of a number', '307', ['issue', 'pull request']],
+      ['a branch, whole', 'octo.cat/login-redirect', ['issue']],
+      // Every GitHub issue link holds `issues`; only one title does.
+      ['a word of links but of one title', 'issues', ['other repository']],
+      ['a link to an issue no card carries', 'https://github.com/acme/app/issues/404', []],
+    ])('finds the cards for %s', async (_case, q, expected) => {
+      const { names } = await fileLinkedBoard();
+
+      expect(await found(names, q)).toEqual(expected);
+    });
+
+    it('finds the card a Factory link opens', async () => {
+      const { issue, names } = await fileLinkedBoard();
+
+      expect(await found(names, `https://factory.example.com/factories/${PROJECT_ID}/cards/${issue.id}`)).toEqual([
+        'issue',
+      ]);
+      expect(await found(names, issue.id)).toEqual(['issue']);
     });
   });
 
