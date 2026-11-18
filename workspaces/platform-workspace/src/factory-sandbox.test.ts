@@ -1,11 +1,19 @@
-import { describeFactorySandbox, isFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
+import { isDeepStrictEqual } from 'node:util';
+
+import {
+  createWorkspaceTools,
+  describeFactorySandbox,
+  isFactorySandbox,
+  normalizeFactorySandboxSettings,
+  Workspace,
+} from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PlatformFactorySandbox } from './factory-sandbox.js';
 import { createRepoTemplate } from './repo-template.js';
 import { PlatformSandbox } from './sandbox.js';
-import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
+import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate, Template } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';
 const SHA_2 = 'fedcba9876543210fedcba9876543210fedcba98';
@@ -194,6 +202,74 @@ describe('PlatformFactorySandbox', () => {
       new PlatformFactorySandbox({ defaults: { docker: true } }).template(listContext(), {}),
     );
     expect(viaDefault.definition.operations).toContainEqual({ method: 'docker', args: [true] });
+  });
+
+  it('describes the desktop setting only with MASTRA_EXPERIMENTAL_COMPUTER=true', () => {
+    const keys = () =>
+      Object.keys(
+        describeFactorySandbox(new PlatformFactorySandbox({ defaults: { desktop: true } })).settingsSchema.properties ??
+          {},
+      );
+    expect(keys()).not.toContain('desktop');
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    expect(keys()).toEqual(['cpuCount', 'memoryMb', 'docker', 'desktop', 'idleTimeoutMinutes', 'publicPorts']);
+    expect(
+      describeFactorySandbox(new PlatformFactorySandbox({ defaults: { desktop: true } })).settingsSchema.properties
+        ?.desktop,
+    ).toMatchObject({ type: 'boolean', default: true });
+  });
+
+  it('ignores the desktop setting without MASTRA_EXPERIMENTAL_COMPUTER=true', async () => {
+    const sandbox = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1', environmentId: 'env_1' });
+    for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {
+      expect((await identity(sandbox.template(ctx, { desktop: true }))).definition).toEqual(
+        (await identity(sandbox.template(ctx, {}))).definition,
+      );
+    }
+    expect(sandbox.create(listContext(), { desktop: true }).computer).toBeUndefined();
+  });
+
+  it('adds the desktop install only when the desktop setting is on', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    const [desktopOp] = serializeSandboxTemplate(Template().desktop()).operations;
+    const sandbox = new PlatformFactorySandbox({});
+    for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {
+      const off = await identity(sandbox.template(ctx, {}));
+      const explicitOff = await identity(sandbox.template(ctx, { desktop: false }));
+      const on = await identity(sandbox.template(ctx, { desktop: true }));
+      expect(explicitOff.definition).toEqual(off.definition);
+      expect(off.definition.operations).not.toContainEqual(desktopOp);
+      expect(on.definition.operations).toContainEqual(desktopOp);
+      expect(on.definition.operations.filter(operation => !isDeepStrictEqual(operation, desktopOp))).toEqual(
+        off.definition.operations,
+      );
+    }
+    const viaDefault = await identity(
+      new PlatformFactorySandbox({ defaults: { desktop: true } }).template(listContext(), {}),
+    );
+    expect(viaDefault.definition.operations).toContainEqual(desktopOp);
+  });
+
+  it('gives the session workspace the computer tools only when the desktop setting is on', async () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    const computerTools = async (sandbox: PlatformSandbox) =>
+      Object.keys(await createWorkspaceTools(new Workspace({ sandbox }))).filter(name =>
+        name.startsWith('mastra_workspace_computer_'),
+      );
+    const factory = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1', environmentId: 'env_1' });
+    const ctx = listContext();
+
+    expect(await computerTools(factory.create(ctx, {}))).toEqual([]);
+    expect(await computerTools(factory.create(ctx, { desktop: false }))).toEqual([]);
+    expect(await computerTools(factory.create(ctx, { desktop: true }))).toContain('mastra_workspace_computer_click');
+    const viaDefault = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      environmentId: 'env_1',
+      defaults: { desktop: true },
+    });
+    expect(await computerTools(viaDefault.create(ctx, {}))).toContain('mastra_workspace_computer_click');
+    expect(await computerTools(viaDefault.create(ctx, { desktop: false }))).toEqual([]);
   });
 
   it('returns a resources-only template for a session without repositories', async () => {

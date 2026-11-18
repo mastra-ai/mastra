@@ -8,6 +8,7 @@ import type {
   FactorySandboxContext,
 } from '@mastra/core/workspace';
 
+import { experimentalComputerEnabled } from './experimental.js';
 import { createRepoTemplate } from './repo-template.js';
 import type { PlatformRepoTemplateResolver } from './repo-template.js';
 import { PlatformSandbox } from './sandbox.js';
@@ -22,6 +23,13 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   memoryMb?: number;
   /** Install Docker Engine and Compose, started on first use. Part of the template identity. */
   docker?: boolean;
+  /**
+   * Give the agent a Linux desktop it controls (the `computer: true` tools). The
+   * template boots the desktop. E2B only. Part of the template identity.
+   *
+   * @experimental Ignored unless `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   */
+  desktop?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
   /** Let anyone with a port's URL open it without signing in. Fixed when a sandbox is created. */
@@ -33,6 +41,7 @@ const DEFAULT_SETTINGS = {
   cpuCount: 2,
   memoryMb: 1024,
   docker: false,
+  desktop: false,
   idleTimeoutMinutes: 5,
   publicPorts: false,
 } as const;
@@ -69,6 +78,13 @@ const SETTINGS_SCHEMA = {
         'Install Docker Engine and Compose; the daemon starts on first use. We recommend at least 2 GB of memory for Docker.',
       default: DEFAULT_SETTINGS.docker,
     },
+    desktop: {
+      type: 'boolean',
+      title: 'Desktop',
+      description:
+        'Give the agent a Linux desktop it controls with screenshots, mouse, keyboard and the accessibility tree. We recommend at least 2 GB of memory for the desktop.',
+      default: DEFAULT_SETTINGS.desktop,
+    },
     idleTimeoutMinutes: {
       type: 'integer',
       title: 'Idle timeout (minutes)',
@@ -100,17 +116,16 @@ function settingsSchema(
 ): PublicSchema<PlatformFactorySandboxSettings> {
   const effective = { ...DEFAULT_SETTINGS, ...defaults };
   const properties = Object.fromEntries(
-    Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
-      key,
-      { ...property, default: effective[key as keyof typeof effective] },
-    ]),
+    Object.entries(SETTINGS_SCHEMA.properties)
+      .filter(([key]) => key !== 'desktop' || experimentalComputerEnabled())
+      .map(([key, property]) => [key, { ...property, default: effective[key as keyof typeof effective] }]),
   );
   return { ...SETTINGS_SCHEMA, properties } as PublicSchema<PlatformFactorySandboxSettings>;
 }
 
 export interface PlatformFactorySandboxOptions extends Omit<
   PlatformSandboxOptions,
-  'id' | 'sandboxId' | 'sessionId' | 'template' | 'env'
+  'id' | 'sandboxId' | 'sessionId' | 'template' | 'env' | 'computer'
 > {
   /**
    * Runtime environment of every session sandbox. A function receives each
@@ -179,6 +194,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
+      desktop: this.#desktop(settings),
     });
   }
 
@@ -191,6 +207,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
+      ...(this.#desktop(settings) && { computer: true }),
       // The template clones under this directory; the session looks for the
       // checkouts there instead of probing the VM's home.
       ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
@@ -201,6 +218,11 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
         DEFAULT_SETTINGS.idleTimeoutMinutes,
       publicPorts: settings.publicPorts ?? defaults?.publicPorts ?? options.publicPorts ?? DEFAULT_SETTINGS.publicPorts,
     });
+  }
+
+  #desktop(settings: PlatformFactorySandboxSettings): boolean {
+    if (!experimentalComputerEnabled()) return false;
+    return settings.desktop ?? this.#options.defaults?.desktop ?? DEFAULT_SETTINGS.desktop;
   }
 
   async #startBuild(

@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import { supportsNetworking } from '@mastra/core/workspace';
+import {
+  createWorkspaceTools,
+  supportsComputer,
+  supportsComputerAccessibility,
+  supportsNetworking,
+  Workspace,
+} from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { commandInCwd, PlatformSandbox } from './sandbox.js';
@@ -4144,5 +4150,145 @@ describe('PlatformSandbox networking', () => {
     await sandbox._start();
 
     await expect(sandbox.networking!.getPortUrl(3000)).rejects.toThrow();
+  });
+});
+
+describe('PlatformSandbox computer', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  const base = { accessToken: 'sk_test', projectId: 'proj_123', environmentId: 'env_123' };
+  const desktopTemplate = () => Template().desktop();
+  const computerToolNames = async (sandbox: PlatformSandbox) =>
+    Object.keys(await createWorkspaceTools(new Workspace({ sandbox })))
+      .filter(k => k.startsWith('mastra_workspace_computer_'))
+      .sort();
+
+  type RunnerResult = { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean };
+
+  /** An E2B sandbox whose exec runner answers the desktop readiness execs, then `respond` for the rest. */
+  function makeComputerSandbox(respond: (command: string) => RunnerResult = () => ({ exitCode: 0 })) {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockImplementation(async () => e2bLeaseResponse());
+    const isReadiness = (c: string) =>
+      c.includes('systemctl show -p LoadState') ||
+      c.startsWith('sha256sum') ||
+      c.includes('probe=') ||
+      c.includes('base64 -d');
+    const e2bExecRunner = vi.fn(async (_lease: unknown, { command }: { command: string }) => {
+      const r = c(command);
+      return { stdout: '', stderr: '', truncated: false, timedOut: false, opened: true, ...r };
+    });
+    function c(command: string): RunnerResult {
+      if (command.includes('probe='))
+        return { exitCode: 0, stdout: '{"ok": true, "generation": "0123456789abcdef"}\n' };
+      if (isReadiness(command)) return { exitCode: 0 };
+      return respond(command);
+    }
+    const sandbox = new PlatformSandbox({
+      ...base,
+      fetch: fetchMock,
+      e2bExecRunner,
+      template: desktopTemplate(),
+      computer: true,
+    });
+    const work = () => e2bExecRunner.mock.calls.map(([, o]) => o).filter(o => !isReadiness(o.command));
+    return { sandbox, e2bExecRunner, fetchMock, work };
+  }
+
+  describe('without MASTRA_EXPERIMENTAL_COMPUTER=true', () => {
+    it.each([undefined, '', 'false', '1'])('is inert with the flag %s, even where it would throw', async flag => {
+      if (flag !== undefined) vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', flag);
+      const e2bExecRunner = vi.fn();
+      for (const options of [
+        { ...base, computer: true, e2bExecRunner },
+        { ...base, computer: true, sandboxProvider: 'railway' as const },
+        { ...base, computer: true, template: Template() },
+      ]) {
+        const sandbox = new PlatformSandbox(options);
+        expect(sandbox.computer).toBeUndefined();
+        expect(supportsComputer(sandbox)).toBe(false);
+        expect(await computerToolNames(sandbox)).toEqual([]);
+        expect(await computerToolNames(sandbox.clone())).toEqual([]);
+      }
+      expect(e2bExecRunner).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('with MASTRA_EXPERIMENTAL_COMPUTER=true', () => {
+    beforeEach(() => vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true'));
+
+    it('adds the 11 pixel tools and the 3 accessibility tools, without exec or fetch at construction', async () => {
+      const { sandbox, e2bExecRunner, fetchMock } = makeComputerSandbox();
+      expect(supportsComputerAccessibility(sandbox)).toBe(true);
+      expect(await computerToolNames(sandbox)).toHaveLength(14);
+      expect(await computerToolNames(sandbox)).toContain('mastra_workspace_computer_accessibility_tree');
+      expect(e2bExecRunner).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('requires the e2b provider', () => {
+      expect(
+        () => new PlatformSandbox({ ...base, template: desktopTemplate(), computer: true, sandboxProvider: 'railway' }),
+      ).toThrow('PlatformSandbox computer requires the e2b sandbox provider');
+    });
+
+    it('requires a template, naming .desktop()', () => {
+      expect(() => new PlatformSandbox({ ...base, computer: true })).toThrow(/Template\(\)\.desktop\(\)/);
+      expect(() => new PlatformSandbox({ ...base, computer: true, template: Template().docker() })).toThrow(
+        /add \.desktop\(\) to the template/,
+      );
+      // A checkpoint alone carries no desktop op, so the create-time desktop env would be missing.
+      expect(() => new PlatformSandbox({ ...base, computer: true, seedCheckpointName: 'ckpt' })).toThrow(
+        /Template\(\)\.desktop\(\)/,
+      );
+      expect(
+        new PlatformSandbox({ ...base, computer: true, seedCheckpointName: 'ckpt', template: desktopTemplate() })
+          .computer,
+      ).toBeDefined();
+      expect(
+        new PlatformSandbox({ ...base, computer: true, template: async () => desktopTemplate() }).computer,
+      ).toBeDefined();
+    });
+
+    it('keeps the computer across clone()', () => {
+      const { sandbox } = makeComputerSandbox();
+      expect(supportsComputer(sandbox.clone())).toBe(true);
+    });
+
+    it('drives the desktop with xdotool argv on display :1, after its readiness check', async () => {
+      const { sandbox, e2bExecRunner, work } = makeComputerSandbox();
+      await sandbox._start();
+      await sandbox.computer!.leftClick(10, 20);
+      expect(e2bExecRunner.mock.calls[0]![1].command).toContain('systemctl show -p LoadState');
+      expect(work().map(o => o.command)).toEqual(['xdotool mousemove 10 20 click 1']);
+      expect(work()[0]).toMatchObject({ env: { DISPLAY: ':1' } });
+    });
+
+    it('checks the desktop again after stop() and start()', async () => {
+      const { sandbox, e2bExecRunner } = makeComputerSandbox();
+      const capabilities = () =>
+        e2bExecRunner.mock.calls.filter(([, o]) => o.command.includes('systemctl show -p LoadState')).length;
+      await sandbox._start();
+      await sandbox.computer!.moveMouse(1, 1);
+      await sandbox.computer!.moveMouse(2, 2);
+      expect(capabilities()).toBe(1);
+      await sandbox.stop();
+      await sandbox._start();
+      await sandbox.computer!.moveMouse(3, 3);
+      expect(capabilities()).toBe(2);
+    });
+
+    it('adds no desktop env to ordinary exec: the image provides it', async () => {
+      const { sandbox, work } = makeComputerSandbox();
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hi'], { env: { FOO: 'bar' } });
+      expect(work().at(-1)!.env).toEqual({ FOO: 'bar' });
+    });
   });
 });

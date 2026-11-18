@@ -132,6 +132,12 @@ export interface PlatformRepoTemplateOptions {
    */
   docker?: boolean;
   /**
+   * Pre-install the desktop used by `PlatformSandbox`'s `computer: true` (see
+   * `.desktop()`). Identity-bearing and kept in the resources-only
+   * template like `docker`. Omitted or false installs nothing.
+   */
+  desktop?: boolean;
+  /**
    * Absolute parent for the checkout. Created by the build user, so its parent
    * must already be writable by that user. Becomes the build cwd, the runtime
    * cwd, and part of the template family; the repo lands at `<workingDirectory>/<repo>`.
@@ -195,9 +201,9 @@ function rememberHead(cloneUrl: string, sha: string): void {
  * transient build envs; they never enter the serialized definition. A failed
  * head lookup reuses the last head resolved for the same clone URL in this
  * process. If the repository cannot be resolved, or no head has been resolved
- * yet, the resolver keeps `cpuCount`, `memoryMB` and
- * `docker` in a resources-only template so the sandbox still boots at the
- * requested size with Docker when asked, and the caller's runtime setup materializes the checkout.
+ * yet, the resolver keeps `cpuCount`, `memoryMB`, `docker` and `desktop` in a
+ * resources-only template so the sandbox still boots at the requested size
+ * with Docker and the desktop when asked, and the caller's runtime setup materializes the checkout.
  */
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
   if (options.getRepositoryAccess && options.repos) {
@@ -215,7 +221,9 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       ? [{ getRepositoryAccess: options.getRepositoryAccess, setupCommand: options.setupCommand }]
       : [];
   const resourcesOnly = () => {
-    if (options.cpuCount === undefined && options.memoryMB === undefined && !options.docker) return undefined;
+    if (options.cpuCount === undefined && options.memoryMB === undefined && !options.docker && !options.desktop) {
+      return undefined;
+    }
     return withResources(Template(), options);
   };
   if (entries.length === 0) {
@@ -392,11 +400,12 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
 function withResources(
   template: SandboxTemplateBuilder,
-  options: Pick<PlatformRepoTemplateOptions, 'cpuCount' | 'memoryMB' | 'docker'>,
+  options: Pick<PlatformRepoTemplateOptions, 'cpuCount' | 'memoryMB' | 'docker' | 'desktop'>,
 ): SandboxTemplateBuilder {
   if (options.cpuCount !== undefined) template = template.cpuCount(options.cpuCount);
   if (options.memoryMB !== undefined) template = template.memoryMB(options.memoryMB);
   if (options.docker) template = template.docker();
+  if (options.desktop) template = template.desktop();
   return template;
 }
 

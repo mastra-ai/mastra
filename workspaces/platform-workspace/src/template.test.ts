@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { serializeSandboxTemplate } from './template.js';
 import * as platformWorkspace from './index.js';
 import { Template } from './index.js';
@@ -225,5 +225,19 @@ describe('Template', () => {
       Template().withFamily('repo:acme/widgets:/w').runCmd('pnpm install').setWorkdir('/w'),
     );
     expect(definition.family).toBe('repo:acme/widgets:/w');
+  });
+});
+
+describe('Template().desktop() behind MASTRA_EXPERIMENTAL_COMPUTER', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([undefined, '', 'false', '1'])('throws naming the flag when it is %s', value => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', value);
+    expect(() => Template().desktop()).toThrow(/MASTRA_EXPERIMENTAL_COMPUTER=true/);
+  });
+
+  it('appends the desktop op with the flag set', () => {
+    vi.stubEnv('MASTRA_EXPERIMENTAL_COMPUTER', 'true');
+    expect(serializeSandboxTemplate(Template().desktop()).operations).toEqual([{ method: 'desktop', args: [true] }]);
   });
 });

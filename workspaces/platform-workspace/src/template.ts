@@ -1,5 +1,6 @@
 import { PlatformClient } from './client.js';
 import type { PlatformClientOptions } from './client.js';
+import { experimentalComputerEnabled } from './experimental.js';
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -8,6 +9,7 @@ export type SandboxTemplateMethod =
   | 'cpuCount'
   | 'memoryMB'
   | 'docker'
+  | 'desktop'
   | 'runCmd'
   | 'setWorkdir'
   | 'setEnvs'
@@ -90,6 +92,15 @@ export interface SandboxTemplateBuilder {
    * recommends at least 2,048 MB of memory for Docker.
    */
   docker(): SandboxTemplateBuilder;
+  /**
+   * Boot a Linux desktop in the E2B template for `PlatformSandbox`'s
+   * `computer: true`: an X display, window manager, accessibility bus and a
+   * noVNC viewer, supervised by systemd and restarted if any part exits. E2B
+   * only; Railway rejects it. Part of the template identity.
+   *
+   * @experimental Throws unless `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   */
+  desktop(): SandboxTemplateBuilder;
   /** Start or reuse this template's provider build without provisioning a sandbox. */
   build(options?: SandboxTemplateBuildOptions): Promise<SandboxTemplateBuildResult>;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
@@ -149,6 +160,13 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
   docker(): SandboxTemplateBuilder {
     return this.#append('docker', [true]);
+  }
+
+  desktop(): SandboxTemplateBuilder {
+    if (!experimentalComputerEnabled()) {
+      throw new Error('Template().desktop() is experimental: set MASTRA_EXPERIMENTAL_COMPUTER=true to use it');
+    }
+    return this.#append('desktop', [true]);
   }
 
   async build(options: SandboxTemplateBuildOptions = {}): Promise<SandboxTemplateBuildResult> {
