@@ -1,0 +1,68 @@
+name: Release merge freeze
+
+# Freezes main while a release is in progress, so merges stop rerunning
+# version-packages.yml and restarting the versioning PR's CI. "freeze" turns on
+# the "Release merge freeze" ruleset (Restrict updates on main); its bypass
+# actors (release owners) can still merge the versioning PR. "unfreeze" turns it
+# off. A repo admin creates the ruleset once, disabled; see
+# .github/scripts/release-freeze.mjs.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'freeze: only release owners can merge to main. unfreeze: everyone can again.'
+        required: true
+        type: choice
+        options:
+          - freeze
+          - unfreeze
+      dry_run:
+        description: 'Check access and the ruleset, print what would change, change nothing'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-merge-freeze
+  cancel-in-progress: false
+
+jobs:
+  freeze:
+    name: ${{ inputs.action }} main
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # GITHUB_TOKEN can't edit rulesets; the Dane app token with
+      # administration: write can.
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: write
+
+      - name: ${{ inputs.action }} main
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          ACTION: ${{ inputs.action }}
+          # triggering_actor, not actor: a re-run keeps the original actor but
+          # is started by whoever clicked re-run, and that person is checked.
+          ACTOR: ${{ github.triggering_actor }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          ARGS=(--action "$ACTION" --actor "$ACTOR")
+          if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+          node .github/scripts/release-freeze.mjs "${ARGS[@]}"
