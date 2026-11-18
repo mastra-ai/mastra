@@ -251,12 +251,20 @@ describe('provisioning protocol', () => {
       };
       hooks(a, { beforePendingDropCheck: hook });
       hooks(b, { beforePendingDropCheck: hook });
+      const create = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
+      // allSettled right away, so no call rejects unhandled while the others are parked.
+      const settled = Promise.allSettled([create(a), create(b), create(a), create(b), create(a)]);
       try {
-        const create = (s: MongoDBVector) => s.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
-        await Promise.all([create(a), create(b), create(a), create(b), create(a)]);
+        // If a call fails before the gate, the others would wait forever: release them after a bound.
+        await Promise.race([all.promise, new Promise(r => setTimeout(r, 30_000))]);
       } finally {
+        all.resolve();
+        const results = await settled;
         checker.restoreHooks();
+        for (const r of results) if (r.status === 'rejected') throw r.reason;
       }
+      // Each call passes the hook at least once (a retried call passes it again).
+      expect(arrived).toBeGreaterThanOrEqual(5);
       const docs = await db
         .collection(REGISTRY)
         .find({ _id: coll as any })
@@ -815,7 +823,9 @@ describe('provisioning protocol', () => {
             ...(emulateCluster(cluster) ? { createSearchIndexesCommand: clusterCreateMode(db) } : {}),
           };
           await withHooks([a, b], hooks, async () => {
-            const calls = [a, b, a, b, a].map(s => createByo(s, coll));
+            // allSettled right away, so no call rejects unhandled while the barrier waits.
+            const settled = Promise.allSettled([a, b, a, b, a].map(s => createByo(s, coll)));
+            let barrierFailed = false;
             try {
               // Bounded: fails after 15 s if a call never reaches the create.
               await reached({ reached: all });
@@ -824,11 +834,14 @@ describe('provisioning protocol', () => {
                 gates[i]!.resolve();
                 await new Promise(r => setTimeout(r, Math.floor(Math.random() * 5)));
               }
+            } catch (error) {
+              barrierFailed = true;
+              throw error;
             } finally {
               for (const g of gates) g.resolve();
-              // Settle every call even when the barrier failed, so none rejects unhandled.
-              const settled = await Promise.allSettled(calls);
-              for (const r of settled) if (r.status === 'rejected') throw r.reason;
+              const results = await settled;
+              // Report a call's failure, but never in place of the barrier's own.
+              if (!barrierFailed) for (const r of results) if (r.status === 'rejected') throw r.reason;
             }
           });
           const docs = await db
@@ -1179,6 +1192,22 @@ describe('provisioning protocol', () => {
         expect(await entry(coll)).toEqual(left);
         await a.deleteIndex({ indexName: coll });
         expect(await searchIndexNames(db, coll)).toEqual([]);
+      });
+
+      // PR #30067 review: a target resolved before a concurrent delete recreated the registration.
+      it('P-STALE-TARGET: createSearchIndex whose registration is deleted after it resolved the target refuses and recreates nothing', async () => {
+        const coll = await byoColl('pstale');
+        await createByo(a, coll);
+        const { err, left } = await raceAt(
+          coll,
+          'afterCreateSearchIndexTarget',
+          () => a.createSearchIndex({ indexName: coll, searchIndexName: 'txt' }),
+          () => b.deleteIndex({ indexName: coll }),
+        );
+        expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
+        expect(left).toBeNull();
+        expect(await entry(coll)).toBeNull();
+        expect(await searchIndexNames(db, coll)).not.toContain('txt');
       });
     });
 
@@ -2480,11 +2509,14 @@ describe('provisioning protocol', () => {
         // Spec variant (1) is "a claim committed before the mark", so J is still `created` here: an
         // `orphaned` J with a live lease would refuse the claim (I7).
         it('P-CLAIM-ORPHAN (1): a claim committed before the mark is seen by the cleanup, which keeps R', async () => {
-          const { coll, n, r } = await legacyWithRecord('pclaim1', 'created', new Date(Date.now() + 2000));
+          // A long lease, so the claim's own reconcile can't take J however slow the setup was.
+          const { coll, n, r, doc } = await legacyWithRecord('pclaim1', 'created', new Date(Date.now() + 300_000));
           const { drops } = recordDrops(b);
           await a.claimLegacyIndex({ indexName: coll });
           expect((await entry(coll))?.indexIds).toEqual([{ name: n, id: r }]);
-          await waitFor(async () => (await docsOn(coll))[0]!.leaseUntil.getTime() < Date.now() - 500, 10_000);
+          expect(await docsOn(coll)).toHaveLength(1);
+          // Only now does the lease expire, so the cleanup runs after the claim.
+          await db.collection(JOURNAL).updateOne({ _id: doc._id as any }, { $set: { leaseUntil: new Date(0) } });
           await reconcile(b, coll);
           expect(drops).toEqual([]);
           expect(await docsOn(coll)).toEqual([]);

@@ -10,6 +10,7 @@ import {
   searchIndexNames,
   seedCollection,
   uniqueName,
+  waitFor,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -85,8 +86,9 @@ describe('Atlas search-index semantics (§0)', () => {
     const coll = await throwaway('s0recreate');
     const stale = createdId(await create(coll, 'n'))!;
     await dropById(coll, stale);
-    // No listing lag after a drop: R12 relies on the dropped name being absent right away.
-    expect(await listedId(db, coll, 'n')).toBeUndefined();
+    // A dropped row can stay listed for a while on a cluster; R12 treats a dying row as "retry",
+    // so wait for it to go before recreating the name.
+    await waitFor(async () => (await listedId(db, coll, 'n')) === undefined);
     const fresh = createdId(await create(coll, 'n'));
     expect(fresh).toMatch(/^[0-9a-f]{24}$/);
     expect(fresh).not.toBe(stale);

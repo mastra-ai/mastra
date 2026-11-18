@@ -16,4 +16,4 @@ const results = await store.hybridQuery({
 });
 ```
 
-Omit `rerank` for hybrid retrieval only, or use `vector.query` on an automatic-embedding index. Native reranking defaults to `rerank-2.5` and requires MongoDB 9.0+ on Atlas with Native Reranking enabled. The Preview `rerank-3` and `rerank-3-lite` models also need an M10-or-higher cluster.
+Omit `rerank` for hybrid retrieval only, or use `vector.query` on an automatic-embedding index. Native reranking defaults to `rerank-2.5` and requires MongoDB 9.0+ on Atlas with Native Reranking enabled. In native `$rerank`, the `rerank-3` and `rerank-3-lite` models are in Preview and also need an M10-or-higher cluster.

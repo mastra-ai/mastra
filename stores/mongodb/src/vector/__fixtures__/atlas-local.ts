@@ -36,6 +36,20 @@ export async function searchIndexNames(db: Db, coll: string): Promise<string[]> 
   return idx.map(i => i.name as string);
 }
 
+/**
+ * The search-index names on `coll` once they equal `expected`, or the last listing after `ms`. A
+ * drop is asynchronous on an Atlas cluster, so a name can stay listed for a while after it.
+ */
+export async function settledNames(db: Db, coll: string, expected: string[], ms = 30000): Promise<string[]> {
+  const start = Date.now();
+  let names = await searchIndexNames(db, coll);
+  while (JSON.stringify(names) !== JSON.stringify(expected) && Date.now() - start < ms) {
+    await new Promise(r => setTimeout(r, 500));
+    names = await searchIndexNames(db, coll);
+  }
+  return names;
+}
+
 export async function seedRegistry(db: Db, doc: Document): Promise<void> {
   await db.collection(REGISTRY).insertOne(doc);
 }
@@ -162,7 +176,11 @@ function listRows(db: Db, name: string): Promise<Document[]> {
     } as ListSearchIndexesOptions)
     .toArray()
     .then(rows => rows as Document[])
-    .catch(() => [] as Document[]);
+    .catch(err => {
+      // Only a missing collection has no rows; any other failure must not read as "clean".
+      if (err?.code === 26 || err?.codeName === 'NamespaceNotFound') return [] as Document[];
+      throw err;
+    });
 }
 
 /**
@@ -250,10 +268,20 @@ export function installInvariantChecker(
       revs.set(key, Math.max(last ?? d.rev, d.rev));
     }
   };
+  // Each read and its sample run one at a time, so concurrent drops sample revs in read order.
+  let serial: Promise<unknown> = Promise.resolve();
+  const readAndSample = (read: () => Promise<Document[]>): Promise<Document[]> => {
+    const next = serial.then(async () => {
+      const docs = await read();
+      sample(docs);
+      return docs;
+    });
+    serial = next.catch(() => {});
+    return next;
+  };
   const installed = stores.map(store => {
     const hook = chainDropHook(store, async (collectionName, name, id) => {
-      const docs = await registry().find({ collectionName }).toArray();
-      sample(docs);
+      const docs = await readAndSample(() => registry().find({ collectionName }).toArray());
       const users = docs.filter(d => d.deleting !== true && references(d, name)).map(d => d._id);
       const decided = await db
         .collection(JOURNAL, primary)
@@ -279,10 +307,11 @@ export function installInvariantChecker(
     async assertClean(colls, opts = {}) {
       const problems: string[] = [];
       const allowed = new Set([...(opts.expectedLeaks ?? []), ...(opts.userIndexes ?? [])]);
-      const docs = await registry()
-        .find({ collectionName: { $in: colls } })
-        .toArray();
-      sample(docs);
+      const docs = await readAndSample(() =>
+        registry()
+          .find({ collectionName: { $in: colls } })
+          .toArray(),
+      );
       const journal = await db
         .collection(JOURNAL, primary)
         .find({ collectionName: { $in: colls } })

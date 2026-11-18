@@ -624,7 +624,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       const filterPaths = filterPathsOf(v);
       expect(filterPaths).toEqual(['_id', 'document', 'metadata.category', 'metadata.tenant_id']);
-      expect((v as any).declaredFilterPaths.get('idx')).toEqual(
+      expect((v as any).declaredFilterPaths.get('idx')?.paths).toEqual(
         new Set(['document', 'metadata.category', 'metadata.tenant_id']),
       );
     });
@@ -636,7 +636,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       await v.createIndex({ indexName: 'idx', dimension: 4 });
 
       expect(filterPathsOf(v)).toEqual(['_id', 'document']);
-      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document']));
+      expect((v as any).declaredFilterPaths.get('idx')?.paths).toEqual(new Set(['document']));
     });
 
     it('still creates the full-text index when the vector index already exists, without caching paths', async () => {
@@ -752,7 +752,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       ).resolves.toBeUndefined();
 
       // The vector index was created by this call, so its declaration is cached.
-      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+      expect((v as any).declaredFilterPaths.get('idx')?.paths).toEqual(new Set(['document', 'metadata.category']));
     });
   });
 
@@ -875,7 +875,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // Now it reads the real declaration (excluding `_id`) and caches it.
       const paths = await (v as any).getDeclaredFilterPaths('idx');
       expect(paths).toEqual(new Set(['document', 'metadata.category']));
-      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+      expect((v as any).declaredFilterPaths.get('idx')?.paths).toEqual(new Set(['document', 'metadata.category']));
     });
 
     it('ignores a building latestDefinition until the index is READY (staged-definition race)', async () => {
@@ -901,7 +901,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // Once the rebuild finishes, the same definition is trusted and cached.
       indexes = [{ ...indexes[0], status: 'READY' }];
       expect(await (v as any).getDeclaredFilterPaths('idx')).toEqual(new Set(['document', 'metadata.category']));
-      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+      expect((v as any).declaredFilterPaths.get('idx')?.paths).toEqual(new Set(['document', 'metadata.category']));
     });
   });
 
@@ -2559,7 +2559,7 @@ describe('MongoDBVector autoEmbed', () => {
 
       await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' }, filterFields: ['year'] });
 
-      expect((v as any).declaredFilterPaths.get('movies')).toEqual(new Set(['metadata.year']));
+      expect((v as any).declaredFilterPaths.get('movies')?.paths).toEqual(new Set(['metadata.year']));
     });
 
     it('persists the autoEmbed config so another process can rebuild the query stage', async () => {
@@ -3788,10 +3788,12 @@ describe('MongoDBVector index ownership', () => {
     try {
       await expect(
         v.createSearchIndex({ indexName: 'own_byo', fields: ['note'], searchIndexName: 'own_text_2' }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/injected/);
     } finally {
       (v as any).testHooks = undefined;
     }
+    // The failure came from the injected refusal, not from something earlier.
+    expect(failed).toBe(true);
 
     const after = await registry().findOne({ _id: 'own_byo' as any });
     expect(after).toEqual({ ...before, rev: before!.rev + 2, claimToken: after?.claimToken });
@@ -3824,8 +3826,8 @@ describe('MongoDBVector pre-filter bounds', () => {
     await waitForAtlasSearchReady(v);
     (v as any).client.on('commandStarted', (e: any) => e.commandName === 'aggregate' && commands.push(e.command));
     await v['db'].collection(col).insertMany([
-      { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, lane: 'clean', note: 'refund' },
-      { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud', note: 'refund' },
+      { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, lane: 'clean', note: 'refund', document: 'refund a' },
+      { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud', note: 'refund', document: 'refund b' },
     ] as any[]);
     await v.createIndex({ indexName: idx, dimension: 4, collectionName: col, filterFields: ['lane'] });
     await v.waitForIndexReady({ indexName: idx, timeoutMs: 60000 });
@@ -3882,6 +3884,17 @@ describe('MongoDBVector pre-filter bounds', () => {
         .catch(e => e);
       expect(hybridError.id).toMatch(/HYBRID_QUERY.*TOO_MANY_CANDIDATES/);
 
+      // PR #30067 review: a pushable filter narrows the fallback too. The regex alone matches both
+      // documents, past the cap of 1; with `lane` it matches one, so the query must succeed.
+      const narrowed = await v.query({
+        indexName: idx,
+        queryVector: [1, 0, 0, 0],
+        filter: { lane: 'fraud' },
+        documentFilter: { $regex: '^refund' },
+        metadataMode: 'document',
+      });
+      expect(narrowed.map(r => r.id)).toEqual(['b']);
+
       // A fallback within the limit still works.
       const res = await v.query({
         indexName: idx,
@@ -3892,6 +3905,103 @@ describe('MongoDBVector pre-filter bounds', () => {
       expect(res.map(r => r.id)).toEqual(['a']);
     } finally {
       statics.MAX_PREFILTER_CANDIDATES = max;
+    }
+  });
+});
+
+// PR #30067 review: pointing an index at another existing search index kept the filter paths
+// cached for the old one, so a filter on a path the new index lacks was pushed down and failed.
+describe('MongoDBVector retarget to an existing search index', () => {
+  it('stops pushing down a filter the new index does not declare', async () => {
+    const v = new MongoDBVector({ uri, dbName, id: 'mongodb-retarget' });
+    await v.connect();
+    await waitForAtlasSearchReady(v);
+    const run = Date.now();
+    const col = `retarget_${run}`;
+    const idx = `retarget_${run}`;
+    try {
+      await v['db'].collection(col).insertMany([
+        { _id: 'a', embedding: [1, 0, 0, 0], lane: 'clean' },
+        { _id: 'b', embedding: [0, 1, 0, 0], lane: 'fraud' },
+      ] as any[]);
+      await v.createIndex({ indexName: idx, dimension: 4, collectionName: col, filterFields: ['lane'] });
+      await v.waitForIndexReady({ indexName: idx, timeoutMs: 60000 });
+      await v['db'].collection(col).createSearchIndex({
+        name: 'plain',
+        type: 'vectorSearch',
+        // `_id` declared as the docs require of a BYO index; `lane` deliberately not.
+        definition: {
+          fields: [
+            { type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' },
+            { type: 'filter', path: '_id' },
+          ],
+        },
+      });
+      await v.createIndex({ indexName: idx, dimension: 4, collectionName: col, searchIndexName: 'plain' });
+      await v.waitForIndexReady({ indexName: idx, timeoutMs: 60000 });
+      await waitForSync(
+        v,
+        idx,
+        async () => (await v.query({ indexName: idx, queryVector: [1, 0, 0, 0] })).length === 2,
+      );
+
+      const res = await v.query({
+        indexName: idx,
+        queryVector: [1, 0, 0, 0],
+        filter: { lane: 'fraud' },
+        metadataMode: 'document',
+      });
+      expect(res.map(r => r.id)).toEqual(['b']);
+    } finally {
+      await v.deleteIndex({ indexName: idx }).catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], col).catch(() => {});
+      await v.disconnect();
+    }
+  }, 300000);
+});
+
+// PR #30067 review: a refresh that conflicted with the registered collection used to create
+// the collection it resolved to before refusing, leaving an empty collection behind.
+describe('MongoDBVector refused retarget', () => {
+  it('creates no collection when the index is registered against another one', async () => {
+    const v = new MongoDBVector({ uri, dbName, id: 'mongodb-refused-retarget' });
+    await v.connect();
+    const run = Date.now();
+    const byo = `ops_${run}`;
+    const idx = `movies_${run}`;
+    try {
+      await v['db'].collection(byo).insertOne({ _id: 'a', embedding: [1, 0, 0, 0] } as any);
+      await v.createIndex({ indexName: idx, dimension: 4, collectionName: byo });
+      const err = await v.createIndex({ indexName: idx, dimension: 4 }).catch(e => e);
+      expect(err?.id).toBe('MASTRA_VECTOR_MONGODB_CREATE_INDEX_CONFLICT');
+      expect(await v['db'].listCollections({ name: idx }).hasNext()).toBe(false);
+    } finally {
+      await v.deleteIndex({ indexName: idx }).catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], byo).catch(() => {});
+      await dropCollectionWithSearchIndexes(v['db'], idx).catch(() => {});
+      await v.disconnect();
+    }
+  }, 120000);
+});
+
+// PR #30067 review: with the client option `ignoreUndefined`, an undefined registry field was stored
+// as `{}`, so a client-embedded index read back as an auto-embedding one.
+describe('MongoDBVector with ignoreUndefined', () => {
+  it('creates, describes and deletes an index', async () => {
+    const v = new MongoDBVector({ uri, dbName, id: 'mongodb-ignore-undefined', options: { ignoreUndefined: true } });
+    await v.connect();
+    const idx = `ign_${Date.now()}`;
+    try {
+      await v.createIndex({ indexName: idx, dimension: 4 });
+      const entry = await v['db'].collection('__mastra_vector_indexes__').findOne({ _id: idx as any });
+      expect(entry?.dimension).toBe(4);
+      expect(entry?.autoEmbed ?? null).toBeNull();
+      expect((await v.describeIndex({ indexName: idx })).dimension).toBe(4);
+      await v.deleteIndex({ indexName: idx });
+      expect(await v['db'].listCollections({ name: idx }).hasNext()).toBe(false);
+    } finally {
+      await dropCollectionWithSearchIndexes(v['db'], idx).catch(() => {});
+      await v.disconnect();
     }
   });
 });

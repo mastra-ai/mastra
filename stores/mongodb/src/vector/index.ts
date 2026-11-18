@@ -170,8 +170,9 @@ export interface MongoDBHybridQueryBranchParams {
     /**
      * Bring-your-own collections only: search this existing vector index instead of the registered
      * one. Filters with this option always use the `_id` pre-filter, so the index must declare `_id`
-     * as a filter field. Rejected on managed
-     * indexes, which use their registered indexes.
+     * as a filter field. It must also index the registered embedding field with the same embedding
+     * mode (vectors or `autoEmbed`), or MongoDB rejects the query. Rejected on managed indexes,
+     * which use their registered indexes.
      */
     searchIndexName?: string;
   };
@@ -402,9 +403,14 @@ function mutationFields(claimToken: string = uuidv4(), generation: string = uuid
   };
 }
 
-/** Wrap each value in `$literal`, so a value starting with `$` is never read as an expression. */
+/**
+ * Wrap each value in `$literal`, so a value starting with `$` is never read as an expression.
+ * `undefined` is written as `null`, which the driver does by default anyway: with the client's
+ * `ignoreUndefined` it would otherwise be stored as `{}`, which readers take for a set value (an
+ * absent `autoEmbed` would read as an auto-embedding index).
+ */
 function literals(fields: Document): Document {
-  return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { $literal: v }]));
+  return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, { $literal: v ?? null }]));
 }
 
 /** What a P0 write left (`pin`) and the document it overwrote (`before`; null when it inserted). */
@@ -477,7 +483,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * this process and lazily hydrated from the live index definition otherwise.
    * `_id` is excluded because it is materialised separately by the fallback path.
    */
-  private declaredFilterPaths: Map<string, Set<string>> = new Map();
+  /** Filter paths per logical index, with the physical index (`collection/searchIndex`) they were read from. */
+  private declaredFilterPaths: Map<string, { source: string; paths: Set<string> }> = new Map();
   /**
    * Per-index target: where the data lives, what the Atlas index is called, and whether
    * the collection is caller-owned (bring-your-own). `isByo` is captured at createIndex
@@ -1490,7 +1497,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           details: { indexName },
           ...(code === 'OUTCOME_UNKNOWN'
             ? {
-                text: `The delete of index "${indexName}" may or may not have committed. Retry deleteIndex({ indexName: "${indexName}" }); a not-registered error on retry means it completed.`,
+                text: `The delete of index "${indexName}" may or may not have committed. Retry deleteIndex({ indexName: "${indexName}" }); a not-registered error on retry means it completed. A retry deletes whatever is registered under this name then, and no read can tell the original registration from a re-created one: if another process may re-create it, coordinate with it first, and don't retry by name if you can't rule out a re-create.`,
               }
             : {}),
         },
@@ -1577,7 +1584,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         const siblings = await registry.find(live, { session }).toArray();
         await this.testHooks?.insideDeleteTransaction?.(indexName, attempt);
         const plan = planDeleteCleanup(own, siblings, observed);
-        const { drop } = plan;
+        // Record the listed id of every name to drop that has none (registered by an earlier
+        // version), so a resumed delete drops that index by id instead of listing the name again,
+        // possibly much later. A name with no id and no listing is already gone.
+        const idOf = (name: string) => own.indexIds?.find(e => e.name === name)?.id ?? observed[name];
+        const drop = collection ? plan.drop.filter(name => idOf(name)) : plan.drop;
         if (!(await this.applyCleanupWrites(indexName, own.collectionName, plan, siblings, session))) {
           // Only a deployment without transactions sees this; there the plan's earlier writes stay,
           // and the retry plans from them.
@@ -1618,7 +1629,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
                 own.ownsTextIndex === true && !!own.textSearchIndexName && drop.includes(own.textSearchIndexName),
               retiredTextIndexNames: (own.retiredTextIndexNames ?? []).filter(n => drop.includes(n)),
               retiredVectorIndexNames: (own.retiredVectorIndexNames ?? []).filter(n => drop.includes(n)),
-              indexIds: (own.indexIds ?? []).filter(e => drop.includes(e.name)),
+              indexIds: drop.flatMap(name => {
+                const id = idOf(name);
+                return id ? [{ name, id }] : [];
+              }),
               deleting: true,
               deleteToken,
             },
@@ -2352,27 +2366,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const existingEntry = await this.readRegistryEntry(indexName);
       this.assertNotDeleting(existingEntry, 'CREATE_INDEX');
       await this.testHooks?.afterCreateIndexRead?.(indexName);
-      // Check if collection exists
-      const collectionExists = await this.db
-        .listCollections({ name: targetCollection }, { readPreference: ReadPreference.primary })
-        .hasNext();
-      if (!collectionExists) {
-        if (isByo) {
-          throw new MastraError({
-            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INVALID_ARGS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `collectionName "${targetCollection}" does not exist. Create and populate the collection before indexing it.`,
-          });
-        }
-        await this.db.createCollection(targetCollection);
-        collectionCreated = true;
-      }
-      collection = await this.getCollection(targetCollection);
-
-      const indexNameInternal = targetSearchIndex;
-      const defaultTextSearchIndex = `${targetCollection}_search_index`;
-
+      // Before creating anything, so a refused retarget leaves no empty collection behind.
       // Guard against a conflicting retarget: if this logical index already points at a
       // DIFFERENT physical collection, refuse rather than silently orphan the old collection's
       // search index (and its registry-less data). Idempotent re-createIndex against the same
@@ -2386,6 +2380,37 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           text: `Index "${indexName}" is already registered against collection "${existingEntry.collectionName}", but this createIndex call resolves to "${targetCollection}". Call deleteIndex({ indexName: "${indexName}" }) first to retarget it.`,
         });
       }
+
+      // Check if collection exists
+      const collectionExists = await this.db
+        .listCollections({ name: targetCollection }, { readPreference: ReadPreference.primary })
+        .hasNext();
+      if (!collectionExists) {
+        if (isByo) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INVALID_ARGS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `collectionName "${targetCollection}" does not exist. Create and populate the collection before indexing it.`,
+          });
+        }
+        try {
+          // `create` also succeeds for an existing collection with identical options, so a plain
+          // create can't prove this call made it. `validationLevel: 'off'` changes nothing on a
+          // collection without a validator, but makes `create` fail with NamespaceExists when the
+          // collection was created first with other options, defaults included. One created first
+          // with this same option is still taken for Mastra's (a documented cleanup limit).
+          await this.db.createCollection(targetCollection, { validationLevel: 'off' });
+          collectionCreated = true;
+        } catch (error: any) {
+          // Created by someone else since the check above: adopt it, never own it.
+          if (error?.code !== 48 && error?.codeName !== 'NamespaceExists') throw error;
+        }
+      }
+      collection = await this.getCollection(targetCollection);
+
+      const indexNameInternal = targetSearchIndex;
+      const defaultTextSearchIndex = `${targetCollection}_search_index`;
 
       // BYO classification is STICKY: once a logical index is registered, an idempotent
       // re-createIndex must never reclassify it. Without this, a BYO index whose
@@ -2732,10 +2757,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // already existed may carry a different declaration; queries hydrate the real one lazily
       // via getDeclaredFilterPaths().
       if (vector.outcome === 'owned') {
-        this.declaredFilterPaths.set(
-          indexName,
-          new Set(documentIsEmbedded ? declaredMetadataPaths : [this.documentFieldName, ...declaredMetadataPaths]),
-        );
+        this.declaredFilterPaths.set(indexName, {
+          source: `${targetCollection}/${targetSearchIndex}`,
+          paths: new Set(
+            documentIsEmbedded ? declaredMetadataPaths : [this.documentFieldName, ...declaredMetadataPaths],
+          ),
+        });
       }
 
       // Companion full-text index (dynamic mapping). Only auto-created for MANAGED
@@ -2871,6 +2898,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     await this.testHooks?.afterCreateSearchIndexTarget?.(indexName);
     const previous = await this.readRegistryEntry(indexName);
     this.assertNotDeleting(previous, 'CREATE_SEARCH_INDEX');
+    // Raised when the entry this call read was removed, registered or rewritten by someone else meanwhile.
+    const concurrentConflict = (what: 'removed' | 'registered' | 'changed') =>
+      new MastraError({
+        id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `Index "${indexName}" was ${what} by another call while createSearchIndex ran, so nothing was provisioned. Check the index and retry.`,
+      });
+    // The target came from a registration that is gone now: don't recreate it from that stale read.
+    if (target.registered && !previous) throw concurrentConflict('removed');
     // A text index must not squat the vector index's name: the creation below would hit
     // IndexAlreadyExists, and the subsequent updateSearchIndex would overwrite the
     // vectorSearch definition with a text mapping, breaking query(). `previous` is the
@@ -2916,15 +2954,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // If provisioning fails, the write is rolled back below.
       // An existing entry gets only the text-index fields and no upsert, so this call never
       // overwrites another process's policy or brings back an entry deleted in the meantime.
-      // Raised when the entry this call read was removed, registered or rewritten by someone else meanwhile.
-      const concurrentConflict = (what: 'removed' | 'registered' | 'changed') =>
-        new MastraError({
-          id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-          text: `Index "${indexName}" was ${what} by another call while createSearchIndex ran, so nothing was provisioned. Check the index and retry.`,
-        });
       if (previous) {
         // One $set stage: every expression reads the pre-write document, so retiring the old
         // name, reactivating a retired one and the ownership flag change atomically.
@@ -3830,9 +3859,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             ...(hasMetadataFilter && !pushMetadata ? [metadataFilter] : []),
             ...(documentFilterExpr && !pushDocument ? [documentFilterExpr] : []),
           ];
+          // The pushed predicates narrow the candidates too, so the cap counts only real matches.
+          const allPredicates = [...preFilter, ...pushed];
           const candidateIds = await this.collectCandidateIds(
             collection,
-            preFilter.length > 1 ? { $and: preFilter } : preFilter[0]!,
+            allPredicates.length > 1 ? { $and: allPredicates } : allPredicates[0]!,
             indexName,
             'QUERY',
           );
@@ -4261,6 +4292,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // TOFU (Q5): the listing before the write; an id is recorded only for an owned name with none.
       const listed = await listIds(collectionName, names);
       const claimToken = uuidv4();
+      // Chosen here, so the claim knows the generation it leaves without reading the entry back.
+      const backfill = uuidv4();
       const before = await registry.findOneAndUpdate(
         {
           _id: indexName,
@@ -4278,7 +4311,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               // An explicit false records that the index existed before registration; keep it.
               ownsVectorIndex: { $ifNull: ['$ownsVectorIndex', true] },
               ...(textSearchIndexName ? { ownsTextIndex: { $ifNull: ['$ownsTextIndex', true] } } : {}),
-              ...mutationFields(claimToken),
+              ...mutationFields(claimToken, backfill),
             },
           },
           ...tofuStages(listed, searchIndexName, textSearchIndexName),
@@ -4300,16 +4333,15 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         throw conflict(current);
       }
       await this.testHooks?.afterClaimWrite?.(indexName);
-      // No handshake here: the names were referenced before this write, which already blocks a drop (I11a).
-      const relisted = await listIds(collectionName, names);
-      const after = await this.readRegistryEntry(indexName);
-      if (after?.claimToken === claimToken) {
-        // The expected ids are the ones recorded after the write.
-        if (idsMatch(after.indexIds, names, relisted)) return;
+      // The entry exactly as this write left it: an undo pinned to it needs no read first, and any
+      // later write (a cleaner's release or transfer, another claim) makes it miss.
+      const written = { generation: before.generation ?? backfill, rev: (before.rev ?? 0) + 1 };
+      /** Restore the fields this claim wrote; true when the entry was still as the claim left it. */
+      const undo = async () => {
         await this.testHooks?.beforeClaimUndo?.(indexName);
         const restore = (v: unknown) => (v === undefined ? '$$REMOVE' : { $literal: v });
         const undone = await registry.updateOne(
-          { _id: indexName, generation: after.generation, claimToken, rev: after.rev },
+          { _id: indexName, generation: written.generation, claimToken, rev: written.rev },
           [
             {
               $set: {
@@ -4323,7 +4355,33 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ],
         );
         this.indexTargets.delete(indexName);
-        if (undone.matchedCount === 1) throw relistConflict();
+        return undone.matchedCount === 1;
+      };
+      // No handshake here: the names were referenced before this write, which already blocks a drop (I11a).
+      let relisted: Record<string, string | undefined>;
+      let after: RegistryDoc | null;
+      try {
+        relisted = await listIds(collectionName, names);
+        after = await this.readRegistryEntry(indexName);
+      } catch (error) {
+        // An unverified claim must not stay behind: deleteIndex would drop the collection on it.
+        const undone = await undo().catch(undoError => {
+          this.logger.error(
+            `claimLegacyIndex("${indexName}") could not verify its claim or undo it, so the registration may still record that Mastra created collection "${collectionName}": ${undoError}`,
+          );
+          return true;
+        });
+        // A later write to the registration makes the pinned undo miss, which keeps that writer's state.
+        if (!undone)
+          this.logger.warn(
+            `claimLegacyIndex("${indexName}") could not verify its claim, and the registration changed since, so the claim was not undone: it may still record that Mastra created collection "${collectionName}"`,
+          );
+        throw error;
+      }
+      if (after?.claimToken === claimToken) {
+        // The expected ids are the ones recorded after the write.
+        if (idsMatch(after.indexIds, names, relisted)) return;
+        if (await undo()) throw relistConflict();
       }
       await settle(collectionName, searchIndexName, names, relisted);
     };
@@ -4392,9 +4450,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       this.indexTargets.delete(indexName);
       await this.testHooks?.afterClaimWrite?.(indexName);
       // The claim adds references, so it runs the attach handshake (R3-3) after its write, then re-lists (R4-3).
-      const pending = await this.pendingDropError(indexName, indexName, names, 'CLAIM_LEGACY_INDEX', reconciled);
-      const after = await otherUsers();
-      const relisted = await listIds(indexName, names);
+      let pending: MastraError | undefined;
+      let after: { _id: string }[];
+      let relisted: Record<string, string | undefined>;
+      try {
+        pending = await this.pendingDropError(indexName, indexName, names, 'CLAIM_LEGACY_INDEX', reconciled);
+        after = await otherUsers();
+        relisted = await listIds(indexName, names);
+      } catch (error) {
+        // An unverified claim must not stay behind: deleteIndex would drop the collection on it.
+        await registry
+          .deleteOne({ _id: indexName, generation, claimToken, rev: 1 })
+          .catch(undoError =>
+            this.logger.error(
+              `claimLegacyIndex("${indexName}") could not verify its claim or undo it, so the registration may still record that Mastra created collection "${indexName}": ${undoError}`,
+            ),
+          );
+        this.indexTargets.delete(indexName);
+        throw error;
+      }
       // R16: a claimed name is present only when the re-list shows a live row with the id listed before.
       const present = names.every(n => tofuIds[n] !== undefined && relisted[n] === tofuIds[n]);
       const refusal = after.length ? inUse(after) : (pending ?? (present ? undefined : relistConflict()));
@@ -4781,10 +4855,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * metadata filter can be pushed down into `$vectorSearch.filter`.
    */
   private async getDeclaredFilterPaths(indexName: string): Promise<Set<string>> {
-    const cached = this.declaredFilterPaths.get(indexName);
-    if (cached) return cached;
-
     const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
+    const source = `${collectionName}/${searchIndexName}`;
+    // A retarget, here or in another process, leaves the paths of the old index behind.
+    const cached = this.declaredFilterPaths.get(indexName);
+    if (cached?.source === source) return cached.paths;
+
     const collection = await this.getCollection(collectionName, true);
     const indexNameInternal = searchIndexName;
     const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexRow[];
@@ -4811,7 +4887,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
     }
 
-    this.declaredFilterPaths.set(indexName, paths);
+    this.declaredFilterPaths.set(indexName, { source, paths });
     return paths;
   }
 

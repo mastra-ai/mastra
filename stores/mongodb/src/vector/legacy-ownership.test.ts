@@ -10,6 +10,7 @@ import {
   deferred,
   rawClient,
   searchIndexNames,
+  settledNames,
   seedCollection,
   seedRegistry,
   uniqueName,
@@ -18,6 +19,7 @@ import {
   hooks,
   listedId,
   recordDrops,
+  captureLogs,
 } from './__fixtures__/atlas-local';
 import { MongoDBVector } from './';
 
@@ -265,11 +267,11 @@ describe('legacy ownership', () => {
     it('T14: a shared retired index passes to the sibling still using it, and is dropped by the last delete', async () => {
       const { coll, X, Y } = await t14();
       await a.deleteIndex({ indexName: X });
-      expect(await searchIndexNames(db, coll)).toEqual(['A']);
+      expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
       expect(await reg(X)).toBeNull();
       expect((await reg(Y))?.ownsTextIndex).toBe(true);
       await a.deleteIndex({ indexName: Y });
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
     });
 
@@ -286,7 +288,7 @@ describe('legacy ownership', () => {
       expect(await reg(X)).toBeNull();
       expect((await reg(Y))?.ownsTextIndex).toBe(true);
       await a.deleteIndex({ indexName: Y });
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
     });
 
@@ -301,14 +303,19 @@ describe('legacy ownership', () => {
       const p = pause();
       (b as any).testHooks = { afterDeleteStep1: p.hook };
       const deleteY = b.deleteIndex({ indexName: Y });
-      await reached(p);
-      const y = await reg(Y);
-      expect(y).toMatchObject({ deleting: true, ownsVectorIndex: true, ownsTextIndex: false });
-      await a.deleteIndex({ indexName: X });
-      expect(await searchIndexNames(db, coll)).toEqual(['V']);
-      p.release.resolve();
+      try {
+        await reached(p);
+        const y = await reg(Y);
+        expect(y).toMatchObject({ deleting: true, ownsVectorIndex: true, ownsTextIndex: false });
+        await a.deleteIndex({ indexName: X });
+        expect(await settledNames(db, coll, ['V'])).toEqual(['V']);
+      } finally {
+        // Settle the parked delete before teardown removes its fixture, even when an assertion failed.
+        p.release.resolve();
+        await deleteY.catch(() => {});
+      }
       await deleteY;
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
     });
 
@@ -331,7 +338,7 @@ describe('legacy ownership', () => {
         await b.deleteIndex({ indexName: ids[order[1]] });
         p.release.resolve();
         await first;
-        expect(await searchIndexNames(db, ids.coll)).toEqual([]);
+        expect(await settledNames(db, ids.coll, [])).toEqual([]);
         expect(await regFor(ids.coll)).toEqual([]);
       });
     }
@@ -347,7 +354,7 @@ describe('legacy ownership', () => {
       await b.deleteIndex({ indexName: Y });
       p.release.resolve();
       await deleteX;
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
     });
 
@@ -374,7 +381,7 @@ describe('legacy ownership', () => {
       (b as any).testHooks = { insideDeleteTransaction };
       await Promise.all([a.deleteIndex({ indexName: X }), b.deleteIndex({ indexName: Y })]);
       expect(attempts).toContain(2);
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
     });
 
@@ -391,14 +398,14 @@ describe('legacy ownership', () => {
       expect(err.id).toBe(errId('FAILED'));
       expect(err.category).toBe('THIRD_PARTY');
       expect(await reg(Y)).toMatchObject({ deleting: true, textSearchIndexName: 'A', ownsTextIndex: true });
-      expect(await searchIndexNames(db, coll)).toEqual(['A']);
+      expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
       hooks(a, { beforeDeleteDrop: undefined });
       const createErr = await a.createSearchIndex({ indexName: Y }).catch(e => e);
       expect(createErr.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'INDEX_DELETING'));
       expect(createErr.category).toBe('USER');
       expect(createErr.message).toMatch(/deleteIndex/);
       await a.deleteIndex({ indexName: Y });
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
       // No recorded id: dropped by the id listed for the name (§3.7).
       expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
@@ -458,10 +465,14 @@ describe('legacy ownership', () => {
       expect(await reg(X)).toMatchObject({ deleting: true, deleteToken: t2 });
       p3.release.resolve();
       await call3;
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await regFor(coll)).toEqual([]);
       expect(dropsA).toEqual([{ collectionName: coll, name: 'A', id: ids.A }]);
-      expect(dropsB).toEqual([{ collectionName: coll, name: 'C', id: ids.C }]);
+      // Call 2 resumes call 1's attempt and retries A by its recorded id, a no-op since A is gone.
+      expect(dropsB).toEqual([
+        { collectionName: coll, name: 'A', id: ids.A },
+        { collectionName: coll, name: 'C', id: ids.C },
+      ]);
     });
 
     it('T14i (before drops): a stale call does not drop the indexes of a recreated registration', async () => {
@@ -474,7 +485,7 @@ describe('legacy ownership', () => {
       const call1 = a.deleteIndex({ indexName: X });
       await reached(p1);
       await b.deleteIndex({ indexName: X });
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       await createRawSearchIndex(db, coll, 'A', dyn, 'search');
       await seedRegistry(db, {
         _id: X,
@@ -489,7 +500,7 @@ describe('legacy ownership', () => {
       });
       p1.release.resolve();
       await call1;
-      expect(await searchIndexNames(db, coll)).toEqual(['A']);
+      expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
       expect(await reg(X)).toMatchObject({ textSearchIndexName: 'A', ownsTextIndex: true });
       expect((await reg(X))?.deleting).toBeUndefined();
       expect(dropsA).toEqual([]);
@@ -515,11 +526,11 @@ describe('legacy ownership', () => {
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('OUTCOME_UNKNOWN'));
         expect(err.category).toBe('THIRD_PARTY');
-        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
         expect(await reg(X)).toMatchObject({ deleting: true, deleteToken: expect.any(String) });
         hooks(a, { afterDeleteCommit: undefined });
         await a.deleteIndex({ indexName: X });
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
         expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
       });
@@ -539,7 +550,7 @@ describe('legacy ownership', () => {
         const retry = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(retry.id).toBe(errId('NOT_REGISTERED'));
         expect((await reg(Y))?.ownsTextIndex).toBe(true);
-        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
         expect(drops).toEqual([]);
       });
 
@@ -554,10 +565,10 @@ describe('legacy ownership', () => {
         });
         const err = await a.deleteIndex({ indexName: X }).catch(e => e);
         expect(err.id).toBe(errId('OUTCOME_UNKNOWN'));
-        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
         hooks(a, { afterDeleteCommit: undefined });
         await a.deleteIndex({ indexName: X });
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
         expect(drops).toEqual([{ collectionName: coll, name: 'A', id: A }]);
       });
@@ -589,7 +600,7 @@ describe('legacy ownership', () => {
             .deleteIndex({ indexName })
             .catch(e => (e?.id === errId('CONFLICT') ? s.deleteIndex({ indexName }) : Promise.reject(e)));
         await Promise.all([del(a, X), del(b, Y)]);
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
       }
     });
@@ -625,8 +636,8 @@ describe('legacy ownership', () => {
         };
         await a.deleteIndex({ indexName: X });
         expect(await reg(X)).toEqual(newX);
-        expect(await searchIndexNames(db, c2)).toEqual(['Z']);
-        expect(await searchIndexNames(db, coll)).toEqual(['A']);
+        expect(await settledNames(db, c2, ['Z'])).toEqual(['Z']);
+        expect(await settledNames(db, coll, ['A'])).toEqual(['A']);
       });
     }
 
@@ -646,8 +657,47 @@ describe('legacy ownership', () => {
       expect(await searchIndexNames(db, coll)).toContain('A');
       (a as any).testHooks = undefined;
       await a.deleteIndex({ indexName: X });
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await reg(X)).toBeNull();
+    });
+
+    // PR #30067 review: a resumed delete listed an ID-less legacy name again, so an index created
+    // under that name after the first attempt was dropped.
+    it('T15b: a resumed delete leaves an index recreated under a legacy name it already dropped', async () => {
+      const { coll, X } = await fixture(
+        { A: 'search', B: 'search' },
+        { X: { textSearchIndexName: 'B', ownsTextIndex: true, retiredTextIndexNames: ['A'] } },
+      );
+      const original: Record<string, string | undefined> = {
+        A: await listedId(db, coll, 'A'),
+        B: await listedId(db, coll, 'B'),
+      };
+      const dropped: string[] = [];
+      (a as any).testHooks = {
+        beforeDeleteDrop: async (_: string, name: string) => {
+          if (dropped.length === 1) throw new Error('second drop failed');
+          dropped.push(name);
+        },
+      };
+      await expect(a.deleteIndex({ indexName: X })).rejects.toMatchObject({ id: errId('FAILED') });
+      (a as any).testHooks = undefined;
+      const first = dropped[0]!;
+      // Someone else creates an index under the name the first attempt dropped.
+      await waitFor(() =>
+        createRawSearchIndex(db, coll, first, dyn, 'search').then(
+          () => true,
+          () => false,
+        ),
+      );
+      const recreated = await listedId(db, coll, first);
+      expect(recreated).toEqual(expect.any(String));
+      expect(recreated).not.toBe(original[first]);
+      // Checked on the drop commands, since a wrongly dropped index can stay listed as DELETING.
+      const { drops } = recordDrops(a);
+      await a.deleteIndex({ indexName: X });
+      expect(await reg(X)).toBeNull();
+      expect(drops.map(d => d.id)).not.toContain(recreated);
+      expect(await listedId(db, coll, first)).toBe(recreated);
     });
 
     it('T17: a BYO delete retried after a partial failure keeps the collection and clears the entry', async () => {
@@ -665,7 +715,7 @@ describe('legacy ownership', () => {
       (a as any).testHooks = undefined;
       await a.deleteIndex({ indexName: X });
       expect(await reg(X)).toBeNull();
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
       expect(await db.collection(coll).countDocuments()).toBe(1);
     });
 
@@ -708,7 +758,7 @@ describe('legacy ownership', () => {
       const coll = await sameName(true);
       await a.deleteIndex({ indexName: coll });
       expect(await reg(coll)).toBeNull();
-      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+      expect(await settledNames(db, coll, ['F'])).toEqual(['F']);
       expect(await db.collection(coll).countDocuments()).toBe(1);
     });
 
@@ -716,7 +766,7 @@ describe('legacy ownership', () => {
       const coll = await sameName(false);
       await a.deleteIndex({ indexName: coll });
       expect(await reg(coll)).toBeNull();
-      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+      expect(await settledNames(db, coll, ['F'])).toEqual(['F']);
     });
 
     it('restart durability: a fresh store with an empty cache deletes a BYO index from the registry', async () => {
@@ -729,7 +779,7 @@ describe('legacy ownership', () => {
         await fresh.disconnect();
       }
       expect(await reg(coll)).toBeNull();
-      expect(await searchIndexNames(db, coll)).toEqual(['F']);
+      expect(await settledNames(db, coll, ['F'])).toEqual(['F']);
       expect(await db.collection(coll).countDocuments()).toBe(1);
     });
 
@@ -743,7 +793,7 @@ describe('legacy ownership', () => {
       const { coll } = await fixture({ A: 'search' }, entries);
       for (const key of Object.keys(entries)) await a.deleteIndex({ indexName: `${coll}_${key}` });
       expect(await regFor(coll)).toEqual([]);
-      expect(await searchIndexNames(db, coll)).toEqual([]);
+      expect(await settledNames(db, coll, [])).toEqual([]);
     });
 
     // Managed deletes drop the whole collection, so they need recorded ownership and no other user.
@@ -775,11 +825,11 @@ describe('legacy ownership', () => {
         expect(await reg(Y)).toMatchObject({ searchIndexName: 'S' });
         del.release.resolve();
         await deleteX;
-        expect(await searchIndexNames(db, coll)).toEqual(['S']);
+        expect(await settledNames(db, coll, ['S'])).toEqual(['S']);
         expect(await reg(X)).toBeNull();
         expect(await reg(Y)).toMatchObject({ searchIndexName: 'S', ownsVectorIndex: true });
         await b.deleteIndex({ indexName: Y });
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
       });
 
@@ -797,7 +847,7 @@ describe('legacy ownership', () => {
         del.release.resolve();
         await deleteX;
         // Handed over, not dropped: S is still the index X created, and Y is responsible for it.
-        expect(await searchIndexNames(db, coll)).toEqual(['S']);
+        expect(await settledNames(db, coll, ['S'])).toEqual(['S']);
         expect(await reg(Y)).toMatchObject({ searchIndexName: 'S', ownsVectorIndex: true });
         att.release.resolve();
         await createY;
@@ -817,7 +867,7 @@ describe('legacy ownership', () => {
         expect(await reg(Y)).toBeNull();
         del.release.resolve();
         await deleteX;
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
       });
 
@@ -840,7 +890,7 @@ describe('legacy ownership', () => {
         expect(await reg(Y)).toBeNull();
         del2.release.resolve();
         await deleteX;
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([]);
       });
 
@@ -869,7 +919,7 @@ describe('legacy ownership', () => {
         });
         del.release.resolve();
         await deleteX;
-        expect(await searchIndexNames(db, coll)).toEqual([]);
+        expect(await settledNames(db, coll, [])).toEqual([]);
         expect(await regFor(coll)).toEqual([restored]);
       });
     });
@@ -1242,7 +1292,7 @@ describe('legacy ownership', () => {
           expect((await searchIndexNames(db, coll)).sort()).toEqual(['A', 'B', `${coll}_vector_index`]);
           (a as any).testHooks = undefined;
           await a.deleteIndex({ indexName: coll });
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
           expect(await entry(coll)).toBeNull();
         });
 
@@ -1256,12 +1306,12 @@ describe('legacy ownership', () => {
             .catch(e => e);
           await reached(p);
           await b.deleteIndex({ indexName: coll });
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
           p.release.resolve();
           const err = await refresh;
           expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
           expect(await entry(coll)).toBeNull();
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
         });
 
         // The registration is removed after the call's write but before it provisions: provisioning
@@ -1276,12 +1326,12 @@ describe('legacy ownership', () => {
             .catch(e => e);
           await reached(p);
           await b.deleteIndex({ indexName: coll });
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
           p.release.resolve();
           const err = await refresh;
           expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'));
           expect(await entry(coll)).toBeNull();
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
         });
 
         it('T-R3c: a createIndex refresh whose registration is deleted after its write refuses with CONFLICT and recreates nothing', async () => {
@@ -1291,12 +1341,12 @@ describe('legacy ownership', () => {
           const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
           await reached(p);
           await b.deleteIndex({ indexName: coll });
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
           p.release.resolve();
           const err = await refresh;
           expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
           expect(await entry(coll)).toBeNull();
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
         });
 
         it('T-R3d: a createIndex refresh never rewrites an entry whose delete started after its read', async () => {
@@ -1345,7 +1395,7 @@ describe('legacy ownership', () => {
           expect((await entry(coll))?.ownsVectorIndex).toBe(true);
           (a as any).testHooks = undefined;
           await a.deleteIndex({ indexName: coll });
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
         });
 
         it('I-2: a failed createSearchIndex never undoes a claim that completed while it ran', async () => {
@@ -1399,7 +1449,7 @@ describe('legacy ownership', () => {
             .catch(e => e);
           expect(err.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INDEX_DELETING'));
           expect(await entry(`${coll}_Y`)).toBeNull();
-          expect(await searchIndexNames(db, coll)).toEqual([]);
+          expect(await settledNames(db, coll, [])).toEqual([]);
         });
 
         // Another call retargets the registration between this call's write and its pre-provision
@@ -1438,7 +1488,7 @@ describe('legacy ownership', () => {
             expect(afterB?.generation).toBe(generation);
             p.release.resolve();
             const err = await first;
-            expect(await searchIndexNames(db, coll)).toEqual(['V2']);
+            expect(await settledNames(db, coll, ['V2'])).toEqual(['V2']);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err.category).toBe('USER');
             expect(err.message).toMatch(/searchIndexName "V2" instead of "V1"/);
@@ -1462,7 +1512,7 @@ describe('legacy ownership', () => {
             expect(typeof afterB?.generation).toBe('string');
             p.release.resolve();
             const err = await refresh;
-            expect(await searchIndexNames(db, coll)).toEqual([]);
+            expect(await settledNames(db, coll, [])).toEqual([]);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err.message).toMatch(new RegExp(`collectionName "${other}" instead of "${coll}"`));
             expect(await entry(coll)).toMatchObject({
@@ -1503,7 +1553,7 @@ describe('legacy ownership', () => {
             await b.createSearchIndex({ indexName: coll, searchIndexName: 'T2' });
             p.release.resolve();
             const err = await create;
-            expect(await searchIndexNames(db, coll)).toEqual(['T2']);
+            expect(await settledNames(db, coll, ['T2'])).toEqual(['T2']);
             expect(err?.id).toBe(createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'));
             expect(err.message).toMatch(new RegExp(`textSearchIndexName "T2" instead of "${coll}_search_index"`));
             expect(await entry(coll)).toMatchObject({ textSearchIndexName: 'T2', ownsTextIndex: true });
@@ -1516,7 +1566,7 @@ describe('legacy ownership', () => {
             await seedRegistry(db, { _id: coll, indexName: coll, textSearchIndexName: `${coll}_search_index` });
             try {
               await a.createSearchIndex({ indexName: coll });
-              expect(await searchIndexNames(db, coll)).toEqual([`${coll}_search_index`]);
+              expect(await settledNames(db, coll, [`${coll}_search_index`])).toEqual([`${coll}_search_index`]);
               expect(await entry(coll)).toMatchObject({ textSearchIndexName: `${coll}_search_index` });
             } finally {
               await db.collection(REGISTRY).deleteOne({ _id: coll as any });
@@ -1533,7 +1583,7 @@ describe('legacy ownership', () => {
             const refresh = a.createIndex({ indexName: coll, dimension: 4, collectionName: coll }).catch(e => e);
             await reached(pa);
             await b.deleteIndex({ indexName: coll });
-            expect(await searchIndexNames(db, coll)).toEqual([]);
+            expect(await settledNames(db, coll, [])).toEqual([]);
             (b as any).testHooks = { beforePendingDropCheck: pb.hook };
             const recreate = b.createIndex({ indexName: coll, dimension: 4, collectionName: coll });
             await reached(pb);
@@ -1547,7 +1597,7 @@ describe('legacy ownership', () => {
             expect(e?.ownsVectorIndex).toBe(true);
             (b as any).testHooks = undefined;
             await b.deleteIndex({ indexName: coll });
-            expect(await searchIndexNames(db, coll)).toEqual([]);
+            expect(await settledNames(db, coll, [])).toEqual([]);
           });
         });
       });
@@ -1637,6 +1687,104 @@ describe('legacy ownership', () => {
       };
       return { reached, release };
     }
+
+    /** Makes every search-index listing after the claim's registry write throw. */
+    /** Makes every search-index listing after the claim's registry write throw; `state.written` says the write happened. */
+    function failRelistAfterWrite() {
+      const state = { written: false, failed: false };
+      (store as any).testHooks = {
+        afterClaimWrite: async () => {
+          state.written = true;
+        },
+        listSearchIndexesStub: () => {
+          if (!state.written) return undefined;
+          state.failed = true;
+          throw new Error('listing failed');
+        },
+      };
+      return state;
+    }
+
+    // PR #30067 review: a claim whose verification failed left ownsCollection: true behind.
+    it('T5c: a registered claim whose re-list fails leaves the entry unclaimed', async () => {
+      const { X } = await flagless();
+      const state = failRelistAfterWrite();
+      await expect(store.claimLegacyIndex({ indexName: X })).rejects.toThrow(/listing failed/);
+      expect(state).toEqual({ written: true, failed: true });
+      expect((await reg(X))?.ownsCollection).toBeUndefined();
+    });
+
+    it('T5d: an inserted claim whose re-list fails leaves no registration', async () => {
+      const X = await legacy();
+      const state = failRelistAfterWrite();
+      await expect(store.claimLegacyIndex({ indexName: X })).rejects.toThrow(/listing failed/);
+      expect(state).toEqual({ written: true, failed: true });
+      expect(await reg(X)).toBeNull();
+    });
+
+    // Independent review of PR #30067: the registry read after a successful re-list was outside the undo.
+    it('T5e: a registered claim whose verification read fails leaves the entry unclaimed, so deleteIndex keeps the data', async () => {
+      const { X } = await flagless();
+      const read = (store as any).readRegistryEntry.bind(store);
+      let written = false;
+      let failed = false;
+      (store as any).testHooks = {
+        afterClaimWrite: async () => {
+          written = true;
+        },
+      };
+      const spy = vi.spyOn(store as any, 'readRegistryEntry').mockImplementation(async (...args: any[]) => {
+        if (written && !failed) {
+          failed = true;
+          throw new Error('verification read failed');
+        }
+        return read(...args);
+      });
+      try {
+        await expect(store.claimLegacyIndex({ indexName: X })).rejects.toThrow(/verification read failed/);
+      } finally {
+        spy.mockRestore();
+        (store as any).testHooks = undefined;
+      }
+      expect(failed).toBe(true);
+      expect((await reg(X))?.ownsCollection).toBeUndefined();
+      const err = await store.deleteIndex({ indexName: X }).catch(e => e);
+      expect(err?.id).toBe(createVectorErrorId('MONGODB', 'DELETE_INDEX', 'OWNERSHIP_UNKNOWN'));
+      expect(await exists(X)).toBe(true);
+    });
+
+    // Independent review of PR #30067: an undo that a later write makes miss used to be silent.
+    it('T5f: a failed claim whose registration changed meanwhile keeps that write and logs a warning', async () => {
+      const { X } = await flagless();
+      const logs = captureLogs(store);
+      const read = (store as any).readRegistryEntry.bind(store);
+      let written = false;
+      let failed = false;
+      (store as any).testHooks = {
+        afterClaimWrite: async () => {
+          written = true;
+          // Another writer's mutation: a new token and rev, as every registry write makes.
+          await db
+            .collection(REGISTRY)
+            .updateOne({ _id: X as any }, { $set: { claimToken: 'other' }, $inc: { rev: 1 } });
+        },
+      };
+      const spy = vi.spyOn(store as any, 'readRegistryEntry').mockImplementation(async (...args: any[]) => {
+        if (written && !failed) {
+          failed = true;
+          throw new Error('verification read failed');
+        }
+        return read(...args);
+      });
+      try {
+        await expect(store.claimLegacyIndex({ indexName: X })).rejects.toThrow(/verification read failed/);
+      } finally {
+        spy.mockRestore();
+        (store as any).testHooks = undefined;
+      }
+      expect(await reg(X)).toMatchObject({ claimToken: 'other', ownsCollection: true });
+      expect(logs.warn.some(m => m.includes('the claim was not undone'))).toBe(true);
+    });
 
     it('T5b: a claimed pre-1.15 collection is dropped by deleteIndex', async () => {
       const X = await legacy();

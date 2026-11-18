@@ -25,6 +25,39 @@ describe('searchDefinitionsEquivalent', () => {
       ),
     ).toBe(true);
   });
+  // PR #30067 review: equivalent foreign indexes were refused.
+  it('omitted storedSource equals false, but not true', () => {
+    expect(eq(def({ a: str }), def({ a: str }, { storedSource: false }))).toBe(true);
+    expect(eq(def({ a: str }), def({ a: str }, { storedSource: true }))).toBe(false);
+  });
+  it('a string field inherits the analyzers in the documented order', () => {
+    // analyzer: the index analyzer, else lucene.standard.
+    expect(eq(def({ a: str }), def({ a: { type: 'string', analyzer: 'lucene.standard' } }))).toBe(true);
+    expect(
+      eq(
+        def({ a: str }, { analyzer: 'lucene.english' }),
+        def({ a: { type: 'string', analyzer: 'lucene.english' } }, { analyzer: 'lucene.english' }),
+      ),
+    ).toBe(true);
+    // searchAnalyzer: the field analyzer, then the index searchAnalyzer, then the index analyzer.
+    expect(
+      eq(
+        def({ a: { type: 'string', analyzer: 'lucene.keyword' } }, { searchAnalyzer: 'lucene.english' }),
+        def(
+          { a: { type: 'string', analyzer: 'lucene.keyword', searchAnalyzer: 'lucene.keyword' } },
+          { searchAnalyzer: 'lucene.english' },
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      eq(
+        def({ a: str }, { searchAnalyzer: 'lucene.english' }),
+        def({ a: { type: 'string', searchAnalyzer: 'lucene.english' } }, { searchAnalyzer: 'lucene.english' }),
+      ),
+    ).toBe(true);
+    // A different effective analyzer is still a different index.
+    expect(eq(def({ a: str }), def({ a: { type: 'string', analyzer: 'lucene.keyword' } }))).toBe(false);
+  });
   it('key order is ignored', () => {
     expect(
       eq(
