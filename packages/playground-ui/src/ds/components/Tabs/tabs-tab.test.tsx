@@ -261,9 +261,11 @@ describe('Tab', () => {
   });
 
   describe('pill tabs with overflow="menu"', () => {
-    const pills = (props: { overflow?: 'scroll' | 'menu'; onValueChange?: (value: string) => void } = {}) => (
+    const pills = (
+      props: { overflow?: 'scroll' | 'menu'; onValueChange?: (value: string) => void } = { overflow: 'menu' },
+    ) => (
       <Tabs defaultTab="first" onValueChange={props.onValueChange}>
-        <TabList variant="pill" size="sm" overflow={props.overflow ?? 'menu'}>
+        <TabList variant="pill" size="sm" overflow={props.overflow}>
           <Tab value="first">First</Tab>
           <Tab value="second">Second</Tab>
           <Tab value="third">Third</Tab>
@@ -272,7 +274,7 @@ describe('Tab', () => {
     );
     // Room for two 100px tabs on the track and the menu, not three.
     const narrow = () => {
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(260);
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(270);
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
     };
 
@@ -286,7 +288,7 @@ describe('Tab', () => {
     it('opens a folded tab from the menu, which then shows as the selected tab', () => {
       narrow();
       const onValueChange = vi.fn();
-      render(pills({ onValueChange }));
+      render(pills({ overflow: 'menu', onValueChange }));
       fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
       fireEvent.click(screen.getByRole('menuitem', { name: 'Third' }));
       expect(onValueChange).toHaveBeenCalledWith('third');
@@ -303,7 +305,7 @@ describe('Tab', () => {
 
     it('scrolls instead by default', () => {
       narrow();
-      render(pills({ overflow: 'scroll' }));
+      render(pills({}));
       expect(screen.getAllByRole('tab')).toHaveLength(3);
       expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
     });

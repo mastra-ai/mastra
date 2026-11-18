@@ -106,10 +106,11 @@ export const TabList = ({
     observer.observe(viewport);
     return () => observer.disconnect();
   }, [folds]);
-  // Space between tabs, and around them, that folding has to count: the inset frame's, or a pill
-  // track's `gap-1` and 2px inset on each side.
-  const gap = contained || pillTrack ? 4 : 0;
-  const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
+  // Space between tabs, and around them, that folding has to count: the inset frame's, a pill
+  // track's `gap-1` and 2px inset on each side, or ghost pills' `gap-0.5`. Outside contained tabs the
+  // "+N" menu also sits `gap-1` after the list.
+  const gap = contained || pillTrack ? 4 : resolvedVariant === 'pill-ghost' ? 2 : 0;
+  const frameReserve = contained ? 30 : (pillTrack ? 4 : 0) + (folds ? 4 : 0);
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!folds || available === null) return hidden;
