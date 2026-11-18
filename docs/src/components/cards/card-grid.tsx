@@ -49,7 +49,15 @@ export const CardGridItem = ({
                 }
               />
             ) : (
-              <div className={preserveLogoColor ? 'h-8 w-8' : 'h-8 w-8 text-black dark:text-white'}>{logo}</div>
+              <div
+                className={
+                  preserveLogoColor
+                    ? 'inline-flex h-8 w-8 items-center justify-center'
+                    : 'inline-flex h-8 w-8 items-center justify-center text-black dark:text-white'
+                }
+              >
+                {logo}
+              </div>
             ))}
           <CardTitle>{title}</CardTitle>
         </CardHeader>
