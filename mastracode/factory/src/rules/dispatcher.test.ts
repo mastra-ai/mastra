@@ -4347,9 +4347,17 @@ describe('FactoryDecisionDispatcher', () => {
     { when: 'during the run', stoppedDuringRun: true, settled: { status: 'superseded', failureCode: null }, sends: 1 },
     // A stop left while nothing ran must not swallow a later run's abort.
     { when: 'before the run', stoppedDuringRun: false, settled: { status: 'retry', failureCode: 'unknown' }, sends: 2 },
+    // A retry would clear a stop that may have been recorded and restart the run.
+    {
+      when: 'unreadably',
+      stoppedDuringRun: false,
+      lookupFails: true,
+      settled: { status: 'superseded', failureCode: null },
+      sends: 1,
+    },
   ])(
     'settles an aborted run whose session was stopped $when as $settled.status',
-    async ({ stoppedDuringRun, settled, sends }) => {
+    async ({ stoppedDuringRun, lookupFails, settled, sends }) => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, {
         type: 'invokeSkill',
@@ -4379,7 +4387,8 @@ describe('FactoryDecisionDispatcher', () => {
         kickoffMessage: null,
       });
       const stop = () => storage.requestRunBindingStop({ orgId: 'org-1', sessionId: 'session-1', at: new Date() });
-      if (!stoppedDuringRun) await stop();
+      if (!stoppedDuringRun && !lookupFails) await stop();
+      if (lookupFails) vi.spyOn(storage, 'runBindingStopRequested').mockRejectedValue(new Error('storage down'));
       const { controller, session } = createSession(undefined, {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
         emitAgentEndDuringSignal: true,

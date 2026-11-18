@@ -1770,8 +1770,7 @@ export class FactoryDecisionDispatcher {
               ? []
               : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
           );
-          const stopRequested = () =>
-            this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id });
+          const stopRequested = () => this.#runStopRequested(record.orgId, binding.id);
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool(record),
@@ -3267,6 +3266,22 @@ export class FactoryDecisionDispatcher {
    * recipients that already have a final report from this run, and never
    * throws, so reporting can't change the decision's outcome.
    */
+  /**
+   * An unreadable stop counts as a stop: retrying would clear the marker and restart a run a person
+   * may have just stopped, while a wrongly settled run only leaves the card idle until started again.
+   */
+  async #runStopRequested(orgId: string, bindingId: string): Promise<boolean> {
+    try {
+      return await this.#storage.runBindingStopRequested({ orgId, bindingId });
+    } catch (error) {
+      console.warn(
+        `[factory] could not read the stop request for binding ${bindingId}; treating the run as stopped:`,
+        error,
+      );
+      return true;
+    }
+  }
+
   async #reportingRunEnd(
     {
       binding,
@@ -3379,8 +3394,7 @@ export class FactoryDecisionDispatcher {
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
           const since = new Date();
-          const stopRequested = () =>
-            this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id });
+          const stopRequested = () => this.#runStopRequested(record.orgId, binding.id);
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
