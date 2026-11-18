@@ -9,12 +9,11 @@ import { useBoardQuery } from '../../hooks/useBoardEditor';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
+import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { IntakeOrderSection } from '../domains/settings/components/IntakeOrderSection';
 import { NotRoutedSection } from '../domains/settings/components/NotRoutedSection';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-
-const COLUMN = 'mx-auto w-full max-w-2xl';
 
 /** Which board takes new work: the order boards are offered a new item, and the items no board took. */
 export function BoardIntakePage() {
@@ -42,7 +41,7 @@ export function BoardIntakePage() {
     <PageLayout
       variant="narrow"
       header={
-        <div className={cn(COLUMN, 'pb-8')}>
+        <div className={cn(SETTINGS_COLUMN, 'pb-8')}>
           <PageHeader>
             <PageHeader.Title>Routing</PageHeader.Title>
             <PageHeader.Description>
@@ -57,7 +56,7 @@ export function BoardIntakePage() {
       }
       {...slots}
     >
-      <div className={cn(COLUMN, 'flex flex-col gap-8')}>
+      <div className={cn(SETTINGS_COLUMN, 'flex flex-col gap-8')}>
         <IntakeOrderSection factoryId={factory.id} />
         <NotRoutedSection factoryId={factory.id} />
       </div>
