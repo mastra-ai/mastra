@@ -14,6 +14,14 @@ import { useState } from 'react';
 
 import { useRenameSession } from '../hooks/useRenameSession';
 
+/** The server keeps 80 characters. Counted as code points, so an emoji is one, not two. */
+const MAX_TITLE_LENGTH = 80;
+
+function withinTitleLimit(value: string): string {
+  const characters = [...value];
+  return characters.length > MAX_TITLE_LENGTH ? characters.slice(0, MAX_TITLE_LENGTH).join('') : value;
+}
+
 export function RenameSessionDialog({
   factoryId,
   sessionId,
@@ -53,11 +61,10 @@ export function RenameSessionDialog({
           <Input
             autoFocus
             aria-label="Session title"
-            maxLength={80}
             value={draft}
             disabled={isPending}
             onFocus={event => event.target.select()}
-            onChange={event => setDraft(event.target.value)}
+            onChange={event => setDraft(withinTitleLimit(event.target.value))}
             onKeyDown={event => {
               if (event.key === 'Enter') void save();
             }}

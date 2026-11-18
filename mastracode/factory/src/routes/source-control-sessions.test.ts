@@ -380,6 +380,79 @@ describe('source-control session routes', () => {
     expect(isThreadTitlePinned(thread?.metadata)).toBe(true);
   });
 
+  it('keeps a typed title when a regeneration asked for earlier finishes after it', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-rename-vs-regenerate';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/rename-vs-regenerate',
+      baseBranch: 'main',
+      visibility: 'org',
+      title: 'First prompt',
+    });
+    const storage = new InMemoryStore({ id: sessionId });
+    const controller = await startOwnershipController(sessionId, storage);
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: sessionId,
+        resourceId: project.id,
+        title: 'First prompt',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const pin = (threadId: string, title: string, pinned: boolean) =>
+      memory.patchThread({ id: threadId, title, metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: pinned } });
+    // The model answers only when released; like the real call, its title lands on the thread unpinned.
+    let releaseModel = () => {};
+    const modelAnswered = new Promise<void>(resolve => {
+      releaseModel = resolve;
+    });
+    let markAsked = () => {};
+    const asked = new Promise<void>(resolve => {
+      markAsked = resolve;
+    });
+    vi.spyOn(controller, 'generateThreadTitle').mockImplementation(async ({ threadId }) => {
+      markAsked();
+      await modelAnswered;
+      await pin(threadId, 'Generated title', false);
+      return 'Generated title';
+    });
+    const renameThread = vi.fn<NonNullable<RouteOptions['renameThread']>>(({ threadId, title }) =>
+      pin(threadId, title, true),
+    );
+    const app = buildApp([sourceControl], seed, controller, noRuns, user, undefined, renameThread);
+    const typed = (title: string) =>
+      app.request(`/web/user-sessions/${sessionId}/title`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+
+    const regenerated = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    await asked;
+    // Two typed titles while the model is still thinking: the later one must be the one kept.
+    const first = typed('Typed first');
+    const second = typed('Typed second');
+    // Long enough for both to have written, had they not waited their turn behind the model.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(renameThread).not.toHaveBeenCalled();
+    releaseModel();
+    expect((await regenerated).status).toBe(200);
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ title: 'Typed second' });
+    const thread = await controller.queryThreadById({ threadId: sessionId });
+    expect(thread?.title).toBe('Typed second');
+    expect(isThreadTitlePinned(thread?.metadata)).toBe(true);
+  });
+
   it('refuses a typed title for a session with no conversation yet', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const sessionId = 'factory-rename-no-thread';

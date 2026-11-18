@@ -148,6 +148,19 @@ describe('Renaming a session by hand', () => {
     expect(sent).toEqual([]);
   });
 
+  it('accepts as many emoji as the server keeps', async () => {
+    useFactoryFixtures(() => [session]);
+
+    const user = userEvent.setup();
+    renderSection();
+
+    const input = await openRename(user, 'dropdown');
+    await user.clear(input);
+    await user.paste('🚀'.repeat(85));
+
+    expect(input).toHaveValue('🚀'.repeat(80));
+  });
+
   it("offers no rename on a teammate's session", async () => {
     useFactoryFixtures(() => [session], 'user-2');
 

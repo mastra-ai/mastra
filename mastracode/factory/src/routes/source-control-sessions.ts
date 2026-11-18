@@ -328,14 +328,35 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Title writes for one session, one at a time and in the order they were asked
+ * for. A title touches the conversation and the session row, so two writers
+ * interleaving would leave the two disagreeing, and a regeneration still
+ * waiting on its model would replace a title typed after it started.
+ */
 function createSessionNaming() {
   const inFlight = new Map<string, Promise<string | null>>();
-  return (sessionId: string, run: () => Promise<string | null>) => {
-    const pending = inFlight.get(sessionId);
-    if (pending) return pending;
-    const started = run().finally(() => inFlight.delete(sessionId));
-    inFlight.set(sessionId, started);
-    return started;
+  const tails = new Map<string, Promise<unknown>>();
+  const inTurn = <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
+    const turn = (tails.get(sessionId) ?? Promise.resolve()).then(run, run);
+    const tail = turn.catch(() => {});
+    tails.set(sessionId, tail);
+    void tail.then(() => {
+      if (tails.get(sessionId) === tail) tails.delete(sessionId);
+    });
+    return turn;
+  };
+  return {
+    /** Ask the model for a title. A second ask while one is pending shares its answer. */
+    generate(sessionId: string, run: () => Promise<string | null>) {
+      const pending = inFlight.get(sessionId);
+      if (pending) return pending;
+      const started = inTurn(sessionId, run).finally(() => inFlight.delete(sessionId));
+      inFlight.set(sessionId, started);
+      return started;
+    },
+    /** Store a typed title after every title write asked for before it. */
+    rename: inTurn,
   };
 }
 
@@ -906,9 +927,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         // The first reply names a new conversation, which would replace a title set before it.
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
-        // The thread goes first: its pin is what keeps the next automatic title off the row.
-        await options.renameThread({ threadId: thread.id, title });
-        await match.sourceControl.sessions.rename({ sessionId, title });
+        const renameThread = options.renameThread;
+        await nameSession.rename(sessionId, async () => {
+          // The thread goes first: its pin is what keeps the next automatic title off the row.
+          await renameThread({ threadId: thread.id, title });
+          await match.sourceControl.sessions.rename({ sessionId, title });
+        });
         return c.json({ title });
       },
     }),
@@ -932,7 +956,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
         try {
-          const title = await nameSession(sessionId, async () => {
+          const title = await nameSession.generate(sessionId, async () => {
             const generated = await options.controller!.generateThreadTitle({
               threadId: thread.id,
               sessionId,
