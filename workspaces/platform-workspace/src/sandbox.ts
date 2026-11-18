@@ -151,8 +151,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * `.desktop()`: screenshots, mouse, keyboard and the accessibility tree,
    * exposed as `sandbox.computer` and the workspace
    * `mastra_workspace_computer_*` tools. Needs a `template` (a builder with
-   * `.desktop()` or a template resolver; a `seedCheckpointName` alone is not
-   * enough); E2B only.
+   * `.desktop()` or a template resolver that returns one; a
+   * `seedCheckpointName` alone is not enough); E2B only.
    * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
    *
    * Give the agent `defaultOptions: { toolCallConcurrency: 1 }`: by default the tool calls of
@@ -788,8 +788,8 @@ export class PlatformSandbox extends MastraSandbox {
       if (template === undefined) {
         throw new Error('PlatformSandbox computer needs a template with the desktop: template: Template().desktop()');
       }
+      // A resolver is checked lazily: without `.desktop()` the first computer call reports a missing desktop.
       if (
-        template !== undefined &&
         typeof template !== 'function' &&
         !serializeSandboxTemplate(template).operations.some(op => op.method === 'desktop')
       ) {
