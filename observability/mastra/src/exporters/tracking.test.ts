@@ -1318,6 +1318,20 @@ describe('TrackingExporter', () => {
       expect([...exporter.abortedSpans.keys()]).toEqual(['tool']);
     });
 
+    it('should close a span whose dropped end arrives while its start is queued for a missing parent', async () => {
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId, spanId: 'child', endTime: t });
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await flushAsync();
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('parent', 'root', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+
+      expect(exporter.closedSpans.get('child')).toEqual(t);
+      expect(exporter.abortedSpans.size).toBe(0);
+    });
+
     it('should close a span whose dropped end is dispatched in the same tick as its start', async () => {
       await Promise.all([
         exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root'))),

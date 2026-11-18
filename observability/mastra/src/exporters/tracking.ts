@@ -810,7 +810,7 @@ export abstract class TrackingExporter<
           traceData.addBranch({ spanId: exportedSpan.id, parentSpanId: exportedSpan.parentSpanId });
           const spanData = await this._buildSpan({ span: exportedSpan, traceData });
           if (spanData) {
-            traceData.addSpan({ spanId: exportedSpan.id, spanData });
+            await this.#addBuiltSpan({ traceData, span: exportedSpan, spanData });
             // Mark root as processed if this is the root span
             if (exportedSpan.isRootSpan) {
               traceData.markRootSpanProcessed();
@@ -1272,11 +1272,7 @@ export abstract class TrackingExporter<
               traceId: exportedSpan.traceId,
               spanId: exportedSpan.id,
             });
-            traceData.addSpan({ spanId: exportedSpan.id, spanData });
-            const filteredEndTime = traceData.takeCloseWhenBuilt({ spanId: exportedSpan.id });
-            if (filteredEndTime) {
-              await this.#closeFilteredSpan({ traceData, spanId: exportedSpan.id, endTime: filteredEndTime });
-            }
+            await this.#addBuiltSpan({ traceData, span: exportedSpan, spanData });
             // Mark root as processed for skipBuildRootTask exporters
             if (exportedSpan.isRootSpan) {
               traceData.markRootSpanProcessed();
@@ -1357,6 +1353,24 @@ export abstract class TrackingExporter<
     await this.#closeFilteredSpan({ traceData, spanId: event.spanId, endTime: event.endTime });
     if (traceData.activeSpanCount() === 0) {
       this.#scheduleCleanup(event.traceId);
+    }
+  }
+
+  /** Register a built span, then close it when `spanFilter` already dropped its end. */
+  async #addBuiltSpan(args: {
+    traceData: TraceData<TRootData, TSpanData, TEventData, TMetadata>;
+    span: AnyExportedSpan;
+    spanData: TSpanData;
+  }): Promise<void> {
+    const { traceData, span, spanData } = args;
+    traceData.addSpan({ spanId: span.id, spanData });
+
+    const filteredEndTime = traceData.takeCloseWhenBuilt({ spanId: span.id });
+    if (!filteredEndTime) return;
+
+    await this.#closeFilteredSpan({ traceData, spanId: span.id, endTime: filteredEndTime });
+    if (traceData.activeSpanCount() === 0) {
+      this.#scheduleCleanup(span.traceId);
     }
   }
 
