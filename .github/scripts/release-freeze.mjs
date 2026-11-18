@@ -8,7 +8,7 @@
 //
 // The ruleset itself is created once by a repo admin; this script only ever
 // sends { enforcement } so the bypass list and rules stay as the admin set them.
-// It fails closed: an actor without the admin or maintain role, a lookup that
+// It fails closed: an actor without write access, a lookup that
 // errors, a missing or duplicated ruleset, or a ruleset that is not a main-only
 // "Restrict updates" rule all stop it before any write.
 //
@@ -27,7 +27,10 @@
 import { appendFileSync } from 'node:fs';
 
 export const RULESET_NAME = 'Release merge freeze';
-const ALLOWED_ROLES = new Set(['admin', 'maintain']);
+// Base permission from the collaborator API: maintain and custom roles built on
+// write report "write"; triage reports "read". Write is what GitHub already
+// requires to dispatch a workflow, so anyone who can start it may freeze main.
+const ALLOWED_PERMISSIONS = new Set(['admin', 'write']);
 const TARGET = { freeze: 'active', unfreeze: 'disabled' };
 
 function usage(message) {
@@ -122,11 +125,11 @@ async function main() {
   const api = makeApi({ baseUrl: process.env.GITHUB_API_URL || 'https://api.github.com', token });
   const target = TARGET[args.action];
 
-  // 1. Only admins and maintainers may freeze or unfreeze main.
+  // 1. Only people with write access may freeze or unfreeze main.
   const permission = await api.get(`/repos/${repo}/collaborators/${encodeURIComponent(args.actor)}/permission`);
-  if (!ALLOWED_ROLES.has(permission?.role_name)) {
+  if (!ALLOWED_PERMISSIONS.has(permission?.permission)) {
     throw new Error(
-      `@${args.actor} has role "${permission?.role_name ?? 'unknown'}" on ${repo} and is not allowed to ${args.action} main (admin or maintain only).`,
+      `@${args.actor} has ${permission?.permission ?? 'unknown'} access to ${repo} and is not allowed to ${args.action} main (write access required).`,
     );
   }
 

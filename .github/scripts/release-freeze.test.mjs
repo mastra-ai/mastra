@@ -71,7 +71,8 @@ function standardRoutes({ role = 'admin', enforcement = 'disabled' } = {}) {
     state,
     routes: {
       'GET /repos/mastra-ai/mastra/collaborators/tyler/permission': () => ({
-        permission: role === 'maintain' ? 'write' : role,
+        // The API reports maintain as write and triage as read in `permission`.
+        permission: { maintain: 'write', triage: 'read' }[role] ?? role,
         role_name: role,
         user: { login: 'tyler' },
       }),
@@ -144,15 +145,24 @@ test('unfreeze sets enforcement=disabled', async t => {
   assert.match(result.summary, /main is open/i);
 });
 
-test('a maintainer may run it', async t => {
-  const { routes } = standardRoutes({ role: 'maintain' });
-  const api = await startApi(t, routes);
-  const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(puts(api).length, 1);
-});
+for (const role of ['maintain', 'write', 'release-manager']) {
+  test(`a non-admin with role "${role}" may run it`, async t => {
+    const { routes } = standardRoutes({ role });
+    // A custom role reports its base permission.
+    if (role === 'release-manager') {
+      routes['GET /repos/mastra-ai/mastra/collaborators/tyler/permission'] = () => ({
+        permission: 'write',
+        role_name: 'release-manager',
+      });
+    }
+    const api = await startApi(t, routes);
+    const result = await run(t, api, ['--action', 'freeze', '--actor', 'tyler']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(puts(api).length, 1);
+  });
+}
 
-for (const role of ['write', 'triage', 'read', 'none']) {
+for (const role of ['triage', 'read', 'none']) {
   test(`an actor with role "${role}" is refused before any ruleset is read`, async t => {
     const { routes } = standardRoutes({ role });
     const api = await startApi(t, routes);
