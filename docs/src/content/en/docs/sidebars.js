@@ -795,11 +795,12 @@ const sidebars = {
     {
       type: 'category',
       label: 'Deploy',
-      collapsed: false,
-      collapsible: false,
-      className: 'sidebar-group-name',
+      link: { type: 'doc', id: 'mastra-platform/deploy/overview' },
+      collapsed: true,
+      customProps: {
+        contextualSidebar: true,
+      },
       items: [
-        { type: 'doc', id: 'mastra-platform/deploy/overview', label: 'Overview' },
         { type: 'doc', id: 'mastra-platform/deploy/server', label: 'Server' },
         { type: 'doc', id: 'mastra-platform/deploy/studio', label: 'Studio' },
         { type: 'doc', id: 'mastra-platform/deploy/github', label: 'GitHub integration' },
@@ -810,11 +811,12 @@ const sidebars = {
     {
       type: 'category',
       label: 'Observability',
-      collapsed: false,
-      collapsible: false,
-      className: 'sidebar-group-name',
+      link: { type: 'doc', id: 'mastra-platform/observability/overview' },
+      collapsed: true,
+      customProps: {
+        contextualSidebar: true,
+      },
       items: [
-        { type: 'doc', id: 'mastra-platform/observability/overview', label: 'Overview' },
         { type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' },
         { type: 'doc', id: 'mastra-platform/alerts', label: 'Alerts and notifications' },
       ],
