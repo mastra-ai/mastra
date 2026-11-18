@@ -1,30 +1,18 @@
-Build from root: pnpm build:playground-ui
-Test from root: pnpm --filter ./packages/playground-ui test
-Typecheck: pnpm --filter ./packages/playground-ui typecheck (standalone `tsc`)
+Build from root: `pnpm build:playground-ui`. Test: `pnpm --filter ./packages/playground-ui test`.
+Typecheck: `pnpm --filter ./packages/playground-ui typecheck` (standalone `tsc`; CI runs turbo `typecheck`).
+`build` is `vite build`; a vite.config.ts plugin runs TS 7 `tsc` (`tsconfig.build.json`) to emit
+declarations and fails on type errors. The package builds in ~5s; a slow build is turbo rebuilding upstream deps.
 
-`build` is `vite build` only; a plugin in vite.config.ts runs TypeScript 7 `tsc`
-(`tsconfig.build.json`) alongside the bundle to emit declarations and fails the
-build on type errors. Use the `typecheck` script for an explicit `tsc` gate (CI
-runs turbo `typecheck`). The package's own build is ~5s; a slow `build:playground-ui` is the cold turbo cache rebuilding
-upstream deps (`^build`), not this package.
+Domain components (`src/domains`) MUST be compound components, with props where they make sense.
+They MUST NOT fetch data: each part receives its data from above (a filter list gets `filters`, even
+if fetched from the backend) and exposes callbacks (`onCreate`, `onEdit`, …) for actions. Export data
+hooks separately; the call site calls the hook and passes data down. Goal: move to MCP server apps.
 
-PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.
-This is the #1 way to validate changes here — ABOVE Playwright E2E.
-Use the `playground-msw-tests` skill for business hooks, data components,
-gating, and React Query flows.
+PRIMARY tests: Vitest + MSW + typed @mastra/client-js fixtures (`playground-msw-tests` skill), ABOVE
+Playwright. Drive the real client + React Query stack; only mock the network; never `vi.mock` our
+own data hooks, services, or auth gating. Fixtures live in nearby `__tests__/fixtures/`, typed with
+@mastra/client-js response types. Playwright E2E (`e2e-tests-studio`) only when MSW can't model it.
 
-Rules:
-
-- Drive the real @mastra/client-js + React Query stack; only mock the network.
-- Never `vi.mock` our own data hooks, services, or auth gating.
-- Fixtures live in nearby `__tests__/fixtures/` folders and MUST be typed with
-  response types re-exported from @mastra/client-js.
-
-Use Playwright E2E (`e2e-tests-studio` skill) only when MSW cannot model the
-journey. Run e2e-frontend-validation before merging frontend changes when
-applicable.
-
-Include mobile, tablet, and desktop screenshots when handing off UI changes.
-Preserve design-system consistency and existing component APIs where possible.
-Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
-No new `asChild`; prefer Base UI's native `render` prop.
+Hand off UI changes with mobile/tablet/desktop screenshots. Keep DS consistency and existing APIs.
+Typography: DS tokens only (`Txt` variants, `text-ui-*` / `text-header-*`); no `text-xs/sm/…` or
+arbitrary `text-[Npx]` (lint-enforced). No new `asChild`; prefer Base UI's `render` prop.

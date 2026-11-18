@@ -27,8 +27,9 @@ function boardColumnEmptyCopy(
     }
     if (intakeSetup === 'route') {
       return {
-        title: 'No intake route sends cards here',
-        description: 'Your connected sources file onto other boards. Create a card or add an intake route.',
+        title: 'No rule files new issues here',
+        description:
+          'Your connected sources file onto other boards. Create a card, or add a rule for new issues and pull requests.',
       };
     }
     return {

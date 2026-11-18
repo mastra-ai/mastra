@@ -43,8 +43,6 @@ function snapshot(
     ...(asked ? { asked } : {}),
     matchingTotal: phases.reduce((sum, listed) => sum + listed.total, 0),
     boardTotal: phases.reduce((sum, listed) => sum + listed.total, 0),
-    runningSessionIds: [],
-    parkedSessionIds: [],
   };
 }
 

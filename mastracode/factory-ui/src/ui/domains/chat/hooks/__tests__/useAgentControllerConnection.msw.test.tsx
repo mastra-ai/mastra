@@ -84,7 +84,7 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);
-    expect(onReadState).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onReadState).toHaveBeenCalledTimes(2));
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
@@ -657,7 +657,6 @@ describe('useAgentControllerConnection', () => {
 
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
-    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.status).toBe('ready'));
@@ -758,6 +757,38 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
     await waitFor(() => expect(result.current.state?.threadId).toBe('state-thread-after-gap'), { timeout: 3000 });
+  });
+
+  it('given a run starts between the state read and the stream opening, then the session shows it running', async () => {
+    let running = false;
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'created-thread',
+          running,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        running = true;
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }));
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
   });
 
   it('refetches the visible message window when server state completes a run without an end event', async () => {

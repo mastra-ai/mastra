@@ -215,7 +215,7 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 - `messages`: A stage-scoped array of `MastraDBMessage` objects. For input processing, `processInput` and `processInputStep` exclude system messages. For output processing, `processOutputResult` and `processOutputStep` include the latest LLM response. The array is backed by `messageList`, so in-place edits to a message's `content.parts` remain visible to downstream processors and persistence.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
-Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
+Use `messages` when you only need to read, map over, or make small edits to fields on the current stage's messages. Use `messageList` when you need to:
 
 - Read messages from another stage, for example input messages while processing output.
 - Add, remove, or replace whole messages.
@@ -1812,7 +1812,7 @@ The `abort` function on each method throws a `TripWire` error that stops process
 abort('Blocked content detected', { retry: false, metadata: { category: 'pii' } })
 ```
 
-- `reason`: A human-readable explanation. Appears as `tripwire.payload.reason`.
+- `reason`: A human-readable explanation. Shown as `tripwire.payload.reason`.
 - `retry`: When `true`, the agent retries the same step with `reason` fed back as feedback. Retries only run when `maxProcessorRetries` is set on the agent or call; otherwise the request aborts. The safety cap of `3` that applies when no cap is set covers only error-processor retries from `processAPIError`. It doesn't give abort retries a budget.
 - `metadata`: Optional structured data attached to the `tripwire` chunk for downstream consumers.
 
@@ -1859,7 +1859,7 @@ await writer.custom({
 
 Pass `transient` as a property of the chunk, not as the second argument to `writer.custom()`. The second argument contains writer options such as `messageId`.
 
-By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
+By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't process tool telemetry by mistake or their own output. Opt in by setting `processDataParts: true` on the processor:
 
 ```typescript
 class ModerationCollector implements Processor {

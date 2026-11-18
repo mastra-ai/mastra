@@ -136,7 +136,7 @@ A mount path is the path exposed to file tools and, after a successful sandbox m
 For a remote provider mounted at `/workspace`:
 
 - File tools use paths such as `/workspace/report.md`.
-- Remote sandbox commands generally use the same path.
+- Remote sandbox commands use the same path.
 - The provider maps the path to its configured bucket, prefix, or remote directory.
 
 `LocalSandbox` creates a symlink inside its `workingDirectory` instead. A `/workspace` mount becomes `<workingDirectory>/workspace` on the host and is usually addressed as `workspace` by commands.

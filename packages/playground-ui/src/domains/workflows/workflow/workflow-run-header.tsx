@@ -42,7 +42,7 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
       className="flex items-center gap-1.5"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
-      <IconStopwatch aria-hidden className="size-3.5" />
+      <IconStopwatch aria-hidden className="size-icon-sm" />
       <Txt as="span" variant="meta" font="mono">
         {elapsed}
       </Txt>
@@ -60,7 +60,7 @@ function RunWaiting({ since }: { since: number }) {
       className="flex items-center gap-1.5 text-warning-foreground tabular-nums"
       title="Waiting for input"
     >
-      <IconPause aria-hidden className="size-3.5" />
+      <IconPause aria-hidden className="size-icon-sm" />
       {waiting}
     </Txt>
   );

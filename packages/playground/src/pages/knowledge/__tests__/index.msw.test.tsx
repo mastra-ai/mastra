@@ -248,8 +248,8 @@ describe('Knowledge page', () => {
       fireEvent.pointerMove(title, { pointerType: 'mouse' });
       fireEvent.mouseMove(title);
       expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('org:acme#payments');
-      expect((await within(detail).findByTestId('knowledge-page-version')).textContent).toContain('Updated');
-      expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
+      expect(within(await within(detail).findByRole('region', { name: 'Details' })).getByText('Updated')).toBeTruthy();
+      expect(document.querySelector('.react-flow')).toBeNull();
     });
 
     it('returns to the graph from the page', async () => {

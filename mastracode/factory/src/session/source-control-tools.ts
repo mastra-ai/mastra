@@ -317,7 +317,7 @@ export async function createSourceControlTools({
     }),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
-      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. ${repositoryArgument}`,
+      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. Returns the pushed \`commit\`; \`upToDate: true\` means the remote already had it and nothing new was pushed, so check that commit is the one you meant to push. Commit before pushing, not in parallel with it. ${repositoryArgument}`,
       inputSchema: repositorySchema,
       execute: async (input, { workspace }) => {
         const target = await targetFor(input);
@@ -337,7 +337,13 @@ export async function createSourceControlTools({
         // Materialize the session branch at the active HEAD without discarding
         // session-only commits, so the push includes the agent's current work.
         await ensureLocalBranch(sandbox, workdir, branch);
-        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        const { commit, upToDate } = await pushRepositoryBranch(
+          sandbox,
+          workdir,
+          branch,
+          access,
+          target.repository.slug,
+        );
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
@@ -350,7 +356,7 @@ export async function createSourceControlTools({
           targets: [{ type: 'repository', id: target.repository.slug }],
           metadata: { branch, provider: target.provider.id, repository: target.repository.slug },
         });
-        return { pushed: true, branch, repository: target.repository.slug };
+        return { pushed: true, branch, repository: target.repository.slug, commit, upToDate };
       },
     }),
     source_control_get_change_request: createTool({

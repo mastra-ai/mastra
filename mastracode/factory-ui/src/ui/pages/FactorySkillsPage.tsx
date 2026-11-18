@@ -1,18 +1,20 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
+import { useFactorySkillsQuery } from '../../hooks/useFactorySkills';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
-import { FactorySkillsSection } from '../domains/boardConfig/components/FactorySkillsSection';
+import { boardConfigPath, newSkillPath } from '../domains/boardConfig/boardConfigPaths';
+import { FactorySkillsSection } from '../domains/boardConfig/components/skills/FactorySkillsSection';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
+import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-
-const COLUMN = 'mx-auto w-full max-w-2xl';
 
 /**
  * The factory's skills that no board phase runs, opened from board settings. The board in the URL only keeps
@@ -24,6 +26,7 @@ export function FactorySkillsPage() {
   const { isMobile, desktopState } = useSidebar();
   const sidebarHidden = isMobile || desktopState === 'collapsed';
   const board = useBoardQuery(factory.id, boardId).data?.board;
+  const canEdit = useFactorySkillsQuery(factory.id).data?.canEdit ?? false;
 
   const slots = useSidebarHeaderSlots({
     breadcrumbs:
@@ -43,19 +46,26 @@ export function FactorySkillsPage() {
     <PageLayout
       variant="narrow"
       header={
-        <div className={cn(COLUMN, 'pb-8')}>
+        <div className={cn(SETTINGS_COLUMN, 'pb-8')}>
           <PageHeader>
             <PageHeader.Title>Skills</PageHeader.Title>
             <PageHeader.Description>
               Agents load these when they need them. Skills a phase runs are on that phase's page.
             </PageHeader.Description>
+            {canEdit && (
+              <PageHeader.Action>
+                <Button size="sm" icon={<IconPlusMedium />} render={<Link to={newSkillPath(factory.id, boardId)} />}>
+                  New skill
+                </Button>
+              </PageHeader.Action>
+            )}
           </PageHeader>
         </div>
       }
       {...slots}
     >
-      <div className={COLUMN}>
-        <FactorySkillsSection factoryId={factory.id} />
+      <div className={SETTINGS_COLUMN}>
+        <FactorySkillsSection factoryId={factory.id} boardId={boardId} />
       </div>
     </PageLayout>
   );

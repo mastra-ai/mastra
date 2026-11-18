@@ -5,8 +5,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
+import { PreferencesSettings } from './SettingsPanel.parts';
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 
@@ -38,7 +39,35 @@ function AccountValue({ children }: { children: string }) {
 export function AccountSettingsSection() {
   const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
+  const signedIn = !!auth.data?.authEnabled && auth.data.authenticated;
 
+  const logOut = () => {
+    clearMastraCodeStorage();
+    redirectToLogout(baseUrl);
+  };
+
+  // Preferences are stored in this browser, so they don't wait on, or disappear with, the account details.
+  return (
+    <>
+      <ProfileSubsection auth={auth} />
+      <PreferencesSettings />
+      {signedIn && (
+        <SettingsSubsection scope="personal" title="Session">
+          <SettingsContainer>
+            <SettingsRow label="Log out" description="End your session on this device.">
+              <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
+                <IconArrowBoxLeft aria-hidden="true" />
+                Log out
+              </Button>
+            </SettingsRow>
+          </SettingsContainer>
+        </SettingsSubsection>
+      )}
+    </>
+  );
+}
+
+function ProfileSubsection({ auth }: { auth: ReturnType<typeof useFactoryAuth> }) {
   if (auth.isPending) {
     return (
       <SettingsSubsection scope="personal" title="Profile">
@@ -64,50 +93,33 @@ export function AccountSettingsSection() {
 
   const user = state.user;
 
-  const logOut = () => {
-    clearMastraCodeStorage();
-    redirectToLogout(baseUrl);
-  };
-
   return (
-    <>
-      <SettingsSubsection
-        scope="personal"
-        title="Profile"
-        description="Your signed-in identity for this MastraCode deployment."
-      >
-        <SettingsContainer>
-          <SettingsRow label="Name" description="From your sign-in provider.">
-            <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
-          </SettingsRow>
-          <SettingsRow label="Email" description="From your sign-in provider.">
-            <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
-          </SettingsRow>
-          <SettingsRow label="Authentication" description="How you signed in.">
-            <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
-          </SettingsRow>
-          {user?.userId && (
-            <SettingsRow label="Account ID" description="Useful when contacting support.">
-              <CopyInput value={user.userId} label="account ID" />
-            </SettingsRow>
-          )}
-          {user?.organizationId && (
-            <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
-              <CopyInput value={user.organizationId} label="organization ID" />
-            </SettingsRow>
-          )}
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection scope="personal" title="Session">
-        <SettingsContainer>
-          <SettingsRow label="Log out" description="End your session on this device.">
-            <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
-              <IconArrowBoxLeft aria-hidden="true" />
-              Log out
-            </Button>
-          </SettingsRow>
-        </SettingsContainer>
-      </SettingsSubsection>
-    </>
+    <SettingsSubsection
+      scope="personal"
+      title="Profile"
+      description="Your signed-in identity for this MastraCode deployment."
+    >
+      <SettingsContainer>
+        <SettingsItem title="Name" description="From your sign-in provider.">
+          <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
+        </SettingsItem>
+        <SettingsItem title="Email" description="From your sign-in provider.">
+          <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
+        </SettingsItem>
+        <SettingsItem title="Authentication" description="How you signed in.">
+          <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
+        </SettingsItem>
+        {user?.userId && (
+          <SettingsItem title="Account ID" description="Useful when contacting support.">
+            <CopyInput value={user.userId} label="account ID" className="w-full sm:w-55" />
+          </SettingsItem>
+        )}
+        {user?.organizationId && (
+          <SettingsItem title="Organization ID" description="The organization that owns this Factory.">
+            <CopyInput value={user.organizationId} label="organization ID" className="w-full sm:w-55" />
+          </SettingsItem>
+        )}
+      </SettingsContainer>
+    </SettingsSubsection>
   );
 }

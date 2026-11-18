@@ -55,7 +55,7 @@ import {
   applyBackgroundToolResult,
 } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
-import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
+import { ownToolCallSuspendData, resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
@@ -73,7 +73,12 @@ import {
   eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
 import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
-import { buildToolApprovalContext, resolveToolApprovalVerdict, runBeforeApprovalChecks } from './tool-approval-verdict';
+import {
+  buildToolApprovalContext,
+  resolveRunToolApprovalPolicy,
+  resolveToolApprovalVerdict,
+  runBeforeApprovalChecks,
+} from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -125,7 +130,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async executionContext => {
-      const { inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext } = executionContext;
+      const { inputData, suspend, resumeData: workflowResumeData, requestContext } = executionContext;
+      const suspendData = ownToolCallSuspendData(executionContext.suspendData, inputData.toolCallId);
       // Eager dispatch invokes this step with its own signal, chained to the run's, so a
       // call started for a model attempt that is later discarded can be cancelled on its
       // own. Every other caller falls back to the run signal, unchanged.
@@ -534,9 +540,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // The factory closure value is authoritative when set: a function-valued policy
         // doesn't survive `RequestContext.toJSON()` across the evented engine's event bus,
         // so reading only from requestContext would lose it. Fall back to requestContext for
-        // direct callers (e.g. legacy tests) that seed the value there.
-        const requireToolApproval =
-          requireToolApprovalFromFactory ?? requestContext.get('__mastra_requireToolApproval');
+        // direct callers (e.g. legacy tests) that seed the value there, and for a resume that
+        // only has the stored stand-in of a function policy.
+        const requireToolApproval = resolveRunToolApprovalPolicy(requireToolApprovalFromFactory, requestContext);
 
         let resumeDataFromArgs: any = undefined;
         let args: any = inputData.args;
@@ -558,19 +564,31 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
         const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+        // With no policy, a fresh call handed a sibling's approval payload still asks, as it did before
+        // suspend data was matched to its call: a run stored before function policies left a stand-in
+        // has nothing else that says its calls need approval. A delegated approval never gated a sibling.
+        const siblingSuspendData = executionContext.suspendData as
+          | { requireToolApproval?: unknown; suspendedToolRunId?: unknown }
+          | undefined;
+        const siblingApprovalWithoutPolicy =
+          requireToolApproval === undefined &&
+          suspendData === undefined &&
+          !!siblingSuspendData?.requireToolApproval &&
+          !siblingSuspendData?.suspendedToolRunId;
         const toolRequiresApproval =
-          cachedApprovalVerdict ??
-          (await resolveToolApprovalVerdict({
-            tool,
-            requireToolApproval,
-            context: buildToolApprovalContext({
-              toolName: inputData.toolName,
-              args,
-              requestContext,
-              workspace: approvalWorkspace,
-            }),
-            logger,
-          }));
+          (cachedApprovalVerdict ??
+            (await resolveToolApprovalVerdict({
+              tool,
+              requireToolApproval,
+              context: buildToolApprovalContext({
+                toolName: inputData.toolName,
+                args,
+                requestContext,
+                workspace: approvalWorkspace,
+              }),
+              logger,
+            }))) ||
+          siblingApprovalWithoutPolicy;
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve

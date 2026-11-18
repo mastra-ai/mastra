@@ -47,6 +47,7 @@ vi.mock('get-port', () => ({
 vi.mock('../../utils/dev-logger.js', () => ({
   devLogger: {
     starting: vi.fn(),
+    stopStarting: vi.fn(),
     ready: vi.fn(),
     watching: vi.fn(),
     restarting: vi.fn(),

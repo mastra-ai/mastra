@@ -7,7 +7,7 @@ packages:
 
 # Terminal notifications
 
-This guide shows a WezTerm setup that sends a clickable macOS notification when Mastra Code needs attention and the terminal pane is not active.
+This guide shows a WezTerm setup that sends a clickable macOS notification when Mastra Code needs attention and the terminal pane isn't active.
 
 This guide is for WezTerm on macOS. To adapt it for another terminal or operating system, share these instructions with Mastra Code and ask it to adjust the scripts for your setup.
 
@@ -103,7 +103,7 @@ chmod +x ~/.mastracode/hooks/wezterm-clear-toast.sh
 
 ## Add the notification hook script
 
-This script receives hook payloads from Mastra Code through stdin. It checks whether the current WezTerm pane is already active. If the pane is not active, it shows a clickable notification.
+This script receives hook payloads from Mastra Code through stdin. It checks whether the current WezTerm pane is already active. If the pane isn't active, it shows a clickable notification.
 
 ```bash title="~/.mastracode/hooks/wezterm-mastracode-notify.sh"
 #!/usr/bin/env bash
@@ -271,7 +271,7 @@ If Mastra Code is already running, reload hooks:
 /hooks reload
 ```
 
-Script changes do not require reload. Configuration changes in `hooks.json` require reload.
+Script changes don't require reload. Configuration changes in `hooks.json` require reload.
 
 ## Test the setup
 

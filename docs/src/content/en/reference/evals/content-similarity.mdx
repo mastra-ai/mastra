@@ -1,13 +1,13 @@
 ---
 title: "Reference: Content similarity scorer | Evals"
-description: "The createContentSimilarityScorer() function measures the textual similarity between two strings, providing a score that indicates how closely they match."
+description: "The createContentSimilarityScorer() function measures the textual similarity between two strings, providing a score that indicates how similar they are."
 packages:
   - "@mastra/evals"
 ---
 
 # Content similarity scorer
 
-The `createContentSimilarityScorer()` function measures the textual similarity between two strings, providing a score that indicates how closely they match. It supports configurable options for case sensitivity and whitespace handling.
+The `createContentSimilarityScorer()` function measures the textual similarity between two strings, providing a score that indicates how similar they are. It supports configurable options for case sensitivity and whitespace handling.
 
 ## Parameters
 
@@ -62,7 +62,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 The scorer evaluates textual similarity through character-level matching and configurable text normalization.
 
-### Scoring Process
+### Scoring process
 
 1. Normalizes text:
    - Case normalization (if ignoreCase: true)
@@ -120,11 +120,11 @@ To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#
 
 A similarity score between 0 and 1:
 
-- **1.0**: Perfect match, content is nearly identical.
+- **1.0**: Perfect match, content is identical in substance.
 - **0.7 to 0.9**: High similarity, minor differences in word choice or structure.
 - **0.4 to 0.6**: Moderate similarity, general overlap with noticeable variation.
 - **0.1 to 0.3**: Low similarity, few common elements or shared meaning.
-- **0.0**: No similarity, completely different content.
+- **0.0**: No similarity, unrelated content.
 
 ## Related
 

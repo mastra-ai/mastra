@@ -820,9 +820,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/connect',
       label: 'Connect',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

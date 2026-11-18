@@ -11,9 +11,12 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
+import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
-import type { RouteObject } from 'react-router';
+import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
+import { continuesTranscript } from './domains/chat/context/transcriptKey';
+import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
@@ -31,33 +34,53 @@ import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
   prefetchBoard,
+  prefetchCardDraft,
   prefetchComposer,
   prefetchDraft,
   prefetchFactories,
   prefetchFactoryLayout,
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
+  prefetchSessionFrame,
   prefetchSidebar,
+  reloadOnAnotherThread,
   retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
-import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
+import { cardDraftPath, createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage), <AppPageLoader />);
+const SessionPage = lazyPage(() =>
+  import('./pages/SessionPage').then(module => {
+    SessionLayout.preload().catch(() => undefined);
+    return module.SessionPage;
+  }),
+);
+// Card drafts and threads share this frame and page, and a draft's first prompt opens its thread.
+const SessionLayout = lazyPage(
+  () =>
+    import('./layouts/SessionLayout').then(module => {
+      // A failed preload retries on the visit.
+      SessionPage.preload().catch(() => undefined);
+      return module.SessionLayout;
+    }),
+  <AppPageLoader />,
+);
 // A new session opens its thread on the first prompt, so that page loads right after.
 const NewPage = lazyPage(
   () =>
     import('./pages/NewPage').then(module => {
-      // A failed preload retries on the visit.
-      ThreadPage.preload().catch(() => undefined);
+      SessionLayout.preload().catch(() => undefined);
       return module.NewPage;
     }),
   <AppPageLoader />,
 );
+// The sidebar opens a session or a new one from any page, so their code loads with the shell
+// and a click from the board only waits on data.
+const chatPages = { preload: () => Promise.all([SessionLayout.preload(), NewPage.preload()]) };
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
   <AppPageLoader />,
@@ -70,8 +93,16 @@ const FactorySkillsPage = lazyPage(
   () => import('./pages/FactorySkillsPage').then(module => module.FactorySkillsPage),
   <AppPageLoader />,
 );
-const CardMovesPage = lazyPage(
-  () => import('./pages/CardMovesPage').then(module => module.CardMovesPage),
+const FactorySkillPage = lazyPage(
+  () => import('./pages/FactorySkillPage').then(module => module.FactorySkillPage),
+  <AppPageLoader />,
+);
+const BoardIntakePage = lazyPage(
+  () => import('./pages/BoardIntakePage').then(module => module.BoardIntakePage),
+  <AppPageLoader />,
+);
+const BoardRulesPage = lazyPage(
+  () => import('./pages/BoardRulesPage').then(module => module.BoardRulesPage),
   <AppPageLoader />,
 );
 const NewBoardPage = lazyPage(
@@ -217,11 +248,19 @@ function KnowledgeRoute() {
   return <KnowledgePage />;
 }
 
-export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
-  const loadOnEntry = createLoadOnEntry(services);
-  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
+/** A card's link names no draft, so each visit starts its own. */
+function CardDraftRedirect() {
+  const { factoryId, workItemId } = useParams<{ factoryId: string; workItemId: string }>();
+  const [draftSessionId] = useState(() => crypto.randomUUID());
+  if (!factoryId || !workItemId) return null;
+  return <Navigate replace to={cardDraftPath(factoryId, workItemId, draftSessionId)} />;
+}
+
+export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?: () => boolean): RouteObject[] {
+  const loadOnEntry = createLoadOnEntry(services, holdsNavigation);
+  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch, shouldRevalidate?: ShouldRevalidateFunction) => ({
     element: <Page />,
-    ...loadOnEntry(prefetch, Page),
+    ...loadOnEntry(prefetch, Page, shouldRevalidate),
   });
 
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
@@ -247,8 +286,8 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
               children: [
                 {
                   element: <AppLayout />,
-                  // Load the chat code while its session links appear, before "Open session" is clicked.
-                  ...loadOnEntry(prefetchSidebar, ThreadPage),
+                  // Load the chat code while its session links appear, before a card or session is clicked.
+                  ...loadOnEntry(prefetchSidebar, chatPages),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
@@ -256,9 +295,29 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                       children: [
                         { index: true, element: <FactoryHomeRedirect /> },
                         { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
-                        { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
                         { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchDraft) },
-                        { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                        {
+                          path: 'cards/:workItemId',
+                          element: <CardDraftRedirect />,
+                          ...loadOnEntry(prefetchCardDraft, SessionPage),
+                        },
+                        {
+                          ...lazyRoute(SessionLayout),
+                          children: [
+                            {
+                              path: 'workspaces/:sessionId/threads/:threadId',
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
+                            },
+                            {
+                              path: 'user/threads/:threadId',
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
+                            },
+                            {
+                              path: 'cards/:workItemId/new/:draftSessionId',
+                              ...lazyRoute(SessionPage, prefetchCardDraft),
+                            },
+                          ],
+                        },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
                         { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'new-board', ...lazyRoute(NewBoardPage) },
@@ -274,8 +333,17 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         { path: 'boards/:boardId/config/:phaseKey?', ...lazyRoute(BoardConfigPage) },
                         { path: 'work/skills', ...lazyRoute(FactorySkillsPage) },
                         { path: 'boards/:boardId/skills', ...lazyRoute(FactorySkillsPage) },
-                        { path: 'work/moves', ...lazyRoute(CardMovesPage) },
-                        { path: 'boards/:boardId/moves', ...lazyRoute(CardMovesPage) },
+                        { path: 'work/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/skills/:skillName', ...lazyRoute(FactorySkillPage) },
+                        { path: 'work/new-skill', ...lazyRoute(FactorySkillPage) },
+                        { path: 'boards/:boardId/new-skill', ...lazyRoute(FactorySkillPage) },
+                        { path: 'work/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'boards/:boardId/rules', ...lazyRoute(BoardRulesPage) },
+                        { path: 'work/intake', ...lazyRoute(BoardIntakePage) },
+                        { path: 'boards/:boardId/intake', ...lazyRoute(BoardIntakePage) },
+                        // Card moves became the board's Rules page.
+                        { path: 'work/moves', element: <Navigate to="../rules" relative="path" replace /> },
+                        { path: 'boards/:boardId/moves', element: <Navigate to="../rules" relative="path" replace /> },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },
@@ -287,7 +355,7 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
                         {
                           path: 'settings',
                           children: [
-                            { index: true, element: <Navigate to="preferences" replace /> },
+                            { index: true, element: <Navigate to="account" replace /> },
                             { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
                             { path: 'board', element: <BoardSettingsRedirect /> },
                             { path: 'skills', element: <SkillsSettingsRedirect /> },
@@ -318,6 +386,22 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   ];
 }
 
-export function createAppRouter(services: RouteLoaderServices) {
-  return createBrowserRouter(createAppRoutes(services));
+export function createAppRouter(
+  services: RouteLoaderServices,
+  createRouter: (routes: RouteObject[]) => DataRouter = createBrowserRouter,
+) {
+  // The first load's loaders can run inside `createRouter`, before `router` is assigned.
+  let router: DataRouter | undefined;
+  router = createRouter(createAppRoutes(services, () => holdsNavigation(router)));
+  return router;
+}
+
+/**
+ * Clicks never wait for a page's reads. A draft continuing into its thread keeps the page on
+ * screen, so it waits for the thread's header and panel rather than blanking them; one that
+ * hands its prompt over shows that prompt at once instead.
+ */
+function holdsNavigation(router: DataRouter | undefined): boolean {
+  const state: unknown = router?.state.navigation.location?.state;
+  return router?.state.initialized === true && continuesTranscript(state) && !opensWithPrompt(state);
 }
