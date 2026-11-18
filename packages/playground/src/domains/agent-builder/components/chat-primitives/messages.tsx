@@ -151,7 +151,7 @@ const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | nu
 };
 
 const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
-  const metadata = message.content.metadata;
+  const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
   if (!metadata || typeof metadata !== 'object') return undefined;
   const { mode } = metadata;
   if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;

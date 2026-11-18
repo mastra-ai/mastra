@@ -150,7 +150,7 @@ export function ScheduleTriggersList({
         return isLinked ? (
           <DataList.RowLink
             key={rowKey}
-            to={paths.workflowRunLink(workflowId!, t.runId)}
+            to={paths.workflowRunLink(workflowId!, t.runId!)}
             LinkComponent={Link}
             {...getRowProps(interactiveIndex)}
           >
