@@ -35,7 +35,11 @@ const onboarding = page('onboarding', 'org', {
   name: 'Customer onboarding',
   description: 'Taking a new workspace from trial to production.',
 });
-const billing = page('billing', 'org', { name: 'Billing and refunds', position: 'a1' });
+const billing = page('billing', 'org', {
+  name: 'Billing and refunds',
+  position: 'a1',
+  body: Array.from({ length: 40 }, (_, line) => `Refund rule ${line + 1}.`).join('\n\n'),
+});
 const pages = [org, onboarding, billing];
 
 const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: false, isError: false, error: null });
@@ -116,6 +120,15 @@ describe('KnowledgePageExplorer drawers', () => {
     expect(screen.getByTestId('knowledge-graph-container').contains(drawer)).toBe(true);
     expect(within(drawer).getByRole('heading', { name: 'Customer onboarding' })).toBeTruthy();
     expect(screen.getByTestId('view').textContent).toBe('graph');
+  });
+
+  it('lets the drawer preview grow into the panel instead of a fixed strip', () => {
+    renderWithProviders(<Host initial="billing" />);
+    const preview = within(pageDrawer()).getByRole('region', { name: 'Preview' });
+    // The preview takes the panel's free height and scrolls inside it; no fixed cap crops the body.
+    const viewports = [...preview.querySelectorAll<HTMLElement>('[style]')];
+    expect(viewports.map(element => element.style.maxHeight).filter(Boolean)).toEqual([]);
+    expect(within(preview).getByText('Refund rule 40.')).toBeTruthy();
   });
 
   it('shows no page drawer while nothing is selected', () => {

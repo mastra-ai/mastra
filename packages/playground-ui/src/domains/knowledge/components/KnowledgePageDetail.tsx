@@ -159,14 +159,16 @@ const BODY_COMPONENTS: Components = { span: BodySpan };
 export function KnowledgeDetailSection({
   label,
   count,
+  className,
   children,
 }: {
   label: string;
   count?: number;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={label} className="flex flex-col gap-2">
+    <section aria-label={label} className={className ? `flex flex-col gap-2 ${className}` : 'flex flex-col gap-2'}>
       <Txt as="h3" variant="label" tone="ink" className="flex items-center gap-1.5">
         {label}
         {count ? (
@@ -568,7 +570,7 @@ export function KnowledgePageDetail({
       </header>
 
       {compact ? (
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 p-4">
           <dl
             aria-label="Links and notes"
             className="grid grid-cols-3 divide-x divide-border rounded-lg border border-border"
@@ -577,9 +579,10 @@ export function KnowledgePageDetail({
             <PeekCount label="Links out" value={linksTo.length} />
             <PeekCount label="Notes" value={notesMore ? `${notes.length}+` : notes.length} />
           </dl>
-          <KnowledgeDetailSection label="Preview">
+          {/* A long body shrinks the preview to the panel's free height and scrolls inside it, down to 12rem. */}
+          <KnowledgeDetailSection label="Preview" className="min-h-48">
             {page.body ? (
-              <ScrollArea maxHeight="12rem">
+              <ScrollArea className="min-h-0">
                 <div data-testid="knowledge-page-body">{body}</div>
               </ScrollArea>
             ) : (
