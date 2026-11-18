@@ -156,9 +156,10 @@ const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // slow cadence so the per-tick reconcile walk stays bounded.
 const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
 const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
-// The bound-thread reconcile walk reads a cursor + messages per binding; it
-// exists to catch results missed at run end, so it runs on a slow cadence off
-// the claim path rather than on every 1s tick.
+// The bound-thread reconcile pass reads a cursor + messages per binding that
+// stepped recently (and every active binding on a much slower cadence); it
+// exists to catch results missed at run end, so it runs off the claim path
+// rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */

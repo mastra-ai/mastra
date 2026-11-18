@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmptyState } from '../EmptyState';
 import { sceneByName } from './art/scenes';
+import type { EmptyStateArtName } from './art/scenes';
 import { EmptyStateArt } from './empty-state-art';
 
 const art = () => document.querySelector<HTMLElement>('[data-slot="empty-state-art"]');
@@ -22,6 +23,17 @@ describe('EmptyStateArt', () => {
     const svg = document.querySelector('svg[data-illustration="knowledge"]');
     expect(svg?.getAttribute('aria-hidden')).toBe('true');
     expect(svg?.getAttribute('viewBox')).toBe(sceneByName.knowledge.viewBox);
+  });
+
+  it('draws every object at the same visual area, whatever its drawn size', () => {
+    const names = Object.keys(sceneByName).filter((name): name is EmptyStateArtName => name in sceneByName);
+    const areas = names.map(name => {
+      cleanup();
+      render(<EmptyStateArt name={name} />);
+      const svg = document.querySelector('svg[data-illustration]');
+      return Number(svg?.getAttribute('width')) * Number(svg?.getAttribute('height'));
+    });
+    for (const area of areas) expect(Math.abs(area / (150 * 150) - 1)).toBeLessThan(0.01);
   });
 
   it('defaults to the idle state and reflects the state it is given', () => {

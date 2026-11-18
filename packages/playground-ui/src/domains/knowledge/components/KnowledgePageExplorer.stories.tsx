@@ -54,7 +54,24 @@ const launch = page('launch', 'documents', {
   updatedAt: HOURS_AGO(1),
 });
 const roadmap = page('roadmap', 'documents', { name: 'Roadmap', key: 'roadmap', position: 'a1' });
-const studio = page('studio', 'projects', { name: 'Studio in Platform', key: 'studio' });
+const studio = page('studio', 'projects', {
+  name: 'Studio in Platform',
+  key: 'studio',
+  body: [
+    '## Why',
+    'Teams want one place to build, deploy and watch their agents, so Studio moves into Platform.',
+    '## Milestones',
+    ...Array.from(
+      { length: 12 },
+      (_, step) =>
+        `${step + 1}. Milestone ${step + 1}: ship the next slice of Studio inside Platform and check it with a design partner.`,
+    ),
+    '## Open questions',
+    '- Which Studio routes stay local-only?',
+    '- How do project tokens reach the playground?',
+    '- What does a Knowledge-only project show first?',
+  ].join('\n\n'),
+});
 const gateway = page('gateway', 'projects', {
   name: 'Gateway BYOK connections and project routing for every environment',
   key: 'gateway',
@@ -188,6 +205,8 @@ type Story = StoryObj<typeof Explorer>;
 export const Graph: Story = { args: { view: 'graph' } };
 
 export const GraphWithDrawer: Story = { args: { view: 'graph', pageId: 'launch' } };
+
+export const GraphWithLongPageDrawer: Story = { args: { view: 'graph', pageId: 'studio' } };
 
 export const ImportedScope: Story = { args: { view: 'page', pageId: 'lin' } };
 

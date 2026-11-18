@@ -11,6 +11,17 @@
   ],
   "structuredOutput": ["deepseek-v4.1-flash", "glm-5.3", "glm-5.3-flash", "kimi-k3", "qwen3.8-flash"],
   "reasoning": {
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -20,22 +31,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "hy4-preview": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "kimi-k3": [
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -48,11 +53,6 @@
       {
         "type": "budget_tokens",
         "max": 262144
-      }
-    ],
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
       }
     ],
     "qwen3.8-max": [
@@ -69,10 +69,10 @@
         "max": 262144
       }
     ],
-    "glm-5.3": [
+    "hy4-preview": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high"]
       }
     ]
   }

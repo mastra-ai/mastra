@@ -144,6 +144,7 @@ export const durableAgenticOutputSchema = z.object({
     steps: z.array(z.any()),
   }),
   state: z.any(),
+  tracingTermination: z.custom<SpanTermination>().optional(),
 });
 
 /**

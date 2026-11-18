@@ -644,6 +644,8 @@ export interface DurableAgenticLoopOutput {
   };
   /** Final state */
   state: SerializableDurableState;
+  /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
+  tracingTermination?: SpanTermination;
 }
 
 export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
@@ -880,15 +882,11 @@ export interface RunRegistryEntry {
   /** Live MODEL_GENERATION span for this run (non-serializable) */
   modelSpan?: AIModelGenerationSpan;
   /**
-   * On resume, a fresh AGENT_RUN span is opened for the resumed segment (the
-   * original was ended as `suspended`). These override the frozen span IDs so
-   * post-resume steps nest under the resumed root and end it on completion.
+   * The live spans of the segment a resume or recovery opened in this process. Steps read the
+   * segment's pair from the request context and end these in place when they match it.
    */
   resumeAgentSpan?: Span<SpanType.AGENT_RUN>;
   resumeModelSpan?: AIModelGenerationSpan;
-  /** Exported forms of the resume spans, read by the workflow steps (same process). */
-  resumeAgentSpanData?: unknown;
-  resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
   /** Time to first token of the resumed segment's spans, kept the same way. */

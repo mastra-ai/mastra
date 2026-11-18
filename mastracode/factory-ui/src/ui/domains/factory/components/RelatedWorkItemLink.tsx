@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
-import { externalLinkLabel } from '../boardItems';
+import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
@@ -42,7 +42,7 @@ export function RelatedWorkItemLink({
     pullRequest && pullRequestStatus ? changeRequestStatusLabel(pullRequest.provider, pullRequestStatus) : undefined;
   let ariaLabel = `Open ${name}`;
   if (live) ariaLabel = `Open live session for ${name}`;
-  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${name}`;
+  if (external) ariaLabel = `${CARD_SOURCES[item.source].linkLabel}: ${name}`;
   if (statusLabel !== undefined) ariaLabel = `${ariaLabel}, ${statusLabel}`;
 
   const content = (

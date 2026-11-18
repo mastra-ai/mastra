@@ -1,6 +1,6 @@
 {
   "name": "@internal/deployer",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Internal Mastra bundler and deployer contract",
   "private": true,
   "type": "module",

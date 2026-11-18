@@ -2,7 +2,7 @@
 import type { CreateFeedbackBody } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -305,6 +305,7 @@ describe('feedback tabs delete', () => {
     // The button reads "Deleting…" until the failed request (and its retries) settle.
     const retryButton = await screen.findByRole('button', { name: 'Delete' }, { timeout: 5000 });
     expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback');
 
     failDeletes = false;
     const failedAttempts = onDelete.mock.calls.length;
@@ -312,6 +313,29 @@ describe('feedback tabs delete', () => {
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(failedAttempts + 1));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+  });
+
+  it('does not show a failed deletion error when the confirmation is opened again', async () => {
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => HttpResponse.json({ error: 'Delete failed' }, { status: 500 })),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback'), {
+      timeout: 5000,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
+
+    expect(await screen.findByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows no delete action for records without a feedbackId', async () => {
@@ -401,5 +425,75 @@ describe('feedback tabs review status', () => {
     await waitFor(() => expect(onPatch).toHaveBeenCalledWith('span-a-feedback', { reviewStatus: 'reviewed' }));
     expect(await screen.findByText('Reviewed')).toBeTruthy();
     expect(onList).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('feedback tabs queued delete', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** The server accepts the delete (202) but keeps returning the row until `applyDeletes()`. */
+  function queuedDeleteServer() {
+    let rows = [
+      feedbackRecord({ feedbackId: 'keep', feedbackType: 'comment', value: 'keep me' }),
+      feedbackRecord({ feedbackId: 'doomed', feedbackType: 'comment', value: 'delete me' }),
+    ];
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse(rows))),
+      http.delete(FEEDBACK_URL, () => HttpResponse.json({ accepted: true }, { status: 202 })),
+    );
+    return { applyDeletes: () => (rows = rows.filter(row => row.feedbackId !== 'doomed')) };
+  }
+
+  const rowOf = (text: string) => {
+    const row = screen.getByText(text).closest<HTMLElement>('[data-slot="comment-item"]');
+    if (!row) throw new Error(`No comment row for "${text}"`);
+    return row;
+  };
+
+  async function deleteDoomed() {
+    await screen.findByText('delete me');
+    const [, doomedActions] = screen.getAllByRole('button', { name: 'Feedback actions' });
+    fireEvent.click(doomedActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+  }
+
+  describe('when the server accepts the delete and the cleanup job removes the row', () => {
+    it('shows the row as deleting, without actions, until the server drops it', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const api = queuedDeleteServer();
+      render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+
+      await deleteDoomed();
+
+      await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
+      expect(within(rowOf('delete me')).queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+      expect(within(rowOf('keep me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
+
+      api.applyDeletes();
+      await act(() => vi.advanceTimersByTimeAsync(3_100));
+
+      await waitFor(() => expect(screen.queryByText('delete me')).toBeNull());
+      expect(screen.getByText('keep me')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when the server still returns the row after the deletion window', () => {
+    it('restores the row with its actions and shows an error', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      queuedDeleteServer();
+      render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+
+      await deleteDoomed();
+      await waitFor(() => expect(within(rowOf('delete me')).getByText('Deleting…')).toBeTruthy());
+
+      await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 + 1));
+
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not delete feedback'));
+      expect(within(rowOf('delete me')).queryByText('Deleting…')).toBeNull();
+      expect(within(rowOf('delete me')).getByRole('button', { name: 'Feedback actions' })).toBeTruthy();
+    });
   });
 });

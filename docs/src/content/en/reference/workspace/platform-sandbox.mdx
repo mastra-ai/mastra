@@ -50,7 +50,7 @@ Configure the platform credentials. The access token, project ID, and environmen
   </TabItem>
 </Tabs>
 
-On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
+On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. The platform injects `MASTRA_PLATFORM_ACCESS_TOKEN` unless [observability](/docs/mastra-platform/observability/overview) is turned off for the project; in that case, add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`, which the provider reads when `MASTRA_PLATFORM_ACCESS_TOKEN` is unset. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Keys**.
 
 The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `e2b`.
 
