@@ -698,6 +698,40 @@ describe('notification inbox', () => {
     });
   });
 
+  it('keeps a notification pending when the runtime blocks its delivery', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered).toEqual([]);
+    expect(result.signals).toEqual([]);
+    expect(result.failed).toMatchObject([
+      { record: { id: 'n1', status: 'pending' }, error: 'Notification signal was blocked: thread-blocked' },
+    ]);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'pending',
+      deliveryAttempts: 1,
+      lastDeliveryError: 'Notification signal was blocked: thread-blocked',
+    });
+  });
+
   it('starts a deferred delivery with the scopes it was sent with, queueing it when the active run holds others', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
@@ -1319,6 +1353,41 @@ describe('notification inbox', () => {
       summaryAt: now,
       deliveryAttempts: 1,
       lastDeliveryError: 'signal routing failed: no model configured',
+    });
+    expect(stored?.summarySignalId).toBeUndefined();
+  });
+
+  it('keeps a notification summary pending when the runtime blocks its delivery', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' }),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'medium',
+      summary: 'CI failed',
+      summaryAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.delivered).toEqual([]);
+    expect(result.signals).toEqual([]);
+    expect(result.failed).toMatchObject([{ error: 'Notification signal was blocked: thread-blocked' }]);
+    const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
+    expect(stored).toMatchObject({
+      status: 'pending',
+      summaryAt: now,
+      deliveryAttempts: 1,
+      lastDeliveryError: 'Notification signal was blocked: thread-blocked',
     });
     expect(stored?.summarySignalId).toBeUndefined();
   });

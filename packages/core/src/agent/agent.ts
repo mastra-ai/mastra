@@ -10984,6 +10984,12 @@ export class Agent<
           let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
           try {
             summaryAccepted = await result.accepted;
+            // `blocked` means no run picked the summary signal up. Treat it like
+            // a rejected routing so the catch below restores `summaryAt` and
+            // records a failed delivery, instead of stamping `summarySignalId`.
+            if (summaryAccepted.action === 'blocked') {
+              throw new Error(`Notification summary signal was blocked: ${summaryAccepted.reason}`);
+            }
           } catch (error) {
             const failed = await notifications.updateNotification({
               id: updated.id,
@@ -11046,6 +11052,13 @@ export class Agent<
       let delivered: SendAgentSignalAccepted<OUTPUT>;
       try {
         delivered = await result.accepted;
+        // `blocked` means no run picked the signal up (a suspended thread, or a
+        // claimed owner holding the handover lease). Treat it like a rejected
+        // routing so the catch below records a failed delivery and retries,
+        // rather than falling through to stamp the record `delivered`.
+        if (delivered.action === 'blocked') {
+          throw new Error(`Notification signal was blocked: ${delivered.reason}`);
+        }
       } catch (error) {
         // An immediate `deliver` record carries no schedule: without one a
         // failed attempt leaves it pending forever, because no dispatch pass
@@ -11071,6 +11084,7 @@ export class Agent<
       // The routing policy can resolve to `persist`/`discard` (no run picked the
       // signal up). Don't mark the notification `delivered` in that case — the
       // record stays in its current state with the emitted signal attached.
+      // (`blocked` is handled above as a failed delivery, not here.)
       if (delivered.action === 'persist' || delivered.action === 'discard') {
         results.push({
           record,

@@ -95,6 +95,21 @@ async function sendNotificationSignalToAgent(
   return result;
 }
 
+/**
+ * Awaits a signal's routing outcome. `accepted` rejects when the signal could
+ * not be routed/started, and resolves `blocked` when no run picked it up (a
+ * suspended thread, or a claimed owner holding the handover lease). Surface
+ * both to the caller so the notification is recorded as a failed delivery and
+ * retried, instead of being stamped delivered.
+ */
+async function awaitNotificationDelivery(result: SendAgentSignalResult): Promise<void> {
+  const accepted = await result.accepted;
+  if (accepted.action === 'blocked') {
+    throw new Error(`Notification signal was blocked: ${accepted.reason}`);
+  }
+  await result.persisted;
+}
+
 /** The scopes every record of a summary names, or none when they differ. */
 function sharedScopes(records: NotificationRecord[]): string[] | undefined {
   const scopes = records.map(record => readNotificationRoutingRequirement(record.metadata)?.scopes);
@@ -232,10 +247,9 @@ async function sendNotificationRecord({
   });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
-  // misconfigured agent). Let that propagate so the caller records the
-  // notification as a failed delivery.
-  await result.accepted;
-  await result.persisted;
+  // misconfigured agent), and resolves `blocked` when no run picked it up. Let
+  // both propagate so the caller records the notification as a failed delivery.
+  await awaitNotificationDelivery(result);
   const updated = await storage.updateNotification({
     id: current.id,
     threadId: current.threadId,
@@ -303,10 +317,10 @@ async function sendNotificationSummary({
           : {}),
       });
   const result = await sendNotificationSignalToAgent(agent, signal, target);
-  // `accepted` rejects when the signal could not be routed/started; let it
-  // propagate so the caller records the notifications as failed deliveries.
-  await result.accepted;
-  await result.persisted;
+  // `accepted` rejects when the signal could not be routed/started, and resolves
+  // `blocked` when no run picked it up; let both propagate so the caller records
+  // the notifications as failed deliveries.
+  await awaitNotificationDelivery(result);
 
   const updatedRecords: NotificationRecord[] = [];
   for (const record of records) {
