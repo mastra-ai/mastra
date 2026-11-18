@@ -427,8 +427,8 @@ describe('review follow-ups', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     await metrics.tick();
-    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(1);
-    expect(records.find(r => r.name === 'mastra_factory_session_start_oldest_age_ms')!.value).toBeGreaterThan(0);
+    expect(records.find(r => r.name === 'mastra_factory_sandboxes_starting')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_start_oldest_age_ms')!.value).toBeGreaterThan(0);
 
     records.length = 0;
     gate.resolve();
@@ -441,8 +441,8 @@ describe('review follow-ups', () => {
       labels: { kind: 'first', outcome: 'ok' },
     });
     // Only the first caller other than the eager start counts as waiting.
-    expect(records.find(r => r.name === 'mastra_factory_session_sandbox_wait_ms_count')?.value).toBe(1);
-    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(0);
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_wait_ms_count')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_sandboxes_starting')?.value).toBe(0);
     expect(sandbox.calls).toBe(1);
   });
 

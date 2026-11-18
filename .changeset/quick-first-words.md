@@ -11,4 +11,11 @@ new MastraFactory({
 });
 ```
 
-Renamed `mastra_factory_session_ready_ms` to `mastra_factory_sandbox_ready_ms`, since it times a sandbox start (the provider plus repository setup), not a session. Update any chart or alert that reads the old name, including `mastra_factory_session_ready_ms_count`.
+Renamed the sandbox start metrics that were named after sessions, since each one measures a sandbox start. Update any chart or alert that reads the old names, including their `_count` series:
+
+| Old name                                     | New name                                     |
+| -------------------------------------------- | -------------------------------------------- |
+| `mastra_factory_session_ready_ms`            | `mastra_factory_sandbox_ready_ms`            |
+| `mastra_factory_session_sandbox_wait_ms`     | `mastra_factory_sandbox_wait_ms`             |
+| `mastra_factory_sessions_starting`           | `mastra_factory_sandboxes_starting`          |
+| `mastra_factory_session_start_oldest_age_ms` | `mastra_factory_sandbox_start_oldest_age_ms` |

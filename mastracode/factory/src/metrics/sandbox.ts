@@ -86,7 +86,7 @@ export function markEagerSandboxStart(sandbox: object): void {
  * - the whole start, up to the end of the onStart hook (`mastra_factory_sandbox_ready_ms`), with
  *   failures included. `kind` is `first` for a session's first sandbox and `resume` for later starts;
  * - how long the first caller other than the eager start waited for it
- *   (`mastra_factory_session_sandbox_wait_ms`): the start-up time someone actually waits through.
+ *   (`mastra_factory_sandbox_wait_ms`): the start-up time someone actually waits through.
  * Patches `_start` in place: `start()`, `ensureRunning()` and the lazy start before the first command
  * all go through it. `hadSandbox` says whether the session already had a sandbox before this instance.
  */
@@ -121,7 +121,7 @@ export function instrumentSandboxStart(sandbox: object, provider: string, hadSan
     const done = (outcome: 'ok' | 'error') => {
       const now = performance.now();
       if (waits) {
-        factoryMetrics().observe('sandbox', 'mastra_factory_session_sandbox_wait_ms', now - callStartedAt, {
+        factoryMetrics().observe('sandbox', 'mastra_factory_sandbox_wait_ms', now - callStartedAt, {
           kind: start.kind,
           outcome,
         });
@@ -178,8 +178,8 @@ export function sessionStartsCollector(): MetricsCollector {
       const now = performance.now();
       let oldest = 0;
       for (const start of sessionStarts.values()) oldest = Math.max(oldest, now - start.startedAt);
-      sink.emit('mastra_factory_sessions_starting', sessionStarts.size);
-      sink.emit('mastra_factory_session_start_oldest_age_ms', oldest);
+      sink.emit('mastra_factory_sandboxes_starting', sessionStarts.size);
+      sink.emit('mastra_factory_sandbox_start_oldest_age_ms', oldest);
     },
   };
 }
