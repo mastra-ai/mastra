@@ -910,6 +910,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   /**
+   * The span whose bridge context this span runs in: itself, or the nearest
+   * ancestor exporters received when this span has no exported bridge span.
+   */
+  private getBridgeContextSpan(): AnySpan {
+    if (!this.isInternal && !this.isExcluded) {
+      return this.isStartFiltered ? (this.getParentSpan(false, true) ?? this) : this;
+    }
+    // When `spanFilter` dropped the start of every ancestor, the nearest one still has a bridge span.
+    return this.getParentSpan(false, true) ?? this.getParentSpan(false) ?? this;
+  }
+
+  /**
    * Execute an async function within this span's tracing context.
    * Delegates to the bridge if available.
    */
@@ -917,9 +929,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      const bridgeContextSpan =
-        this.isInternal || this.isExcluded || this.isStartFiltered ? this.getParentSpan(false, true) : this;
-      return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
+      return bridge.executeInContext(this.getBridgeContextSpan().id, fn);
     }
 
     return fn();
@@ -933,9 +943,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      const bridgeContextSpan =
-        this.isInternal || this.isExcluded || this.isStartFiltered ? this.getParentSpan(false, true) : this;
-      return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
+      return bridge.executeInContextSync(this.getBridgeContextSpan().id, fn);
     }
 
     return fn();

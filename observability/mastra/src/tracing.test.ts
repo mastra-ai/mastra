@@ -309,6 +309,39 @@ describe('Tracing', () => {
       expect(bridge.executeInContextSync).toHaveBeenCalledWith(agentSpan.id, expect.any(Function));
     });
 
+    it('should run an internal span in a bridge context that exists when spanFilter drops its ancestors', () => {
+      const bridge = createMockBridge();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        bridge,
+        spanFilter: span => span.type !== SpanType.MODEL_GENERATION,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root-agent' });
+      const modelSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'model' });
+      const internalStep = modelSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.MODEL },
+      });
+      internalStep.executeInContextSync(() => 'ok');
+      // The agent is the nearest span exporters received.
+      expect(bridge.executeInContextSync).toHaveBeenLastCalledWith(agentSpan.id, expect.any(Function));
+
+      // With every ancestor dropped, the nearest one still has a bridge span.
+      const droppedRoot = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'model-root' });
+      const orphanStep = droppedRoot.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'internal-step',
+        tracingPolicy: { internal: InternalSpans.MODEL },
+      });
+      orphanStep.executeInContextSync(() => 'ok');
+      expect(bridge.executeInContextSync).toHaveBeenLastCalledWith(droppedRoot.id, expect.any(Function));
+    });
+
     it('should maintain consistent traceId across span hierarchy', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',

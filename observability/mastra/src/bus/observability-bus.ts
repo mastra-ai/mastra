@@ -206,7 +206,9 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
       const starts = this.pendingSpanStarts.get(handler) ?? new Map<string, Promise<void>>();
       this.pendingSpanStarts.set(handler, starts);
       starts.set(key, result);
-      void result.finally(() => starts.delete(key));
+      void result.finally(() => {
+        if (starts.get(key) === result) starts.delete(key);
+      });
     }
     return result;
   }
