@@ -53,13 +53,13 @@ describe('generated GitLab tools', () => {
   let server: Server;
   let baseUrl: string;
   let requests: RecordedRequest[];
-  let answer: (target: string) => { status: number; body: unknown };
+  let answer: (target: string) => { status: number; body: unknown; headers?: Record<string, string> };
 
   beforeAll(async () => {
     server = createServer((request, response) => {
       const target = request.url ?? '/';
-      const send = (status: number, body: unknown) => {
-        response.writeHead(status, { 'content-type': 'application/json' });
+      const send = (status: number, body: unknown, headers: Record<string, string> = {}) => {
+        response.writeHead(status, { 'content-type': 'application/json', ...headers });
         response.end(body === undefined ? '' : JSON.stringify(body));
       };
       if (target.endsWith('/connections')) return send(200, { connections: [connection] });
@@ -67,8 +67,8 @@ describe('generated GitLab tools', () => {
       if (!target.startsWith(PROXY_PREFIX)) return send(404, { error: `unexpected request ${target}` });
       const proxied = target.slice(PROXY_PREFIX.length);
       requests.push({ method: request.method, target: proxied });
-      const { status, body } = answer(proxied);
-      send(status, body);
+      const { status, body, headers } = answer(proxied);
+      send(status, body, headers);
     });
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
@@ -100,6 +100,30 @@ describe('generated GitLab tools', () => {
     if (isValidationError(result)) throw new Error(`${toolId} failed validation: ${result.message}`);
     return result as Record<string, unknown>;
   }
+
+  /** Runs a tool expecting input validation to refuse it before anything reaches GitLab. */
+  async function expectRefused(toolId: string, input: Record<string, unknown>) {
+    await expect(run(toolId, input)).rejects.toThrow(`${toolId} failed validation`);
+    expect(requests).toEqual([]);
+  }
+
+  const issue = {
+    iid: 3,
+    title: 'Bug',
+    description: null,
+    state: 'opened',
+    labels: [],
+    assignees: [],
+    milestone: null,
+    due_date: null,
+    confidential: false,
+    discussion_locked: null,
+    issue_type: 'issue',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    web_url: 'https://gitlab.example/team/app/-/issues/3',
+    project_id: 42,
+  };
 
   describe('path segments', () => {
     it('keeps a query character in project_id inside the project segment of a pipeline delete', async () => {
@@ -282,7 +306,10 @@ describe('generated GitLab tools', () => {
 
       await expect(run('gitlab_get_branch', { project_id: 42, branch: 'feature' })).rejects.toThrow();
 
-      expect(requests.length).toBeGreaterThan(1);
+      // get_branch asks the proxy for three attempts; writes ask for one.
+      expect(requests).toEqual(
+        Array.from({ length: 3 }, () => ({ method: 'GET', target: '/api/v4/projects/42/repository/branches/feature' })),
+      );
     });
   });
 
@@ -430,6 +457,127 @@ describe('generated GitLab tools', () => {
       const pipeline = await run('gitlab_cancel_pipeline', { project_id: 42, pipeline_id: 7 });
 
       expect(pipeline).toMatchObject({ id: 7, coverage: '87.50' });
+    });
+  });
+  describe('input rules', () => {
+    it('refuses a project id too large to send exactly', async () => {
+      await expectRefused('gitlab_delete_file', {
+        project_id: Number.MAX_SAFE_INTEGER + 2,
+        file_path: 'a.txt',
+        branch: 'main',
+        commit_message: 'remove',
+      });
+    });
+
+    it('refuses a project path that cannot be URL-encoded', async () => {
+      await expectRefused('gitlab_list_jobs', { project_id: 'team/\ud800' });
+    });
+
+    it('refuses a project update that changes nothing', async () => {
+      await expectRefused('gitlab_update_project', { id: 42 });
+    });
+
+    it('sends a project update that only turns shared runners off', async () => {
+      answer = () => ({ status: 200, body: { id: 42, name: 'app', path: 'app', default_branch: null } });
+
+      const result = await run('gitlab_update_project', { id: 42, shared_runners_enabled: false });
+
+      // GitLab answers null for a project with no commits yet; the tool reports it as absent.
+      expect(result).toMatchObject({ id: 42, name: 'app' });
+      expect(result).not.toHaveProperty('default_branch');
+      expect(requests).toEqual([{ method: 'PUT', target: '/api/v4/projects/42' }]);
+    });
+
+    it('refuses an issue update that changes nothing', async () => {
+      await expectRefused('gitlab_update_issue', { project_id: 42, issue_iid: 3 });
+    });
+
+    it('sends an issue update that only clears confidentiality', async () => {
+      answer = () => ({ status: 200, body: issue });
+
+      await run('gitlab_update_issue', { project_id: 42, issue_iid: 3, confidential: false });
+
+      expect(requests).toEqual([{ method: 'PUT', target: '/api/v4/projects/42/issues/3' }]);
+    });
+
+    it('refuses a negative two-factor grace period', async () => {
+      await expectRefused('gitlab_update_group', { id: 5, two_factor_grace_period: -1 });
+    });
+
+    it('refuses a commit that creates a file without content', async () => {
+      await expectRefused('gitlab_create_commit', {
+        project_id: 42,
+        branch: 'main',
+        commit_message: 'add',
+        actions: [{ action: 'create', file_path: 'a.txt' }],
+      });
+    });
+
+    it('refuses a release with two asset links of the same name', async () => {
+      await expectRefused('gitlab_create_release', {
+        project_id: 42,
+        tag_name: 'v1',
+        assets_links: [
+          { name: 'binary', url: 'https://example.com/a' },
+          { name: 'binary', url: 'https://example.com/b' },
+        ],
+      });
+    });
+
+    it('refuses a merge request update naming the milestone two ways', async () => {
+      await expectRefused('gitlab_update_merge_request', {
+        project_id: 42,
+        merge_request_iid: 1,
+        milestone_id: 7,
+        milestone: 'v1',
+      });
+    });
+
+    it('refuses a list cursor that is not a page number', async () => {
+      await expectRefused('gitlab_list_issues', { project_id: 42, cursor: 'next' });
+    });
+  });
+
+  describe('pagination', () => {
+    it('reads the next page from the Link header when GitLab omits x-next-page', async () => {
+      answer = () => ({
+        status: 200,
+        body: [],
+        headers: { link: '<https://gitlab.com/api/v4/projects/42/issues?page=3&per_page=20>; rel="next"' },
+      });
+
+      const result = await run('gitlab_list_issues', { project_id: 42, cursor: '2' });
+
+      expect(result.next_cursor).toBe('3');
+      expect(requests[0]?.target).toBe('/api/v4/projects/42/issues?page=2');
+    });
+
+    it('reports no next page when GitLab sends neither header', async () => {
+      answer = () => ({ status: 200, body: [] });
+
+      const result = await run('gitlab_list_issues', { project_id: 42 });
+
+      expect(result.next_cursor).toBeUndefined();
+    });
+  });
+
+  describe('missing branches', () => {
+    it('reports a missing connection as such, not as a missing branch', async () => {
+      answer = () => ({
+        status: 404,
+        body: { title: 'Not Found', status: 404, detail: 'connection gl_test not found' },
+        headers: { 'content-type': 'application/problem+json' },
+      });
+
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'main' })).rejects.toMatchObject({
+        code: 'connection_not_found',
+      });
+    });
+
+    it('reports a branch GitLab does not have as not found', async () => {
+      answer = () => ({ status: 404, body: { message: '404 Branch Not Found' } });
+
+      await expect(run('gitlab_get_branch', { project_id: 42, branch: 'gone' })).rejects.toThrow('Branch not found');
     });
   });
 });

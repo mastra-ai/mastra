@@ -4,6 +4,14 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
+/** Fills x-next-page from the Link header when GitLab sends only Link (keyset pagination, large result sets). */
+function fillGitLabNextPage(headers: Record<string, string>): void {
+  if (headers['x-next-page']) return;
+  const next = /<([^>]+)>;\s*rel="next"/.exec(headers['link'] ?? '')?.[1];
+  const page = next ? new URL(next).searchParams.get('page') : null;
+  if (page) headers['x-next-page'] = page;
+}
+
 /** Encodes one GitLab path segment exactly once, whether `value` arrives raw or already URL-encoded. */
 function gitlabPathSegment(value: string | number): string {
   const text = String(value);
@@ -16,11 +24,28 @@ function gitlabPathSegment(value: string | number): string {
 
 export const listBranchesInputSchema = z.object({
   project_id: z
-    .union([z.number(), z.string()])
+    .union([
+      z.number().int().positive(),
+      z
+        .string()
+        .min(1)
+        .refine(value => {
+          try {
+            encodeURIComponent(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'must not contain unpaired surrogate characters'),
+    ])
     .describe(
       'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
     ),
-  cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^[1-9]\d*$/, 'cursor must be the page number from next_cursor')
+    .optional()
+    .describe('Pagination cursor (page number). Omit for the first page.'),
   per_page: z.number().optional().describe('Number of results per page. Default: 20, max: 100.'),
   search: z.string().optional().describe('Search string to filter branches.'),
   regex: z.string().optional().describe('Regular expression to filter branch names. Cannot be used with search.'),
@@ -124,6 +149,7 @@ export function listBranchesTool(proxy: PlatformProxy) {
       };
 
       const response = await platformProxy.get(config);
+      fillGitLabNextPage(response.headers);
 
       if (!Array.isArray(response.data)) {
         throw new platformProxy.ActionError({

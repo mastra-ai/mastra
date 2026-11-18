@@ -16,11 +16,28 @@ function gitlabPathSegment(value: string | number): string {
 
 export const deleteGroupInputSchema = z
   .object({
-    group_id: z.union([z.number(), z.string()]).describe('The ID or URL-encoded path of the group. Example: 123'),
+    group_id: z
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
+      .describe('The ID or URL-encoded path of the group. Example: 123'),
     permanently_remove: z
       .boolean()
       .optional()
-      .describe('If true, immediately deletes a subgroup already marked for deletion.'),
+      .describe(
+        'If true, request permanent removal of a subgroup already scheduled for deletion. GitLab completes it asynchronously.',
+      ),
     full_path: z
       .string()
       .optional()

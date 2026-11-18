@@ -4,8 +4,20 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Fills x-next-page from the Link header when GitLab sends only Link (keyset pagination, large result sets). */
+function fillGitLabNextPage(headers: Record<string, string>): void {
+  if (headers['x-next-page']) return;
+  const next = /<([^>]+)>;\s*rel="next"/.exec(headers['link'] ?? '')?.[1];
+  const page = next ? new URL(next).searchParams.get('page') : null;
+  if (page) headers['x-next-page'] = page;
+}
+
 export const listGroupsInputSchema = z.object({
-  cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^[1-9]\d*$/, 'cursor must be the page number from next_cursor')
+    .optional()
+    .describe('Pagination cursor (page number). Omit for the first page.'),
   search: z.string().optional().describe('Search query to filter groups.'),
   owned: z.boolean().optional().describe('Limit to groups explicitly owned by the current user.'),
   min_access_level: z.number().optional().describe('Minimum access level of the authenticated user.'),
@@ -65,6 +77,7 @@ export function listGroupsTool(proxy: PlatformProxy) {
         },
         retries: 3,
       });
+      fillGitLabNextPage(response.headers);
 
       const providerGroups = z.array(ProviderGroupSchema).parse(response.data);
 

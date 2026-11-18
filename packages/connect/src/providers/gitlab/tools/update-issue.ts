@@ -14,33 +14,52 @@ function gitlabPathSegment(value: string | number): string {
   }
 }
 
-export const updateIssueInputSchema = z.object({
-  project_id: z
-    .union([z.number(), z.string()])
-    .describe(
-      'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
-    ),
-  issue_iid: z.number().describe('The internal ID of a project issue. Example: 1'),
-  title: z.string().optional().describe('The title of the issue'),
-  description: z.string().optional().describe('The description of the issue'),
-  state_event: z
-    .string()
-    .optional()
-    .describe('The state event of the issue. Use "close" to close or "reopen" to reopen'),
-  labels: z
-    .string()
-    .optional()
-    .describe('Comma-separated label names for the issue. Set to empty string to unassign all labels'),
-  add_labels: z.string().optional().describe('Comma-separated label names to add to the issue'),
-  remove_labels: z.string().optional().describe('Comma-separated label names to remove from the issue'),
-  assignee_ids: z.array(z.number()).optional().describe('Array of user IDs to assign the issue to'),
-  milestone_id: z.number().optional().describe('The global ID of a milestone to assign the issue to'),
-  due_date: z.string().optional().describe('The due date in YYYY-MM-DD format'),
-  confidential: z.boolean().optional().describe('Whether the issue is confidential'),
-  discussion_locked: z.boolean().optional().describe('Whether the issue discussion is locked'),
-  issue_type: z.string().optional().describe('The type of issue. One of issue, incident, test_case, or task'),
-  weight: z.number().optional().describe('The weight of the issue'),
-});
+export const updateIssueInputSchema = z
+  .object({
+    project_id: z
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
+      .describe(
+        'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
+      ),
+    issue_iid: z.number().describe('The internal ID of a project issue. Example: 1'),
+    title: z.string().optional().describe('The title of the issue'),
+    description: z.string().optional().describe('The description of the issue'),
+    state_event: z
+      .string()
+      .optional()
+      .describe('The state event of the issue. Use "close" to close or "reopen" to reopen'),
+    labels: z
+      .string()
+      .optional()
+      .describe('Comma-separated label names for the issue. Set to empty string to unassign all labels'),
+    add_labels: z.string().optional().describe('Comma-separated label names to add to the issue'),
+    remove_labels: z.string().optional().describe('Comma-separated label names to remove from the issue'),
+    assignee_ids: z.array(z.number()).optional().describe('Array of user IDs to assign the issue to'),
+    milestone_id: z.number().optional().describe('The global ID of a milestone to assign the issue to'),
+    due_date: z.string().optional().describe('The due date in YYYY-MM-DD format'),
+    confidential: z.boolean().optional().describe('Whether the issue is confidential'),
+    discussion_locked: z.boolean().optional().describe('Whether the issue discussion is locked'),
+    issue_type: z.string().optional().describe('The type of issue. One of issue, incident, test_case, or task'),
+    weight: z.number().optional().describe('The weight of the issue'),
+  })
+  .refine(
+    data =>
+      Object.entries(data).some(([key, value]) => !['project_id', 'issue_iid'].includes(key) && value !== undefined),
+    { message: 'Provide at least one field to update.' },
+  );
 
 const ProviderIssueSchema = z
   .object({

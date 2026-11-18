@@ -14,39 +14,60 @@ function gitlabPathSegment(value: string | number): string {
   }
 }
 
-export const updateGroupInputSchema = z.object({
-  id: z.number().describe('The ID of the group. Example: 133159324'),
-  name: z.string().optional().describe('The name of the group'),
-  path: z.string().optional().describe('The path of the group'),
-  description: z.string().nullable().optional().describe('The description of the group'),
-  visibility: z.enum(['private', 'internal', 'public']).optional().describe('The visibility level of the group'),
-  request_access_enabled: z.boolean().optional().describe('Allow users to request member access'),
-  lfs_enabled: z
-    .boolean()
-    .optional()
-    .describe('Enable/disable Large File Storage (LFS) for the projects in this group'),
-  project_creation_level: z.string().optional().describe('Determine if developers can create projects in the group'),
-  subgroup_creation_level: z.string().optional().describe('Allowed to create subgroups'),
-  default_branch: z.string().optional().describe("The default branch name for group's projects"),
-  emails_enabled: z.boolean().optional().describe('Enable email notifications'),
-  mentions_disabled: z.boolean().optional().describe('Disable the capability of a group from getting mentioned'),
-  share_with_group_lock: z
-    .boolean()
-    .optional()
-    .describe('Prevent sharing a project with another group within this group'),
-  require_two_factor_authentication: z
-    .boolean()
-    .optional()
-    .describe('Require all users in this group to set up two-factor authentication'),
-  two_factor_grace_period: z
-    .number()
-    .optional()
-    .describe('Time before Two-factor authentication is enforced (in hours)'),
-  auto_devops_enabled: z
-    .boolean()
-    .optional()
-    .describe('Default to Auto DevOps pipeline for all projects within this group'),
-});
+export const updateGroupInputSchema = z
+  .object({
+    id: z
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
+      .describe('The ID of the group. Example: 133159324'),
+    name: z.string().optional().describe('The name of the group'),
+    path: z.string().optional().describe('The path of the group'),
+    description: z.string().nullable().optional().describe('The description of the group'),
+    visibility: z.enum(['private', 'internal', 'public']).optional().describe('The visibility level of the group'),
+    request_access_enabled: z.boolean().optional().describe('Allow users to request member access'),
+    lfs_enabled: z
+      .boolean()
+      .optional()
+      .describe('Enable/disable Large File Storage (LFS) for the projects in this group'),
+    project_creation_level: z.string().optional().describe('Determine if developers can create projects in the group'),
+    subgroup_creation_level: z.string().optional().describe('Allowed to create subgroups'),
+    default_branch: z.string().optional().describe("The default branch name for group's projects"),
+    emails_enabled: z.boolean().optional().describe('Enable email notifications'),
+    mentions_disabled: z.boolean().optional().describe('Disable the capability of a group from getting mentioned'),
+    share_with_group_lock: z
+      .boolean()
+      .optional()
+      .describe('Prevent sharing a project with another group within this group'),
+    require_two_factor_authentication: z
+      .boolean()
+      .optional()
+      .describe('Require all users in this group to set up two-factor authentication'),
+    two_factor_grace_period: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe('Time before Two-factor authentication is enforced (in hours)'),
+    auto_devops_enabled: z
+      .boolean()
+      .optional()
+      .describe('Default to Auto DevOps pipeline for all projects within this group'),
+  })
+  .refine(data => Object.entries(data).some(([key, value]) => !['id'].includes(key) && value !== undefined), {
+    message: 'Provide at least one field to update.',
+  });
 
 const ProviderGroupSchema = z.object({
   id: z.number(),

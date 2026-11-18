@@ -16,7 +16,20 @@ function gitlabPathSegment(value: string | number): string {
 
 export const getBranchInputSchema = z.object({
   project_id: z
-    .union([z.number(), z.string()])
+    .union([
+      z.number().int().positive(),
+      z
+        .string()
+        .min(1)
+        .refine(value => {
+          try {
+            encodeURIComponent(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'must not contain unpaired surrogate characters'),
+    ])
     .describe(
       'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
     ),
@@ -79,7 +92,8 @@ export function getBranchTool(proxy: PlatformProxy) {
           typeof error.response === 'object' &&
           error.response !== null &&
           'status' in error.response &&
-          error.response.status === 404
+          error.response.status === 404 &&
+          !('code' in error && error.code === 'connection_not_found')
         ) {
           throw new platformProxy.ActionError({
             type: 'not_found',

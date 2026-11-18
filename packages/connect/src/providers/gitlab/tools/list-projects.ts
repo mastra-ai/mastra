@@ -4,8 +4,20 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+/** Fills x-next-page from the Link header when GitLab sends only Link (keyset pagination, large result sets). */
+function fillGitLabNextPage(headers: Record<string, string>): void {
+  if (headers['x-next-page']) return;
+  const next = /<([^>]+)>;\s*rel="next"/.exec(headers['link'] ?? '')?.[1];
+  const page = next ? new URL(next).searchParams.get('page') : null;
+  if (page) headers['x-next-page'] = page;
+}
+
 export const listProjectsInputSchema = z.object({
-  cursor: z.string().optional().describe('Pagination cursor (page number). Omit for the first page.'),
+  cursor: z
+    .string()
+    .regex(/^[1-9]\d*$/, 'cursor must be the page number from next_cursor')
+    .optional()
+    .describe('Pagination cursor (page number). Omit for the first page.'),
   per_page: z.number().int().min(1).max(100).optional().describe('Number of results per page (max 100).'),
   search: z.string().optional().describe('Filter projects by name.'),
   owned: z.boolean().optional().describe('Limit to projects owned by the current user.'),
@@ -78,6 +90,7 @@ export function listProjectsTool(proxy: PlatformProxy) {
         },
         retries: 3,
       });
+      fillGitLabNextPage(response.headers);
 
       const projects = z.array(ProviderProjectSchema).parse(response.data);
 

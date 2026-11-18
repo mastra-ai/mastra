@@ -14,20 +14,46 @@ function gitlabPathSegment(value: string | number): string {
   }
 }
 
-const CommitActionSchema = z.object({
-  action: z.enum(['create', 'delete', 'move', 'update', 'chmod']),
-  file_path: z.string(),
-  content: z.string().optional(),
-  encoding: z.enum(['text', 'base64']).optional(),
-  execute_filemode: z.boolean().optional(),
-  last_commit_id: z.string().optional(),
-  previous_path: z.string().optional(),
-});
+const CommitActionSchema = z
+  .object({
+    action: z.enum(['create', 'delete', 'move', 'update', 'chmod']),
+    file_path: z.string(),
+    content: z.string().optional(),
+    encoding: z.enum(['text', 'base64']).optional(),
+    execute_filemode: z.boolean().optional(),
+    last_commit_id: z.string().optional(),
+    previous_path: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const missing =
+      (value.action === 'create' || value.action === 'update') && value.content === undefined
+        ? 'content'
+        : value.action === 'move' && value.previous_path === undefined
+          ? 'previous_path'
+          : value.action === 'chmod' && value.execute_filemode === undefined
+            ? 'execute_filemode'
+            : undefined;
+    if (missing)
+      ctx.addIssue({ code: 'custom', path: [missing], message: `${missing} is required for a ${value.action} action` });
+  });
 
 export const createCommitInputSchema = z
   .object({
     project_id: z
-      .union([z.number(), z.string()])
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
       .describe(
         'Numeric project ID, or the project path raw or URL-encoded. Example: 82599306, "team/app", or "team%2Fapp"',
       ),
@@ -40,7 +66,23 @@ export const createCommitInputSchema = z
     allow_empty: z.boolean().optional().describe('When true, creates an empty commit. Default is false'),
     force: z.boolean().optional().describe('If true, overwrites branch with a new commit. Default is false'),
     start_sha: z.string().optional().describe('SHA of the commit to use as the parent for the new commit'),
-    start_project: z.string().optional().describe('The project ID or URL-encoded path to use as the source'),
+    start_project: z
+      .union([
+        z.number().int().positive(),
+        z
+          .string()
+          .min(1)
+          .refine(value => {
+            try {
+              encodeURIComponent(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, 'must not contain unpaired surrogate characters'),
+      ])
+      .optional()
+      .describe('The project ID or URL-encoded path to use as the source'),
     stats: z.boolean().optional().describe('Include commit stats. Default is true'),
   })
   .refine(data => data.allow_empty === true || (Array.isArray(data.actions) && data.actions.length > 0), {
