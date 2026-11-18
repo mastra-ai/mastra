@@ -15,7 +15,8 @@ function isIdentityTag(tag: string): boolean {
 }
 
 /**
- * The scope tags a session's runs act with: the host's `knowledge.scopes` plus the session's own.
+ * The scope tags a session's runs act with, beside each run's own identity tags: the host's `scopes`
+ * plus the session's own.
  * Every Knowledge reader and writer in a session (the code agent, the /knowledge inspector) uses
  * this, so what the agent writes is what the inspector reads.
  *
@@ -26,7 +27,7 @@ function isIdentityTag(tag: string): boolean {
  * - When the host's scopes name an `org:`, a Factory session acts with the host's scopes alone, without
  *   its own `org:` and `project:` tags, for a Knowledge instance that declares only that org; every org
  *   and project on the host shares it. A host `project:`, `resource:` or `thread:` tag is refused then,
- *   so a run never holds a scope the host didn't name.
+ *   so the host can't stand in for a project or a run's identity.
  * - Local sessions act with the host's scopes as given; they are canonical addresses already.
  */
 export function resolveKnowledgeSessionScopes(

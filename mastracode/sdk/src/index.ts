@@ -1396,8 +1396,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ...(knowledge
       ? {
           knowledge,
-          // Factory sessions add their org + project tags to the host's scopes, on top of the run's
-          // incoming scopes (identity and per-message scopes). An unresolved Factory session keeps
+          // Factory sessions add their org + project tags to the host's scopes (or act with the host's
+          // scopes alone when they name an org:), on top of the run's incoming scopes (identity and
+          // per-message scopes). An unresolved Factory session keeps
           // only identity tags, so its writes stay private to the run, matching the inspector,
           // which refuses to read for it.
           scopes: ({ scopes, requestContext }) => {

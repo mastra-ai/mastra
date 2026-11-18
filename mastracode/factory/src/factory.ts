@@ -693,7 +693,7 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
-    // Fail at construction on scopes every session would refuse.
+    // An `org:` with a `project:`, `resource:` or `thread:` beside it is refused by every session; fail here.
     const hostScopes = resolveKnowledgeSessionScopes({ factoryOrgId: 'factory' }, config.scopes);
     if (!hostScopes.resolved) throw new Error(`MastraFactory: 'scopes': ${hostScopes.reason}`);
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
