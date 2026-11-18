@@ -5,25 +5,13 @@ import { changeRequestNumber } from '@mastra/factory/work-items/change-requests'
 import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
 import { isValid } from 'date-fns';
 
-import type { WorkItem, WorkItemSource } from './services/workItems';
+import type { WorkItem } from './services/workItems';
 
 const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export function cardLabels(metadata: Record<string, unknown>): string[] {
   return metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
 }
-
-export const SOURCE_LABELS: Record<WorkItemSource, string> = {
-  'github-issue': 'Issue',
-  'github-pr': 'PR Review',
-  'gitlab-issue': 'GitLab',
-  'gitlab-pr': 'MR Review',
-  'linear-issue': 'Linear',
-  'jira-issue': 'Jira',
-  'incidentio-follow-up': 'incident.io',
-  'slack-thread': 'Slack',
-  manual: 'Manual',
-};
 
 export function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
@@ -152,17 +140,6 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   if (item.source === 'github-issue') return githubSourceKey('issue', itemNumber, repositoryId);
   if (item.source === 'github-pr') return githubSourceKey('pull-request', itemNumber, repositoryId);
   return undefined;
-}
-
-/** Aria label for the icon-only external link next to a card title. */
-export function externalLinkLabel(source: WorkItemSource): string {
-  if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
-  if (source === 'linear-issue') return 'Open in Linear';
-  if (source === 'jira-issue') return 'Open in Jira';
-  if (source === 'incidentio-follow-up') return 'Open in incident.io';
-  if (source === 'slack-thread') return 'Open in Slack';
-  if (source === 'manual') return 'Open link';
-  return 'Open in GitHub';
 }
 
 /** When the issue/PR was opened upstream; `createdAt` is only when the factory first saw it, "just now" for every backfilled card. */
