@@ -579,8 +579,8 @@ export function KnowledgePageDetail({
             <PeekCount label="Links out" value={linksTo.length} />
             <PeekCount label="Notes" value={notesMore ? `${notes.length}+` : notes.length} />
           </dl>
-          {/* A long body shrinks the preview to the panel's free height and scrolls inside it, down to 12rem. */}
-          <KnowledgeDetailSection label="Preview" className="min-h-48">
+          {/* The preview takes the panel's free height: a long body scrolls inside it, down to 12rem. */}
+          <KnowledgeDetailSection label="Preview" className="min-h-48 flex-1">
             {page.body ? (
               <ScrollArea className="min-h-0">
                 <div data-testid="knowledge-page-body">{body}</div>
