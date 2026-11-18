@@ -12,12 +12,8 @@ import { useComposerImagesState } from '../context/useComposerImagesState';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
-
-interface PromptHandoff {
-  handoffPrompt: string;
-  handoffModelId?: string;
-  handoffThinkingLevel?: ThinkingLevelSetting;
-}
+import { readHandoffPrompt } from '../services/promptHandoff';
+import type { PromptHandoff } from '../services/promptHandoff';
 
 interface HandoffModel {
   modelId?: string;
@@ -27,13 +23,24 @@ interface HandoffModel {
 // History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
 const unsentHandoffs = new Map<string, HandoffModel>();
 
-export function startPromptHandoff(sessionId: string, prompt: string, model: HandoffModel): PromptHandoff {
+export function startPromptHandoff(
+  sessionId: string,
+  prompt: string,
+  {
+    shownMessageId,
+    ...model
+  }: HandoffModel & {
+    /** The draft's bubble for this prompt, which a thread that keeps the draft's transcript shows already. */
+    shownMessageId?: string;
+  },
+): PromptHandoff {
   unsentHandoffs.set(sessionId, model);
   storePendingHandoff(sessionId, prompt);
   return {
     handoffPrompt: prompt,
     handoffModelId: model.modelId,
     handoffThinkingLevel: model.thinkingLevel,
+    handoffShownMessageId: shownMessageId,
   };
 }
 
@@ -45,18 +52,6 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   if (!isRecord(state)) return undefined;
   const value = state[key];
   return typeof value === 'string' && value ? value : undefined;
-}
-
-// An image-only first prompt hands off an empty string, so only a missing field means "no handoff".
-function readHandoffPrompt(state: unknown): string | undefined {
-  if (!isRecord(state)) return undefined;
-  const value = state.handoffPrompt;
-  return typeof value === 'string' ? value : undefined;
-}
-
-/** A thread opened with a first prompt to send: its session may still be being created. */
-export function opensWithPrompt(state: unknown): boolean {
-  return readHandoffPrompt(state) !== undefined;
 }
 
 function toOutgoing(files: PendingImage[]) {
@@ -93,7 +88,7 @@ export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { localUser, clearPending, pushNotice } = useChatTranscript();
+  const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
   const { restoreComposerDraft } = useChatCommands();
   const { setImages } = useComposerImagesState();
   const mutationArgs = {
@@ -111,6 +106,8 @@ export function useHandoffPrompt(): void {
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
+  const shownMessageId = readHandoffField(location.state, 'handoffShownMessageId');
+  const promptShown = shownMessageId !== undefined && transcript.entries.some(entry => entry.id === shownMessageId);
 
   useEffect(() => {
     if (handedOff.current) return;
@@ -129,7 +126,7 @@ export function useHandoffPrompt(): void {
       }
       shown.current = true;
       const files = peekHandoffFiles(sessionId);
-      if (prompt || files.length > 0) localUser(prompt, false, toOutgoing(files));
+      if (!promptShown && (prompt || files.length > 0)) localUser(prompt, false, toOutgoing(files));
     }
     if (!sessionEnabled) return;
     if (prompt === undefined) {
@@ -182,6 +179,7 @@ export function useHandoffPrompt(): void {
     modelId,
     navigate,
     prompt,
+    promptShown,
     pushNotice,
     restoreComposerDraft,
     sessionId,

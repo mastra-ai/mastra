@@ -12,7 +12,7 @@ export function useOpenSession() {
   return {
     session,
     isUserThread,
-    title: session && isUserThread ? getUserSessionLabel(session) : session?.title?.trim() || undefined,
+    title: session ? getUserSessionLabel(session) : undefined,
     loading: sessionQuery.isLoading,
   };
 }

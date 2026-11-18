@@ -16,11 +16,9 @@ import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
-import { IntakeOrderSection } from './IntakeOrderSection';
 import { IntakeSection } from './IntakeSection';
-import { NotRoutedSection } from './NotRoutedSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
+import { BehaviorSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
 
@@ -58,15 +56,12 @@ export function SettingsPanel() {
   return (
     <>
       {section === 'account' && <AccountSettingsSection />}
-      {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && (
         <div className="flex flex-col gap-8">
           <IntakeSection />
-          {factoryId && <IntakeOrderSection factoryId={factoryId} />}
-          {factoryId && <NotRoutedSection factoryId={factoryId} />}
         </div>
       )}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}

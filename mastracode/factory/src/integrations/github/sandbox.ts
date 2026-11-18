@@ -1022,6 +1022,13 @@ export async function configureGitIdentity(
   }
 }
 
+export interface PushedBranch {
+  /** The local branch tip that was pushed. */
+  commit: string;
+  /** True when the remote already had this commit, so the push sent nothing new. */
+  upToDate: boolean;
+}
+
 async function pushAuthenticatedBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
@@ -1029,10 +1036,17 @@ async function pushAuthenticatedBranch(
   cloneUrl: string,
   token: string,
   username: string,
-): Promise<void> {
+): Promise<PushedBranch> {
+  const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', `refs/heads/${branch}`]);
+  if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
   const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
-  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '-u', 'origin', branch], { env });
+  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '--porcelain', '-u', 'origin', branch], { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+  // Porcelain lines read `<flag>\t<src>:<dst>\t<summary>`; `=` marks a ref the remote already had.
+  const upToDate = push.stdout
+    .split('\n')
+    .some(line => line.startsWith('=\t') && line.split('\t')[1]?.startsWith(`refs/heads/${branch}:`));
+  return { commit: tip.stdout.trim(), upToDate };
 }
 
 /** Whether the checkout has a local `refs/heads/<branch>`. */
@@ -1123,7 +1137,7 @@ export async function pushRepositoryBranch(
   branch: string,
   access: RepositoryAccess,
   repoFullName: string,
-): Promise<void> {
+): Promise<PushedBranch> {
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
@@ -1132,7 +1146,7 @@ export async function pushRepositoryBranch(
   if (!authorization?.token) {
     throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');
   }
-  await pushAuthenticatedBranch(
+  return pushAuthenticatedBranch(
     sandbox,
     workdir,
     branch,

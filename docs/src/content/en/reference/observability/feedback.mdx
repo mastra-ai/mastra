@@ -182,6 +182,18 @@ await mastraClient.deleteScores({
 })
 ```
 
+## Get feedback
+
+### `getFeedback(feedbackId)`
+
+Returns one feedback record by ID. The response's `feedback` field is `null` when no record matches.
+
+```typescript
+const { feedback } = await mastraClient.getFeedback('feedback-1')
+```
+
+Observability storage exposes the same lookup as `await storage.getFeedbackById(feedbackId)`, which resolves to the `FeedbackRecord` or `null`. `PostgresStoreVNext`, `ClickhouseStoreVNext`, and the DuckDB and in-memory observability stores support it. Other stores, including the legacy `PostgresStore` and `ClickhouseStore` and LibSQL, throw `OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED`, and the client request fails instead of returning `null`.
+
 ## List feedback
 
 ### `listFeedback(args?)`
@@ -636,6 +648,7 @@ These routes belong to a Mastra runtime and use its configured observability sto
 | Method | Path | Purpose | Permission |
 | - | - | - | - |
 | `GET` | `/api/observability/feedback` | List feedback records | `observability:read` |
+| `GET` | `/api/observability/feedback/:feedbackId` | Get one feedback record | `observability:read` |
 | `POST` | `/api/observability/feedback` | Create a feedback record | `observability:write` |
 | `PUT` | `/api/observability/feedback/:feedbackId` | Replace a complete feedback record | `observability:write` |
 | `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |

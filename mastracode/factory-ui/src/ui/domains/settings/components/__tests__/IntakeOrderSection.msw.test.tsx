@@ -16,10 +16,8 @@ import type {
   IntakeOrderResponse,
   IntakeRouteAgainResponse,
 } from '../../../../../api/types';
-import { NewCardsHere } from '../../../boardConfig/components/NewCardsHere';
 import { FACTORY_ID, PROJECT_URL, rule, serveRules } from '../../../boardRules/__tests__/fixtures/rulesServer';
 import { IntakeOrderSection } from '../IntakeOrderSection';
-import { NotRoutedSection } from '../NotRoutedSection';
 
 function order(fields: Partial<IntakeOrderResponse> = {}): IntakeOrderResponse {
   return {
@@ -57,10 +55,12 @@ function serveOrder(initial: IntakeOrderResponse) {
   return saved;
 }
 
-const boardNames = () =>
+const boardRows = () =>
   within(screen.getByRole('list', { name: 'Intake order' }))
     .getAllByRole('listitem')
-    .map(item => within(item).getByText(/^(Work|Release Preview)$/).textContent);
+    .filter(item => !item.closest('[aria-label="Not routed"]'));
+
+const boardNames = () => boardRows().map(item => within(item).getByText(/^(Work|Release Preview)$/).textContent);
 
 function decision(fields: Partial<IntakeDecisionInfo> & Pick<IntakeDecisionInfo, 'id' | 'title'>): IntakeDecisionInfo {
   return {
@@ -99,17 +99,17 @@ describe('Intake order', () => {
       </MemoryRouter>,
     );
 
-    const list = within(await screen.findByRole('list', { name: 'Intake order' }));
-    const [work, release] = list.getAllByRole('listitem');
+    await screen.findByRole('list', { name: 'Intake order' });
+    const [work, release] = boardRows();
     expect(work).toBeDefined();
     expect(within(work).getByText('Work')).toBeVisible();
-    expect(await within(work).findByText('3 rules')).toBeVisible();
+    expect(await within(work).findByText('3 rules for new issues and pull requests')).toBeVisible();
     expect(within(work).getByText('Ends in catch-all')).toBeVisible();
     expect(within(work).getByRole('link', { name: 'Edit rules' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/work/rules`,
     );
-    expect(within(release).getByText('1 rule')).toBeVisible();
+    expect(within(release).getByText('1 rule for new issues and pull requests')).toBeVisible();
     // Release takes every new issue but no pull request, so it doesn't end in a catch-all.
     expect(within(release).queryByText('Ends in catch-all')).not.toBeInTheDocument();
   });
@@ -125,7 +125,7 @@ describe('Intake order', () => {
     );
 
     await screen.findByRole('list', { name: 'Intake order' });
-    const release = () => within(screen.getAllByRole('listitem')[1]);
+    const release = () => within(boardRows()[1]);
     await user.click(release().getByRole('button', { name: 'Check earlier' }));
     expect(boardNames()).toEqual(['Release Preview', 'Work']);
     expect(screen.getByText('Not saved yet. The comparison is for the saved order.')).toBeVisible();
@@ -201,7 +201,7 @@ describe('Intake order', () => {
     await screen.findByRole('list', { name: 'Intake order' });
     rerender(at(FACTORY_ID));
     await screen.findByRole('list', { name: 'Intake order' });
-    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    await user.click(within(boardRows()[1]).getByRole('button', { name: 'Check earlier' }));
     expect(boardNames()).toEqual(['Release Preview', 'Work']);
     rerender(at('fp-2'));
 
@@ -222,12 +222,12 @@ describe('Intake order', () => {
     );
 
     await screen.findByRole('list', { name: 'Intake order' });
-    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    await user.click(within(boardRows()[1]).getByRole('button', { name: 'Check earlier' }));
     current = order({ boards: [...order().boards, { boardKey: 'docs', name: 'Docs' }] });
     await client.invalidateQueries();
 
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3));
-    expect(within(screen.getAllByRole('listitem')[2]).getByText('Docs')).toBeVisible();
+    await waitFor(() => expect(boardRows()).toHaveLength(3));
+    expect(within(boardRows()[2]).getByText('Docs')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Save order' })).not.toBeInTheDocument();
   });
 
@@ -257,12 +257,10 @@ describe('Intake order', () => {
     );
 
     await screen.findByRole('list', { name: 'Intake order' });
-    await user.click(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' }));
+    await user.click(within(boardRows()[1]).getByRole('button', { name: 'Check earlier' }));
     await user.click(screen.getByRole('button', { name: 'Save order' }));
 
-    await waitFor(() =>
-      expect(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: 'Check earlier' })).toBeDisabled(),
-    );
+    await waitFor(() => expect(within(boardRows()[1]).getByRole('button', { name: 'Check earlier' })).toBeDisabled());
     finish();
     await waitForMutationsIdle(client);
     expect(boardNames()).toEqual(['Release Preview', 'Work']);
@@ -318,13 +316,13 @@ describe('Not routed', () => {
     );
     const user = userEvent.setup();
     const { client } = renderWithProviders(
-      <>
-        <NotRoutedSection factoryId={FACTORY_ID} />
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
         <Toaster />
-      </>,
+      </MemoryRouter>,
     );
 
-    const list = within(await screen.findByRole('list', { name: 'Not routed' }));
+    const list = within(await screen.findByRole('list', { name: 'Items not routed' }));
     expect(list.getByRole('link', { name: 'Crash on start' })).toHaveAttribute(
       'href',
       'https://github.com/acme/app/issues/1',
@@ -341,15 +339,53 @@ describe('Not routed', () => {
     await waitFor(() => expect(screen.queryByText('Crash on start')).not.toBeInTheDocument());
   });
 
-  it('says when every new item found a board', async () => {
+  it('says when every new issue and pull request found a board', async () => {
     renderWithProviders(
-      <>
-        <NotRoutedSection factoryId={FACTORY_ID} />
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
         <Toaster />
-      </>,
+      </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Every new item found a board.')).toBeVisible();
+    expect(await screen.findByText('Every new issue and pull request found a board.')).toBeVisible();
+  });
+
+  it('still lists items no board took when the intake order fails to load', async () => {
+    server.use(
+      http.get(`${PROJECT_URL}/intake-order`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+      http.get(`${PROJECT_URL}/intake/not-routed`, () =>
+        HttpResponse.json({
+          notRouted: [decision({ id: 'd-1', title: 'Crash on start' })],
+          nextCursor: null,
+          canEdit: true,
+        } satisfies IntakeNotRoutedResponse),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('The intake order didn’t load.')).toBeVisible();
+    const list = within(await screen.findByRole('list', { name: 'Items not routed' }));
+    expect(list.getByRole('link', { name: 'Crash on start' })).toBeVisible();
+  });
+
+  it('keeps Load more when every loaded item was routed again but older ones remain', async () => {
+    server.use(
+      http.get(`${PROJECT_URL}/intake/not-routed`, () =>
+        HttpResponse.json({ notRouted: [], nextCursor: 'c-1', canEdit: true } satisfies IntakeNotRoutedResponse),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('More waiting for a board.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
   });
 
   it('shows why an item could not be routed again', async () => {
@@ -370,10 +406,10 @@ describe('Not routed', () => {
     );
     const user = userEvent.setup();
     renderWithProviders(
-      <>
-        <NotRoutedSection factoryId={FACTORY_ID} />
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
         <Toaster />
-      </>,
+      </MemoryRouter>,
     );
 
     await user.click(await screen.findByRole('button', { name: 'Route again' }));
@@ -419,42 +455,16 @@ describe('Not routed', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<NotRoutedSection factoryId={FACTORY_ID} />);
+    renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
 
     await user.click(await screen.findByRole('button', { name: 'Why?' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Test intake' }));
     expect(await dialog.findByText('Not routed. No board’s rules match it.')).toBeVisible();
     expect(dialog.getByRole('list', { name: 'What each rule answered' })).toHaveTextContent('Work › Bugs go to Triage');
     expect(tested).toEqual([{ itemId: 'd-1' }]);
-  });
-});
-
-describe('Board settings summary', () => {
-  it("counts the board's reachable rules for new items and where intake checks it", async () => {
-    serveRules({
-      rules: [
-        rule({
-          name: 'Bugs',
-          when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
-        }),
-        rule({ name: 'Off', enabled: false }),
-        rule({ name: 'Everything else' }),
-        rule({ name: 'Never reached' }),
-        rule({ name: 'Closed', on: ['work_item.closed'] }),
-      ],
-      order: ['release', 'work'],
-    });
-    renderWithProviders(
-      <MemoryRouter>
-        <NewCardsHere factoryId={FACTORY_ID} board={workBoardInfo} />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText('2 rules for new items')).toBeVisible();
-    expect(screen.getByText('Checked 2nd')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Edit rules' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/work/rules`,
-    );
   });
 });

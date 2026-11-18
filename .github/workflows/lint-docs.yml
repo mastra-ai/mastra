@@ -239,6 +239,7 @@ jobs:
               docs/src/content/en/docs \
               docs/src/content/en/integrations \
               docs/src/content/en/reference \
+              docs/src/mastra-code \
               | grep '\.mdx$' || true
           )
 
@@ -273,7 +274,7 @@ jobs:
       - name: Install Vale
         if: steps.mdx-changes.outputs.has_changes == 'true'
         env:
-          VALE_VERSION: 3.25.1
+          VALE_VERSION: 3.27.0
         run: |
           curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
             | tar -xz -C /usr/local/bin vale

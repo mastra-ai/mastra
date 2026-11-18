@@ -1426,6 +1426,7 @@ describe('PlatformGithubIntegration', () => {
       connectionId: connection.id,
       repositoryId: repository.id,
     });
+    await seed.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/app'] } } });
     const context = {
       auth: fakeAuth(),
       // Only presence is read here; the callback is never invoked.

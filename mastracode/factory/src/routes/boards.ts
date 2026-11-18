@@ -31,7 +31,10 @@ export interface BoardRoutesDeps extends RouteDependencies {
   workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
-  boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
+  boards: Pick<
+    ProjectBoardCache,
+    'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'projectSkillNames' | 'seedFor'
+  >;
 }
 
 type Resolved = StoredBoardScope & { userId: string };

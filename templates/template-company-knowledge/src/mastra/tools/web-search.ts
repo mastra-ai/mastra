@@ -15,6 +15,8 @@ const getGatewayChatCompletionsUrl = () => {
   return `${gatewayUrl}/v1/chat/completions`;
 };
 
+const MAX_ERROR_BODY_LENGTH = 500;
+
 const sourceSchema = z.object({
   title: z.string(),
   url: z.string(),
@@ -108,14 +110,18 @@ export const webSearchTool = createTool({
         tools: [
           {
             type: 'openrouter:web_search',
-            search_context_size: 'medium',
           },
         ],
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Gateway web search failed: ${response.status} ${response.statusText}`.trim());
+      // Include part of the response body so the gateway's reason is visible.
+      const body = await response.text().catch(() => '');
+      const detail = body.length > MAX_ERROR_BODY_LENGTH ? `${body.slice(0, MAX_ERROR_BODY_LENGTH)}...` : body;
+      throw new Error(
+        `Gateway web search failed: ${response.status} ${response.statusText}`.trim() + (detail ? ` - ${detail}` : ''),
+      );
     }
 
     const data = (await response.json()) as GatewayResponse;

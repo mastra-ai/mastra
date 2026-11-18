@@ -10,8 +10,10 @@ import { ConnectionManagementButton } from './common/ConnectionManagementButton'
 import { IntegrationItem } from './IntegrationItem';
 import { RetryRow } from './common/ConnectionStateRows';
 import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
 const slack = { provider: 'slack', name: 'Slack' } as const;
+const SLACK_SETUP_DOCS_URL = 'https://factory.mastra.ai/configure/slack#create-your-own-slack-app';
 
 // Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
@@ -22,8 +24,19 @@ export function SlackNotConfigured() {
   );
 }
 
+// Each factory uses its own Slack app, so point to the guide for creating one.
 function SlackUnavailableRow() {
-  return <IntegrationItem {...slack} description="Slack is not set up for this factory." />;
+  return (
+    <IntegrationItem {...slack} description="Slack is not set up for this factory.">
+      <Button
+        size="sm"
+        render={<a href={SLACK_SETUP_DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+        iconEnd={<IconSquareArrowTopRight aria-hidden />}
+      >
+        Set up Slack
+      </Button>
+    </IntegrationItem>
+  );
 }
 
 export function ConnectedAccountsSection() {

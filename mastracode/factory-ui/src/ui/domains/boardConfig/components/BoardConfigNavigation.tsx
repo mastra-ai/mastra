@@ -15,12 +15,13 @@ import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton
 import { orderedBoards } from '../../factory/boardCatalog';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { useBoardDraft, useShownDraft } from '../BoardDraftProvider';
-import { boardRulesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
+import { boardIntakePath, boardRulesPath, boardConfigPath, boardSkillsPath, newBoardPath } from '../boardConfigPaths';
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
@@ -29,55 +30,68 @@ import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedi
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 /**
- * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Rules,
- * then one page per phase, in board order. Skills sit above the switcher because they belong to no board.
+ * Two scopes. All boards: the skills no phase runs, and how new issues and pull requests are routed between boards. This board: the
+ * switcher naming it, its Overview and Rules pages, then one page per phase, in board order.
  */
-export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, rules }: BoardConfigLocation) {
+export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, rules, intake }: BoardConfigLocation) {
   const query = useBoardQuery(factoryId, boardId);
 
   return (
-    <nav className="flex flex-col gap-2" aria-label="Board configuration">
-      <Sidebar.NavList>
-        <ConfigLink
-          to={boardSkillsPath(factoryId, boardId)}
-          isActive={skills === true}
-          icon={<IconBook />}
-          label="Skills"
-        />
-      </Sidebar.NavList>
-      <BoardSwitcher factoryId={factoryId} boardId={boardId} />
-      <Sidebar.NavList>
-        <ConfigLink
-          to={boardConfigPath(factoryId, boardId)}
-          isActive={!phaseKey && !skills && !rules}
-          icon={<IconSettingsSliderHor />}
-          label="General"
-        />
-        <ConfigLink
-          to={boardRulesPath(factoryId, boardId)}
-          isActive={rules === true}
-          icon={<IconBranch />}
-          label="Rules"
-        />
-      </Sidebar.NavList>
-      <section className="flex flex-col gap-1" aria-label="Phases">
-        <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
-        {query.isPending ? (
-          <SidebarNavigationSkeleton label="Loading phases" rows={4} />
-        ) : query.isError ? (
-          <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
-            Couldn’t load phases
-          </SidebarLoadError>
-        ) : (
-          <PhaseList
-            factoryId={factoryId}
-            boardId={boardId}
-            phaseKey={phaseKey}
-            skills={skills}
-            rules={rules}
-            response={query.data}
+    <nav className="flex flex-col gap-6" aria-label="Board configuration">
+      <section className="flex flex-col gap-1" aria-label="All boards">
+        <Sidebar.NavHeader>All boards</Sidebar.NavHeader>
+        <Sidebar.NavList>
+          <ConfigLink
+            to={boardSkillsPath(factoryId, boardId)}
+            isActive={skills === true}
+            icon={<IconBook />}
+            label="Skills"
           />
-        )}
+          <ConfigLink
+            to={boardIntakePath(factoryId, boardId)}
+            isActive={intake === true}
+            icon={<IconInboxEmpty />}
+            label="Routing"
+          />
+        </Sidebar.NavList>
+      </section>
+      <section className="flex flex-col gap-2" aria-label="This board">
+        <Sidebar.NavHeader>This board</Sidebar.NavHeader>
+        <BoardSwitcher factoryId={factoryId} boardId={boardId} />
+        <Sidebar.NavList>
+          <ConfigLink
+            to={boardConfigPath(factoryId, boardId)}
+            isActive={!phaseKey && !skills && !rules && !intake}
+            icon={<IconSettingsSliderHor />}
+            label="Overview"
+          />
+          <ConfigLink
+            to={boardRulesPath(factoryId, boardId)}
+            isActive={rules === true}
+            icon={<IconBranch />}
+            label="Rules"
+          />
+        </Sidebar.NavList>
+        <section className="flex flex-col gap-1 pt-2" aria-label="Phases">
+          <Sidebar.NavHeader>Phases</Sidebar.NavHeader>
+          {query.isPending ? (
+            <SidebarNavigationSkeleton label="Loading phases" rows={4} />
+          ) : query.isError ? (
+            <SidebarLoadError onRetry={() => void query.refetch()} retrying={query.isFetching}>
+              Couldn’t load phases
+            </SidebarLoadError>
+          ) : (
+            <PhaseList
+              factoryId={factoryId}
+              boardId={boardId}
+              phaseKey={phaseKey}
+              skills={skills}
+              rules={rules}
+              intake={intake}
+              response={query.data}
+            />
+          )}
+        </section>
       </section>
     </nav>
   );
@@ -144,6 +158,7 @@ function PhaseList({
   phaseKey,
   skills,
   rules,
+  intake,
   response,
 }: BoardConfigLocation & {
   response: StoredBoardResponse;
@@ -151,8 +166,8 @@ function PhaseList({
   const { board, canEdit } = response;
   const { draft, locked, setDraft } = useBoardDraft(factoryId, boardId, board);
   const editable = canEdit === true && board.editable === true;
-  // The skills and rules pages have no save bar to keep a reorder made there.
-  const sortable = editable && !skills && !rules && !locked && draft.phases.length > 2;
+  // The skills, rules and intake pages have no save bar to keep a reorder made there.
+  const sortable = editable && !skills && !rules && !intake && !locked && draft.phases.length > 2;
   const [drag, setDrag] = useState<Drag>();
   const [announcement, setAnnouncement] = useState('');
 

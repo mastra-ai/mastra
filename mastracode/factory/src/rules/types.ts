@@ -808,6 +808,12 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
    */
   startsAfterOwnMove?: boolean;
   /**
+   * The run was queued by a card move on an outside author's pull request event. Starting a run
+   * stays a person's call there: the dispatcher parks it for approval even in a phase that
+   * starts on its own.
+   */
+  untrustedPullRequestEvent?: boolean;
+  /**
    * Pursue the run's work as a goal: the session's thread holds `objective` until the card
    * leaves the phase, and the agent's goal judge keeps the run going until it is met.
    */
@@ -845,6 +851,12 @@ export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   priority?: 'medium' | 'high' | 'urgent';
   idleBehavior?: 'persist' | 'wake';
   prepareBinding?: boolean;
+  /**
+   * The message answers an outside author's pull request event. Waking an idle session (or
+   * starting one with `prepareBinding`) on that author's say-so waits for a person; the
+   * dispatcher parks the decision as a proposal instead of delivering it.
+   */
+  untrustedPullRequestEvent?: boolean;
 }
 
 export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {

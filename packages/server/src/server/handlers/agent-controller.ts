@@ -11,6 +11,7 @@ import type {
   WireDisplayState,
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
@@ -24,6 +25,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { shareStreamChunk } from '../server-adapter/serialize';
 import { handleError } from './error';
 import { enforceThreadAccess } from './utils';
 
@@ -616,20 +618,135 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 });
 
 /**
- * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
- * before converting its Maps so queued wire events retain point-in-time state.
+ * Copy a display-state value as `JSON.stringify` would read it now: `toJSON` is
+ * resolved and every object and array is copied, so the reducer's in-place
+ * updates (tool status and results, input buffers, file operations, subagent
+ * progress) cannot reach a queued frame. Primitives are immutable and shared, so
+ * message text and large tool results are not duplicated per snapshot the way
+ * `structuredClone` duplicates them. `copies` preserves shared and circular
+ * references.
+ */
+function snapshotForWire(value: unknown, key: string, copies: Map<object, unknown>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (copies.has(value)) return copies.get(value);
+  if (ArrayBuffer.isView(value)) {
+    const copy = structuredClone(value);
+    copies.set(value, copy);
+    return copy;
+  }
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  let source: unknown = typeof toJSON === 'function' ? toJSON.call(value, key) : value;
+  // `JSON.stringify` writes a boxed number, string or boolean as its primitive.
+  if (source instanceof Number || source instanceof String || source instanceof Boolean) source = source.valueOf();
+  if (source === null || typeof source !== 'object') {
+    copies.set(value, source);
+    return source;
+  }
+  if (Array.isArray(source)) {
+    const copy: unknown[] = new Array(source.length);
+    copies.set(value, copy);
+    for (let index = 0; index < source.length; index++) {
+      copy[index] = snapshotForWire(source[index], String(index), copies);
+    }
+    return copy;
+  }
+  const copy: Record<string, unknown> = {};
+  copies.set(value, copy);
+  for (const field of Object.keys(source)) {
+    const fieldCopy = snapshotForWire((source as Record<string, unknown>)[field], field, copies);
+    if (field === '__proto__') {
+      // Parsed JSON can hold an own `__proto__` key; assigning it would set the
+      // copy's prototype and drop the key from the wire.
+      Object.defineProperty(copy, field, { value: fieldCopy, enumerable: true, writable: true, configurable: true });
+    } else {
+      copy[field] = fieldCopy;
+    }
+  }
+  return copy;
+}
+
+/**
+ * `display_state_changed` Maps JSON-serialize to `{}`, so convert them to
+ * records, and snapshot the live display state so queued wire events retain
+ * point-in-time state.
  */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
-  const snapshot = structuredClone(displayState);
-  return {
-    ...snapshot,
-    activeTools: Object.fromEntries(snapshot.activeTools),
-    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
-    pendingApprovals: Object.fromEntries(snapshot.pendingApprovals),
-    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
-    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
-  };
+  const copies = new Map<object, unknown>();
+  const wire: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(displayState)) {
+    wire[field] =
+      value instanceof Map
+        ? Object.fromEntries(Array.from(value, ([id, entry]) => [id, snapshotForWire(entry, String(id), copies)]))
+        : snapshotForWire(value, field, copies);
+  }
+  return wire as WireDisplayState;
+}
+
+/**
+ * The frame of the display-state event being dispatched. Every stream of a
+ * session receives the same event object in one synchronous dispatch, so they
+ * share one snapshot, and its JSON, rather than each building its own.
+ */
+let dispatchedDisplayFrame: { event: AgentControllerEvent; frame: JsonReadyAgentControllerEvent } | undefined;
+
+function toWireDisplayEvent(
+  event: Extract<AgentControllerEvent, { displayState: AgentControllerDisplayState }>,
+): JsonReadyAgentControllerEvent {
+  if (dispatchedDisplayFrame?.event === event) {
+    // A second stream of the session: from here on the frame is fanned out, so
+    // serialize it once. A lone stream never pays for the shared-JSON entry.
+    return shareStreamChunk(dispatchedDisplayFrame.frame);
+  }
+  const frame = { ...event, displayState: toWireDisplayState(event.displayState) };
+  dispatchedDisplayFrame = { event, frame };
+  // The live state may change after this dispatch, so a later emit of the same
+  // event object must snapshot again.
+  queueMicrotask(() => {
+    if (dispatchedDisplayFrame?.event === event) dispatchedDisplayFrame = undefined;
+  });
+  return frame;
+}
+
+/**
+ * A stream whose client is this far behind is closed. The client reconnects
+ * and starts again from current state, instead of the server holding an
+ * ever-growing backlog for it.
+ */
+const SSE_MAX_PENDING_FRAMES = 5_000;
+const SSE_MAX_PENDING_AGE_MS = 60_000;
+
+type PendingFrame = { frame: unknown; queuedAt: number; turn?: number };
+
+/**
+ * Counts event-loop turns, advancing only while snapshots are being queued. A
+ * client that keeps up takes everything one synchronous dispatch queued before
+ * the event loop moves on, so only a snapshot still waiting in a later turn
+ * means the client is behind. Its bytes stay exactly what they were.
+ */
+let loopTurn = 0;
+let loopTurnScheduled = false;
+function currentLoopTurn(): number {
+  if (!loopTurnScheduled) {
+    loopTurnScheduled = true;
+    const next = () => {
+      loopTurnScheduled = false;
+      loopTurn++;
+    };
+    if (typeof setImmediate === 'function') setImmediate(next);
+    else setTimeout(next, 0);
+  }
+  return loopTurn;
+}
+
+function isDisplayStateFrame(frame: unknown): boolean {
+  return typeof frame === 'object' && frame !== null && (frame as { type?: unknown }).type === 'display_state_changed';
+}
+
+/** Metrics are best-effort: a failing sink must never break a client's stream. */
+function emitStreamMetric(mastra: Mastra, name: string, value: number, labels: Record<string, string>): void {
+  try {
+    mastra.metrics?.emit(name, value, labels);
+  } catch {}
 }
 
 function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
@@ -644,7 +761,7 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
-    return { ...event, displayState: toWireDisplayState(event.displayState) };
+    return toWireDisplayEvent(event);
   }
   if (carriesError(event)) {
     return { ...event, error: toPersistedErrorIdentity(event.error) };
@@ -679,85 +796,160 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: (() => void) | undefined;
+      let stream!: ReadableStreamDefaultController;
+      // Frames wait here, not in the ReadableStream, so the backlog of a client
+      // that reads slower than the session emits can be bounded.
+      const pending: PendingFrame[] = [];
+      // Waiting snapshots, oldest first, all from the turn of the newest one.
+      let snapshots: PendingFrame[] = [];
+      let droppedSnapshots = 0;
+      // The adapter asked for a frame and none was waiting.
+      let wanted = false;
       const clearHeartbeat = () => {
         if (heartbeat) {
           clearTimeout(heartbeat);
           heartbeat = undefined;
         }
       };
-      const cleanup = (controller?: ReadableStreamDefaultController) => {
+      const cleanup = (closeStream = false) => {
         if (cleanedUp) return;
         cleanedUp = true;
         clearHeartbeat();
         unsubscribe?.();
-        if (controller) {
+        pending.length = 0;
+        snapshots = [];
+        if (droppedSnapshots > 0) {
+          emitStreamMetric(mastra, 'mastra_agent_controller_sse_snapshots_dropped_total', droppedSnapshots, {
+            controllerId,
+          });
+        }
+        if (closeStream) {
           try {
-            controller.close();
+            stream.close();
           } catch {}
         }
+      };
+      const closeBehind = (reason: 'max_pending' | 'max_wait') => {
+        mastra.getLogger()?.warn('Closing agent controller stream: the client is too far behind', {
+          controllerId,
+          sessionId,
+          reason,
+          pendingFrames: pending.length,
+          oldestPendingMs: Date.now() - pending[0]!.queuedAt,
+          droppedSnapshots,
+        });
+        emitStreamMetric(mastra, 'mastra_agent_controller_sse_slow_client_closes_total', 1, { controllerId, reason });
+        cleanup(true);
+      };
+      const checkBacklog = () => {
+        if (pending.length > SSE_MAX_PENDING_FRAMES) closeBehind('max_pending');
+        else if (pending.length > 0 && Date.now() - pending[0]!.queuedAt > SSE_MAX_PENDING_AGE_MS) {
+          closeBehind('max_wait');
+        }
+      };
+      const push = (frame: unknown) => {
+        if (cleanedUp) return;
+        if (wanted) {
+          wanted = false;
+          try {
+            stream.enqueue(frame);
+          } catch {
+            cleanup();
+          }
+          return;
+        }
+        const entry: PendingFrame = { frame, queuedAt: Date.now() };
+        if (isDisplayStateFrame(frame)) {
+          // A newer snapshot carries everything an older one does, so a
+          // snapshot still waiting from an earlier turn is removed. Other
+          // events are never dropped and keep their order. Every event is
+          // followed by a snapshot, so an older one sits near the end.
+          const turn = currentLoopTurn();
+          snapshots = snapshots.filter(older => {
+            if (older.turn === turn) return true;
+            const index = pending.lastIndexOf(older);
+            if (index !== -1) pending.splice(index, 1);
+            droppedSnapshots++;
+            return false;
+          });
+          entry.turn = turn;
+          snapshots.push(entry);
+        }
+        pending.push(entry);
+        checkBacklog();
+      };
+      const takeNext = (): PendingFrame | undefined => {
+        const entry = pending.shift();
+        if (entry && snapshots[0] === entry) snapshots.shift();
+        return entry;
       };
 
       // The stream yields raw event objects plus `:`-prefixed SSE comments
       // (heartbeats); the server adapter frames events and passes comments
-      // through verbatim.
-      return new ReadableStream<unknown>({
-        start(controller) {
-          const scheduleHeartbeat = () => {
-            if (cleanedUp) return;
-            clearHeartbeat();
-            heartbeat = setTimeout(() => {
-              heartbeat = undefined;
+      // through verbatim. With no internal buffer, the adapter gets a frame
+      // only once it has written the previous one.
+      return new ReadableStream<unknown>(
+        {
+          start(controller) {
+            stream = controller;
+            const scheduleHeartbeat = () => {
               if (cleanedUp) return;
+              clearHeartbeat();
+              heartbeat = setTimeout(() => {
+                heartbeat = undefined;
+                if (cleanedUp) return;
+                // A waiting frame keeps the connection busy already; a client
+                // that stopped reading is closed once its oldest frame is too old.
+                if (pending.length > 0) checkBacklog();
+                else push(': heartbeat\n\n');
+                scheduleHeartbeat();
+              }, 25_000);
+            };
+
+            // Live events are not replayed, so seed a late subscriber with the
+            // session's current state: the display state snapshot by default, or
+            // the equivalent events for a client that opted out of snapshots.
+            // This runs before subscribe() so it precedes the buffered workspace
+            // events subscribe() replays; both are synchronous, so no event slips
+            // between.
+            if (displayState === false) {
+              for (const event of session.initialStateEvents()) push(toWireEvent(event));
+            } else {
+              push(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
+            }
+
+            unsubscribe = session.subscribe(event => {
+              if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
               try {
-                controller.enqueue(': heartbeat\n\n');
+                // Queue the raw event object. The server adapter is responsible
+                // for SSE framing (`data: <json>\n\n`); queuing a pre-framed
+                // string here would double-encode it.
+                push(toWireEvent(event));
+                scheduleHeartbeat();
               } catch {
                 cleanup();
-                return;
               }
-              scheduleHeartbeat();
-            }, 25_000);
-          };
+            });
 
-          // Live events are not replayed, so seed a late subscriber with the
-          // current display state (including the message in flight). This runs
-          // before subscribe() so it precedes the buffered workspace events
-          // subscribe() replays; both are synchronous, so no event slips between.
-          if (displayState !== false) {
-            try {
-              controller.enqueue(
-                toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
-              );
-            } catch {
-              cleanup(controller);
+            const abortCleanup = () => cleanup(true);
+            if (abortSignal?.aborted) {
+              abortCleanup();
               return;
             }
-          }
-
-          unsubscribe = session.subscribe(event => {
-            if (cleanedUp || (displayState === false && event.type === 'display_state_changed')) return;
-            try {
-              // Enqueue the raw event object. The server adapter is responsible
-              // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
-              // string here would double-encode it.
-              controller.enqueue(toWireEvent(event));
-              scheduleHeartbeat();
-            } catch {
-              cleanup();
-            }
-          });
-
-          const abortCleanup = () => cleanup(controller);
-          if (abortSignal?.aborted) {
-            abortCleanup();
-            return;
-          }
-          abortSignal?.addEventListener('abort', abortCleanup, { once: true });
-          scheduleHeartbeat();
+            abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+            scheduleHeartbeat();
+          },
+          pull(controller) {
+            const next = takeNext();
+            if (next) controller.enqueue(next.frame);
+            else wanted = !cleanedUp;
+          },
+          cancel() {
+            cleanup();
+          },
         },
-        cancel() {
-          cleanup();
-        },
-      });
+        { highWaterMark: 0 },
+      );
     } catch (error) {
       return handleError(error, 'error streaming controller session');
     }
