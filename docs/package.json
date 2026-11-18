@@ -31,7 +31,7 @@
     "lint:vale:ai": "pnpm lint:vale --minAlertLevel=error --output=line",
     "lint:vale:vocab": "node scripts/vale/check-heading-vocabulary.mjs",
     "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/integrations src/content/en/reference",
-    "lint:prose": "npm-run-all --parallel lint:vale:ai lint:remark",
+    "lint:prose": "npm-run-all --parallel lint:vale:ai lint:vale:vocab lint:remark",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:e2e": "pnpm exec playwright test",

@@ -44,9 +44,10 @@ try {
     { encoding: 'utf8' },
   )
   if (result.error) {
-    throw new Error(`Couldn't run Vale (${vale}). Run \`pnpm vale:download\` or set VALE_BIN.`, {
-      cause: result.error,
-    })
+    throw new Error(
+      `Couldn't run Vale (${vale}): ${result.error.message}. Run \`pnpm vale:download\`, or set VALE_BIN to an executable Vale binary.`,
+      { cause: result.error },
+    )
   }
   // Set exitCode instead of calling process.exit() so `finally` removes workDir.
   const flagged = [
