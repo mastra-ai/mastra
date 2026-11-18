@@ -50,7 +50,7 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { attachDependabotRules } from '../../dependabot/rules.js';
-import { createDependabotSync } from '../../dependabot/sync.js';
+import { createDependabotSync, DEFAULT_DEPENDABOT_SYNC_INTERVAL_MS } from '../../dependabot/sync.js';
 import type { DependabotSync, GithubDependabotAlert } from '../../dependabot/sync.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
@@ -65,7 +65,7 @@ import type {
 } from '../../github/integration.js';
 import { narrowRepos } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
-import { DEFAULT_GITHUB_RECONCILE_INTERVAL_MS, GithubReconcileWorker } from '../../github/reconcile-worker.js';
+import { GithubReconcileWorker } from '../../github/reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../../github/routes.js';
 import {
@@ -85,7 +85,7 @@ import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import { PlatformConnectIntegration } from '../foundation/index.js';
-import type { PlatformConnectEventDelivery, PlatformTopicSubscription } from '../foundation/index.js';
+import type { PlatformConnectEventDelivery } from '../foundation/index.js';
 import { logPlatformBootInfo, logPlatformError, logPlatformInfo, logPlatformWarn } from '../logging.js';
 import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
@@ -96,7 +96,9 @@ import {
 } from './connect-events.js';
 import { GithubConnectTokens } from './connect-tokens.js';
 import { ConnectGithubTransport, githubErrorStatus, toGithubApiError } from './connect-transport.js';
-import { legacyGithubTopicSubscription } from './legacy-events.js';
+import { PlatformGithubLegacyEventPoller } from './legacy-event-poller.js';
+import type { PlatformGithubLegacyEventStorage } from './legacy-event-poller.js';
+import { legacyGithubEventHandler } from './legacy-events.js';
 import { LegacyGithubTransport, splitRepository } from './legacy-transport.js';
 import type {
   LegacyGithubUserConnection,
@@ -251,6 +253,8 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   readonly #pullRequestReconcileIntervalMs: number | undefined;
   readonly #issueReconcileIntervalMs: number | undefined;
   readonly #pullRequestDiscoveryIntervalMs: number | undefined;
+  readonly #pollingEnabled: boolean;
+  readonly #pollingIntervalMs: number | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   #reconcileWorker: GithubReconcileWorker | undefined;
@@ -621,6 +625,8 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       ],
     );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
+    this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     const legacyReconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED;
     this.#pullRequestReconcileEnabled = reconciliationEnabled(
       process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_ENABLED,
@@ -1166,9 +1172,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   }
 
   /**
-   * The hourly reconcile: pull requests, issues, missed opens and Dependabot
-   * alerts. Events arrive through the deployment's events worker
-   * ({@link platformTopicSubscriptions}); this only covers what they miss.
+   * The legacy GitHub App's event poller, and the reconcile: pull requests and
+   * issues hourly, missed opens every five minutes, Dependabot alerts every
+   * fifteen. Switched orgs' `factory-github` events arrive through the
+   * deployment's Connect event poller ({@link handleConnectEvent}).
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     const reconcile = this.#pullRequestReconcileEnabled
@@ -1186,8 +1193,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
         )
       : undefined;
     const syncDependabot = this.#issueReconcileEnabled ? this.#dependabotSync(ctx) : undefined;
+    const workers: MastraWorker[] = [];
+    if (this.#pollingEnabled) workers.push(this.#legacyEventPoller(ctx));
     // Without the Factory runtime there is nothing to reconcile.
-    if (!reconcile && !discover && !reconcileIssues && !syncDependabot) return [];
+    if (!reconcile && !discover && !reconcileIssues && !syncDependabot) return workers;
     const worker = new GithubReconcileWorker({
       name: 'platform-github-reconcile',
       leaseKey: 'platform-github:reconcile',
@@ -1200,9 +1209,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
         ? {}
         : { intervalMs: this.#pullRequestReconcileIntervalMs }),
       ...(this.#issueReconcileIntervalMs === undefined ? {} : { issueIntervalMs: this.#issueReconcileIntervalMs }),
-      // Opens arrive as events, so discovery only covers gaps: hourly, unlike the self-hosted default.
-      discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
-      dependabotIntervalMs: DEFAULT_GITHUB_RECONCILE_INTERVAL_MS,
+      ...(this.#pullRequestDiscoveryIntervalMs === undefined
+        ? {}
+        : { discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs }),
+      dependabotIntervalMs: DEFAULT_DEPENDABOT_SYNC_INTERVAL_MS,
       // Resolved lazily: workers are constructed before versionControl
       // storage is initialized, and the worker only reads these slices once
       // it is running.
@@ -1217,32 +1227,38 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       },
     });
     this.#reconcileWorker = worker;
-    return [worker];
+    workers.push(worker);
+    return workers;
   }
 
   override requestReconcile(): void {
     this.#reconcileWorker?.requestRun();
   }
 
-  /** The legacy GitHub App's webhooks, read from the `github-app` topic. */
-  platformTopicSubscriptions(ctx: IntegrationContext): readonly PlatformTopicSubscription[] {
+  /** Reads the legacy GitHub App's webhooks from each linked repository's platform event log. */
+  #legacyEventPoller(ctx: IntegrationContext): PlatformGithubLegacyEventPoller {
     if (!ctx.controller) {
       throw new Error('Platform GitHub events require the mounted Mastra Code controller.');
     }
-    return [
-      legacyGithubTopicSubscription({
-        delivery: { controller: ctx.controller, github: this, ingestFactoryEvent: attachGithubRules(this, ctx) },
-        repositories: this.#linkedRepositories,
-        modes: this.#modes,
-        reconcile: () => this.requestReconcile(),
-        onDependabotAlert: () => this.#reconcileWorker?.requestRun(['dependabot']),
-      }),
-    ];
+    const handle = legacyGithubEventHandler({
+      delivery: { controller: ctx.controller, github: this, ingestFactoryEvent: attachGithubRules(this, ctx) },
+      repositories: this.#linkedRepositories,
+      modes: this.#modes,
+      onDependabotAlert: () => this.#reconcileWorker?.requestRun(['dependabot']),
+    });
+    return new PlatformGithubLegacyEventPoller({
+      transport: this.#legacy,
+      storage: ctx.storage.generic as unknown as PlatformGithubLegacyEventStorage,
+      repositoryIds: () => this.#linkedRepositories.repositoryIds(),
+      handle,
+      reconcile: () => this.requestReconcile(),
+      ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
+    });
   }
 
   /**
-   * `factory-github` webhooks from the `connect` topic, for orgs that switched
-   * to the Mastra Factory apps. `factory-reviews-github` events are ignored.
+   * `factory-github` webhooks from its connections' platform event logs, for
+   * orgs that switched to the Mastra Factory apps. `factory-reviews-github` events are ignored.
    */
   protected override async handleConnectEvent(
     event: PlatformConnectEventDelivery,
@@ -1502,7 +1518,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     return {
       mode: 'platform',
       endpointHost: this.#endpointHost,
-      events: { topics: ['github-app'] },
+      polling: {
+        enabled: this.#pollingEnabled,
+        ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
+      },
       reconcile: {
         pullRequests: {
           enabled: this.#pullRequestReconcileEnabled,
@@ -2385,6 +2404,14 @@ function parseGithubExternalTarget(externalId: string): { repository: string; is
     externalId.match(/^(\d+):(\d+)$/);
   if (!match?.[1] || !match[2] || parsePositiveInteger(match[2]) === null) return null;
   return { repository: match[1], issueId: match[2] };
+}
+
+function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS'): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  const parsed = parsePositiveInteger(value);
+  if (parsed === null) throw new Error(`${name} must be a positive integer.`);
+  return parsed;
 }
 
 function requirePositiveId(value: string, resource: string): number {
