@@ -97,6 +97,16 @@ class ReleaseAnswers {
     return this.#answer;
   }
 
+  /**
+   * The current answer, opened now when no release was added yet, so a waiter also sees a release that starts
+   * later. It stays unanswered until a release answers; callers bound the wait.
+   */
+  awaitAnswer(): Promise<boolean> {
+    if (this.#confirmed) return Promise.resolve(true);
+    if (!this.#resolve) this.#answer = new Promise<boolean>(resolve => (this.#resolve = resolve));
+    return this.#answer!;
+  }
+
   add(release: Promise<boolean>): void {
     if (this.#confirmed) return;
     if (!this.#resolve) this.#answer = new Promise<boolean>(resolve => (this.#resolve = resolve));
@@ -1370,8 +1380,9 @@ export class ExecutionFence implements RunFenceScope {
           return this.#noteTakeover();
         })
         .catch(async cause => {
-          // A settled fence's own confirmed release explains a renewal that errored after it.
-          if (this.#settlement && (await releaseAnswer(this.#ownRelease.answer))) return;
+          // A settled fence's own confirmed release explains a renewal that errored after it. The fence may still be
+          // running its terminal writes, with its release not started yet, so wait up to one renewal interval for it.
+          if (this.#settlement && (await releaseAnswer(this.#ownRelease.awaitAnswer()))) return;
           if (Date.now() >= this.#leaseExpiresAt) {
             this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details(), cause));
             return;

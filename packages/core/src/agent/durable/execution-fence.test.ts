@@ -2177,6 +2177,41 @@ describe('ExecutionFence release orderings with a hung release (#30206)', () => 
     expect(participant.isLost()).toBe(true);
   });
 
+  it('keeps a fence whose renewal errors past the lease while it settles, before its release starts (#30206)', async () => {
+    const { store, participant } = await sharedClaim();
+    let failRenewal!: (cause: Error) => void;
+    vi.spyOn(store, 'renewRunOwnership').mockImplementationOnce(
+      () => new Promise((_, reject) => (failRenewal = reject)),
+    );
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const terminalWrites = deferred<void>();
+    const settled = participant.settle(() => terminalWrites.promise);
+    // Past the lease deadline, the renewal errors while the terminal writes still run and no release has started.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+    failRenewal(new Error('connection terminated'));
+    await vi.advanceTimersByTimeAsync(0);
+    terminalWrites.resolve();
+    expect(await settled).toBe('owned');
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + 1);
+    expect(participant.isLost()).toBe(false);
+  });
+
+  it('still marks a settling fence lost when its renewal errors past the lease and no release answers in time (#30206)', async () => {
+    const { store, participant } = await sharedClaim();
+    let failRenewal!: (cause: Error) => void;
+    vi.spyOn(store, 'renewRunOwnership').mockImplementationOnce(
+      () => new Promise((_, reject) => (failRenewal = reject)),
+    );
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const terminalWrites = deferred<void>();
+    void participant.settle(() => terminalWrites.promise);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+    failRenewal(new Error('connection terminated'));
+    // The terminal writes never finish, so the release never starts within the wait.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + 1);
+    expect(participant.isLost()).toBe(true);
+  });
+
   it('keeps a settled fence whose own release confirms after a renewal error started waiting on a hung release (#30206)', async () => {
     const { store, mastra, coordinator, participant } = await sharedClaim();
     const entered = hangNextRelease(store);
