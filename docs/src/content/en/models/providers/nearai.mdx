@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
+    "model": "nearai/anthropic/claude-fable-5-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
     "model": "nearai/anthropic/claude-haiku-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -353,7 +365,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 3.3,
     "outputCost": 16.5
   },
@@ -365,7 +377,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2,
     "outputCost": 10
   },
@@ -656,18 +668,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.15,
     "outputCost": 0.55
-  },
-  {
-    "model": "nearai/qwen/qwen3.5-397b-a17b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.5,
-    "outputCost": 3.3
   },
   {
     "model": "nearai/Qwen/Qwen3.6-35B-A3B-FP8",
