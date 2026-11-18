@@ -7,8 +7,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { createAppRoutes } from '../../router';
+import {
+  findPageHeader,
+  renderWithProviders,
+  TEST_API,
+  TEST_BASE_URL,
+  waitForMutationsIdle,
+} from '../../../../e2e/ui/render';
+import { createQueryClient } from '../../../query-client';
+import { createAppRouter } from '../../router';
 import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 const FACTORY_ID = 'fp-1';
@@ -175,13 +182,20 @@ function stubThreadRoute({
 }
 
 function renderRoute(path: string) {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(
-    <>
-      <RouterProvider router={router} />
-      <Toaster position="bottom-right" />
-    </>,
+  const queryClient = createQueryClient();
+  const router = createAppRouter({ queryClient, api: TEST_API }, routes =>
+    createMemoryRouter(routes, { initialEntries: [path] }),
   );
+  return {
+    router,
+    ...renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+      queryClient,
+    ),
+  };
 }
 
 afterEach(() => {
@@ -204,6 +218,48 @@ describe('ThreadPage header', () => {
     expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
   });
 
+  it("shows the next card's stage as soon as its session opens, before the card's refresh answers", async () => {
+    stubThreadRoute();
+    const nextSessionId = 'sess-3';
+    const nextPath = `/factories/${FACTORY_ID}/workspaces/${nextSessionId}/threads/${nextSessionId}`;
+    const nextSession = { ...workspaceSession, id: 'row-3', sessionId: nextSessionId, branch: 'factory/issue-43' };
+    const nextItem = {
+      ...workItem,
+      id: 'wi-3',
+      title: 'Speed up the build',
+      stages: ['planning'],
+      sessions: {
+        [nextSessionId]: {
+          sessionId: nextSessionId,
+          branch: 'factory/issue-43',
+          threadId: nextSessionId,
+          startedBy: 'user-1',
+        },
+      },
+    };
+    const nextCard = deferred();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${nextSessionId}`, () =>
+        HttpResponse.json({ session: nextSession }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.get('sessionId') !== nextSessionId) {
+          return HttpResponse.json({ workItems: [workItem] });
+        }
+        if (router.state.location.pathname === nextPath) await nextCard.promise;
+        return HttpResponse.json({ workItems: [nextItem] });
+      }),
+    );
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('button', { name: 'Change stage from Building' })).toBeInTheDocument();
+
+    await router.navigate(nextPath);
+
+    expect(await screen.findByRole('button', { name: 'Change stage from Planning' })).toBeInTheDocument();
+    nextCard.resolve();
+  });
+
   it('titles a user session with its own name', async () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
@@ -213,6 +269,24 @@ describe('ThreadPage header', () => {
     expect(within(header).queryByText('User sessions')).not.toBeInTheDocument();
     const panel = screen.getByRole('complementary', { name: 'Session panel' });
     expect(within(panel).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
+  });
+
+  it('titles a factory session with no card and no title by its branch, as the sidebar names it', async () => {
+    stubThreadRoute();
+    const slackSession = { ...workspaceSession, branch: 'slack/1794850014-495739', title: null };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [slackSession] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: slackSession })),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('heading', { level: 1, name: slackSession.branch })).toBeInTheDocument();
   });
 
   it('shares from the header and restores privacy from the sidebar menu', async () => {

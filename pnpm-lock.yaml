@@ -72,6 +72,8 @@ catalogs:
       version: 6.0.3
 
 overrides:
+  hono@<4.13.18: 4.13.18
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'
   miniflare@4.20260730.0>workerd: 1.20261023.1
@@ -227,7 +229,7 @@ overrides:
   raw-body@<4.0.0: 4.0.0
   protobufjs@<8.8.0: 8.8.0
   nanoid@<5.1.16: 5.1.16
-  basic-ftp@<6.2.1: 6.2.4
+  basic-ftp@<6.2.6: 6.2.6
   '@opentelemetry/configuration>yaml': 2.9.1
   strnum@<2.4.2: 2.4.2
   inline-style-parser@<0.2.9: 0.2.9
@@ -544,8 +546,8 @@ importers:
         specifier: ^1.7.22
         version: 1.7.25(@opentelemetry/api@1.10.0)(mongodb@7.8.0(@aws-sdk/credential-providers@3.1161.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.10))(mysql2@3.24.6(@types/node@22.19.15))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.1.0)
       hono:
-        specifier: ^4.0.0
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -618,8 +620,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       hono:
-        specifier: ^4.0.0
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -728,7 +730,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -751,8 +753,8 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -766,8 +768,8 @@ importers:
   auth/okta:
     dependencies:
       hono:
-        specifier: ^4.0.0
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       jose:
         specifier: ^6.2.12
         version: 6.2.15
@@ -879,8 +881,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)
       hono:
-        specifier: ^4.0.0
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       lru-cache:
         specifier: ^11.5.3
         version: 11.5.3
@@ -1961,7 +1963,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../../packages/_vendored/ai_v5
@@ -1987,8 +1989,8 @@ importers:
         specifier: ^7.2.0
         version: 7.2.0
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -2470,8 +2472,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       posthog-node:
         specifier: ^5.57.1
         version: 5.61.2(@opentelemetry/api@1.10.0)(rxjs@7.8.2)
@@ -3791,8 +3793,8 @@ importers:
         specifier: workspace:*
         version: link:../../_internal-core
       hono:
-        specifier: ^4.13.7
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4631,8 +4633,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       prettier:
         specifier: 3.9.10
         version: 3.9.10
@@ -4706,11 +4708,11 @@ importers:
         specifier: ^1.20.3
         version: 1.20.3
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       hono-openapi:
         specifier: ^1.5.0
-        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
+        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.18)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       ignore:
         specifier: ^7.0.14
         version: 7.0.14
@@ -4996,7 +4998,7 @@ importers:
         version: 8.1.0
       '@hono/node-ws':
         specifier: ^1.3.1
-        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)
+        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.18))(bufferutil@4.1.0)(hono@4.13.18)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -5046,8 +5048,8 @@ importers:
         specifier: ^4.14.3
         version: 4.14.3
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       local-pkg:
         specifier: ^1.2.1
         version: 1.2.1
@@ -5075,13 +5077,13 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@hono/standard-validator':
         specifier: ^0.3.0
-        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.17)
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.18)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.17)
+        version: 0.5.3(hono@4.13.18)
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
@@ -5129,7 +5131,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^1.5.0
-        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
+        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.18)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -5175,7 +5177,7 @@ importers:
         version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -5201,8 +5203,8 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5600,7 +5602,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5626,8 +5628,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5652,7 +5654,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5681,8 +5683,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       msw:
         specifier: ^2.15.0
         version: 2.15.0(@types/node@22.19.15)(typescript@7.0.2)
@@ -6530,8 +6532,8 @@ importers:
   packages/server:
     dependencies:
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -7024,7 +7026,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.1
-        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)
+        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.18))(bufferutil@4.1.0)(hono@4.13.18)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -7043,10 +7045,10 @@ importers:
         version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.17)
+        version: 0.5.3(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7071,6 +7073,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: workspace:*
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7080,6 +7085,9 @@ importers:
       '@mastra/server-adapters-test-suite':
         specifier: workspace:*
         version: link:../server-adapters-test-suite
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -7087,8 +7095,8 @@ importers:
         specifier: ^8.18.2
         version: 8.18.2
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7181,8 +7189,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -7286,7 +7294,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7303,8 +7311,8 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7368,7 +7376,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7385,8 +7393,8 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7433,8 +7441,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -8144,6 +8152,9 @@ importers:
         specifier: ^12.7.11
         version: 12.7.13(supports-color@10.2.2)
     devDependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -9622,7 +9633,7 @@ importers:
         version: 1.10.0
       inngest:
         specifier: ^4.26.1
-        version: 4.26.2(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.17)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
+        version: 4.26.2(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.18)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -9635,7 +9646,7 @@ importers:
         version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.7(hono@4.13.17)
+        version: 2.1.7(hono@4.13.18)
       '@internal/core':
         specifier: workspace:*
         version: link:../../packages/_internal-core
@@ -9703,8 +9714,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.13.13
-        version: 4.13.17
+        specifier: 4.13.18
+        version: 4.13.18
       inngest-cli:
         specifier: ^1.49.0
         version: 1.49.0(encoding@0.1.14)(supports-color@10.2.2)
@@ -10290,7 +10301,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(785e29737ac6f2319799d889e5b4ef9f)
+        version: 1.9.0(dc94129cd3a5467678d506e4e59024e9)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13512,7 +13523,7 @@ packages:
     resolution: {integrity: sha512-5VdOr0Z71u+Yp3ozOx8T11N703wIFGVRgOWbOZMKgglPJsWA54MRIoMNVMa7shUToIhx5J8vX4sOZgD2XiihiQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      postcss: ^8.4
+      postcss: 8.5.23
 
   '@cursor/sdk-darwin-arm64@1.3.0':
     resolution: {integrity: sha512-UqAWxbZ3/MHJkLU3Az0V8ezM+0zZd3WoForpLmNruD+1b9a4U4D7I4QSVxVGHb55WjZMbkW+zoAp2tsNL/TJiQ==}
@@ -14995,37 +15006,37 @@ packages:
     resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: ^4 || ^5.0.0-0
+      hono: 4.13.18
 
   '@hono/node-server@2.1.7':
     resolution: {integrity: sha512-Wr0E6S+v2Bw9FkpGNP5BQ5QbJvclUa06UVehd65WFZe6XeJwbrKQQ5wPDevc0IC+QyzbO7v3Llh5uo45IZcSnA==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: ^4 || ^5.0.0-0
+      hono: 4.13.18
 
   '@hono/node-ws@1.3.1':
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       '@hono/node-server': ^1.19.11
-      hono: ^4.6.0
+      hono: 4.13.18
 
   '@hono/standard-validator@0.3.0':
     resolution: {integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: '>=4.11.2'
+      hono: 4.13.18
 
   '@hono/standard-validator@0.4.1':
     resolution: {integrity: sha512-Q0+1dgMKAXEvsmJ5FNoamwnfrf/I5JNnKn7WzfynH8nJlNe1lNOW1+vlKpEQZbrBLEgmxIeys6HjRotDvZzq+A==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: '>=4.11.2'
+      hono: 4.13.18
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
     peerDependencies:
-      hono: '>=4.0.0'
+      hono: 4.13.18
 
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
@@ -23204,8 +23215,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  basic-ftp@6.2.4:
-    resolution: {integrity: sha512-6ACKOQxSlv5xka4i03ujfncNr9qp5yZNK3u0+yUFTAU4HfG5AeztCC9+R1I9dm8oq+1vt4RZ7cIRTBrdHqL2mw==}
+  basic-ftp@6.2.6:
+    resolution: {integrity: sha512-0EjZCaodOz6yiokv2JA1VyKGNdGxULZ+GGlPgG9tm4d+T/bHtX1hUch8CumDneBfpIbiSdn7TaCGwpM+gwsOlw==}
     engines: {node: '>=10.0.0'}
 
   batch@0.6.1:
@@ -25480,7 +25491,7 @@ packages:
       '@supabase/storage-js': ^2.105.4
       '@vercel/blob': ^2.4.0
       ai: ^6.0.0
-      basic-ftp: 6.2.4
+      basic-ftp: 6.2.6
       box-typescript-sdk-gen: ^1.19.1
       cloudinary: ^2.10.0
       convex: ^1.16.0
@@ -26132,10 +26143,10 @@ packages:
   hono-openapi@1.5.0:
     resolution: {integrity: sha512-7pRGQbFLBSy+SmCKHIZB3a8pzalnsYflvGRXyS1P7vucEGlkL23QitQ++wNCuMT25Q3TbGH2JUuTdYnWMY/GIw==}
     peerDependencies:
-      hono: ^4.11.2
+      hono: 4.13.18
 
-  hono@4.13.17:
-    resolution: {integrity: sha512-vZIcbkvjOR5hHRWERbGkr8fGfF0GGM1ooYkuH448iO3b2AdVEr3AXZSw4Z3Kn+1L5z0CVoVeyV29VGYmFh05kQ==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   hookable@6.1.2:
@@ -26424,7 +26435,7 @@ packages:
       express: '>=4.19.2'
       fastify: '>=4.21.0'
       h3: '>=1.8.1'
-      hono: '>=4.2.7'
+      hono: 4.13.18
       koa: '>=2.14.2'
       next: '>=12.0.0'
       react: '>=18.0.0'
@@ -38738,36 +38749,36 @@ snapshots:
 
   '@hey-api/types@0.1.4': {}
 
-  '@hono/node-server@2.1.6(hono@4.13.17)':
+  '@hono/node-server@2.1.6(hono@4.13.18)':
     dependencies:
-      hono: 4.13.17
+      hono: 4.13.18
 
-  '@hono/node-server@2.1.7(hono@4.13.17)':
+  '@hono/node-server@2.1.7(hono@4.13.18)':
     dependencies:
-      hono: 4.13.17
+      hono: 4.13.18
 
-  '@hono/node-ws@1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.1.7(hono@4.13.18))(bufferutil@4.1.0)(hono@4.13.18)':
     dependencies:
-      '@hono/node-server': 2.1.7(hono@4.13.17)
-      hono: 4.13.17
+      '@hono/node-server': 2.1.7(hono@4.13.18)
+      hono: 4.13.18
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.17)':
+  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.18)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.17
+      hono: 4.13.18
 
-  '@hono/standard-validator@0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)':
+  '@hono/standard-validator@0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.18)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.17
+      hono: 4.13.18
 
-  '@hono/swagger-ui@0.5.3(hono@4.13.17)':
+  '@hono/swagger-ui@0.5.3(hono@4.13.18)':
     dependencies:
-      hono: 4.13.17
+      hono: 4.13.18
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))':
     dependencies:
@@ -40277,19 +40288,19 @@ snapshots:
 
   '@modelcontextprotocol/node@2.1.1(@modelcontextprotocol/server@2.3.1)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.17)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       '@modelcontextprotocol/server': 2.3.1
-      hono: 4.13.17
+      hono: 4.13.18
 
   '@modelcontextprotocol/node@2.1.2(@modelcontextprotocol/server@2.4.0)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.17)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       '@modelcontextprotocol/server': 2.4.0
-      hono: 4.13.17
+      hono: 4.13.18
 
   '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.17)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -40299,7 +40310,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.17
+      hono: 4.13.18
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -40313,7 +40324,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.17)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -40323,7 +40334,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.17
+      hono: 4.13.18
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -40337,7 +40348,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.17)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -40347,7 +40358,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.17
+      hono: 4.13.18
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -47198,7 +47209,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.35: {}
 
-  basic-ftp@6.2.4: {}
+  basic-ftp@6.2.6: {}
 
   batch@0.6.1: {}
 
@@ -49879,7 +49890,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  files-sdk@1.9.0(785e29737ac6f2319799d889e5b4ef9f):
+  files-sdk@1.9.0(dc94129cd3a5467678d506e4e59024e9):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.7
@@ -49895,7 +49906,7 @@ snapshots:
       '@opentelemetry/api': 1.10.0
       '@supabase/storage-js': 2.118.0
       ai: 6.0.322(zod@4.6.7)
-      basic-ftp: 6.2.4
+      basic-ftp: 6.2.6
       convex: 1.49.0(bufferutil@4.1.0)(react@19.3.1)
       google-auth-library: 10.9.1(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
@@ -50250,7 +50261,7 @@ snapshots:
 
   get-uri@6.0.5(supports-color@10.2.2):
     dependencies:
-      basic-ftp: 6.2.4
+      basic-ftp: 6.2.6
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -50758,14 +50769,14 @@ snapshots:
     dependencies:
       parse-passwd: 1.0.0
 
-  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
+  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.18)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
     dependencies:
-      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)
+      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.18)
       '@standard-community/standard-json': 0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       '@standard-community/standard-openapi': 0.2.11(@standard-community/standard-json@0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(arktype@2.2.9)(openapi-types@12.1.3)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       '@types/json-schema': 7.0.15
-      hono: 4.13.17
+      hono: 4.13.18
       openapi-types: 12.1.3
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
@@ -50778,14 +50789,14 @@ snapshots:
       - zod-openapi
       - zod-to-json-schema
 
-  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
+  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.18)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
     dependencies:
-      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)
+      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.18)
       '@standard-community/standard-json': 0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       '@standard-community/standard-openapi': 0.2.11(@standard-community/standard-json@0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(arktype@2.2.9)(openapi-types@12.1.3)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       '@types/json-schema': 7.0.15
-      hono: 4.13.17
+      hono: 4.13.18
       openapi-types: 12.1.3
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
@@ -50798,7 +50809,7 @@ snapshots:
       - zod-openapi
       - zod-to-json-schema
 
-  hono@4.13.17: {}
+  hono@4.13.18: {}
 
   hookable@6.1.2: {}
 
@@ -51082,7 +51093,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@4.26.2(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.17)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7):
+  inngest@4.26.2(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.18)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7):
     dependencies:
       '@bufbuild/protobuf': 2.13.0
       '@inngest/ai': 0.1.8
@@ -51110,7 +51121,7 @@ snapshots:
     optionalDependencies:
       express: 5.3.0(supports-color@10.2.2)
       fastify: 5.12.8
-      hono: 4.13.17
+      hono: 4.13.18
       koa: 3.3.0
       react: 19.3.1
       typescript: 7.0.2

@@ -2607,6 +2607,8 @@ export class Agent<
         // Internal processor workflows are transient and non-resumable, so they must never
         // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
         shouldPersistSnapshot: () => false,
+        // Never stored, so only the agent call that owns it can cancel it.
+        localCancellationOnly: true,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
