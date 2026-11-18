@@ -83,7 +83,9 @@ function eventReads(platform: FakePlatform, connectionId: string): string[] {
     .map(request => request.query.get('afterEventId') ?? '');
 }
 
-async function platformWith(connections: Array<{ id: string; integrationId: string; status?: string }>) {
+async function platformWith(
+  connections: Array<{ id: string; integrationId: string; status?: string; resourceId?: string }>,
+) {
   const platform = await startFakePlatform();
   platform.orgConnections = connections.map(connection => ({ status: 'active', ...connection }));
   for (const connection of connections) platform.linked.add(connection.id);
@@ -169,6 +171,33 @@ describe('PlatformConnectEventPoller', () => {
     expect(linear.handled.map(event => event.connectionId)).toEqual(['conn-lin']);
     expect(gitlabAgain.handled).toEqual([]);
     expect(eventReads(platform, 'conn-gl')).toHaveLength(1);
+  });
+
+  it('reads only the provider keys a route takes events from, and no end-user connection', async () => {
+    const platform = await platformWith([
+      { id: 'conn-app', integrationId: 'factory-github' },
+      { id: 'conn-reviews', integrationId: 'factory-reviews-github' },
+      { id: 'conn-user', integrationId: 'factory-github', resourceId: 'user-1' },
+    ]);
+    const github = route(platform, 'factory-github', undefined, {
+      binding: new PlatformConnectBinding({
+        integrationId: 'github',
+        providerKeys: ['factory-github', 'factory-reviews-github'],
+        connect: platform.connect(),
+      }),
+      eventProviderKeys: ['factory-github'],
+    });
+    const poller = new PlatformConnectEventPoller({
+      storage: settingsStorage().storage,
+      routes: [github.route],
+      intervalMs: 60_000,
+    });
+    await start(poller);
+
+    await vi.waitFor(() => expect(eventReads(platform, 'conn-app')).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(eventReads(platform, 'conn-reviews')).toEqual([]);
+    expect(eventReads(platform, 'conn-user')).toEqual([]);
   });
 
   it('saves the cursor only past events whose handler finished', async () => {

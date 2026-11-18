@@ -17,6 +17,11 @@ export interface PlatformConnectEventRoute {
   handle(event: PlatformConnectEventDelivery): Promise<void>;
   /** Asks the integration to reconcile once, to cover events that may have been missed. */
   reconcile(): void;
+  /**
+   * The provider keys whose connections send events the integration handles.
+   * Defaults to every provider key of the binding.
+   */
+  eventProviderKeys?: readonly string[];
   /** How often the integration wants its connections' events read. The poller reads at the shortest asked for. */
   pollIntervalMs?: number;
 }

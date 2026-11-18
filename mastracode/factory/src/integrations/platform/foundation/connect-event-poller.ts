@@ -230,6 +230,9 @@ export class PlatformConnectEventPoller extends MastraWorker {
       }
       for (const connection of connections) {
         if (!this.#running || !this.#hasLease) return retryInMs;
+        // End-user connections carry tokens, not the integration's webhooks.
+        if (connection.resourceId) continue;
+        if (route.eventProviderKeys && !route.eventProviderKeys.includes(connection.integrationId)) continue;
         if (seen.has(connection.id)) continue;
         seen.add(connection.id);
         try {
