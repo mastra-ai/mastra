@@ -44,6 +44,8 @@ const workspace = {
   } as Record<string, Array<Record<string, unknown>>>,
 };
 
+const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AZn//2Q==', 'base64');
+let fileBytes = jpeg;
 let calls: Array<{ method: string; args: Record<string, string> }> = [];
 let server: ReturnType<typeof createServer>;
 let apiUrl = '';
@@ -103,7 +105,7 @@ beforeAll(async () => {
     if (req.url === '/api/files/wallpaper') {
       calls.push({ method: 'file.download', args: { authorization: req.headers.authorization ?? '' } });
       res.setHeader('content-type', 'image/jpeg');
-      res.end(Buffer.from('original image bytes'));
+      res.end(fileBytes);
       return;
     }
     let body = '';
@@ -124,6 +126,7 @@ afterAll(() => server.close());
 
 beforeEach(() => {
   calls = [];
+  fileBytes = jpeg;
 });
 
 type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any>; toModelOutput?: (output: any) => unknown };
@@ -202,7 +205,7 @@ const wide = { channels: 'all', directMessages: 'anyone' } as const;
 describe('Slack tools on a Factory session, by default', () => {
   it('downloads the original bytes of a private image in its channel without exposing the bot token', async () => {
     workspace.history.C1![0]!.files = [{
-      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 20,
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: jpeg.length,
       url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
     }];
     try {
@@ -210,7 +213,7 @@ describe('Slack tools on a Factory session, by default', () => {
       const result = await run('downloadSlackAttachment', {
         threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
       });
-      expect(Buffer.from(result.base64, 'base64').toString()).toBe('original image bytes');
+      expect(Buffer.from(result.base64, 'base64')).toEqual(jpeg);
       expect(tool('downloadSlackAttachment')!.toModelOutput?.(result)).toEqual({
         type: 'content', value: [{ type: 'image-data', data: result.base64, mediaType: 'image/jpeg' }],
       });
@@ -232,10 +235,53 @@ describe('Slack tools on a Factory session, by default', () => {
     }
   });
 
+  it('rejects mislabeled image bytes before sending them to the model', async () => {
+    fileBytes = Buffer.from('not an image');
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: fileBytes.length,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Attachment bytes do not match the declared image format.');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('accepts PNG and WebP bytes matching their declared formats', async () => {
+    const images = [
+      { mimeType: 'image/png', name: 'pixel.png', base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVQI12NoAAAAggCB3UNq9AAAAABJRU5ErkJggg==' },
+      { mimeType: 'image/webp', name: 'pixel.webp', base64: 'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAA=' },
+    ];
+    try {
+      const { run, tool } = await slackSession();
+      for (const image of images) {
+        fileBytes = Buffer.from(image.base64, 'base64');
+        workspace.history.C1![0]!.files = [{
+          id: 'F1', name: image.name, mimetype: image.mimeType, size: fileBytes.length,
+          url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+        }];
+        const result = await run('downloadSlackAttachment', {
+          threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+        });
+        expect(Buffer.from(result.base64, 'base64')).toEqual(fileBytes);
+        expect(tool('downloadSlackAttachment')!.toModelOutput?.(result)).toEqual({
+          type: 'content', value: [{ type: 'image-data', data: image.base64, mediaType: image.mimeType }],
+        });
+      }
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
   it('inspects images from its own top-level DM without leaking access to another DM', async () => {
     workspace.history.D1 = [{
       ts: '1700000400.000400', user: 'USAM', text: 'Look at this', files: [{
-        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 20,
+        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: jpeg.length,
         url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
       }],
     }];
@@ -246,7 +292,7 @@ describe('Slack tools on a Factory session, by default', () => {
       const result = await run('downloadSlackAttachment', {
         threadId: 'slack:D1:', messageId: '1700000400.000400', attachmentIndex: 0,
       });
-      expect(Buffer.from(result.base64, 'base64').toString()).toBe('original image bytes');
+      expect(Buffer.from(result.base64, 'base64')).toEqual(jpeg);
       expect(sent('conversations.replies')[0]).toMatchObject({ channel: 'D1', ts: '1700000400.000400' });
       await expect(run('downloadSlackAttachment', {
         threadId: 'slack:DOTHER:', messageId: '1700000400.000400', attachmentIndex: 0,

@@ -142,6 +142,13 @@ export function createSlackChatTools({
         const data = Buffer.from(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes);
         if (data.byteLength > maxBytes) throw new Error('Attachment exceeds 8 MiB.');
         if (data.byteLength > maxModelBytes) throw new Error('Attachment exceeds the 5 MB encoded model input limit.');
+        const matchesFormat =
+          mimeType === 'image/jpeg'
+            ? data.length >= 5 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff && data.at(-2) === 0xff && data.at(-1) === 0xd9
+            : mimeType === 'image/png'
+              ? data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+              : data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP';
+        if (!matchesFormat) throw new Error('Attachment bytes do not match the declared image format.');
         return { name: attachment.name, mimeType, base64: data.toString('base64') };
       },
       toModelOutput: ({ mimeType, base64 }) => ({
