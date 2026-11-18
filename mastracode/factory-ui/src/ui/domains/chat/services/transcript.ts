@@ -35,6 +35,8 @@ export interface MessageEntry {
   streaming?: boolean;
   steer?: boolean;
   deliveryStatus?: 'pending' | 'delivered' | 'failed';
+  /** Drawn from the server's list of sent messages it has not stored yet; leaves when the list drops it. */
+  pendingSend?: true;
 }
 
 export interface NoticeEntry {
@@ -308,9 +310,10 @@ function applyEvent(
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
     case 'display_state_changed': {
+      const shown = showPendingUserMessages(state, event.displayState.pendingUserMessages);
       const { isRunning, currentMessage } = event.displayState;
-      if (!isRunning || !currentMessage) return state;
-      return followLiveRow(state, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId);
+      if (!isRunning || !currentMessage) return shown;
+      return followLiveRow(shown, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId);
     }
 
     case 'tool_input_start':
@@ -661,7 +664,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   if (messages.length === 0) return state;
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
-  const confirmed = confirmPendingUserMessages(state, onScreenIndex);
+  const confirmed = confirmPendingUserMessages(storedPendingSends(state, onScreenIndex), onScreenIndex);
   const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
   const unclaimed = messages.filter(message => !onScreenIndex.has(message));
@@ -901,6 +904,22 @@ function claimOnScreenEntries(
   }
 
   return anchors;
+}
+
+// A stored row now backs the entry, so the pending list no longer decides whether it shows.
+function storedPendingSends(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
+  const claimed = new Set(anchors.values());
+  if (!state.entries.some((entry, index) => claimed.has(index) && entry.kind === 'message' && entry.pendingSend)) {
+    return state;
+  }
+  return {
+    ...state,
+    entries: state.entries.map((entry, index) => {
+      if (!claimed.has(index) || entry.kind !== 'message' || !entry.pendingSend) return entry;
+      const { pendingSend: _, ...rest } = entry;
+      return rest;
+    }),
+  };
 }
 
 function isUnconfirmedSteer(entry: MessageEntry): boolean {
@@ -1184,6 +1203,37 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+type PendingUserMessages = NonNullable<
+  Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState']['pendingUserMessages']
+>;
+
+// A sent message waits a moment before the run stores it. A reload in that gap
+// only knows it from the server's pending list, so draw it after history.
+function showPendingUserMessages(state: TranscriptState, pending: PendingUserMessages | undefined): TranscriptState {
+  if (!pending) return state;
+  const listed = new Set(pending.map(message => message.id));
+  const kept = state.entries.filter(entry => entry.kind !== 'message' || !entry.pendingSend || listed.has(entry.id));
+  const added = pending.flatMap(({ id, content, kind }) => {
+    const message: MastraDBMessage = {
+      id,
+      role: 'user',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: content }] },
+    };
+    const onScreen = kept.some(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id));
+    if (onScreen || indexOfUnclaimedOptimisticCopy(kept, message) !== -1) return [];
+    const steer = kind === 'steer';
+    return [
+      {
+        ...toMessageEntry(message, { steer, deliveryStatus: steer ? 'pending' : undefined }),
+        pendingSend: true as const,
+      },
+    ];
+  });
+  if (added.length === 0 && kept.length === state.entries.length) return state;
+  return { ...state, entries: [...kept, ...added] };
 }
 
 // The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
