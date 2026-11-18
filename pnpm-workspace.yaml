@@ -399,7 +399,7 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   axios@>=1.0.0 <1.20.0: 1.20.0
-  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1; target raised to 11.0.9 on 2026-11-18). Cross-major, approved.
   # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
   minimatch@>=7.0.0 <11.0.9: 11.0.9
   ws@>=8.0.0 <8.23.0: 8.23.0
