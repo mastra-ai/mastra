@@ -943,12 +943,12 @@ describe('Model provider onboarding', () => {
       renderModelSection({ draft: { modelScope: 'factory' } });
 
       // Base UI renders radios as spans, so the disabled state is carried by aria-disabled.
-      expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+      expect(await screen.findByRole('radio', { name: 'Personal accounts', checked: true })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
       expect(screen.getByRole('radio', { name: 'Company work and personal sessions' })).toHaveAttribute(
         'aria-disabled',
         'true',
       );
-      expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
       expect(
         within(screen.getByRole('group', { name: 'Your account' })).getByRole('button', { name: 'Choose a provider' }),
       ).toBeVisible();

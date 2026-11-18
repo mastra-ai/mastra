@@ -198,12 +198,13 @@ describe('IntakeSection incidentio', () => {
         await within(section).findByRole('button', { name: 'Remove Incident follow-ups (acme)' }),
       ).toBeInTheDocument();
       expect(within(section).queryByText(/Not routed/)).not.toBeInTheDocument();
-      expect(within(section).queryByLabelText('Factory for Incident follow-ups (acme)')).not.toBeInTheDocument();
+      const factory = within(section).getByLabelText('Factory for Incident follow-ups (acme)');
+      expect(factory).toHaveAttribute('aria-busy', 'true');
 
       releaseBindings();
 
-      const factory = await within(section).findByLabelText('Factory for Incident follow-ups (acme)');
-      expect(factory).toHaveTextContent('Acme Web');
+      await waitFor(() => expect(factory).toHaveTextContent('Acme Web'));
+      expect(factory).not.toHaveAttribute('aria-busy', 'true');
       expect(within(section).queryByText(/Not routed/)).not.toBeInTheDocument();
     });
   });

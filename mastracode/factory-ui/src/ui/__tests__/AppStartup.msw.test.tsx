@@ -6,6 +6,7 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { HttpHandler } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -13,7 +14,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog
 import { answerBoardPhases, answerWorkItemFilterOptions } from '../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { findLive, renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createQueryClient } from '../../query-client';
 import { factory, signedIn, signedOut } from '../domains/auth/components/__tests__/fixtures/auth';
 import { createAppRouter } from '../router';
@@ -66,7 +67,13 @@ function renderApp(
     listed = linkedFactory,
     projects = () => HttpResponse.json({ projects: [listed] }),
     models = [],
-  }: { listed?: typeof linkedFactory; projects?: Parameters<typeof http.get>[1]; models?: typeof USABLE_MODEL } = {},
+    handlers = [],
+  }: {
+    listed?: typeof linkedFactory;
+    projects?: Parameters<typeof http.get>[1];
+    models?: typeof USABLE_MODEL;
+    handlers?: HttpHandler[];
+  } = {},
 ) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
@@ -106,6 +113,7 @@ function renderApp(
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
   );
+  server.use(...handlers);
   const client = createQueryClient();
   const router = createAppRouter({ queryClient: client, api: TEST_API }, routes =>
     createMemoryRouter(routes, { initialEntries: [path] }),
@@ -144,6 +152,21 @@ function watchForText(text: string) {
 
 function returnToTab() {
   fireEvent(document, new Event('visibilitychange', { bubbles: true }));
+}
+
+function holdSignInCheck(session: typeof signedIn | typeof signedOut) {
+  let finish = () => {};
+  const answered = new Promise<void>(resolve => {
+    finish = resolve;
+  });
+  onTestFinished(finish);
+  server.use(
+    http.get(AUTH_ME_URL, async () => {
+      await answered;
+      return HttpResponse.json(session);
+    }),
+  );
+  return finish;
 }
 
 describe('Opening Factory', () => {
@@ -196,7 +219,7 @@ describe('Opening Factory', () => {
     const prefetched = client.getQueryCache().getAll();
     finishSignInCheck();
     const settings = path.includes('/settings/');
-    await screen.findByRole('navigation', { name: settings ? 'Settings sections' : 'Main' });
+    await findLive(() => screen.getByRole('navigation', { name: settings ? 'Settings sections' : 'Main' }));
     await waitFor(() => expect(screen.queryByLabelText('Loading page')).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
 
@@ -274,5 +297,45 @@ describe('Opening Factory', () => {
     expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factories/factory-1/work');
     expect(listFailureShown()).toBe(false);
+  });
+
+  it('sends a signed-out link to sign-in without showing sidebar load errors first', async () => {
+    const { requests } = recordRequests();
+    const loadErrorsShown = [watchForText('Couldn’t load sessions'), watchForText('Couldn’t load boards')];
+    const finishSignInCheck = holdSignInCheck(signedOut);
+    const refused = () => new HttpResponse(undefined, { status: 401 });
+    const { router, client } = renderApp('/factories/factory-1/work', {
+      projects: refused,
+      handlers: [
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/session-rows`, refused),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, refused),
+      ],
+    });
+
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    finishSignInCheck();
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/signin'));
+    expect(loadErrorsShown.map(shown => shown())).toEqual([false, false]);
+    const sidebarReads = requests.map(({ url }) => url).filter(url => /\/(session-rows|boards)\b/.test(url));
+    expect(sidebarReads).toEqual([...new Set(sidebarReads)]);
+  });
+
+  it('sends a link to an unknown Factory to the first one without showing sidebar load errors first', async () => {
+    const loadErrorsShown = [watchForText('Couldn’t load sessions'), watchForText('Couldn’t load boards')];
+    const finishSignInCheck = holdSignInCheck(signedIn);
+    const missing = () => HttpResponse.json({ error: 'not_found' }, { status: 404 });
+    const { router, client } = renderApp('/factories/bogus/work', {
+      handlers: [
+        http.get(`${TEST_BASE_URL}/web/factory/projects/bogus/session-rows`, missing),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/bogus/boards`, missing),
+      ],
+    });
+
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    finishSignInCheck();
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/factory-1/work'));
+    expect(loadErrorsShown.map(shown => shown())).toEqual([false, false]);
   });
 });

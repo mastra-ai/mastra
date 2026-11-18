@@ -56,7 +56,7 @@ describe('Environment settings', () => {
     renderEnvironmentSettings();
 
     // The loading state already titles its card Environment, so wait for the loaded fields.
-    await screen.findByRole('textbox', { name: 'Working directory' });
+    await screen.findByDisplayValue('/workspace');
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
     expect(headings).toEqual(['Environment', 'Environment variables', 'Builds', 'Danger zone']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
@@ -74,7 +74,8 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    const workdir = await screen.findByRole('textbox', { name: 'Working directory' });
+    await screen.findByDisplayValue('/workspace');
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     expect(workdir).toHaveValue('/workspace');
     await user.clear(workdir);
     await user.type(workdir, '/workspace/new{Enter}');
@@ -125,7 +126,8 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    const workdir = await screen.findByRole('textbox', { name: 'Working directory' });
+    await screen.findByDisplayValue('/workspace');
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     await user.clear(workdir);
     await user.type(workdir, '/home/user{Enter}');
     expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();

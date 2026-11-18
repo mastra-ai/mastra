@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { findLive, renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { storedWorkBoard } from '../domains/boardConfig/__tests__/fixtures/work-board';
 import { createAppRoutes } from '../router';
 
@@ -97,7 +97,7 @@ describe('Board entry points', () => {
     const user = userEvent.setup();
     const router = renderWorkBoard();
 
-    await user.click(await screen.findByRole('link', { name: 'Configure board' }));
+    await user.click(await findLive(() => screen.getByRole('link', { name: 'Configure board' })));
 
     expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`);
@@ -125,7 +125,7 @@ describe('Board entry points', () => {
 
     const nav = await boardsNav();
     expect(await nav.findByRole('link', { name: 'Work' })).toBeInTheDocument();
-    await user.click(await screen.findByRole('link', { name: 'Configure board' }));
+    await user.click(await findLive(() => screen.getByRole('link', { name: 'Configure board' })));
     expect(await screen.findByText('Only organization admins can change this board.')).toBeInTheDocument();
     expect(nav.queryByRole('link', { name: 'New board' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add phase' })).not.toBeInTheDocument();

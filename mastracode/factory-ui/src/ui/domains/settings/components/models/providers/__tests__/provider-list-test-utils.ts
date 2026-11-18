@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { expect } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
+import { findLive, TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
 import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
 
 export const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -32,12 +32,9 @@ export function rowFor(provider: string, container: HTMLElement = document.body)
 }
 
 export async function openAddProvider(user: UserEvent, container: HTMLElement = document.body) {
-  const add = () => within(container).getByRole('button', { name: 'Add provider' });
-  await waitFor(() => {
-    expect(add().closest('[inert]')).toBeNull();
-    expect(add()).toBeEnabled();
-  });
-  await user.click(add());
+  const add = await findLive(() => within(container).getByRole('button', { name: 'Add provider' }));
+  await waitFor(() => expect(add).toBeEnabled());
+  await user.click(add);
   return screen.findByRole('dialog', { name: 'Add provider' });
 }
 

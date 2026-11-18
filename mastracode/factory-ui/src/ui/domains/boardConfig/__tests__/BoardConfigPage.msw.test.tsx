@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { releaseBoard as releaseBoardInfo, workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
+import { findLive, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type {
   BoardCatalogResponse,
   FactorySkillInfo,
@@ -41,8 +41,7 @@ function configNav() {
 
 async function openPhase(name: string) {
   const user = userEvent.setup();
-  const nav = await screen.findByRole('navigation', { name: 'Board configuration' });
-  await user.click(await within(nav).findByRole('link', { name }));
+  await user.click(await findLive(() => configNav().getByRole('link', { name })));
   expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue(name);
   return user;
 }
@@ -91,7 +90,7 @@ describe('Board configuration', () => {
     const user = userEvent.setup();
     const { router } = renderAt(`/factories/${FACTORY_ID}/work`);
 
-    await user.click(await screen.findByRole('link', { name: 'Configure board' }));
+    await user.click(await findLive(() => screen.getByRole('link', { name: 'Configure board' })));
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/config`);
     expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Work');
     expect(await configNav().findByRole('link', { name: 'Planning' })).toHaveAttribute(
@@ -661,8 +660,7 @@ describe('Board configuration', () => {
       serveBoard(releaseBoard(), RELEASE_URL);
       const { router } = renderAt(`/factories/${FACTORY_ID}/boards/release/config`);
 
-      const nav = within(await screen.findByRole('navigation', { name: 'Board configuration' }));
-      await userEvent.setup().click(await nav.findByRole('link', { name: 'Skills' }));
+      await userEvent.setup().click(await findLive(() => configNav().getByRole('link', { name: 'Skills' })));
 
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/boards/release/skills`);
       expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();

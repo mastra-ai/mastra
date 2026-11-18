@@ -1044,7 +1044,8 @@ describe('Account presets', () => {
     seedOnboarding('project-management', { repository: repo });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    const work = await findActiveSection('Work');
+    await user.click(work.getByRole('button', { name: 'Continue' }));
     const modelSection = await findActiveSection('Model');
     expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument();
     expect(modelSection.getByText('Local connection')).toBeInTheDocument();

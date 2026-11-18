@@ -146,7 +146,8 @@ describe('MemorySettings', () => {
     renderMemory();
 
     const personal = screen.getByRole('region', { name: 'Personal memory' });
-    const search = await within(personal).findByRole('combobox', { name: 'Observer model' });
+    await within(personal).findByDisplayValue('30,000');
+    const search = within(personal).getByRole('combobox', { name: 'Observer model' });
     await user.clear(search);
     await user.type(search, 'llm');
 
