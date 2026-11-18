@@ -388,7 +388,7 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   protected override async _closeFilteredSpan(args: { span: LangSmithSpan; endTime: Date }): Promise<void> {
-    await args.span.end({ endTime: args.endTime.getTime() });
+    await args.span.end(undefined, undefined, args.endTime.getTime());
     await args.span.patchRun();
   }
 

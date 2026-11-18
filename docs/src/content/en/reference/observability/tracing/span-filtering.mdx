@@ -32,7 +32,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
-          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+          if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') {
             return false
           }
 
@@ -86,7 +86,7 @@ import { SpanType } from '@mastra/core/observability'
 
 spanFilter: span => {
   if (span.type === SpanType.MODEL_CHUNK) return false
-  if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
+  if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') return false
 
   return true
 }
@@ -112,6 +112,25 @@ Span filtering happens at export time in this order:
 1. `spanFilter` decides whether to keep the final exported span.
 
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
+
+## Start and end events
+
+Mastra calls `spanFilter` for each event of a span: when the span starts, on each update, and when it ends. Each call receives the span data at that moment. Data set when the span ends, such as `output`, an error, or `attributes.success`, isn't available when the span starts.
+
+### Drop a span from its start
+
+A filter that only reads data the span has when it starts returns the same answer for every event. That data is the type, name, entity, input, and the attributes and metadata set at creation. No exporter receives the span. Its children attach to the nearest ancestor that was exported, which keeps the trace tree connected.
+
+### Drop a span at its end
+
+A filter that reads end-time data keeps the start event and drops the end event. The result depends on when the exporter writes a span:
+
+- Exporters that write a span when it ends never write this span. Langfuse, the OpenTelemetry exporters, and `MastraStorageExporter` with the `insert-only` strategy work this way. Children of the span were already exported with the span as their parent. In that tool they have no parent.
+- Exporters that write a span when it starts keep the span and close it at its end time, without its end-time data. `MastraStorageExporter` with the `realtime` or `batch-with-updates` strategy, Braintrust, LangSmith, and Sentry work this way.
+
+To drop a span and keep a connected tree in every exporter, filter on data the span has when it starts.
+
+A custom exporter that opens a span on its start event can implement [`onSpanFilteredEvent`](/reference/observability/tracing/interfaces#observabilityexporter) to close a span whose end was dropped.
 
 ## Related
 
