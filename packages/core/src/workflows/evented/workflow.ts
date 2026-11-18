@@ -2255,8 +2255,12 @@ export class EventedRun<
     // execute() still waits for the worker's finish event in the background so the
     // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
     let markDispatched!: () => void;
+    let isDispatched = false;
     const dispatched = new Promise<void>(resolve => {
-      markDispatched = resolve;
+      markDispatched = () => {
+        isDispatched = true;
+        resolve();
+      };
     });
     const execution = this.executionEngine.execute<
       TState,
@@ -2280,16 +2284,20 @@ export class EventedRun<
       onDispatched: markDispatched,
     });
 
-    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
-    await Promise.race([dispatched, execution]);
-
     // execute() only tracks the wait for the finish event. Nobody awaits this run's
-    // callbacks, so let shutdown() drain them too before it closes storage and pubsub.
+    // callbacks, so track the whole execution now, before the dispatch wait, so
+    // shutdown() drains them before it closes storage and pubsub. Failures before
+    // dispatch reject the caller below, so only later ones are logged here.
     const background = execution.catch(error => {
-      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      if (isDispatched) {
+        this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      }
     });
     const releaseTracking = this.mastra.__trackEventedRun(background);
     void background.finally(releaseTracking);
+
+    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
+    await Promise.race([dispatched, execution]);
     return { runId: this.runId };
   }
 
