@@ -817,65 +817,15 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Gateway',
-          link: { type: 'doc', id: 'mastra-platform/gateway/overview' },
-          collapsed: true,
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            { type: 'doc', id: 'mastra-platform/gateway/features', label: 'Features' },
-            { type: 'doc', id: 'mastra-platform/gateway/models', label: 'Models' },
-            { type: 'doc', id: 'mastra-platform/gateway/limits', label: 'Limits' },
-            { type: 'doc', id: 'mastra-platform/gateway/api', label: 'API' },
-            {
-              type: 'category',
-              label: 'Examples',
-              link: { type: 'doc', id: 'mastra-platform/gateway/examples/overview' },
-              collapsed: true,
-              items: [
-                {
-                  type: 'category',
-                  label: 'TypeScript',
-                  collapsed: false,
-                  items: [
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/anthropic-sdk', label: 'Anthropic SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/deep-agents-ts', label: 'Deep Agents' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/langgraph', label: 'LangGraph' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/openai-sdk', label: 'OpenAI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/ai-sdk', label: 'Vercel AI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/mastra-framework', label: 'Mastra Framework' },
-                  ],
-                },
-                {
-                  type: 'category',
-                  label: 'Python',
-                  collapsed: false,
-                  items: [
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/deep-agents-py', label: 'Deep Agents' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/python-openai', label: 'OpenAI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/pydantic-ai', label: 'Pydantic AI' },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: 'category',
           label: 'Observability',
           link: { type: 'doc', id: 'mastra-platform/observability/overview' },
           collapsed: true,
           customProps: {
             contextualSidebar: true,
           },
-          items: [
-            { type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' },
-            { type: 'doc', id: 'mastra-platform/observability/dashboards', label: 'Dashboards' },
-            { type: 'doc', id: 'mastra-platform/observability/alerts', label: 'Observability Alerts' },
-          ],
+          items: [{ type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' }],
         },
-        { type: 'doc', id: 'mastra-platform/connect', label: 'Connect', customProps: { tags: ['new'] } },
+        { type: 'doc', id: 'mastra-platform/connect', label: 'Connect' },
         { type: 'doc', id: 'mastra-platform/memory', label: 'Memory' },
         { type: 'doc', id: 'mastra-platform/knowledge', label: 'Knowledge' },
         { type: 'doc', id: 'mastra-platform/database', label: 'Databases' },
