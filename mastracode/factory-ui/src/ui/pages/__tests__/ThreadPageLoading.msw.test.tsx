@@ -18,7 +18,7 @@ import {
 import { createQueryClient } from '../../../query-client';
 import { createAppRouter, createAppRoutes } from '../../router';
 import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
-import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
+import { assistantOnlyThreadMessages, threadRailMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -289,6 +289,37 @@ describe('ThreadPage opened through the app router', () => {
     sessionGate.resolve();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
+  });
+
+  it('keeps a restored approval locked until the session loads', async () => {
+    const args = { path: 'src/agent.ts' };
+    const parkedApproval: MastraDBMessage = {
+      id: 'assistant-parked-approval',
+      role: 'assistant',
+      createdAt: new Date('2026-08-03T09:05:00.000Z'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'call-write', toolName: 'write_file', args },
+          },
+        ],
+        metadata: {
+          pendingToolApprovals: { 'call-write': { toolCallId: 'call-write', toolName: 'write_file', args } },
+        },
+      },
+    };
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: [...threadRailMessages, parkedApproval] });
+    messagesGate.resolve();
+    renderThreadRouteWithLoaders(WORKSPACE_PATH);
+
+    expect(await screen.findByRole('button', { name: 'Approve write_file' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decline write_file' })).toBeDisabled();
+
+    sessionGate.resolve();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve write_file' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Decline write_file' })).toBeEnabled();
   });
 
   it('opens another session from the app onto its transcript, its history read beside the session', async () => {

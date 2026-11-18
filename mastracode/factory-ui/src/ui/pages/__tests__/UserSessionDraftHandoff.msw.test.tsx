@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { queryKeys } from '../../../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../api/keys';
 import { createQueryClient } from '../../../query-client';
 import { createAppRouter, createAppRoutes } from '../../router';
 import { DRAFT_SESSION_ID, FACTORY_ID, OTHER_DRAFT_SESSION_ID, stubDraftRoute } from './fixtures/draftRoute';
@@ -92,9 +92,18 @@ describe('a user session draft on the real thread route', () => {
       await screen.findByRole('textbox', { name: 'Message' });
       await waitFor(() => expect(client.getQueryData(queryKeys.userSession(DRAFT_SESSION_ID))).toBeDefined());
       answerFirstHistoryRead();
-      // Give the messages read time to land: before the fix it surfaced the 404.
-      await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await waitFor(() =>
+        expect(
+          client.getQueryData(
+            queryKeys.agentControllerThreadMessages(
+              'code',
+              DRAFT_SESSION_ID,
+              DRAFT_SESSION_ID,
+              INITIAL_THREAD_MESSAGE_LIMIT,
+            ),
+          ),
+        ).toEqual([]),
+      );
       expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
       route.finishWorkspace();
