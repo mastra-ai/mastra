@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function EnvironmentsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-51.3,22Q-51.3,20.3 -49.3,19.3L-2,-4.3Q0,-5.3 2,-4.3L47.5,18.5Q49.5,19.4 49.5,21.2L49.5,21.5Q49.5,23.2 47.5,24.2L0.2,47.9Q-1.8,48.8 -3.7,47.9L-49.3,25.1Q-51.3,24.1 -51.3,22.4Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="2.7" cy="19" r="50.9">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-41.6,17.7C-42.1,13.9 -28,10.7 -21.1,7.2C-14.1,3.7 -4.2,-1.8 -0.2,-3.4C3.9,-5 2.1,-2.8 3.2,-2.4C4.3,-2.1 2,-3.6 6.5,-1.4C11,0.7 22.4,6.6 30.2,10.5C38,14.5 53,18.6 53.4,22.4C53.9,26.1 39.8,29.3 32.9,32.8C25.9,36.4 16,41.8 12,43.4C7.9,45 9.7,42.8 8.6,42.4C7.5,42.1 9.8,43.6 5.3,41.4C0.8,39.3 -10.6,33.4 -18.4,29.5C-26.2,25.5 -41.2,21.4 -41.6,17.7Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-35.4,-62.6Q-35.4,-64.8 -33.4,-65.8L-2,-81.5Q0,-82.5 2,-81.5L38.7,-63.2Q40.7,-62.2 40.7,-60L40.7,18.1Q40.7,20.3 38.7,21.3L7.3,37Q5.3,38 3.3,37L-33.4,18.7Q-35.4,17.7 -35.4,15.5Z"
         fill="var(--face)"

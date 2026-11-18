@@ -112,6 +112,8 @@ export interface ThreadSettingsStore {
 /** Process-local listener awaited before a terminal agent event is emitted. */
 export type SessionBeforeAgentEndListener = (
   event: Extract<AgentControllerEvent, { type: 'agent_end' }>,
+  /** The run that is ending; the session may already track another one. */
+  context: { runId: string | null },
 ) => void | Promise<void>;
 
 /** Options for {@link Session.sendNotificationSignal}. */
@@ -1777,6 +1779,26 @@ export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallI
   return JSON.stringify([resourceId, threadId, runId, toolCallId]);
 }
 
+/** Whether a resume failed because the agent no longer holds the suspended call. */
+function isUnresumableRun(error: unknown): boolean {
+  return error instanceof MastraError && error.id === 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN';
+}
+
+/** The calls of a run the agent still holds in storage, or undefined when storage cannot say. */
+async function storedToolCallIds(
+  agent: { listSuspendedRuns?: Agent['listSuspendedRuns'] },
+  { threadId, resourceId, runId }: SuspensionAddress,
+): Promise<Set<string> | undefined> {
+  if (typeof agent.listSuspendedRuns !== 'function') return undefined;
+  try {
+    const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+    const calls = runs.find(run => run.runId === runId)?.toolCalls ?? [];
+    return new Set(calls.flatMap(call => (call.toolCallId ? [call.toolCallId] : [])));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Owns the session's parked tool suspensions: tool calls paused via the native
  * tool-suspension primitive (e.g. `ask_user` / `request_access` / `submit_plan`)
@@ -1887,6 +1909,24 @@ export class SessionSuspensions {
       }
     }
     return dropped;
+  }
+
+  /** The suspensions parked on a run, as copies. */
+  listForRun({
+    resourceId,
+    threadId,
+    runId,
+  }: {
+    resourceId: string;
+    threadId: string;
+    runId: string;
+  }): PendingSuspension[] {
+    return [...this.#pending.values()]
+      .filter(
+        suspension =>
+          suspension.resourceId === resourceId && suspension.threadId === threadId && suspension.runId === runId,
+      )
+      .map(suspension => ({ ...suspension }));
   }
 
   /** Discard the in-memory suspension mirror for a deleted thread. */
@@ -4490,20 +4530,21 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
-    { abortReason }: { abortReason?: string } = {},
+    { abortReason, runId: endingRunId }: { abortReason?: string; runId?: string } = {},
   ): Promise<void> {
     const event = { type: 'agent_end', reason, ...(abortReason ? { abortReason } : {}) } as const;
-    const runId = this.run.getRunId();
+    const runId = endingRunId ?? this.run.getRunId();
+    // A listener may move the tracked run on, and another run may end while one
+    // awaits, so each listener gets this run's id rather than a shared slot.
     for (const listener of this.#beforeAgentEndListeners) {
       try {
-        await listener(event);
+        await listener(event, { runId });
       } catch (error) {
         console.error('Error in before-agent-end listener:', error);
       }
     }
     if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
-    // The display state clears the ending run's prompts; a listener above may
-    // already have moved the tracked run on, so hand it the run that ended.
+    // The display state clears the ending run's prompts during this synchronous emit.
     this.#endingRunId = runId;
     try {
       this.emit(event);
@@ -4523,8 +4564,7 @@ export class Session<TState = unknown> {
     const completion = new Promise<void>(resolve => {
       resolveCompletion = resolve;
     });
-    const unsubscribe = this.onBeforeAgentEnd(() => {
-      const endingRunId = this.run.getRunId();
+    const unsubscribe = this.onBeforeAgentEnd((_event, { runId: endingRunId }) => {
       if (!endingRunId) return;
       completedRunIds.add(endingRunId);
       if (endingRunId === runId) resolveCompletion();
@@ -6290,8 +6330,18 @@ export class Session<TState = unknown> {
         address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
       if (!sourceIsActive) throw err;
       this.emit({ type: 'error', error: err });
-      if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
-        await this.finishAgentRun('error');
+      // The run tracker may already be reset by the failed start, so name the
+      // ending run; otherwise the display would drop other runs' prompts too.
+      // A run the agent still holds other calls of stays parked for them.
+      // Another answer may have resumed the run meanwhile; that continuation owns its end.
+      const runStillParked = isUnresumableRun(error) && this.suspensions.listForRun(address).length > 0;
+      if (
+        !this.suspensions.has(address) &&
+        !runStillParked &&
+        !this.run.isRunning() &&
+        this.getCurrentRunId() === address.runId
+      )
+        await this.finishAgentRun('error', { runId: address.runId });
     }
   }
 
@@ -6953,7 +7003,25 @@ export class Session<TState = unknown> {
     } catch (error) {
       // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
       restoreAbortedRun?.();
-      if (!observer?.dispatched()) {
+      if (!observer?.dispatched() && isUnresumableRun(error)) {
+        // The agent no longer holds this call (another runtime answered it, or the
+        // run was lost). Re-parking would leave a prompt that every answer fails on,
+        // so retract it, along with the run's other prompts the agent no longer holds.
+        // The answered prompt was already dropped before the resume.
+        // Siblings parked after this point belong to a later continuation and stay.
+        // When storage cannot say which calls the agent holds, keep every sibling.
+        const reason = getErrorFromUnknown(error).message;
+        const siblings = this.suspensions.listForRun(address);
+        const held = siblings.length > 0 ? await storedToolCallIds(agent, address) : undefined;
+        this.emit({ type: 'tool_suspension_cancelled', ...address, toolName: suspension.toolName, reason });
+        if (held) {
+          for (const sibling of siblings) {
+            if (held.has(sibling.toolCallId) || !this.suspensions.has(sibling)) continue;
+            this.suspensions.delete(sibling);
+            this.emit({ type: 'tool_suspension_cancelled', ...sibling, reason });
+          }
+        }
+      } else if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
         if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });

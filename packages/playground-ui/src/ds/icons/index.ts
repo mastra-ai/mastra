@@ -5,6 +5,7 @@ export * from './AiIcon';
 export * from './ApiIcon';
 export * from './BranchIcon';
 export * from './CheckIcon';
+export * from './CircleDotIcon';
 export * from './ChevronIcon';
 export * from './CommitIcon';
 export * from './CrossIcon';

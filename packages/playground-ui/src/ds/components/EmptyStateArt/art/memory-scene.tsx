@@ -3,15 +3,25 @@ import type { SceneProps } from './scene-style';
 export function MemoryScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-30.1,11.4Q-30.1,9.7 -28.1,8.7L-2,-4.3Q0,-5.3 2,-4.3L52.8,21.1Q54.8,22.1 54.8,23.8L54.8,24.1Q54.8,25.9 52.8,26.8L26.7,39.9Q24.8,40.9 22.8,39.9L-28.1,14.5Q-30.1,13.5 -30.1,11.8Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="15" cy="14.6" r="43">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-20.4,6.9C-22.9,4 -13.8,3.6 -10.4,1.9C-7.1,0.2 -2.6,-2.6 -0.4,-3.3C1.8,-3.9 1.8,-2.6 2.9,-2.3C4,-2 1.3,-3.6 6.2,-1.3C11,1 23.5,7.2 32,11.5C40.5,15.7 54.4,21.3 56.9,24.2C59.4,27.2 50.3,27.6 47,29.3C43.7,31 39.2,33.7 37,34.4C34.8,35.1 34.8,33.8 33.7,33.5C32.6,33.1 35.3,34.8 30.4,32.5C25.5,30.2 13,24 4.6,19.7C-3.9,15.5 -17.9,9.9 -20.4,6.9Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-14.1,-43.2Q-14.1,-45.4 -12.2,-46.4L-2,-51.5Q0,-52.5 2,-51.5L42.2,-31.4Q44.2,-30.4 44.2,-28.2L44.2,19.9Q44.2,22.1 42.2,23.1L32,28.2Q30.1,29.2 28.1,28.2L-12.2,8.1Q-14.1,7.1 -14.1,4.9Z"
         fill="var(--face)"

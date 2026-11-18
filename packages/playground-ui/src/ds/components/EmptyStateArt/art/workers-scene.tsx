@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function WorkersScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-99,45.9Q-99,44.2 -97,43.2L-2,-4.3Q0,-5.3 2,-4.3L38.7,14Q40.7,15 40.7,16.7L40.7,17.1Q40.7,18.8 38.7,19.8L-56.4,67.3Q-58.3,68.3 -60.3,67.3L-97,48.9Q-99,48 -99,46.2Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="-25.7" cy="27.6" r="69.5">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-92.9,45.2C-90.6,41.2 -72.9,34.6 -62.8,29.2C-52.8,23.8 -40.3,16.8 -32.5,12.8C-24.7,8.7 -21.4,7.3 -15.9,4.6C-10.5,2 -2.9,-2.2 0.3,-3.3C3.6,-4.5 2.5,-2.6 3.6,-2.3C4.7,-1.9 3.4,-2.9 6.9,-1.3C10.5,0.4 18.9,4.8 24.9,7.9C30.9,10.9 42.5,14.1 42.8,16.9C43.1,19.8 32.1,22.3 26.7,25C21.4,27.7 18.7,29.2 10.6,33.2C2.5,37.2 -11,43.7 -21.8,48.7C-32.5,53.8 -48.1,61.3 -54,63.6C-59.9,65.9 -56.2,62.9 -57.3,62.6C-58.4,62.2 -57.3,63.1 -60.6,61.6C-63.8,60 -71.4,56.1 -76.7,53.4C-82.1,50.7 -95.2,49.3 -92.9,45.2Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-59.2,34.8Q-59.2,32.6 -57.3,31.6L-20.5,13.2Q-18.6,12.2 -16.6,13.2L-6.4,18.3Q-4.4,19.3 -4.4,21.5L-4.4,22.1Q-4.4,24.3 -6.4,25.3L-43.1,43.7Q-45.1,44.6 -47.1,43.7L-57.3,38.6Q-59.2,37.6 -59.2,35.4Z"
         fill="var(--face)"

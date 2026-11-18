@@ -322,7 +322,7 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: pnpm publish -r --dry-run --access public --no-git-checks
+        run: node .github/scripts/publish-packages.mjs --dry-run
 
       - name: Add tags
         if: ${{ !inputs.dry_run }}
@@ -524,7 +524,7 @@ jobs:
           if [[ "$DRY_RUN" == 'true' ]]; then
             args+=(--dry-run)
           fi
-          pnpm --filter-prod '@mastra/playground-ui...' --filter-prod '@mastra/observability...' --filter-prod '@mastra/mcp-apps-components...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
+          node .github/scripts/publish-packages.mjs --tag "$FINAL_TAG" --pnpm-filter-prod '@mastra/playground-ui...' --pnpm-filter-prod '@mastra/observability...' --pnpm-filter-prod '@mastra/mcp-apps-components...' "${args[@]}"
 
   # ===========================================
   # SNAPSHOT: Manual trigger only (non-main branches)
