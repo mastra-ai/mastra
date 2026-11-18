@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 70.1.0-alpha.3
+
+### Patch Changes
+
+- `SettingsRow` and `SettingsFieldsetRow` now move controls that are too wide to sit beside their label onto the next line, starting under the label, instead of squeezing the label. Put several controls straight in the row (no wrapper `div` or width classes); beside the label they end on the same right edge as every other row. ([#30352](https://github.com/mastra-ai/mastra/pull/30352))
+
+- Settings rows center a control against its label, and keep the label at the top when the control grows (for example, an error line under a field). Pages no longer need their own alignment overrides. ([#30731](https://github.com/mastra-ai/mastra/pull/30731))
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+  - @mastra/client-js@1.61.1-alpha.3
+  - @mastra/react@1.15.2-alpha.3
+
 ## 70.1.0-alpha.2
 
 ### Patch Changes
