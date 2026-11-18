@@ -60,7 +60,7 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the set an environment's deploys actually run with, with managed variables listed by name, pull them into a local env file. Each environment is pulled on its own. The file never mixes in another environment's values:
+To see the variables an environment's deploys run with, pull them into a local env file. Managed variables are listed by name only. Each pull covers one environment. The file never mixes in another environment's values:
 
 ```bash
 mastra env vars pull staging --output .env.staging
@@ -94,7 +94,7 @@ mastra env db create staging --kind turso --name my-project-staging-db
 
 If you'd rather share one database across every environment, attach it with `--shared` instead: `mastra env db create --kind turso --shared`.
 
-Each environment can use one database per provider. An existing shared (`--shared`) database from the same provider creates a variable-name conflict with an environment-scoped database. Export any data you need to keep before running `mastra env db delete`, because this command destroys the shared provider database and its data. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
+Each environment can use one database per provider. A shared database and an environment-scoped database from the same provider set the same variable names, and the two conflict. To replace a shared database, delete it with `mastra env db delete` first. That command destroys the provider database and its data, so export anything you want to keep before you run it. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
 
 ## Delete an environment
 

@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 Server on Mastra platform is a production deployment target that runs your Mastra application as an API server. Use it when you want the platform to build, deploy, host, and manage your Mastra server.
 
-You get a stable API endpoint with environment variable management and custom domain support, plus deploy history out of the box.
+Each server includes a stable API endpoint, environment variable management, custom domain support, and deploy history.
 
 :::note
 
@@ -45,8 +45,13 @@ Server deploy provisions hosted storage automatically. If you override storage w
     The command runs `mastra build` and uploads its artifact, then builds and deploys a Docker image. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
 
     :::note
-    The CLI uploads environment variables from one env file. It uses `.env.<environment>` if it exists (for example `.env.production` for the default `production` environment), otherwise the only `.env` or `.env.*` file. If there are several and none matches, it asks which one to use; in non-interactive runs (`--yes` or CI), pass `--env-file <file>` instead. Pass `--env-file` to override the choice. Every deploy merges the file's vars into the environment's stored env vars: values from the file win, except that an empty value doesn't clear a stored one. The CLI lists the keys it will overwrite and asks you to confirm (skipped with `--yes` or in CI). To manage a var only in the dashboard, remove it from the env file. If no env file exists, nothing is uploaded and the environment keeps its stored env vars.
-    Review and sanitize the selected file before deploying to avoid uploading development-only or personal secrets.
+    The CLI uploads environment variables from one env file:
+
+    - **Which file:** `.env.<environment>` if it exists, for example `.env.production` for the default `production` environment. Otherwise, the only `.env` or `.env.*` file. If there are several and none matches, the CLI asks which one to use. Pass `--env-file <file>` to choose the file yourself, which non-interactive runs (`--yes` or CI) require in that case.
+    - **How it merges:** Values from the file overwrite the environment's stored variables, but an empty value doesn't clear a stored one. The CLI lists the keys it will overwrite and asks you to confirm, unless you pass `--yes` or run in CI. To manage a variable only in the dashboard, remove it from the env file.
+    - **No file:** Nothing is uploaded, and the environment keeps its stored variables.
+
+    Review the selected file before you deploy, so you don't upload development-only or personal secrets.
     :::
 
     See the [CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags.
@@ -63,7 +68,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 ## Deploy lifecycle
 
-Each project runs one build at a time as its deploy transitions through **queued → uploading → starting → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Deploys triggered from GitHub first build from source, so they pass through **building** between **queued** and **uploading**. When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+Each project runs one build at a time as its deploy transitions through **queued → uploading → starting → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Deploys triggered from GitHub first build from source, so they pass through **building** between **queued** and **uploading**. When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from the selected env file. Your server URL remains stable across deploys.
 
 ## Idle behavior
 
@@ -133,7 +138,7 @@ Call `unref()` on the diagnostic interval so the helper itself doesn't keep the 
 
 ### Keep a service running
 
-Some applications actually need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
+Some applications need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
 
 With the **Persistent Server add-on** enabled, the service stays awake even with no traffic, so persistent connections, scheduled tasks, and open streams keep working without being interrupted by idle sleep.
 
@@ -147,6 +152,8 @@ If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/dep
 
 ### Create an API token
 
+Create an [access token](/docs/mastra-platform/access-tokens) for CI to authenticate with:
+
 <Steps>
   <StepItem>
     Run the following command locally:
@@ -159,7 +166,7 @@ If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/dep
   </StepItem>
 
   <StepItem>
-    Add the token as a secret in your CI provider. In GitHub Actions, go to **Settings → Secrets and variables → Actions** and create the `MASTRA_API_TOKEN` secret.
+    Add the token as a secret in your CI provider. In GitHub Actions, open **Settings → Secrets and variables → Actions** and create the `MASTRA_API_TOKEN` secret.
   </StepItem>
 
   <StepItem>
@@ -210,7 +217,7 @@ jobs:
           MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
-Adjust the `paths` filter and `working-directory` if your Mastra project is in a subdirectory (e.g. a monorepo).
+If your Mastra project is in a subdirectory, for example in a monorepo, adjust the `paths` filter and set `working-directory` on the steps.
 
 ### GitLab CI
 
@@ -240,7 +247,7 @@ Any CI system that runs Node.js and shell commands works with Mastra:
 
 ### Verify the deploy
 
-After the workflow completes, verify the deployment by hitting the health endpoint:
+After the workflow completes, verify the deployment by requesting the health endpoint:
 
 ```bash
 curl -f https://<your-project>.server.mastra.cloud/health
@@ -263,7 +270,7 @@ The following example adds a verification step to a GitHub Actions workflow:
 
 ### Override project config with environment variables
 
-For interactive deploys, the CLI reads `organizationId` and `projectId` from `.mastra-project.json` by default. When `MASTRA_API_TOKEN` is set, both variables below are required. To override these values (e.g. deploying to a different project from the same repository), set the following environment variables:
+For interactive deploys, the CLI reads `organizationId` and `projectId` from `.mastra-project.json`. To override these values, for example to deploy to a different project from the same repository, set the following environment variables. When `MASTRA_API_TOKEN` is set, both are required:
 
 | Variable | Description |
 | - | - |
