@@ -350,6 +350,44 @@ describe('Not routed', () => {
     expect(await screen.findByText('Every new issue and pull request found a board.')).toBeVisible();
   });
 
+  it('still lists items no board took when the intake order fails to load', async () => {
+    server.use(
+      http.get(`${PROJECT_URL}/intake-order`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+      http.get(`${PROJECT_URL}/intake/not-routed`, () =>
+        HttpResponse.json({
+          notRouted: [decision({ id: 'd-1', title: 'Crash on start' })],
+          nextCursor: null,
+          canEdit: true,
+        } satisfies IntakeNotRoutedResponse),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('The intake order didn’t load.')).toBeVisible();
+    const list = within(await screen.findByRole('list', { name: 'Items not routed' }));
+    expect(list.getByRole('link', { name: 'Crash on start' })).toBeVisible();
+  });
+
+  it('keeps Load more when every loaded item was routed again but older ones remain', async () => {
+    server.use(
+      http.get(`${PROJECT_URL}/intake/not-routed`, () =>
+        HttpResponse.json({ notRouted: [], nextCursor: 'c-1', canEdit: true } satisfies IntakeNotRoutedResponse),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter>
+        <IntakeOrderSection factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('More waiting for a board.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
+  });
+
   it('shows why an item could not be routed again', async () => {
     server.use(
       http.get(`${PROJECT_URL}/intake/not-routed`, () =>

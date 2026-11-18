@@ -450,6 +450,21 @@ describe('Board rules', () => {
     );
   });
 
+  it('narrows to the rules sending cards to other boards', async () => {
+    const toTriage = rule({ ...bugs(), name: 'Bugs go to Triage' });
+    const toRelease = rule({
+      name: 'Labelled releases go to Release Preview',
+      on: ['work_item.updated'],
+      target: { boardKey: 'work', phaseKey: 'queued', joinClosedIssue: false, moveToBoardKey: 'release' },
+    });
+    serveRules({ rules: [toTriage, toRelease] });
+    renderRules('work', '?leaving');
+
+    expect(await screen.findByText('Only the rule sending cards to other boards.')).toBeVisible();
+    expect(ruleNames('Issue labels or assignees change')).toEqual(['Labelled releases go to Release Preview']);
+    expect(screen.queryByRole('region', { name: OPENED })).not.toBeInTheDocument();
+  });
+
   it('says no rule moves cards into a phase none reaches', async () => {
     serveRules({ rules: [rule({ ...bugs(), name: 'Bugs go to Triage' })] });
     renderRules('work', '?into=planning');

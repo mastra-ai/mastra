@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,23 +5,18 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
-import { IconPlayCircle } from '@mastra/playground-ui/icons/central/IconPlayCircle';
-import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
-
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { boardFlow } from '../../boardRules/boardFlow';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { approvalText, startsText, toolLabel, unattended } from '../phaseSummary';
-import { boardConfigPath, boardRulesPath, LEAVING } from '../boardConfigPaths';
+import { boardConfigPath, boardRulesPath } from '../boardConfigPaths';
 import { PhaseRunnerCard } from './PhaseRunnerCard';
-import { Muted, NextPhases, Step } from './PhaseTimeline';
+import { Muted } from './PhaseTimeline';
+import { outlineOfStored, PhaseWalkthrough } from './PhaseWalkthrough';
 import { RuleCountCard } from './RuleCountCard';
 import { SettingsColumn } from './SettingsColumn';
+import { StartsToggle } from './StartsToggle';
 
 /**
  * Lines the first column's content up with the settings column above it (42rem wide, centered), and leaves the same
@@ -41,6 +35,7 @@ export function BoardOverview({
   phases,
   skills,
   action,
+  onAutoStart,
 }: {
   factoryId: string;
   boardId: string;
@@ -48,11 +43,14 @@ export function BoardOverview({
   /** Undefined until the factory's skills load. */
   skills: FactorySkillInfo[] | undefined;
   action?: ReactNode;
+  /** Switches starting on its own in the draft; left out when the board can't be edited. */
+  onAutoStart?: (phaseKey: string, on: boolean) => void;
 }) {
   const catalog = useBoardCatalog(factoryId);
   const routes = useIntakeRoutesQuery(factoryId);
   const loading = catalog.isPending || routes.isPending;
   const start = catalog.data?.find(board => board.id === boardId)?.initialPhase ?? phases[0]?.key;
+  const outlines = phases.map(phase => outlineOfStored(phase, phases));
   const flow =
     routes.data && start ? boardFlow(routes.data.intakeRoutes, { key: boardId, initialPhase: start }) : undefined;
 
@@ -76,7 +74,7 @@ export function BoardOverview({
             <RuleCountCard
               rules={flow.leaving}
               title="Rules that send cards to other boards"
-              to={boardRulesPath(factoryId, boardId, LEAVING)}
+              to={boardRulesPath(factoryId, boardId, 'leaving')}
               boardId={boardId}
               boards={catalog.data}
             />{' '}
@@ -87,8 +85,7 @@ export function BoardOverview({
       <ol aria-label="Phases" className={cn('mx-auto flex w-max', MAP_GUTTER)}>
         {phases.map(phase => {
           const kind = phaseIconKind(boardId, phase.kind);
-          const arriving = flow?.into[phase.key] ?? [];
-          const next = phase.nextPhases ?? [];
+          const arriving = flow?.into.get(phase.key) ?? [];
           return (
             <li
               key={phase.key}
@@ -105,84 +102,49 @@ export function BoardOverview({
                     {phase.name}
                   </Txt>
                 </Link>
-                {phase.runner && phase.autoStart && (
-                  <Badge
-                    size="xs"
-                    variant="info"
-                    emphasis="subtle"
-                    icon={<IconPlayCircle aria-hidden />}
-                    className="ml-auto shrink-0"
-                  >
-                    Auto-start
-                  </Badge>
-                )}
               </div>
-              <ol aria-label={`${phase.name}, step by step`} className="flex flex-col px-3 py-3">
-                <Step label="In" icon={IconArrowInbox}>
-                  {loading ? (
-                    <Skeleton className="h-4 w-20" />
-                  ) : flow ? (
-                    arriving.length > 0 ? (
-                      <RuleCountCard
-                        rules={arriving}
-                        title={`Rules that move cards into ${phase.name}`}
-                        to={boardRulesPath(factoryId, boardId, phase.key)}
-                        boardId={boardId}
-                        boards={catalog.data}
-                      />
-                    ) : (
-                      <Muted>No rule</Muted>
-                    )
-                  ) : (
-                    <Muted>Unknown</Muted>
-                  )}
-                  {phase.key === start && <Muted>New cards start here</Muted>}
-                </Step>
-                <Step label="Work" icon={phase.runner ? IconRobot : unattended(phase.kind).icon}>
-                  <Work factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />
-                </Step>
-                {phase.exitTool && (
-                  <Step label="Ends with" icon={IconFlag2}>
-                    <Txt as="span" variant="caption" className="truncate">
-                      {phase.exitTool.id}
-                    </Txt>
-                    <Muted>{approvalText(phase.exitTool)}</Muted>
-                  </Step>
-                )}
-                <Step label="Next" icon={IconArrowRight}>
-                  <NextPhases boardId={boardId} next={next} phases={phases} />
-                </Step>
-              </ol>
+              <div className="px-3 py-3">
+                <PhaseWalkthrough
+                  boardId={boardId}
+                  phase={outlineOfStored(phase, phases)}
+                  phases={outlines}
+                  arrivals={
+                    <>
+                      {loading ? (
+                        <Skeleton className="h-4 w-20" />
+                      ) : flow ? (
+                        arriving.length > 0 ? (
+                          <RuleCountCard
+                            rules={arriving}
+                            title={`Rules that move cards into ${phase.name}`}
+                            to={boardRulesPath(factoryId, boardId, { into: phase.key })}
+                            boardId={boardId}
+                            boards={catalog.data}
+                          />
+                        ) : (
+                          <Muted>No rule moves cards here</Muted>
+                        )
+                      ) : (
+                        <Muted>Rules didn’t load</Muted>
+                      )}
+                      {phase.key === start && <Muted>New cards start here</Muted>}
+                    </>
+                  }
+                  starts={
+                    <StartsToggle
+                      label={phase.name}
+                      autoStart={phase.autoStart ?? false}
+                      autoStartWhen={phase.autoStartWhen}
+                      onChange={onAutoStart && (on => onAutoStart(phase.key, on))}
+                    />
+                  }
+                  agent={<PhaseRunnerCard factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />}
+                />
+              </div>
             </li>
           );
         })}
       </ol>
     </section>
-  );
-}
-
-/** Who works a card in a phase: its agent, how it starts, the Factory tools it gets; or nobody. */
-function Work({
-  factoryId,
-  boardId,
-  phase,
-  skills,
-}: {
-  factoryId: string;
-  boardId: string;
-  phase: StoredPhaseInfo;
-  skills: FactorySkillInfo[] | undefined;
-}) {
-  if (!phase.runner) {
-    return <Muted>{unattended(phase.kind).text}</Muted>;
-  }
-  return (
-    <>
-      <PhaseRunnerCard factoryId={factoryId} boardId={boardId} phase={phase} skills={skills} />
-      {(!phase.autoStart || !!phase.autoStartWhen?.conditions.length) && <Muted>{startsText(phase)}</Muted>}
-      {phase.tools?.map(id => (
-        <Muted key={id}>{toolLabel(id)}</Muted>
-      ))}
-    </>
   );
 }

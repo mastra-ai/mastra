@@ -33,9 +33,11 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
     ? 'Loading…'
     : query.isError
       ? 'Items not routed didn’t load.'
-      : items.length === 0
-        ? 'Every new issue and pull request found a board.'
-        : `${items.length}${query.hasNextPage ? '+' : ''} waiting for a board.`;
+      : query.hasNextPage
+        ? `${items.length > 0 ? `${items.length}+` : 'More'} waiting for a board.`
+        : items.length === 0
+          ? 'Every new issue and pull request found a board.'
+          : `${items.length} waiting for a board.`;
 
   return (
     <section
@@ -60,7 +62,7 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
         }
         description={summary}
       />
-      {items.length > 0 && (
+      {(items.length > 0 || query.hasNextPage) && (
         <ul aria-label="Items not routed" className="ml-11 flex flex-col">
           {items.map(item => (
             <li key={item.id} className="border-border border-t py-3">

@@ -11,7 +11,7 @@ import { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../hooks/useIntakeOrder';
 import { useBoardRulesQuery, useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
-import { boardRulesPath, LEAVING, RULES_INTO_PARAM } from '../../boardConfig/boardConfigPaths';
+import { boardRulesPath, RULES_INTO_PARAM, RULES_LEAVING_PARAM } from '../../boardConfig/boardConfigPaths';
 import { boardFlow } from '../boardFlow';
 import { phaseName, phaseOptions, reorderWithin } from '../ruleTargets';
 import { arrivalFallback, isOpenedLane, LANE_SECTIONS, laneRules, shadowedBy } from '../ruleLanes';
@@ -80,18 +80,18 @@ function BoardLanes({
     rule => rule.target.moveToBoardKey === board.id && rule.target.boardKey !== board.id,
   );
   const skips = new Map(skipped.data?.skipped.map(skip => [skip.routeId, skip]));
-  const into = useSearchParams()[0].get(RULES_INTO_PARAM) ?? undefined;
+  const [params] = useSearchParams();
+  const into = params.get(RULES_INTO_PARAM) ?? undefined;
+  const leaving = params.has(RULES_LEAVING_PARAM);
+  const focused = leaving || into !== undefined;
   const flow =
-    into && projectRules.data
+    focused && projectRules.data
       ? boardFlow(projectRules.data.intakeRoutes, { key: board.id, initialPhase: board.initialPhase })
       : undefined;
-  const only =
-    flow && into
-      ? new Set((into === LEAVING ? flow.leaving : (flow.into[into] ?? [])).map(rule => rule.id))
-      : undefined;
+  const only = flow && new Set((leaving ? flow.leaving : (flow.into.get(into ?? '') ?? [])).map(rule => rule.id));
   const shows = (lane: readonly IntakeRouteInfo[]) => !only || lane.some(rule => only.has(rule.id));
 
-  if (query.isPending || (into && projectRules.isPending)) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending || (focused && projectRules.isPending)) return <Skeleton className="h-64 w-full" />;
   if (query.isError) return <Notice variant="destructive">This board’s rules didn’t load.</Notice>;
 
   const run = (changes: RouteWrite[]) => writes.mutateAsync(changes).catch(error => toast.error(failureMessage(error)));
@@ -193,11 +193,11 @@ function BoardLanes({
       {projectRules.isError && (
         <Notice variant="warning">Rules on other boards that move cards here didn’t load, so they aren’t shown.</Notice>
       )}
-      {into && (
+      {focused && (
         <IntoFilter
           count={only?.size}
-          into={into === LEAVING ? 'other boards' : (phaseName(board, into) ?? into)}
-          leaving={into === LEAVING}
+          into={leaving || !into ? 'other boards' : (phaseName(board, into) ?? into)}
+          leaving={leaving}
           showAll={boardRulesPath(factoryId, board.id)}
         />
       )}

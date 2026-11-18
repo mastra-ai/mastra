@@ -22,6 +22,14 @@ export const PHASE_TOOLS = [
   { id: 'factory_review_source', label: 'Review the source of a change request' },
 ] as const;
 
+/** Starts a phase on its own or by hand. Turning it off drops the cards it was limited to. */
+export function withAutoStart<Phase extends { autoStart?: boolean; autoStartWhen?: unknown }>(
+  phase: Phase,
+  on: boolean,
+): Phase {
+  return { ...phase, autoStart: on, autoStartWhen: on ? phase.autoStartWhen : null };
+}
+
 /** What the config page edits and saves; everything else on the board stays as stored. */
 export interface BoardDraft {
   name: string;
@@ -38,7 +46,7 @@ export function draftChanged(draft: BoardDraft, board: StoredBoardInfo): boolean
 }
 
 /** Every other phase when `nextPhases` is unset, none from a terminal phase, as the server reads it. */
-export function nextPhasesOf(phase: StoredPhaseInfo, phases: StoredPhaseInfo[]): string[] {
+export function nextPhasesOf(phase: StoredPhaseInfo, phases: readonly StoredPhaseInfo[]): string[] {
   if (phase.nextPhases != null) return phase.nextPhases;
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
 }

@@ -1,5 +1,7 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { PhaseSetup } from '../../domains/factory/components/PhaseSetup';
+import { PhaseSetupHoverCard } from '../../domains/factory/components/PhaseSetupHoverCard';
+import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
 import type { ProviderPerson } from '@mastra/factory/work-items/card-people';
 import { boardLoop } from '../../domains/factory/boardFlow';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -170,6 +172,7 @@ export function BoardContent({
     targetItemId,
     targetReady,
   });
+  const [phaseCard] = useState(() => createHoverCardHandle<string>());
   const collapsedStages = useCollapsedStages(
     targetItemId && targetListed ? { itemId: targetItemId, stages: targetStages } : undefined,
   );
@@ -215,7 +218,13 @@ export function BoardContent({
       stage,
       phaseKind: definition.id === DEFAULT_BOARD_ID ? undefined : stage.kind,
       setup: (
-        <PhaseSetup factoryId={factoryProjectId} boardId={definition.id} phase={stage} phases={definition.phases} />
+        <PhaseSetup
+          handle={phaseCard}
+          factoryId={factoryProjectId}
+          boardId={definition.id}
+          phase={stage}
+          phases={definition.phases}
+        />
       ),
       loading,
       taskCount,
@@ -351,6 +360,12 @@ export function BoardContent({
             }
           />
         }
+      />
+      <PhaseSetupHoverCard
+        handle={phaseCard}
+        factoryId={factoryProjectId}
+        boardId={definition.id}
+        phases={definition.phases}
       />
     </div>
   );

@@ -44,7 +44,12 @@ export function IntakeOrderSection({ factoryId }: { factoryId: string }) {
           <SettingsSkeleton label="Loading intake order" variant="item" rows={3} />
         </SettingsContainer>
       ) : query.isError ? (
-        <Notice variant="destructive">The intake order didn’t load.</Notice>
+        <div className="flex flex-col gap-3">
+          <Notice variant="destructive">The intake order didn’t load.</Notice>
+          <div className="border-border rounded-xl border">
+            <NotRoutedStep factoryId={factoryId} />
+          </div>
+        </div>
       ) : (
         // Keyed so an unsaved order never carries over to another project.
         <OrderEditor key={factoryId} factoryId={factoryId} order={query.data} />

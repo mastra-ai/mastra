@@ -164,7 +164,7 @@ export function RuleLane({
                       type="button"
                       aria-label={`Edit conditions of ${rule.name}`}
                       onClick={() => onEdit(rule, 'conditions')}
-                      onKeyDown={canEdit ? key => drag.onKeyDown(key, index) : undefined}
+                      onKeyDown={sortable ? key => drag.onKeyDown(key, index) : undefined}
                       className={cn(
                         'flex w-full items-start gap-2.5 rounded-lg border bg-fill-subtle px-3 py-2 text-left transition-colors hover:border-border-hover',
                         skipped ? 'border-dashed border-border opacity-50' : 'border-border',

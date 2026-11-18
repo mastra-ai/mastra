@@ -36,15 +36,20 @@ export function newSkillPath(factoryId: string, boardId: string): string {
   return `${boardPath(factoryId, boardId)}/new-skill`;
 }
 
-/** The board's rules. Outside `config/` for the same reason as the skills page. */
-export function boardRulesPath(factoryId: string, boardId: string, into?: string): string {
-  const path = `${boardPath(factoryId, boardId)}/rules`;
-  return into ? `${path}?${new URLSearchParams({ [RULES_INTO_PARAM]: into })}` : path;
-}
+/** Narrows the Rules page to the rules moving cards into one phase, or to those sending cards to other boards. */
+export type RulesFocus = { into: string } | 'leaving';
 
-/** Narrows the Rules page to the rules moving cards into one phase, or {@link LEAVING} for those sending them away. */
 export const RULES_INTO_PARAM = 'into';
-export const LEAVING = 'other-boards';
+/** A param of its own, so no phase key can be mistaken for it. */
+export const RULES_LEAVING_PARAM = 'leaving';
+
+/** The board's rules. Outside `config/` for the same reason as the skills page. */
+export function boardRulesPath(factoryId: string, boardId: string, focus?: RulesFocus): string {
+  const path = `${boardPath(factoryId, boardId)}/rules`;
+  if (!focus) return path;
+  if (focus === 'leaving') return `${path}?${RULES_LEAVING_PARAM}`;
+  return `${path}?${new URLSearchParams({ [RULES_INTO_PARAM]: focus.into })}`;
+}
 
 /** The order intake asks boards to take a new item, on the intake page. */
 export const INTAKE_ORDER_ANCHOR = 'intake-order';

@@ -44,6 +44,8 @@ async function sendBoardRequest(
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     ...(init ? { body: JSON.stringify(init.body) } : {}),
+  }).catch(() => {
+    throw new BoardRequestError(0, undefined, 'Factory could not be reached.');
   });
   const body = (await res.json().catch(() => undefined)) as (Partial<StoredBoardResponse> & BoardRefusal) | undefined;
   if (!res.ok || !body?.board) throw refusal(res.status, body);

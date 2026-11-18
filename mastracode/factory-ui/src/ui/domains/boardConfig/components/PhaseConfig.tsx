@@ -32,6 +32,7 @@ import {
   PHASE_TOOLS,
   goalRunsValid,
   nextPhasesOf,
+  withAutoStart,
 } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
@@ -215,7 +216,7 @@ export function PhaseConfig({
                 checked={phase.autoStart ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {
-                  onChange({ ...phase, autoStart: checked, autoStartWhen: checked ? phase.autoStartWhen : null });
+                  onChange(withAutoStart(phase, checked));
                   if (!checked) onRawRule('autoStartWhen', undefined);
                 }}
               />

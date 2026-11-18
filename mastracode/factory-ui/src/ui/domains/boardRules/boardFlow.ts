@@ -3,7 +3,7 @@ import { LANE_EVENTS, laneRules, shadowedBy } from './ruleLanes';
 
 export interface BoardFlow {
   /** Rules that can move cards into each phase, this board's and other boards', by phase key. */
-  into: Record<string, IntakeRouteInfo[]>;
+  into: Map<string, IntakeRouteInfo[]>;
   /** This board's rules that send its cards to another board. */
   leaving: IntakeRouteInfo[];
 }
@@ -24,7 +24,7 @@ export function boardFlow(rules: readonly IntakeRouteInfo[], board: { key: strin
     }
   }
 
-  const into: Record<string, IntakeRouteInfo[]> = {};
+  const into = new Map<string, IntakeRouteInfo[]>();
   const leaving: IntakeRouteInfo[] = [];
   for (const rule of live) {
     const own = rule.target.boardKey === board.key;
@@ -34,7 +34,7 @@ export function boardFlow(rules: readonly IntakeRouteInfo[], board: { key: strin
       continue;
     }
     const phase = rule.target.phaseKey ?? board.initialPhase;
-    (into[phase] ??= []).push(rule);
+    into.set(phase, [...(into.get(phase) ?? []), rule]);
   }
   return { into, leaving };
 }

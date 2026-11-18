@@ -37,6 +37,8 @@ describe('nameRepeats', () => {
     ],
     ['Closed issues go to Done', `Issue closed ${describeRule(null)} Done`, true],
     ['Duplicates go to Canceled', `Issue closed ${describeRule(null)} Canceled`, false],
+    ['緊急対応', `Issue closed ${describeRule(null)} Done`, false],
+    ['Sécurité urgente', `Issue opened ${describeRule(security)} Backlog`, false],
   ])('%#: "%s" over "%s" repeats: %s', (name, shown, repeats) => expect(nameRepeats(name, shown)).toBe(repeats));
 });
 

@@ -4,20 +4,20 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { useRef, useState } from 'react';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router';
 
-import type { FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
-import { useDeleteBoardMutation, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { boardPath, orderedBoards } from '../../factory/boardCatalog';
+import { queryKeys } from '../../../../api/keys';
+import type { BoardCatalogResponse, FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { boardConfigPath, boardSkillsPath, parseBoardConfigPath } from '../boardConfigPaths';
 import { useBoardDraft } from '../BoardDraftProvider';
-import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase } from '../boardDraft';
+import { canRemovePhase, draftChanged, phaseHasProblem, rawRuleKey, removePhase, withAutoStart } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { SettingsColumn } from './SettingsColumn';
 import { BoardOverview } from './BoardOverview';
@@ -60,18 +60,9 @@ export function BoardConfigEditor({
     discard();
     setDiscards(count => count + 1);
   };
-  const catalog = useBoardCatalog(factory.id);
   const navigate = useNavigate();
   const save = useSaveBoardMutation(factory.id, boardId);
-  // discard() lands on the next render, after the navigation below asks the blocker.
-  const deleted = useRef(false);
-  const remove = useDeleteBoardMutation(factory.id, boardId, () => {
-    deleted.current = true;
-    discard();
-    // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
-    const next = orderedBoards(catalog.data ?? []).find(other => other.id !== boardId);
-    void navigate(next ? boardPath(factory.id, next.id) : `/factories/${factory.id}`, { replace: true });
-  });
+  const queryClient = useQueryClient();
 
   const readOnly = !canEdit || !board.editable;
   const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
@@ -98,7 +89,11 @@ export function BoardConfigEditor({
   const stale = save.error?.code === 'revision_mismatch';
 
   const blocker = useBlocker(({ nextLocation }) => {
-    if (!changed || deleted.current) return false;
+    // A deleted board leaves the catalog before its header navigates away: there is nothing left to save.
+    const listed = queryClient
+      .getQueryData<BoardCatalogResponse>(queryKeys.boardCatalog(factory.id))
+      ?.boards.some(other => other.id === boardId);
+    if (!changed || listed === false) return false;
     const next = parseBoardConfigPath(nextLocation.pathname);
     // The skills, rules and intake pages have no save bar, so leaving for them counts as leaving the board's settings.
     return (
@@ -172,6 +167,17 @@ export function BoardConfigEditor({
           boardId={boardId}
           phases={draft.phases}
           skills={skills}
+          onAutoStart={
+            readOnly || locked
+              ? undefined
+              : (phaseKey, on) => {
+                  setDraft(current => ({
+                    ...current,
+                    phases: current.phases.map(phase => (phase.key === phaseKey ? withAutoStart(phase, on) : phase)),
+                  }));
+                  if (!on) setRawRule(rawRuleKey(phaseKey, 'autoStartWhen'), undefined);
+                }
+          }
           action={
             sidebarHidden && !readOnly ? (
               <AddPhaseButton factoryId={factory.id} boardId={boardId} board={board} disabled={locked} />
@@ -193,43 +199,6 @@ export function BoardConfigEditor({
                   <IconChevronRightMedium className="text-muted-foreground size-icon-md" aria-hidden />
                 </Link>
               </SettingsContainer>
-            </SettingsSubsection>
-          )}
-
-          {board.source !== 'builtin' && !readOnly && (
-            <SettingsSubsection title="Delete">
-              <SettingsContainer>
-                <SettingsRow label="Delete board" description="A board that still has cards cannot be deleted.">
-                  <AlertDialog>
-                    <AlertDialog.Trigger
-                      render={
-                        <Button size="sm" variant="destructive" disabled={remove.isPending}>
-                          Delete
-                        </Button>
-                      }
-                    />
-                    <AlertDialog.Content>
-                      <AlertDialog.Header>
-                        <AlertDialog.Title>Delete {board.name}?</AlertDialog.Title>
-                        <AlertDialog.Description>
-                          The board and its phases are removed from this project.
-                        </AlertDialog.Description>
-                      </AlertDialog.Header>
-                      <AlertDialog.Footer>
-                        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                        <AlertDialog.Action onClick={() => remove.mutate(board.revision ?? 0)}>
-                          Delete
-                        </AlertDialog.Action>
-                      </AlertDialog.Footer>
-                    </AlertDialog.Content>
-                  </AlertDialog>
-                </SettingsRow>
-              </SettingsContainer>
-              {remove.error && (
-                <Notice variant="destructive" role="alert">
-                  <Notice.Message>The board was not deleted. {remove.error.reasons}</Notice.Message>
-                </Notice>
-              )}
             </SettingsSubsection>
           )}
         </SettingsColumn>

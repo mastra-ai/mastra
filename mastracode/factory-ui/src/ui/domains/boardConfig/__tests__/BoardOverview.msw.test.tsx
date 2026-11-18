@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { rule, serveRules } from '../../boardRules/__tests__/fixtures/rulesServer';
@@ -69,7 +69,7 @@ describe('Board map', () => {
     expect(phase('Canceled').getByRole('link', { name: '1 rule' })).toHaveAttribute('href', `${RULES}?into=canceled`);
     expect(phase('Intake').getByRole('link', { name: '1 rule' })).toBeInTheDocument();
     expect(phase('Intake').getByText('New cards start here')).toBeInTheDocument();
-    expect(phase('Triage').getByText('No rule')).toBeInTheDocument();
+    expect(phase('Triage').getByText('No rule moves cards here')).toBeInTheDocument();
     expect(screen.getByText(/cards from here to other boards/)).toHaveTextContent(
       '1 rule sends cards from here to other boards.',
     );
@@ -145,9 +145,9 @@ describe('Board map', () => {
 
     const planning = within(await screen.findByRole('listitem', { name: 'Planning' }));
     expect(planning.getByText('Approved on its own only if labels contains small')).toBeInTheDocument();
-    expect(phase('Triage').getByText('Auto-start')).toBeInTheDocument();
     expect(phase('Triage').getByText('Starts on its own only if labels contains bug')).toBeInTheDocument();
-    expect(planning.queryByText('Auto-start')).not.toBeInTheDocument();
+    expect(planning.getByText('Started by hand')).toBeInTheDocument();
+    expect(phase('Done').queryByText('Starts')).not.toBeInTheDocument();
 
     await user.hover(planning.getByRole('link', { name: 'factory-plan' }));
     expect(await screen.findByRole('heading', { name: 'factory-plan' })).toBeInTheDocument();
@@ -155,12 +155,63 @@ describe('Board map', () => {
     expect(screen.getByText('Goal, up to 3 runs')).toBeInTheDocument();
     expect(screen.getByText('A plan the team approves')).toBeInTheDocument();
 
-    const review = phase('Review').getByRole('link', { name: 'gone-skill' });
+    const review = phase('Review').getByRole('link', { name: 'gone-skill, skill not found' });
     expect(review).toHaveAttribute('href', `/factories/${FACTORY_ID}/work/config/pr-review`);
     await user.hover(review);
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'This factory has no gone-skill skill, so cards entering Review fail to start.',
     );
+  });
+
+  it('lists every other phase as next when a phase leaves its moves unset', async () => {
+    const phases = storedWorkBoard().board.phases.map(candidate =>
+      candidate.key === 'triage' ? { ...candidate, nextPhases: undefined } : candidate,
+    );
+    stubFactory();
+    serveBoard(storedWorkBoard({ phases }));
+    serveRules({ rules: [] });
+    renderAt(OVERVIEW);
+
+    const triage = within(await screen.findByRole('listitem', { name: 'Triage' }));
+    for (const other of phases.filter(candidate => candidate.key !== 'triage')) {
+      expect(triage.getAllByText(other.name).length).toBeGreaterThan(0);
+    }
+    expect(triage.queryByText('Stays here')).not.toBeInTheDocument();
+  });
+
+  it('switches a phase to start on its own, saved with the rest of the board', async () => {
+    const user = userEvent.setup();
+    const saved: { phases: { key: string; autoStart?: boolean }[] }[] = [];
+    stubFactory();
+    serveBoard(storedWorkBoard());
+    serveRules({ rules: [] });
+    server.use(
+      http.patch('*/web/factory/projects/:id/boards/work', async ({ request }) => {
+        saved.push((await request.json()) as (typeof saved)[number]);
+        return HttpResponse.json(storedWorkBoard());
+      }),
+    );
+    renderAt(OVERVIEW);
+
+    const planning = within(await screen.findByRole('listitem', { name: 'Planning' }));
+    await user.click(planning.getByRole('switch', { name: 'Planning: start on its own' }));
+    expect(planning.getByText('Starts on its own')).toBeInTheDocument();
+    expect(saved).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].phases.find(candidate => candidate.key === 'planning')?.autoStart).toBe(true);
+  });
+
+  it('shows how a phase starts without a switch to someone who cannot edit the board', async () => {
+    stubFactory();
+    serveBoard(storedWorkBoard({}, false));
+    serveRules({ rules: [] });
+    renderAt(OVERVIEW);
+
+    const planning = within(await screen.findByRole('listitem', { name: 'Planning' }));
+    expect(planning.getByText('Started by hand')).toBeInTheDocument();
+    expect(planning.queryByRole('switch')).not.toBeInTheDocument();
   });
 
   it("doesn't claim a phase has no rule when the rules didn't load", async () => {
@@ -171,7 +222,7 @@ describe('Board map', () => {
     renderAt(OVERVIEW);
 
     expect(await screen.findByText('Rules didn’t load, so the map doesn’t count them.')).toBeInTheDocument();
-    expect(phase('Done').getByText('Unknown')).toBeInTheDocument();
-    expect(screen.queryByText('No rule')).not.toBeInTheDocument();
+    expect(phase('Done').getByText('Rules didn’t load')).toBeInTheDocument();
+    expect(screen.queryByText('No rule moves cards here')).not.toBeInTheDocument();
   });
 });

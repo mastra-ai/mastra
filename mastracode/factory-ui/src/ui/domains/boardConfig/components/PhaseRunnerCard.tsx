@@ -57,6 +57,7 @@ export function PhaseRunnerCard({
       >
         <Icon aria-hidden className="size-icon-sm shrink-0 opacity-70" />
         <span className="truncate">{skillName ?? 'Agent'}</span>
+        {broken && <span className="sr-only">{missing ? ', skill not found' : ', skill failed to load'}</span>}
       </HoverCardTrigger>
       <HoverCardContent
         side="right"

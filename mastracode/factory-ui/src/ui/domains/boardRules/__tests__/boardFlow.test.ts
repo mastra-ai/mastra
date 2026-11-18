@@ -17,12 +17,20 @@ function to(boardKey: string, phaseKey: string, moveToBoardKey: string | null = 
 /** Rule names per phase, and leaving rule names, so a failure reads as which rule went where. */
 function names({ into, leaving }: BoardFlow) {
   return {
-    into: Object.fromEntries(Object.entries(into).map(([phase, rules]) => [phase, rules.map(rule => rule.name)])),
+    into: Object.fromEntries([...into].map(([phase, rules]) => [phase, rules.map(rule => rule.name)])),
     leaving: leaving.map(rule => rule.name),
   };
 }
 
 describe('boardFlow', () => {
+  it('takes a phase whose key is also an object property name', () => {
+    const flow = boardFlow(
+      [rule({ name: 'Built', on: ['work_item.closed'], target: to('work', 'constructor') })],
+      work,
+    );
+    expect(names(flow).into).toEqual({ constructor: ['Built'] });
+  });
+
   it('counts each rule under the phase it moves cards into, the first phase when it names none', () => {
     const flow = boardFlow(
       [

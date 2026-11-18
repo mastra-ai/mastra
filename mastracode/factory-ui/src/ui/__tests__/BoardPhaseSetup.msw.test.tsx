@@ -3,7 +3,7 @@
  * (list layout): who works the card, whether it starts on its own, and how its exit tool's success is approved. The
  * header opens the phase's settings; its card reads the phase step by step and switches starting on its own.
  */
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { workBoard, workBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createQueryClient } from '../../query-client';
 import type { BoardCatalogResponse, ReplaceBoardBody } from '../../api/types';
 import { storedWorkBoard } from '../domains/boardConfig/__tests__/fixtures/work-board';
@@ -151,6 +151,21 @@ describe('Board phase setup', () => {
     expect(screen.getByText('Approved on its own only if labels contains effort:low')).toBeVisible();
   });
 
+  it('keeps one card open, showing the phase last hovered', async () => {
+    const user = userEvent.setup();
+    const [work, ...others] = storedCatalog.boards;
+    const phases = work.phases.map(phase => (phase.id === 'execute' ? { ...phase, skill: 'factory-build' } : phase));
+    stubWorkBoard({ ...storedCatalog, boards: [{ ...work, phases }, ...others] });
+    renderWorkBoard('?layout=board');
+
+    await user.hover(await within(await columnHeader('Planning')).findByRole('link', { name: /runs factory-plan/ }));
+    expect(await screen.findByRole('list', { name: 'Planning, step by step' })).toBeVisible();
+
+    await user.hover(await within(await columnHeader('Building')).findByRole('link', { name: /runs factory-build/ }));
+    expect(await screen.findByRole('list', { name: 'Building, step by step' })).toBeVisible();
+    await waitFor(() => expect(screen.getAllByRole('list', { name: /, step by step$/ })).toHaveLength(1));
+  });
+
   it("shows the same in the list layout's group headers", async () => {
     stubWorkBoard(workBoardCatalog);
     renderWorkBoard();
@@ -194,7 +209,7 @@ describe('Board phase setup', () => {
         return HttpResponse.json(storedWorkBoard({ phases, revision: 2 }));
       }),
     );
-    renderWorkBoard('?layout=board');
+    const { client } = renderWorkBoard('?layout=board');
 
     await user.hover(
       await within(await columnHeader('Planning')).findByRole('link', { name: /ends when submit_plan/ }),
@@ -213,13 +228,54 @@ describe('Board phase setup', () => {
       `/factories/${FACTORY_ID}/work/config/planning`,
     );
 
-    await user.click(await screen.findByRole('switch', { name: 'Planning: start on its own' }));
-    await expect.poll(() => saved.length).toBe(1);
+    await user.click(await within(steps).findByRole('switch', { name: 'Planning: start on its own' }));
+    await waitForMutationsIdle(client);
+    expect(saved).toHaveLength(1);
     expect(saved[0].expectedRevision).toBe(1);
     expect(saved[0].phases.find(phase => phase.key === 'planning')?.autoStart).toBe(true);
     expect(saved[0].phases.find(phase => phase.key === 'execute')?.autoStart).toBe(
       storedWorkBoard().board.phases.find(phase => phase.key === 'execute')?.autoStart,
     );
+  });
+
+  it('reloads the board when someone saved it first, so trying again saves against their version', async () => {
+    const user = userEvent.setup();
+    const sentRevisions: number[] = [];
+    let revision = 1;
+    stubWorkBoard(storedCatalog);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/intake-routes`, () =>
+        HttpResponse.json({ intakeRoutes: [], canEdit: true }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards/work`, () =>
+        HttpResponse.json(storedWorkBoard({ revision })),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards/work`, async ({ request }) => {
+        const body = (await request.json()) as ReplaceBoardBody;
+        sentRevisions.push(body.expectedRevision);
+        if (body.expectedRevision !== revision) {
+          return HttpResponse.json({ error: 'revision_mismatch', message: 'Board changed.' }, { status: 409 });
+        }
+        revision += 1;
+        return HttpResponse.json(storedWorkBoard({ revision }));
+      }),
+    );
+    const { client } = renderWorkBoard('?layout=board');
+
+    await user.hover(
+      await within(await columnHeader('Planning')).findByRole('link', { name: /ends when submit_plan/ }),
+    );
+    const steps = await screen.findByRole('list', { name: 'Planning, step by step' });
+    const toggle = await within(steps).findByRole('switch', { name: 'Planning: start on its own' });
+    revision = 3;
+    await user.click(toggle);
+    await waitForMutationsIdle(client);
+    expect(await within(steps).findByText('Didn’t save, try again')).toBeVisible();
+
+    await expect.poll(() => client.isFetching()).toBe(0);
+    await user.click(toggle);
+    await waitForMutationsIdle(client);
+    expect(sentRevisions).toEqual([1, 3]);
   });
 
   it("offers no switch to someone who can't edit the board", async () => {
@@ -239,6 +295,7 @@ describe('Board phase setup', () => {
       await within(await columnHeader('Planning')).findByRole('link', { name: /ends when submit_plan/ }),
     );
     expect(await screen.findByText('No rule moves cards here')).toBeVisible();
+    expect(screen.getByText('Started by hand')).toBeVisible();
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 });

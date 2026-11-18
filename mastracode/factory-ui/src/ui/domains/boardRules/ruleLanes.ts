@@ -297,7 +297,7 @@ const FILLER_WORDS = new Set([
 ]);
 
 function meaningfulWords(text: string): string[] {
-  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? [])
+  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
     .filter(word => !FILLER_WORDS.has(word))
     .map(word => word.replace(/s$/, ''));
 }
