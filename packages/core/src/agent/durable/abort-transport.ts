@@ -75,14 +75,41 @@ export async function ensureRemoteAbortListener(
     const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
     if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
   });
+  remoteAbortListeners.set(entry, listener.detach);
   try {
     await listener.ready;
   } catch (error) {
+    remoteAbortListeners.delete(entry);
     await listener.detach();
     // Release the claim so the next step retries a transient subscription failure.
     entry.remoteAbortListenerInstalled = false;
     throw error;
   }
+}
+
+/** The detach handle of each registry entry's remote abort listener. */
+const remoteAbortListeners = new WeakMap<RunRegistryEntry, () => Promise<void>>();
+
+/**
+ * Stop listening for remote abort requests for `runId` in this process once the
+ * run has reached a final status (success, failed, canceled). Nothing is left to
+ * stop, and a listener left in place would keep its subscription (a dedicated
+ * connection on Redis Streams) until the registry entry is cleaned up, and would
+ * acknowledge aborts of the finished run as if it had stopped it. Removing it
+ * makes an abort of a finished durable run report `false`, like one of a
+ * finished plain run.
+ *
+ * Only the listener is released: the registry entry, the run's stream history
+ * and its run record stay until cleanupTimeoutMs. Must not be called for a
+ * suspended run, which still needs to hear aborts once resumed. See #30479.
+ */
+export async function releaseRemoteAbortListener(runId: string, mastra?: Mastra): Promise<void> {
+  const entry = getRunRegistryEntry(runId, mastra);
+  const detach = entry && remoteAbortListeners.get(entry);
+  if (!entry || !detach) return;
+  remoteAbortListeners.delete(entry);
+  entry.remoteAbortListenerInstalled = false;
+  await detach();
 }
 
 /** Controllers this module created for a worker that had none, as opposed to an owner's controller wired to its `abort()`. */

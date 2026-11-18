@@ -78,7 +78,7 @@ import type { AgentAbortThreadOptions, AgentDurableOption, AgentModelManagerConf
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
+import { publishAbortRequest, releaseRemoteAbortListener, requestAcknowledgedAbort } from './abort-transport';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -2850,6 +2850,10 @@ export class DurableAgent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
+      // The run reached a final status while this execution owns it: stop
+      // listening for aborts now rather than when cleanupTimeoutMs releases the
+      // registry entry. Suspended runs keep the listener for their resume.
+      if (finished) await releaseRemoteAbortListener(runId, this.#mastra);
       // The claim is held until the save lands (bounded), so it is not rejected as a stale write.
       if (deadlineSave) await settledOrElapsed(deadlineSave, DEADLINE_SAVE_CLAIM_HOLD_MS);
     };
@@ -4648,6 +4652,8 @@ export class DurableAgent<
           const finished = !!result?.status && result.status !== 'suspended';
           await executionFence.settle(async () => {
             if (finished) await this.deleteRunSnapshots(runId);
+            // Same as settleExecution(): a finished run has nothing left to abort.
+            if (finished) await releaseRemoteAbortListener(runId, this.#mastra);
           });
           if (result?.status === 'failed') {
             throw this.executionEngine.workflowFailureError((result as any).error, 'Workflow recover failed');
