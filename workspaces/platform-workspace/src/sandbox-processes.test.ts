@@ -199,6 +199,37 @@ describe('PlatformSandbox.processes', () => {
     (sandbox as unknown as { _lease: unknown })._lease = null;
   };
 
+  it.each([
+    { name: 'drops GitHub credentials from a process started on a vault VM', vault: true, kept: { A: '1' } },
+    {
+      name: 'keeps GitHub credentials for a process started on a VM that is not vault',
+      vault: false,
+      kept: { GH_TOKEN: 'ghs_real', A: '1' },
+    },
+  ])('$name', async ({ vault, kept }) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault }))
+      .mockResolvedValueOnce(e2bLease());
+    const sent: (Record<string, string> | undefined)[] = [];
+    const { sandbox } = makeSandbox(fetchMock, jwt => {
+      const commands = vm.commandsFor(jwt);
+      return {
+        ...commands,
+        run: (command, opts) => {
+          sent.push(opts.envs);
+          return commands.run(command, opts);
+        },
+      };
+    });
+
+    const handle = await sandbox.processes!.spawn('true', { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+    await handle.wait();
+
+    expect(sandbox.vault).toBe(vault);
+    expect(sent).toEqual([kept]);
+  });
+
   it('runs a background process from a cwd relative to the working directory, and fails cleanly when it is missing', async () => {
     const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'workdir-')));
     // Named after the unique temp dir, so no host directory can shadow the fallback.
