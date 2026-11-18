@@ -218,10 +218,13 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
       'us.openai.gpt-6-luna',
       'global.openai.gpt-6-sol',
       'us.openai.gpt-5.6-sol',
+      'us.openai.gpt-4o',
     ]) {
-      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(false);
+      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(true);
     }
-    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-4o')).toBe(true);
+    // gpt-5-pro is not in the openai temperature list, and Bedrock inherits that.
+    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-5-pro')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/global.openai.gpt-5-pro')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-oss-120b')).toBeUndefined();
   });
 });

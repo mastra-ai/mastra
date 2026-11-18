@@ -2252,22 +2252,57 @@ export class EventedRun<
 
     // Dispatch-only callers do not own execution spans; the worker may run in
     // another process, so no local span or tracing registry entry is created here.
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.start',
+    // execute() still waits for the worker's finish event in the background so the
+    // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
+    let markDispatched!: () => void;
+    let isDispatched = false;
+    const dispatched = new Promise<void>(resolve => {
+      markDispatched = () => {
+        isDispatched = true;
+        resolve();
+      };
+    });
+    const execution = this.executionEngine.execute<
+      TState,
+      TInput,
+      WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+    >({
+      workflowId: this.workflowId,
       runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: requestContext.toJSON(),
-        actor,
-        initialState: initialStateToUse,
-        perStep,
-        ...(this.storageVersion === 2 && { storageVersion: 2 }),
-      },
+      resourceId: this.resourceId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: inputDataToUse,
+      initialState: initialStateToUse,
+      pubsub: this.mastra.pubsub,
+      retryConfig: this.retryConfig,
+      requestContext,
+      actor,
+      abortController: this.abortController,
+      perStep,
+      storageVersion: this.storageVersion,
+      onDispatched: markDispatched,
     });
 
-    // Return immediately without waiting for completion
+    // execute() only tracks the wait for the finish event. Nobody awaits this run's
+    // callbacks, so track the whole execution now, before the dispatch wait, so
+    // shutdown() drains them before it closes storage and pubsub. Failures before
+    // dispatch reject the caller below, so only later ones are logged here.
+    // `background` always fulfills, even if the logger throws, so shutdown's drain never
+    // sees a rejection from it and the release chain cannot raise an unhandled rejection.
+    const background = execution.catch(error => {
+      if (!isDispatched) return;
+      try {
+        this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      } catch {
+        // A failing logger must not fail the run's tracking or shutdown.
+      }
+    });
+    const releaseTracking = this.mastra.__trackEventedRun(background);
+    void background.then(releaseTracking);
+
+    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
+    await Promise.race([dispatched, execution]);
     return { runId: this.runId };
   }
 

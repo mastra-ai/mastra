@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
+    "model": "prime/anthropic/claude-fable-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
     "model": "prime/anthropic/claude-opus-4.6",
     "imageInput": true,
     "audioInput": false,
@@ -173,7 +185,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943717,
+    "maxOutput": 393216,
     "inputCost": 0.44,
     "outputCost": 1.32
   },
@@ -185,7 +197,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "maxOutput": 65536,
     "inputCost": 0.44,
     "outputCost": 1.32
   },
@@ -197,21 +209,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 384000,
+    "maxOutput": 393216,
     "inputCost": 1.91,
     "outputCost": 3.83
-  },
-  {
-    "model": "prime/deepseek/deepseek-v4.1-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.039,
-    "outputCost": 1.2
   },
   {
     "model": "prime/deepseek/deepseek-v4.1-flash-1017",
@@ -310,6 +310,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "prime/google/gemini-4-carbon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "prime/google/gemma-3-27b-it",
     "imageInput": true,
     "audioInput": false,
@@ -341,7 +353,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 262144,
+    "maxOutput": 943718,
     "inputCost": 1.25,
     "outputCost": 4.25
   },
@@ -761,7 +773,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 32768,
+    "maxOutput": 131072,
     "inputCost": 0.07,
     "outputCost": 0.3
   },
@@ -820,10 +832,22 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 235929,
-    "inputCost": 0.99,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
     "outputCost": 3.2
+  },
+  {
+    "model": "prime/thinkingmachines/inkling-2-small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "prime/x-ai/grok-4.6",
@@ -860,30 +884,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 943718,
     "inputCost": 1.54,
     "outputCost": 4.84
-  },
-  {
-    "model": "prime/z-ai/glm-5.3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.4,
-    "outputCost": 2.464
-  },
-  {
-    "model": "prime/z-ai/glm-5.3-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.0525,
-    "outputCost": 0.25
   }
 ]}
 />
@@ -922,7 +922,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "prime/z-ai/glm-5.3-flash"
+      ? "prime/z-ai/glm-5.2"
       : "prime/anthropic/claude-fable-5";
   }
 });
