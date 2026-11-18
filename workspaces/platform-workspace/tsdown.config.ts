@@ -3,6 +3,8 @@ import { defineConfig } from 'tsdown';
 
 export default defineConfig({
   entry: ['src/index.ts'],
+  // The accessibility helper ships as its Python source text.
+  loader: { '.py': 'text' },
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',

@@ -8,7 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
-import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
+import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate, Template } from './template.js';
 
 const SHA_1 = '0123456789abcdef0123456789abcdef01234567';
 const SHA_2 = 'fedcba9876543210fedcba9876543210fedcba98';
@@ -319,6 +319,18 @@ describe('createRepoTemplate', () => {
     })!();
 
     expect(other).toBeUndefined();
+  });
+
+  it('keeps the desktop install in the resources-only template, and only when asked', async () => {
+    const expected = serializeSandboxTemplate(Template().desktop());
+    expect(serializeSandboxTemplate((await createRepoTemplate({ desktop: true })!())!)).toEqual(expected);
+    const unresolved = await createRepoTemplate({
+      desktop: true,
+      getRepositoryAccess: accessFor('https://github.com/acme/unresolved-desktop.git'),
+      resolveHead: async () => undefined,
+    })!();
+    expect(serializeSandboxTemplate(unresolved!)).toEqual(expected);
+    expect(createRepoTemplate({ desktop: false })).toBeUndefined();
   });
 
   it('keeps docker in the resources-only template when nothing else is requested', async () => {

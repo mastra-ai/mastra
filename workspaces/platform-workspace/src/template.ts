@@ -8,6 +8,7 @@ export type SandboxTemplateMethod =
   | 'cpuCount'
   | 'memoryMB'
   | 'docker'
+  | 'desktop'
   | 'runCmd'
   | 'setWorkdir'
   | 'setEnvs'
@@ -90,6 +91,15 @@ export interface SandboxTemplateBuilder {
    * recommends at least 2,048 MB of memory for Docker.
    */
   docker(): SandboxTemplateBuilder;
+  /**
+   * Boot a Linux desktop in the E2B template for `PlatformSandbox`'s
+   * `computer: true`: an X display, window manager, accessibility bus and a
+   * noVNC viewer, supervised by systemd and restarted if any part exits. E2B
+   * only; Railway rejects it. Part of the template identity.
+   *
+   * @experimental Used only when `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   */
+  desktop(): SandboxTemplateBuilder;
   /** Start or reuse this template's provider build without provisioning a sandbox. */
   build(options?: SandboxTemplateBuildOptions): Promise<SandboxTemplateBuildResult>;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
@@ -149,6 +159,10 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
   docker(): SandboxTemplateBuilder {
     return this.#append('docker', [true]);
+  }
+
+  desktop(): SandboxTemplateBuilder {
+    return this.#append('desktop', [true]);
   }
 
   async build(options: SandboxTemplateBuildOptions = {}): Promise<SandboxTemplateBuildResult> {

@@ -13,6 +13,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxComputer,
   SandboxNetworking,
   SandboxStartResult,
   SpawnProcessOptions,
@@ -28,10 +29,13 @@ import {
 import { AuthenticationError, TimeoutError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient, resolveSandboxProvider } from './client.js';
+import { COMPUTER_VIEWER_PORT, createPlatformComputer } from './computer.js';
+import type { PlatformComputer } from './computer.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
 import type { E2BCommandsFactory, E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
 import { commandsForLease, e2bFilesForLease, execViaE2BLease } from './e2b-exec.js';
+import { experimentalComputerEnabled } from './experimental.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
 import { isBrokenSandboxError, PlatformSandboxFilesystem } from './sandbox-filesystem.js';
@@ -41,8 +45,7 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -143,6 +146,20 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
    * {@link SandboxAddressRegistry}.
    */
   addressRegistry?: SandboxAddressRegistry;
+  /**
+   * Give the agent the Linux desktop booted by a template built with
+   * `.desktop()`: screenshots, mouse, keyboard and the accessibility tree,
+   * exposed as `sandbox.computer` and the workspace
+   * `mastra_workspace_computer_*` tools. Needs a `template` (a builder with
+   * `.desktop()`, a template resolver, or a `seedCheckpointName`); E2B only.
+   * `sandbox.computer.streamUrl()` returns a noVNC viewer link for a human.
+   *
+   * Give the agent `defaultOptions: { toolCallConcurrency: 1 }`: by default the tool calls of
+   * one model step run concurrently and can reach the desktop out of order.
+   *
+   * @experimental Ignored unless `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   */
+  computer?: boolean;
 }
 
 interface ExecLeaseResponse {
@@ -599,6 +616,12 @@ export class PlatformSandbox extends MastraSandbox {
    */
   declare readonly networking?: SandboxNetworking;
 
+  /**
+   * The agent's desktop, present when the sandbox was created with
+   * `computer: true` and `MASTRA_EXPERIMENTAL_COMPUTER=true`.
+   */
+  declare readonly computer?: SandboxComputer;
+
   private readonly _networking: SandboxNetworking = {
     getPortUrl: async (port: number): Promise<string | null> => (await this._previewGrant(port))?.url ?? null,
   };
@@ -658,6 +681,8 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _publicPorts?: boolean;
   private readonly _env: Record<string, string>;
   private readonly _timeout?: number;
+  private readonly _computerEnabled: boolean;
+  private _platformComputer?: PlatformComputer;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
   private readonly _webSocketFactory?: DirectExecWebSocketFactory;
@@ -752,6 +777,37 @@ export class PlatformSandbox extends MastraSandbox {
     this._client = new PlatformClient(options);
     // Only E2B-backed sandboxes serve their ports.
     if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
+    this._computerEnabled = options.computer === true && experimentalComputerEnabled();
+    if (this._computerEnabled) {
+      if (this._client.sandboxProvider !== 'e2b') {
+        throw new Error('PlatformSandbox computer requires the e2b sandbox provider');
+      }
+      const template = options.template;
+      if (template === undefined && options.seedCheckpointName === undefined) {
+        throw new Error('PlatformSandbox computer needs a template with the desktop: template: Template().desktop()');
+      }
+      if (
+        template !== undefined &&
+        typeof template !== 'function' &&
+        !serializeSandboxTemplate(template).operations.some(op => op.method === 'desktop')
+      ) {
+        throw new Error('PlatformSandbox computer needs the desktop in its template: add .desktop() to the template');
+      }
+      this.computer = this._platformComputer = createPlatformComputer({
+        exec: (command, args, opts) =>
+          this._executeCommand(command, args, { timeout: opts.timeout, env: opts.env }, { once: opts.once }),
+        viewerUrl: async () => {
+          const base = await this._networking.getPortUrl(COMPUTER_VIEWER_PORT);
+          if (!base) return null;
+          const url = new URL('vnc.html', base);
+          url.searchParams.set('autoconnect', '1');
+          url.searchParams.set('resize', 'scale');
+          url.searchParams.set('path', 'websockify');
+          return url.toString();
+        },
+        template: template !== undefined && typeof template !== 'function' ? 'builder' : 'prebuilt',
+      });
+    }
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
@@ -850,6 +906,7 @@ export class PlatformSandbox extends MastraSandbox {
       // of the shared registry, not the parent's. See
       // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
       ...(this._addressRegistry !== undefined && { addressRegistry: this._addressRegistry }),
+      ...(this._computerEnabled && { computer: true }),
     });
     clone._templateDefinition = this._templateDefinition ? structuredClone(this._templateDefinition) : undefined;
     clone._templateBuildEnvs = this._templateBuildEnvs ? { ...this._templateBuildEnvs } : undefined;
@@ -950,6 +1007,8 @@ export class PlatformSandbox extends MastraSandbox {
     const requestMs = Date.now() - requestStartedAt;
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
+    // A new VM: its desktop has not been checked yet.
+    this._platformComputer?.resetReadiness();
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
     this._populateAddressFromResponse(json);
@@ -1184,6 +1243,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._probeTarget = null;
     this._transportReadyPromise = null;
     this._lease = null;
+    this._platformComputer?.resetReadiness();
   }
 
   /**
