@@ -111,6 +111,9 @@ jobs:
 
       - name: Run build
         run: pnpm build
+        env:
+          # The docs build is only here for the llms.txt files embedded in the packages.
+          DOCS_SKIP_MINIFY: 'true'
 
       - name: Determine publish tag
         id: determine-tag
@@ -267,6 +270,9 @@ jobs:
 
       - name: Build packages
         run: pnpm build
+        env:
+          # The docs build is only here for the llms.txt files embedded in the packages.
+          DOCS_SKIP_MINIFY: 'true'
 
       - name: Push version changes
         if: steps.check_files.outputs.files_exists == 'true' && !inputs.dry_run

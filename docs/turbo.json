@@ -8,6 +8,7 @@
       "env": [
         "ALGOLIA_APP_ID",
         "ALGOLIA_SEARCH_API_KEY",
+        "DOCS_SKIP_MINIFY",
         "GA_ID",
         "HS_FORM_GUID",
         "HS_FORM_GUID_LEARN",
