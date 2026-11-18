@@ -3254,8 +3254,10 @@ export class DurableAgent<
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
-    // controller so either source can cancel the run.
-    const { controller: abortController } = createRunAbortController(options?.abortSignal);
+    // controller so either source can cancel the run. `detachExternalAbort`
+    // stops that forwarding once the run's state is released below, so the
+    // caller's signal does not keep this run alive.
+    const { controller: abortController, detach: detachExternalAbort } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -3284,7 +3286,8 @@ export class DurableAgent<
     // still owns — an execution that recovered the run in this process holds
     // its own. The topic stays when the run's latest execution here (this one
     // or a later resume()) lost the run: whoever took it over, in any process,
-    // writes to it. Runs at most once.
+    // writes to it. Finally stops forwarding the caller's signal, so a
+    // finished run is not kept alive by a listener on it. Runs at most once.
     const runCleanup = createRunCleanup({
       scheduleTimer: cleanup => this.#scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
@@ -3302,6 +3305,7 @@ export class DurableAgent<
               this.#clearPubsubTopic(runId, globalRegistryEntry);
           }
         }
+        detachExternalAbort();
       },
     });
     const performCleanup = runCleanup.run;
@@ -4441,7 +4445,10 @@ export class DurableAgent<
     //    snapshot.
     this.#assertRecoveryActive();
     const releaseLocalRecovery = this.#claimLocalRecovery(runId);
-    const { controller: abortController } = createRunAbortController(options?.abortSignal);
+    // `detachExternalAbort` stops forwarding the caller's signal once the
+    // recovery releases the run's state (see the release closure below), so a
+    // finished recovery is not kept alive by a listener on that signal.
+    const { controller: abortController, detach: detachExternalAbort } = createRunAbortController(options?.abortSignal);
 
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
@@ -4546,14 +4553,16 @@ export class DurableAgent<
     };
     // Single cleanup path for the auto-cleanup timer, the explicit cleanup(),
     // and the recovery error paths. Revokes continuation before unsubscribing
-    // the pubsub reader, then tears down the owned registry entries. Runs at
-    // most once.
+    // the pubsub reader, then tears down the owned registry entries. Finally
+    // stops forwarding the caller's signal, so a finished recovery is not kept
+    // alive by a listener on it. Runs at most once.
     const runCleanup = createRunCleanup({
       scheduleTimer: cleanup => this.#scheduleReaderCleanup(executionFence, cleanup),
       release: () => {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup?.();
         cleanupOwnedRegistryState();
+        detachExternalAbort();
       },
     });
     const performCleanup = runCleanup.run;
@@ -4876,8 +4885,10 @@ export class DurableAgent<
     // and the durable LLM-execution step reads `abortSignal` off the registry
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
-    // controller so either source can cancel the run.
-    const { controller: abortController } = createRunAbortController(options?.abortSignal);
+    // controller so either source can cancel the run. `detachExternalAbort`
+    // stops that forwarding once the run's state is released below, so the
+    // caller's signal does not keep this run alive.
+    const { controller: abortController, detach: detachExternalAbort } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -4896,7 +4907,8 @@ export class DurableAgent<
     // Tears down the registry entries and pubsub topic this execution still
     // owns, as stream() does: an execution that recovered the run in this
     // process registers its own under the same runId, and one that took the
-    // run over, in any process, writes to the topic.
+    // run over, in any process, writes to the topic. Also stops forwarding the
+    // caller's signal, so a finished run is not kept alive by a listener on it.
     const releaseRunState = () => {
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
@@ -4909,6 +4921,7 @@ export class DurableAgent<
         )
           this.#clearPubsubTopic(runId, globalRegistryEntry);
       }
+      detachExternalAbort();
     };
 
     // The explicit cleanup() also revokes continuation and unsubscribes the
