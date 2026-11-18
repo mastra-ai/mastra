@@ -324,13 +324,6 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
               'This sandbox authenticates GitHub through the credential vault, so it holds no token to refresh. Retry the command; if it still fails, the vault denied the request.',
           };
         }
-        if (auth === 'unknown') {
-          return {
-            refreshed: false,
-            message:
-              'The platform did not report whether this sandbox runs in credential-vault mode, so Factory withholds GitHub tokens from it. Use the source_control_* tools for GitHub until the sandbox is reprovisioned.',
-          };
-        }
         await refreshGithubToken(requestContext, github);
         return { refreshed: true };
       },

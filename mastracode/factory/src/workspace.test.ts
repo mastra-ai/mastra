@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   localRoot: null as string | null,
   vault: 'absent' as boolean | undefined | 'absent',
   /** What the platform's sandbox record reports when a vault-capable stub re-asks for its mode. */
-  vaultOnRefresh: undefined as boolean | undefined,
+  vaultOnRefresh: undefined as boolean | Error | undefined,
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
@@ -88,6 +88,7 @@ const mocks = vi.hoisted(() => ({
         : {
             vault: mocks.vault,
             refreshVault: vi.fn(async () => {
+              if (mocks.vaultOnRefresh instanceof Error) throw mocks.vaultOnRefresh;
               if (mocks.vaultOnRefresh !== undefined) sandbox.vault = mocks.vaultOnRefresh;
               return sandbox.vault;
             }),
@@ -2677,8 +2678,9 @@ describe('GitHub session workspace preparation', () => {
       expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
     });
 
-    it('withholds tokens when the platform does not report the vault mode', async () => {
+    it('asks the platform when the start left the mode unset, and withholds tokens from a vault sandbox', async () => {
       mocks.vault = undefined;
+      mocks.vaultOnRefresh = true;
       mocks.githubPat = 'ghp_org_pat';
       const { workspace } = await createLocalFactory();
       addProject();
@@ -2690,7 +2692,22 @@ describe('GitHub session workspace preparation', () => {
       expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
     });
 
-    it('asks the platform again when the start left the mode unknown, and installs tokens for a non-vault sandbox', async () => {
+    it('fails the start instead of installing tokens when the platform cannot be asked for the mode', async () => {
+      mocks.vault = undefined;
+      mocks.vaultOnRefresh = new Error('proxy unavailable');
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+        'proxy unavailable',
+      );
+
+      expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+    });
+
+    it('asks the platform when the start left the mode unset, and installs tokens for a non-vault sandbox', async () => {
       mocks.vault = undefined;
       mocks.vaultOnRefresh = false;
       mocks.githubPat = 'ghp_org_pat';

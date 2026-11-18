@@ -236,7 +236,7 @@ describe('PlatformSandbox', () => {
     expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
   });
 
-  it('drops GitHub credentials from a call on a VM whose mode is unknown', async () => {
+  it('keeps per-call GitHub credentials for a reattached VM whose response does not report vault', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
@@ -254,9 +254,9 @@ describe('PlatformSandbox', () => {
 
     await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
 
-    expect(sandbox.vault).toBeUndefined();
+    expect(sandbox.vault).toBe(false);
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
-    expect(init.data.env).toEqual({ A: '1' });
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real', A: '1' });
   });
 
   it('drops GitHub credentials when the VM is replaced between acquisition and dispatch', async () => {
@@ -684,31 +684,41 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(false);
     });
 
-    it('leaves the mode unknown when neither the recovery-id reattach nor the sandbox record reports it', async () => {
+    it('treats a recovery-id reattach as not vault when the sandbox record does not report vault', async () => {
       const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, { id: 'sbx_1' });
-      await sandbox._start();
-      expect(sandbox.vault).toBeUndefined();
-    });
-
-    it('reads the sandbox record when a recovery-id reattach does not report the mode', async () => {
-      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, {
-        id: 'sbx_1',
-        vault: false,
-      });
       await sandbox._start();
       expect(sandbox.vault).toBe(false);
     });
 
-    it('takes the mode from a reattach by recovery id that reports it', async () => {
-      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null, vault: true });
+    it('learns vault from the sandbox record after a recovery-id reattach', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, {
+        id: 'sbx_1',
+        vault: true,
+      });
       await sandbox._start();
       expect(sandbox.vault).toBe(true);
     });
 
-    it('leaves the mode unknown when a reattach does not report it', async () => {
+    it('fails the start when the sandbox record cannot be read after a recovery-id reattach', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', reattached: true, instanceUrl: null }))
+        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'internal_error' } }, { status: 500 }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await expect(sandbox._start()).rejects.toThrow();
+      expect(sandbox.vault).not.toBe(false);
+    });
+
+    it('treats a reattach that does not report vault as not vault', async () => {
       const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing');
       await sandbox._start();
-      expect(sandbox.vault).toBeUndefined();
+      expect(sandbox.vault).toBe(false);
     });
 
     it('reports a reattach that says the sandbox is not vault', async () => {
@@ -717,15 +727,33 @@ describe('PlatformSandbox', () => {
       expect(sandbox.vault).toBe(false);
     });
 
-    it('learns the mode later with refreshVault', async () => {
+    it('reads the mode again with refreshVault', async () => {
       const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing', {
         id: 'sbx_existing',
-        vault: false,
+        vault: true,
       });
       await sandbox._start();
-      expect(sandbox.vault).toBeUndefined();
-      await expect(sandbox.refreshVault()).resolves.toBe(false);
       expect(sandbox.vault).toBe(false);
+      await expect(sandbox.refreshVault()).resolves.toBe(true);
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('propagates a refreshVault failure and keeps the mode', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_existing', destroyedAt: null, vault: true }))
+        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'internal_error' } }, { status: 500 }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_existing',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      await expect(sandbox.refreshVault()).rejects.toThrow();
+      expect(sandbox.vault).toBe(true);
     });
 
     it('ignores a refreshVault answer for a sandbox that was replaced while it was in flight', async () => {

@@ -6,54 +6,34 @@
  * - `vault`: the platform provisioned the sandbox in credential-vault mode. Its
  *   git rewrites github.com to the vault and the vault adds the real
  *   credential to each request, so the sandbox must never hold a real token.
- * - `unknown`: a platform sandbox whose provision, reattach or get response
- *   did not say. Factory fails closed and treats it like a vault sandbox: no
- *   real token goes in.
  *
  * The mode comes only from the provider object, which the platform's responses
  * set. Never from the sandbox env (`SANDBOX_VAULT`): code inside the sandbox
  * can change its own env, and must not be able to talk Factory into handing
  * it a token.
  */
-export type SandboxGithubAuth = 'token' | 'vault' | 'unknown';
+export type SandboxGithubAuth = 'token' | 'vault';
 
 type VaultReportingSandbox = { vault?: boolean; refreshVault?: () => Promise<unknown> };
 
-const warnedUnknown = new WeakSet<object>();
-
 /**
- * Read a sandbox's GitHub auth mode. Providers without a `vault` property
- * (local sandboxes, test doubles) are never vault sandboxes. A provider that
- * declares it but leaves it unset does not know the mode.
+ * Read a sandbox's GitHub auth mode. Only a platform that reported
+ * `vault: true` makes a vault sandbox: platforms that support vault mode always
+ * report it for vault sandboxes, and older ones never report it at all.
  */
 export function sandboxGithubAuth(sandbox: object): SandboxGithubAuth {
-  if (!('vault' in sandbox)) return 'token';
-  const vault = (sandbox as VaultReportingSandbox).vault;
-  if (vault === true) return 'vault';
-  if (vault === false) return 'token';
-  if (!warnedUnknown.has(sandbox)) {
-    warnedUnknown.add(sandbox);
-    console.warn(
-      '[factory] The platform did not report whether this sandbox runs in credential-vault mode; ' +
-        'withholding GitHub tokens from it. Git and gh in the sandbox cannot authenticate until it is reprovisioned.',
-    );
-  }
-  return 'unknown';
+  return (sandbox as VaultReportingSandbox).vault === true ? 'vault' : 'token';
 }
 
 /**
- * Read the mode, first asking the platform again when it is unknown (a
- * reattach whose response did not say). A failed or silent answer keeps it
- * unknown, so this still fails closed.
+ * Read the mode, first asking the platform when the provider has not recorded
+ * one yet. A failed request rejects rather than falling back to token mode,
+ * since it cannot tell a vault sandbox apart.
  */
 export async function learnSandboxGithubAuth(sandbox: object): Promise<SandboxGithubAuth> {
   const reporting = sandbox as VaultReportingSandbox;
   if ('vault' in sandbox && reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
-    try {
-      await reporting.refreshVault();
-    } catch {
-      // Unknown stays unknown.
-    }
+    await reporting.refreshVault();
   }
   return sandboxGithubAuth(sandbox);
 }

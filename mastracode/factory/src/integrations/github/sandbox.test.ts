@@ -468,8 +468,8 @@ describe('credential-vault sandboxes', () => {
   const vaultSandbox = (vault: boolean | undefined, handler?: ConstructorParameters<typeof FakeSandbox>[0]) =>
     Object.assign(new FakeSandbox(handler), { vault });
 
-  it.each([true, undefined])('clones GitHub with no credentials in the command env (vault: %s)', async vault => {
-    const sandbox = vaultSandbox(vault);
+  it('clones GitHub with no credentials in the command env', async () => {
+    const sandbox = vaultSandbox(true);
     await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
 
     const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
