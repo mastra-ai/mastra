@@ -40,7 +40,7 @@ export function OnboardingAccountLane({
   /** The factory is being created: every control locks. */
   creating: boolean;
   onPreviewProvider: PreviewProvider;
-  /** Under the personal lane's model; null hides it (member setup saves the model as it is picked). */
+  /** Under the personal lane's model. Defaults to create-factory's note; member setup passes its own, null hides it. */
   personalNote?: string | null;
 }) {
   const labelId = useId();
