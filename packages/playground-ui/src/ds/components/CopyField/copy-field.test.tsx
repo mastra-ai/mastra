@@ -88,7 +88,8 @@ describe('CopyField', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Copy organization ID' }));
 
       await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ORG_ID));
-      expect(await screen.findByRole('button', { name: 'Copied!' })).toBeTruthy();
+      expect(await screen.findByText('organization ID copied')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Copy organization ID' })).toBeTruthy();
       expect(document.querySelector('[data-sonner-toast]')).toBeNull();
     });
   });

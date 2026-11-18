@@ -1,10 +1,12 @@
 import type { ClipboardEvent } from 'react';
-import { CopyButton } from '../CopyButton';
-import { InputGroup, InputGroupAddon, inputGroupControlClassName } from '../InputGroup/input-group';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { InputGroup, InputGroupAddon, InputGroupButton, inputGroupControlClassName } from '../InputGroup/input-group';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
 import { useMiddleTruncation } from './use-middle-truncation';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
 export type CopyFieldProps = {
@@ -26,6 +28,7 @@ export type CopyFieldProps = {
  */
 export function CopyField({ value, label, size, disabled, className }: CopyFieldProps) {
   const { ref, text, truncated } = useMiddleTruncation<HTMLSpanElement>(value);
+  const { isCopied, handleCopy } = useCopyToClipboard({ text: value, showToast: false });
 
   // What's selected is the shortened text; put the real value on the clipboard instead.
   const copyWholeValue = (event: ClipboardEvent<HTMLElement>) => {
@@ -34,42 +37,50 @@ export function CopyField({ value, label, size, disabled, className }: CopyField
     event.clipboardData.setData('text/plain', value);
   };
 
+  // The app may set tooltips to open instantly; this field keeps the standard delay so hovering past it is quiet.
   return (
-    <InputGroup size={size} aria-label={label} className={cn(fieldTriggerWidthStyle, 'flex-initial', className)}>
-      <Tooltip disabled={!truncated}>
-        <TooltipTrigger
-          render={<span />}
-          data-slot="input-group-control"
-          translate="no"
-          onCopy={copyWholeValue}
-          className={cn(
-            inputGroupControlClassName,
-            'flex items-center font-mono text-muted-foreground',
-            disabled && 'cursor-not-allowed',
-          )}
-        >
-          {/* The whole value sizes the box (so it hugs short values); the visible line fits inside it. */}
-          <span ref={ref} className="grid min-w-0 grid-cols-[minmax(0,max-content)]">
-            {/* Drawn as CSS content, so it's never selected and never found as a second copy of the text. */}
-            <span
-              aria-hidden
-              data-value={value}
-              className="invisible col-start-1 row-start-1 h-0 overflow-hidden whitespace-pre select-none before:content-[attr(data-value)]"
-            />
-            <span
-              aria-hidden={truncated || undefined}
-              className="col-start-1 row-start-1 overflow-hidden whitespace-pre"
-            >
-              {text}
+    <TooltipProvider>
+      <InputGroup size={size} aria-label={label} className={cn(fieldTriggerWidthStyle, 'flex-initial', className)}>
+        <Tooltip disabled={!truncated}>
+          <TooltipTrigger
+            render={<span />}
+            data-slot="input-group-control"
+            translate="no"
+            onCopy={copyWholeValue}
+            className={cn(
+              inputGroupControlClassName,
+              'flex items-center font-mono font-normal text-muted-foreground',
+              disabled && 'cursor-not-allowed',
+            )}
+          >
+            {/* The whole value sizes the box (so it hugs short values); the visible line fits inside it. */}
+            <span ref={ref} className="grid min-w-0 grid-cols-[minmax(0,max-content)]">
+              {/* Drawn as CSS content, so it's never selected and never found as a second copy of the text. */}
+              <span
+                aria-hidden
+                data-value={value}
+                className="invisible col-start-1 row-start-1 h-0 overflow-hidden whitespace-pre select-none before:content-[attr(data-value)]"
+              />
+              <span
+                aria-hidden={truncated || undefined}
+                className="col-start-1 row-start-1 overflow-hidden whitespace-pre"
+              >
+                {text}
+              </span>
             </span>
+            {truncated && <span className="sr-only select-none">{value}</span>}
+          </TooltipTrigger>
+          <TooltipContent className="max-w-[min(32rem,90vw)] font-mono break-all">{value}</TooltipContent>
+        </Tooltip>
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton onClick={handleCopy} disabled={disabled} tooltip="Copy" aria-label={`Copy ${label}`}>
+            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
+          </InputGroupButton>
+          <span role="status" className="sr-only">
+            {isCopied ? `${label} copied` : ''}
           </span>
-          {truncated && <span className="sr-only select-none">{value}</span>}
-        </TooltipTrigger>
-        <TooltipContent className="max-w-[min(32rem,90vw)] font-mono break-all">{value}</TooltipContent>
-      </Tooltip>
-      <InputGroupAddon align="inline-end">
-        <CopyButton content={value} tooltip={`Copy ${label}`} variant="ghost" showToast={false} disabled={disabled} />
-      </InputGroupAddon>
-    </InputGroup>
+        </InputGroupAddon>
+      </InputGroup>
+    </TooltipProvider>
   );
 }
