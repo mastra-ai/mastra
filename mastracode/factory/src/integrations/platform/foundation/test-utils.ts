@@ -30,6 +30,7 @@ export interface FakeConnectionEvent {
   eventType: string;
   sourceEventId: string | null;
   payload: unknown;
+  unverified?: boolean;
 }
 
 export interface FakePlatformRequest {

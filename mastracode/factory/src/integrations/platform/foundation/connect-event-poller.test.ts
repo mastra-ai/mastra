@@ -200,6 +200,25 @@ describe('PlatformConnectEventPoller', () => {
     expect(eventReads(platform, 'conn-user')).toEqual([]);
   });
 
+  it('passes on that the platform could not verify an event, so the handler can drop it', async () => {
+    const platform = await platformWith([{ id: 'conn-1', integrationId: 'gitlab' }]);
+    platform.connectionEvents.set('conn-1', [logEvent('2000-0', { unverified: true }), logEvent('2000-1')]);
+    const settings = settingsStorage({ version: 1, connections: { 'conn-1': { afterEventId: '1-0' } } });
+    const gitlab = route(platform, 'gitlab');
+    const poller = new PlatformConnectEventPoller({
+      storage: settings.storage,
+      routes: [gitlab.route],
+      intervalMs: 60_000,
+    });
+    await start(poller);
+
+    await vi.waitFor(() => expect(gitlab.handled).toHaveLength(2));
+    expect(gitlab.handled.map(event => [event.id, event.unverified])).toEqual([
+      ['2000-0', true],
+      ['2000-1', false],
+    ]);
+  });
+
   it('saves the cursor only past events whose handler finished', async () => {
     const platform = await platformWith([{ id: 'conn-1', integrationId: 'gitlab' }]);
     platform.connectionEvents.set('conn-1', [logEvent('2000-0'), logEvent('2000-1')]);

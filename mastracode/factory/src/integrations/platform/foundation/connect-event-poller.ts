@@ -39,6 +39,8 @@ interface ConnectionEventEntry {
   eventType: string;
   sourceEventId: string | null;
   payload: unknown;
+  /** Set when the forwarder skipped the provider's signature check. Not every platform version logs it. */
+  unverified?: boolean;
 }
 
 export interface PlatformConnectEventPollerConfig {
@@ -305,7 +307,7 @@ export class PlatformConnectEventPoller extends MastraWorker {
       eventType: entry.eventType,
       sourceEventId,
       payload: entry.payload,
-      unverified: false,
+      unverified: entry.unverified === true,
       dedupeKey: sourceEventId ?? entry.id,
     };
     for (let attempt = 1; ; attempt += 1) {
