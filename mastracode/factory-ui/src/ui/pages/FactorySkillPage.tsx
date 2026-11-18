@@ -101,6 +101,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   if (skillName === undefined) {
     return (
       <NewSkillEditor
+        key={factoryId}
         factoryId={factoryId}
         onCreated={name => void navigate(boardSkillPath(factoryId, boardId, name), { replace: true })}
       />
@@ -118,7 +119,7 @@ function SkillPageBody({ factoryId, boardId, skillName }: { factoryId: string; b
   }
   return (
     <SkillEditor
-      key={skill.name}
+      key={`${factoryId}/${skill.name}`}
       factoryId={factoryId}
       skill={skill}
       canEdit={canEdit}

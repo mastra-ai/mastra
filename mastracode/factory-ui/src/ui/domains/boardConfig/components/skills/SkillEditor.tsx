@@ -38,6 +38,7 @@ export function SkillEditor({
   const revertable = canEdit && Boolean(skill.edited);
   const deletable = canEdit && skill.origin === 'project';
 
+  const asEdit = (value: string, saved: string) => (value === saved && !pending ? undefined : value);
   const keepEditsMadeSince = (sent: { description: string; instructions: string }) => () => {
     setEditedDescription(current => (current === sent.description ? undefined : current));
     setEditedInstructions(current => (current === sent.instructions ? undefined : current));
@@ -136,10 +137,19 @@ export function SkillEditor({
         <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
           {skill.name}
         </Txt>
-        <SkillDescription value={description} required readOnly={!canEdit} onChange={setEditedDescription} />
+        <SkillDescription
+          value={description}
+          required
+          readOnly={!canEdit}
+          onChange={value => setEditedDescription(asEdit(value, skill.description))}
+        />
       </div>
 
-      <SkillInstructions value={instructions} readOnly={!canEdit} onChange={setEditedInstructions} />
+      <SkillInstructions
+        value={instructions}
+        readOnly={!canEdit}
+        onChange={value => setEditedInstructions(asEdit(value, skill.content))}
+      />
 
       {changed && (
         <SaveBar

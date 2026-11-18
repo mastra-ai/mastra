@@ -334,6 +334,7 @@ describe("a skill's page", () => {
     const user = userEvent.setup();
 
     const description = await screen.findByRole('textbox', { name: 'Description' });
+    await user.type(description, '!{Backspace}');
     serveChangelogLint({ description: 'Lint every changelog' });
     await client.refetchQueries();
     await waitFor(() => expect(description).toHaveValue('Lint every changelog'));
@@ -589,7 +590,7 @@ describe('the new skill page', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('locks the draft while creating it, and unlocks it to fix a refused name', async () => {
+  it('locks the draft while creating it, and unlocks it when the server refuses', async () => {
     const { client } = openAt(NEW_SKILL_PAGE);
     let answer = () => {};
     const answered = new Promise<void>(resolve => {
@@ -615,7 +616,7 @@ describe('the new skill page', () => {
     answer();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
-    expect(description.closest('[inert]')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Description' }).closest('[inert]')).toBeNull();
     await waitForMutationsIdle(client);
   });
 
