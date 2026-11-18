@@ -1,7 +1,7 @@
 /**
- * An Inngest workflow's resume is a fresh function run. Its root span must continue the suspended
- * run's trace rather than sample again: a sampled run stays recorded and linked, an unsampled run
- * stays unrecorded.
+ * An Inngest workflow run makes one sampling decision. Its step spans and its resumed root start from
+ * ids instead of a live parent, so each has to repeat that decision: a sampled run stays recorded and
+ * linked, an unsampled run stays unrecorded.
  */
 import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 import { createStep } from '@mastra/core/workflows';
@@ -19,12 +19,11 @@ import {
 
 const exporter = new TestExporter();
 /**
- * The decision for a run's original root. A resumed root that asks again gets the opposite, so a
- * resume that samples on its own shows up as a dropped continuation or an orphan. Inngest step spans
- * start from ids rather than a live parent and ask too; they follow the original decision.
+ * The decision for a run's original root, which is the first to ask. Every later ask gets the
+ * opposite, so a span that samples on its own shows up as dropped or as an orphan.
  */
 let originalSampled = true;
-let resumedRootDecisions = 0;
+let samplingDecisions = 0;
 
 const { createWorkflow } = init(getSharedInngest());
 const approval = createStep({
@@ -50,9 +49,26 @@ const workflow = createWorkflow({
   .then(approval)
   .commit();
 
+const child = createWorkflow({
+  id: 'sampling-child',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  retryConfig: { attempts: 0, delay: 0 },
+})
+  .then(createStep({ id: 'work', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
+  .commit();
+const parent = createWorkflow({
+  id: 'sampling-parent',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  retryConfig: { attempts: 0, delay: 0 },
+})
+  .then(child)
+  .commit();
+
 beforeAll(async () => {
   await setupSharedTestInfrastructure({
-    workflows: { [workflow.id]: workflow },
+    workflows: { [workflow.id]: workflow, [parent.id]: parent, [child.id]: child },
     observability: new Observability({
       configs: {
         default: {
@@ -60,11 +76,7 @@ beforeAll(async () => {
           exporters: [exporter],
           sampling: {
             type: SamplingStrategyType.CUSTOM,
-            sampler: options => {
-              if (options?.metadata?.resumed !== true) return originalSampled;
-              resumedRootDecisions++;
-              return !originalSampled;
-            },
+            sampler: () => (++samplingDecisions === 1 ? originalSampled : !originalSampled),
           },
         },
       },
@@ -76,22 +88,22 @@ beforeAll(async () => {
 afterAll(() => teardownSharedTestInfrastructure({ forceClose: true }));
 
 beforeEach(() => {
-  resumedRootDecisions = 0;
+  samplingDecisions = 0;
+  exporter.reset();
 });
 
+const endedSpans = () => exporter.getByEventType(TracingEventType.SPAN_ENDED).map(event => event.exportedSpan);
+
 const rootsOf = (runId: string) =>
-  exporter
-    .getByEventType(TracingEventType.SPAN_ENDED)
-    .map(event => event.exportedSpan)
-    .filter(span => span.type === SpanType.WORKFLOW_RUN && span.metadata?.runId === runId);
+  endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN && span.metadata?.runId === runId);
 
 const tracingContextOf = async (runId: string) => {
   const store = await getSharedMastra().getStorage()?.getStore('workflows');
   return (await store?.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))?.tracingContext;
 };
 
-describe('resumed Inngest workflow sampling', () => {
-  it('keeps a sampled run recorded and linked without sampling again', async () => {
+describe('Inngest workflow sampling', () => {
+  it('keeps a sampled run and its steps recorded and linked without sampling again', async () => {
     originalSampled = true;
     const run = await workflow.createRun();
     expect((await run.start({ inputData: {} })).status).toBe('suspended');
@@ -103,13 +115,15 @@ describe('resumed Inngest workflow sampling', () => {
     expect((await resumed.resume({ step: 'approval', resumeData: { approved: true } })).status).toBe('success');
     await expect.poll(() => rootsOf(run.runId).length).toBe(2);
 
-    expect(resumedRootDecisions, 'resumed root sampling decisions').toBe(0);
+    expect(samplingDecisions, 'sampling decisions').toBe(1);
     expect(rootsOf(run.runId)[1]).toMatchObject({
       outcome: 'success',
       traceId: original.traceId,
       parentSpanId: original.id,
       resumedFromSpanId: original.id,
     });
+    const steps = endedSpans().filter(span => span.type === SpanType.WORKFLOW_STEP);
+    expect(steps.map(span => span.traceId)).toEqual([original.traceId, original.traceId]);
   });
 
   it('keeps an unsampled run unrecorded', async () => {
@@ -121,7 +135,24 @@ describe('resumed Inngest workflow sampling', () => {
     const resumed = await workflow.createRun({ runId: run.runId });
     expect((await resumed.resume({ step: 'approval', resumeData: { approved: true } })).status).toBe('success');
 
-    expect(resumedRootDecisions, 'resumed root sampling decisions').toBe(0);
-    expect(rootsOf(run.runId)).toEqual([]);
+    expect(samplingDecisions, 'sampling decisions').toBe(1);
+    expect(endedSpans()).toEqual([]);
+  });
+
+  it('keeps a nested run in the trace of the run that invoked it', async () => {
+    originalSampled = true;
+    const run = await parent.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('success');
+    const runs = () => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+    await expect
+      .poll(() =>
+        runs()
+          .map(span => span.entityId)
+          .sort(),
+      )
+      .toEqual([child.id, parent.id]);
+
+    expect(samplingDecisions, 'sampling decisions').toBe(1);
+    expect(new Set(endedSpans().map(span => span.traceId)).size, 'traces').toBe(1);
   });
 });
