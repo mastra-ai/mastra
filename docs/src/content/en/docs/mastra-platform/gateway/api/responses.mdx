@@ -17,6 +17,13 @@ Compatible with the OpenAI Responses API.
 ## Create a response
 
 ```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
 const response = await client.responses.create({
   model: '__GATEWAY_OPENAI_MODEL__',
   input: 'Write a haiku about routers.',

@@ -18,7 +18,7 @@ curl https://gateway-api.mastra.ai/v1/decisions \
   -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "__GATEWAY_OPENAI_MODEL__",
+    "model": "openai/gpt-6-luna-decisions",
     "input": "My order arrived broken and I want my money back.",
     "questions": [
       { "type": "predicate", "name": "is_complaint", "instructions": "Is the customer complaining?" },

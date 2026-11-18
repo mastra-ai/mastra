@@ -44,6 +44,13 @@ Gateway validates the request before routing. Unknown fields return `400`.
 ## Streaming
 
 ```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
 const stream = await client.chat.completions.create({
   model: '__GATEWAY_OPENAI_MODEL__',
   messages: [{ role: 'user', content: 'Count to five.' }],

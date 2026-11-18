@@ -233,7 +233,7 @@ To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-p
   <details>
     <summary>Why do I get <code>401</code> with a key that starts with <code>msk\_</code>?</summary>
 
-    <code>msk\_</code> keys belong to the previous Memory Gateway. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
+    <code>msk\_</code> keys belong to the previous Memory Gateway. Gateway treats them like any unknown key and returns <code>401</code> with <code>Invalid API key</code>, without mentioning the old format. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
   </details>
 
   <details>

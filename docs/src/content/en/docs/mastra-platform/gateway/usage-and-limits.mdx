@@ -50,21 +50,24 @@ Request bodies can be up to 16 MiB.
 
 ## Errors
 
-Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/mastra-platform/gateway/api/messages) uses the Anthropic shape.
+Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/mastra-platform/gateway/api/messages) uses the Anthropic shape, `{ "type": "error", "error": { "type", "message" } }`, with the code at the end of `message`. Authentication errors (`401`) have `type: "authentication_error"` and no `code`.
 
 | Status | Common codes | Meaning |
 | - | - | - |
-| `400` | `unsupported_model_endpoint` | Malformed JSON or body, or the model isn't available on this endpoint. |
-| `401` | | Missing, invalid, expired, or revoked key. |
+| `400` | `invalid_request_error` (type) | The body isn't valid JSON. |
+| `400` | `unsupported_model_endpoint` | The model isn't available on this endpoint. |
+| `401` | | Missing, invalid, expired, or revoked key. The body has no `code`. |
 | `402` | `insufficient_credit`, `spend_limit_reached` | Out of credit, or a spend cap was reached. |
 | `403` | `model_not_allowed`, `byok_connection_inactive` | Key or policy doesn't allow the request. |
 | `404` | `model_not_found` | Unknown model ID. |
 | `409` | | A request with the same ID is already in progress. |
-| `413` | | The input exceeds the model's context window. |
-| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. |
-| `429` | `rate_limit_exceeded`, `provider_rate_limited` | A Gateway or provider rate limit was hit, or spend capacity is held by in-flight requests. Retry after `retry-after`. |
+| `413` | `request_body_too_large` | Body over 16 MiB, or input over the model's context window. |
+| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. Unknown fields are rejected. |
+| `429` | `rate_limit_exceeded`, `provider_rate_limited` | A Gateway or provider rate limit was hit, or spend capacity is held by in-flight requests. `provider_rate_limited` means every eligible provider route is rate limiting. Retry after `retry-after`. |
 | `502` | | The provider failed after the request may have been sent. |
 | `503` | `exhausted` | No route could serve the request. |
 | `504` | `deadline_exceeded` | The request timed out. |
+
+Some provider failures are passed through without a Gateway code. For example, [`/v1/audio/transcriptions`](/docs/mastra-platform/gateway/api/audio) returns `{ "error": { "message": "HTTP 400", "code": 400 } }` when the provider rejects the file, with a numeric `code` holding the provider's status. Check the HTTP status first, and treat `code` as optional.
 
 Include `x-request-id` when contacting support.

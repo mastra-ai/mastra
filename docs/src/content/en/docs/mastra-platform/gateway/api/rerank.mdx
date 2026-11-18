@@ -16,7 +16,7 @@ curl https://gateway-api.mastra.ai/v1/rerank \
   -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "cohere/rerank-v3.5",
+    "model": "cohere/rerank-v5-fast",
     "query": "capital of France",
     "documents": ["Berlin is in Germany.", "Paris is the capital of France."],
     "top_n": 1

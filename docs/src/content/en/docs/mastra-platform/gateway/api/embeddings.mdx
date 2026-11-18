@@ -12,6 +12,13 @@ POST https://gateway-api.mastra.ai/v1/embeddings
 Compatible with the OpenAI Embeddings API. `input` accepts a string, an array of strings, or token arrays.
 
 ```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
 const result = await client.embeddings.create({
   model: '__GATEWAY_OPENAI_EMBEDDING_MODEL__',
   input: ['first document', 'second document'],
