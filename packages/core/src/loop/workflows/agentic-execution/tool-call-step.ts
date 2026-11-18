@@ -60,6 +60,7 @@ import {
   applyBackgroundToolResult,
 } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
+import { withAgentWorkflowToolMarker } from '../../shared/steps/tool-result-commit-core';
 import { ownToolCallSuspendData, resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
@@ -1447,6 +1448,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // the research was still running.
               onResult: async params => {
                 try {
+                  // Marked so a result recovery appends still reads as a workflow result (#30219).
+                  const baseProviderMetadata = withAgentWorkflowToolMarker(
+                    inputData.providerMetadata as ProviderMetadata | undefined,
+                    resolvedTool,
+                  ) as ProviderMetadata | undefined;
                   await applyBackgroundToolResult({
                     params,
                     currentRunId: runId,
@@ -1454,7 +1460,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args,
                     messageList,
                     approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                    baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                    baseProviderMetadata,
                     transformForTranscript: async result => {
                       const transformCarrier = await applyToolPayloadTransformToChunk(
                         {
@@ -1494,7 +1500,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           ? transcriptResultTransform.transformed
                           : result,
                         providerMetadata: withToolPayloadTransformProviderMetadata(
-                          inputData.providerMetadata as ProviderMetadata | undefined,
+                          baseProviderMetadata,
                           transformCarrier.metadata,
                         ) as ProviderMetadata | undefined,
                       };

@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 1.85.0-alpha.3
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f))
+
+- Fixed tool calls running without their required approval after a resume. When the model called several tools in one response and one of them suspended or waited for approval, a later tool call from that response could run after the resume without asking. This affected `requireToolApproval` functions passed at call time on `Agent`, and every approval policy on agents created with `createEventedAgent`. Such calls now ask for approval. Agents created with `createEventedAgent` also no longer ask for approval of a call that a `requireToolApproval` function does not match. ([#30605](https://github.com/mastra-ai/mastra/pull/30605))
+
+  On `Agent`, a `requireToolApproval` function is not stored with the run. When a run is resumed without passing it again, every tool call that starts after the resume now asks for approval, including calls the function would not have matched. Pass the same `requireToolApproval` to `resumeStream()` or `approveToolCall()` to keep per-call decisions.
+
+  A tool that called `suspend()` on a version older than 1.50.0 and is resumed after the upgrade no longer receives the payload it suspended with. If that tool also requires approval, it asks for approval again and then runs without the data it was resumed with, so it can suspend once more.
+
+- Blocked messages no longer print an error with a stack trace. When an input or output processor calls `abort()`, the workflow step that ran it used to log `Error executing step …: TripWire: …` at ERROR level with the full stack, even though a guardrail blocking a message is expected behavior. Tripwires are now logged at debug level with the step id, processor id and reason. The run still returns `result.tripwire` and the trace still records the step as blocked by a guardrail. Genuine step errors still log at ERROR with their stack. ([#30807](https://github.com/mastra-ai/mastra/pull/30807))
+
+- Fixed resumed workflow runs sampling again. A resume now keeps the suspended run's sampling decision and trace settings and nests under its span on the default, evented and Inngest engines. A resume of a run the sampler did not record stays unrecorded, so scorers do not run for it. This also applies to a durable agent run that another process resumes. On Inngest, a custom sampler now receives the request context and run metadata for the workflow run span. ([#30697](https://github.com/mastra-ai/mastra/pull/30697))
+
+- Fixed evented workflows started with `run.startAsync()` skipping their `onFinish` and `onError` callbacks. `onFinish` now runs when the background run succeeds, fails, suspends, or is canceled, and `onError` runs when it fails or a tripwire stops it, the same way they do for `run.start()`. `mastra.shutdown()` now also waits, up to its drain timeout, for evented `startAsync()` runs that were already dispatched so their callbacks can finish. Fixes [#29391](https://github.com/mastra-ai/mastra/issues/29391). ([#29541](https://github.com/mastra-ai/mastra/pull/29541))
+
+- Fixed evented workflows handing a resumed `foreach` item another item's suspend data. When several items of a `foreach` were suspended, a resumed item received the first suspended item's payload as `suspendData`, and an item started after a resume could receive it too. Each resumed item now gets its own payload, and an item that never suspended gets none. This also fixes evented agents with several suspended sub-agent tool calls, where approving one call could resume another call's sub-agent run. ([#30403](https://github.com/mastra-ai/mastra/pull/30403))
+
 ## 1.85.0-alpha.2
 
 ### Patch Changes
