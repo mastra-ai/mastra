@@ -32,16 +32,28 @@ export function listHeadQueryKey(queryKey: readonly unknown[]) {
   return ['observability-list-head', ...queryKey] as const;
 }
 
+export type ListWindow = { from: string; to: string };
+
 /**
- * The moved end of a list window after a head-poll overflow. `reanchor` sets it to now, which changes
+ * `window` moved to end at `to`, keeping its length. A rolling window must not grow while the list is
+ * open: a server cap on the length (word search's 7 days) would start refusing it.
+ */
+export function slideWindow(window: ListWindow, to: string): ListWindow {
+  const length = Date.parse(window.to) - Date.parse(window.from);
+  return { from: new Date(Date.parse(to) - length).toISOString(), to };
+}
+
+/**
+ * The moved list window after a head-poll overflow. `reanchor` slides it to end now, which changes
  * the list's query key so only its first page reloads. A new `selection` drops the anchor.
  */
 export function useListAnchor(selection: unknown) {
   const selectionHash = hashKey([selection]);
-  const [anchor, setAnchor] = useState<{ selectionHash: string; to: string }>();
-  const anchorTo = anchor?.selectionHash === selectionHash ? anchor.to : undefined;
-  const reanchor = () => setAnchor({ selectionHash, to: new Date().toISOString() });
-  return { anchorTo, reanchor };
+  const [anchor, setAnchor] = useState<{ selectionHash: string; window: ListWindow }>();
+  const anchorWindow = anchor?.selectionHash === selectionHash ? anchor.window : undefined;
+  const reanchor = (window: ListWindow) =>
+    setAnchor({ selectionHash, window: slideWindow(window, new Date().toISOString()) });
+  return { anchorWindow, reanchor };
 }
 
 const emptyStore = <Row>(): ListHeadStore<Row> => ({ rows: [], watermark: undefined });

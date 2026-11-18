@@ -90,6 +90,10 @@ const nextTick = () =>
 
 const threadIds = (threads: QueryTraceThreadsResult['threads'] | undefined) => threads?.map(thread => thread.threadId);
 
+const windowLength = (body: { timeRange: { traces: { from: string; to: string } } }) =>
+  Date.parse(body.timeRange.traces.to) - Date.parse(body.timeRange.traces.from);
+const threadWindowLength = Date.parse(threadTimeRange.to) - Date.parse(threadTimeRange.from);
+
 describe('useThreadsListSource', () => {
   describe('when the window is rolling and threads change while the list is open', () => {
     it('shows the new thread at the top after one poll, without reloading the list', async () => {
@@ -106,7 +110,7 @@ describe('useThreadsListSource', () => {
       expect(headBodies).toHaveLength(1);
       expect(headBodies[0].orderBy).toEqual([{ field: 'endedAt', direction: 'desc' }]);
       expect(headBodies[0].page).toEqual({ limit: OBSERVABILITY_LIST_HEAD_LIMIT });
-      expect(headBodies[0].timeRange.traces.from).toBe(threadTimeRange.from);
+      expect(windowLength(headBodies[0])).toBe(threadWindowLength);
       expect(Date.parse(headBodies[0].timeRange.traces.to)).toBeGreaterThanOrEqual(polledAfter);
       expect(listBodies).toHaveLength(1);
     });
@@ -152,7 +156,7 @@ describe('useThreadsListSource', () => {
   });
 
   describe('when more threads changed than one poll can bring', () => {
-    it('reloads the first page with a window ending now and drops the polled threads', async () => {
+    it('reloads the first page with a window of the same length ending now and drops the polled threads', async () => {
       const { listBodies } = setHandlers([fullThreadHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, threadTimeRange.to)]);
       const { result } = renderSource({ query: rollingQuery, rolling: true });
       await waitFor(() => expect(result.current.threads).toHaveLength(2));
@@ -161,7 +165,7 @@ describe('useThreadsListSource', () => {
       await nextTick();
 
       await waitFor(() => expect(listBodies).toHaveLength(2));
-      expect(listBodies[1].timeRange.traces.from).toBe(threadTimeRange.from);
+      expect(windowLength(listBodies[1])).toBe(threadWindowLength);
       expect(Date.parse(listBodies[1].timeRange.traces.to)).toBeGreaterThanOrEqual(reloadedAfter);
       expect(listBodies[1].page.after).toBeUndefined();
       await waitFor(() => expect(threadIds(result.current.threads)).toEqual(['thread-1', 'thread-2']));
