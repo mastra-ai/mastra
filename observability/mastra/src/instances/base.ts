@@ -862,8 +862,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
-    const exportedSpan = this.getUnfilteredSpanForExport(span);
-    return exportedSpan && this.passesSpanFilter(exportedSpan) ? exportedSpan : undefined;
+    return this.applySpanFilter(span, this.getUnfilteredSpanForExport(span));
   }
 
   /**
@@ -891,16 +890,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
+   * Ask `spanFilter` about an export view of a span. The filter sees the parent
+   * the span was created under. A view it keeps is then pointed at the nearest
+   * ancestor exporters received, past ancestors whose start the filter dropped.
+   */
+  private applySpanFilter(span: AnySpan, exportedSpan: AnyExportedSpan | undefined): AnyExportedSpan | undefined {
+    if (!exportedSpan || !this.passesSpanFilter(exportedSpan)) return undefined;
+    if (this.config.spanFilter && span instanceof BaseSpan) {
+      span.reparentPastFilteredStarts(exportedSpan, this.config.includeInternalSpans);
+    }
+    return exportedSpan;
+  }
+
+  /**
    * Ask `spanFilter` about a span's start. When it drops the start, record that
    * on the span so descendants point at an ancestor exporters did receive.
    * Returns the start view to export, if any.
    */
   private judgeSpanStart(span: AnySpan): AnyExportedSpan | undefined {
-    const exportedSpan = this.getUnfilteredSpanForExport(span);
-    if (!exportedSpan) return undefined;
-    if (this.passesSpanFilter(exportedSpan)) return exportedSpan;
-    if (span instanceof BaseSpan) span.isStartFiltered = true;
-    return undefined;
+    const unfilteredSpan = this.getUnfilteredSpanForExport(span);
+    const exportedSpan = this.applySpanFilter(span, unfilteredSpan);
+    if (unfilteredSpan && !exportedSpan && span instanceof BaseSpan) span.isStartFiltered = true;
+    return exportedSpan;
   }
 
   /**
@@ -957,7 +968,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const unfilteredSpan = spanWasProcessed
       ? processedSpan && this.getUnfilteredSpanForExport(processedSpan, true)
       : this.getUnfilteredSpanForExport(span);
-    const exportedSpan = unfilteredSpan && this.passesSpanFilter(unfilteredSpan) ? unfilteredSpan : undefined;
+    const exportedSpan = this.applySpanFilter(span, unfilteredSpan);
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);

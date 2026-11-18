@@ -1306,6 +1306,18 @@ describe('TrackingExporter', () => {
       expect(exporter.abortedSpans.size).toBe(0);
     });
 
+    it('should still abort the span at shutdown when the exporter has no close hook', async () => {
+      // An exporter written before the hook existed keeps the earlier behaviour.
+      Object.assign(exporter, { _closeFilteredSpan: undefined });
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root')));
+      await exporter.onSpanFilteredEvent({ type: 'span_filtered', traceId, spanId: 'tool', endTime: t });
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+
+      expect([...exporter.abortedSpans.keys()]).toEqual(['tool']);
+    });
+
     it('should close a span whose dropped end is dispatched in the same tick as its start', async () => {
       await Promise.all([
         exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root'))),

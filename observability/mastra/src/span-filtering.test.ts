@@ -421,19 +421,52 @@ describe('Span Filtering', () => {
       const runSpan = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
       const stepSpan = runSpan.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
 
-      const rebuiltStep = tracing.rebuildSpan(stepSpan.exportSpan()!);
+      const rebuiltStep = tracing.rebuildSpan(stepSpan.snapshot!());
       const toolSpan = rebuiltStep.createChildSpan({
         type: SpanType.TOOL_CALL,
         name: "tool: 'my_tool'",
         attributes: { toolId: 'my_tool', toolType: 'function' },
       });
-      toolSpan.end();
+      // The tool call also ends in a later step, from its own snapshot.
+      tracing.rebuildSpan(toolSpan.snapshot!()).end();
 
-      const toolExported = testExporter.events.map(e => e.exportedSpan).find(s => s.type === SpanType.TOOL_CALL);
-      expect(toolExported?.parentSpanId).toBe(runSpan.id);
+      const toolEvents = testExporter.events.filter(e => e.exportedSpan.type === SpanType.TOOL_CALL);
+      expect(toolEvents.map(e => [e.type, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_started', runSpan.id],
+        ['span_ended', runSpan.id],
+      ]);
     });
 
-    it('should tell exporters to close a span when the filter drops only its end', () => {
+    it('should give the filter the same parent whether or not it dropped that parent', () => {
+      // A filter that reads the parent must keep its answers: here it keeps every span that has a parent.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.parentSpanId),
+      });
+
+      const runSpan = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
+      const agentSpan = runSpan.createChildSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      toolSpan.end();
+      agentSpan.end();
+      runSpan.end();
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_started', 'agent', undefined],
+        ['span_started', "tool: 'my_tool'", agentSpan.id],
+        ['span_ended', "tool: 'my_tool'", agentSpan.id],
+        ['span_ended', 'agent', undefined],
+      ]);
+    });
+
+    it('should tell exporters to close a span when the filter drops only its end', async () => {
       const closed: SpanFilteredEvent[] = [];
       const exporter = Object.assign(testExporter, {
         onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
@@ -461,10 +494,40 @@ describe('Span Filtering', () => {
       toolSpan.end({ attributes: { success: true } });
       stepSpan.end();
       agentSpan.end();
+      await tracing.flush();
 
       expect(closed).toEqual([
         { type: 'span_filtered', traceId: toolSpan.traceId, spanId: toolSpan.id, endTime: toolSpan.endTime },
       ]);
+    });
+
+    it('should deliver the close after the start of a span that starts and ends in the same tick', async () => {
+      const handled: string[] = [];
+      const exporter: ObservabilityExporter = {
+        name: 'slow-start-exporter',
+        async exportTracingEvent(event) {
+          // Exporters do async work before they register a span.
+          await new Promise(resolve => setTimeout(resolve, 5));
+          handled.push(event.type);
+        },
+        async onSpanFilteredEvent() {
+          handled.push('span_filtered');
+        },
+        async flush() {},
+        async shutdown() {},
+      };
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => !span.endTime,
+      });
+
+      tracing.startSpan({ type: SpanType.TOOL_CALL, name: "tool: 'my_tool'" }).end();
+      await tracing.flush();
+
+      expect(handled).toEqual(['span_started', 'span_filtered']);
     });
 
     it('should still drop every span of an entity when the filter drops that entity', () => {

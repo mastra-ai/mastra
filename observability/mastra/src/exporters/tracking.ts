@@ -1117,17 +1117,18 @@ export abstract class TrackingExporter<
   /**
    * Close a span whose end `spanFilter` dropped (called on span_filtered events).
    * No end-time span data exists, so only end the vendor span at `endTime`.
-   * The default does nothing, which suits vendors that send a span when it ends.
+   * Optional: an exporter that does not implement it keeps the span active,
+   * and `_abortSpan` still closes it at shutdown.
    *
    * @param args.span - The vendor-specific span object to close
    * @param args.endTime - When the span ended
    * @param args.traceData - The trace data container
    */
-  protected async _closeFilteredSpan(_args: {
+  protected _closeFilteredSpan?(args: {
     span: TSpanData;
     endTime: Date;
     traceData: TraceData<TRootData, TSpanData, TEventData, TMetadata>;
-  }): Promise<void> {}
+  }): Promise<void>;
 
   // ============================================================================
   // Behavior Flags (Override in subclass as needed)
@@ -1343,7 +1344,7 @@ export abstract class TrackingExporter<
    * span, so it does not stay open and keep its trace from being cleaned up.
    */
   async onSpanFilteredEvent(event: SpanFilteredEvent): Promise<void> {
-    if (this.isDisabled || this.#shutdownStarted) return;
+    if (!this._closeFilteredSpan || this.isDisabled || this.#shutdownStarted) return;
 
     const traceData = this.#traceMap.get(event.traceId);
     if (!traceData) return;
@@ -1366,7 +1367,7 @@ export abstract class TrackingExporter<
   }): Promise<void> {
     const { traceData, spanId, endTime } = args;
     const span = traceData.getSpan({ spanId });
-    if (!span || !traceData.isActiveSpan({ spanId })) return;
+    if (!this._closeFilteredSpan || !span || !traceData.isActiveSpan({ spanId })) return;
 
     traceData.endSpan({ spanId });
     try {

@@ -167,6 +167,19 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // construction, so cleanEvent() returns them unchanged.
     const cleaned = cleanEvent(event, this.deepCleanOptions);
 
+    // A span_filtered event closes a span that a handler opened on its start
+    // event. Handlers work asynchronously, so deliver it after the work already
+    // handed to them. Otherwise it can arrive before the span's start is handled.
+    if (cleaned.type === 'span_filtered' && this.pendingHandlers.size > 0) {
+      const inFlight = [...this.pendingHandlers];
+      this.trackPromise(Promise.allSettled(inFlight).then(() => this.deliver(cleaned, shouldHandle)));
+      return;
+    }
+
+    this.deliver(cleaned, shouldHandle);
+  }
+
+  private deliver(cleaned: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
       if (!shouldHandle || shouldHandle(exporter)) this.trackPromise(routeToHandler(exporter, cleaned, this.logger));
