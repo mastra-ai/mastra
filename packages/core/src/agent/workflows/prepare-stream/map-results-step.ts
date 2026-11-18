@@ -500,6 +500,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 runId,
               });
               await undoEarlyUserSave?.();
+            } else if (payload.tripwire) {
+              // An input processor blocked a later step: the turn is not saved, so the early row goes too.
+              await undoEarlyUserSave?.();
             }
 
             try {

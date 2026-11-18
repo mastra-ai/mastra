@@ -78,6 +78,7 @@ function createHarness({
   responses = [],
   tools,
   outputProcessors,
+  inputProcessors,
 }: {
   blockText?: string;
   blockIn?: 'processInput' | 'processInputStep' | 'processLLMRequest';
@@ -87,6 +88,7 @@ function createHarness({
   responses?: ScriptedResponse[];
   tools?: Record<string, ReturnType<typeof createTool>>;
   outputProcessors?: () => Processor[];
+  inputProcessors?: Processor[];
 } = {}) {
   const storage = new InMemoryStore();
   const memory = new MockMemory({ storage });
@@ -157,7 +159,7 @@ function createHarness({
     instructions: 'Reply briefly.',
     memory,
     model: agentModel,
-    inputProcessors: blockText ? [blockingProcessor] : [],
+    inputProcessors: inputProcessors ?? (blockText ? [blockingProcessor] : []),
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(tools ? { tools } : {}),
   });
@@ -247,6 +249,50 @@ describe('a sent message is stored once the run has taken it', () => {
     await h.send('a fine request');
     expect(await h.storedUserTexts()).toEqual(['a fine request']);
     expect(h.prompts.at(-1)).not.toContain('secret');
+  });
+
+  it('a reply blocked while it streams keeps the message, stored once, as the turn save always has', async () => {
+    const blockStep: Processor = {
+      id: 'block-step',
+      async processOutputStep({ messages, abort }) {
+        abort('step blocked');
+        return messages;
+      },
+    };
+    const h = createHarness({ outputProcessors: () => [blockStep] });
+
+    const output = await h.send('tell me the secret');
+
+    expect(output.tripwire?.reason).toBe('step blocked');
+    expect(h.storedAtRequest).toEqual([['tell me the secret']]);
+    expect(await h.storedUserTexts()).toEqual(['tell me the secret']);
+  });
+
+  it('a run blocked by an input processor on a later step leaves no message stored', async () => {
+    const blockSecondStep: Processor = {
+      id: 'block-second-step',
+      async processInputStep({ messages, stepNumber, abort }) {
+        if (stepNumber > 0) abort('later step blocked');
+        return messages;
+      },
+    };
+    const wait = createTool({
+      id: 'wait',
+      description: 'Waits.',
+      inputSchema: z.object({}),
+      execute: async () => 'waited',
+    });
+    const h = createHarness({
+      inputProcessors: [blockSecondStep],
+      tools: { wait },
+      responses: [{ chunks: toolCallChunks() }, { chunks: textChunks('never asked') }],
+    });
+
+    const output = await h.send('start working');
+
+    expect(output.tripwire?.reason).toBe('later step blocked');
+    expect(h.storedAtRequest).toEqual([['start working']]);
+    expect(await h.storedUserTexts()).toEqual([]);
   });
 
   it('configured output processors are resolved once per run', async () => {
