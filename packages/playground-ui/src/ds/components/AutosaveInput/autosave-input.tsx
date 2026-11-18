@@ -120,11 +120,17 @@ export function AutosaveInput({
     if (event.key === 'Enter') {
       event.preventDefault();
       void save();
-    } else if (event.key === 'Escape' && !savingRef.current && (dirty || error)) {
-      // Revert, and stay in the field. A clean field lets Escape through (to blur it or close a dialog), and so does
-      // a field mid-save: the save already started, so there's nothing to revert yet.
-      event.preventDefault();
-      revert();
+    } else if (event.key === 'Escape') {
+      // Mid-save there's nothing to revert yet: the save already started.
+      if (savingRef.current) return;
+      if (dirty || error) {
+        // Revert, and stay in the field.
+        event.preventDefault();
+        revert();
+        return;
+      }
+      // A clean field: Escape leaves it (and still reaches a dialog around it).
+      event.currentTarget.blur();
     }
   }
 

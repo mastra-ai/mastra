@@ -168,4 +168,35 @@ describe('AutosaveInput', () => {
     expect(ids[0]).toBe('name-help');
     expect(ids.map(id => document.getElementById(id)?.textContent)).toContain("Name can't be empty.");
   });
+
+  it('shows that it is saving until the save finishes', async () => {
+    const user = userEvent.setup();
+    let finish = () => {};
+    render(
+      <AutosaveInput
+        label="Organization name"
+        value="Acme"
+        onSave={() => new Promise<void>(resolve => (finish = resolve))}
+      />,
+    );
+
+    await user.type(input(), ' Labs{Enter}');
+    expect(screen.getByText('Saving Organization name').getAttribute('role')).toBe('status');
+    expect(input().readOnly).toBe(true);
+    finish();
+
+    await waitFor(() => expect(screen.getByText('Organization name saved')).toBeDefined());
+    expect(input().readOnly).toBe(false);
+  });
+
+  it('leaves a clean field on Escape', async () => {
+    const user = userEvent.setup();
+    render(<OrganizationName />);
+
+    await user.click(input());
+    await user.keyboard('{Escape}');
+
+    expect(document.activeElement).not.toBe(input());
+    expect(saves()).toBe('');
+  });
 });
