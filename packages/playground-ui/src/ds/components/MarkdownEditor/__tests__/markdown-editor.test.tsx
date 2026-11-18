@@ -130,6 +130,16 @@ describe('MarkdownEditor — formatting', () => {
     expect(saved()).toBe('| Step | Owner |\n| --- | --- |\n| **Lint** | Bot |');
   });
 
+  it('leaves a selection that crosses table cells alone so the cells keep their pipes', async () => {
+    const { view, saved } = open('| Step | Owner |\n| --- | --- |\n| Lint | Bot |');
+    const user = userEvent.setup();
+
+    select(view, 'Lint | Bot');
+    await user.keyboard('{Control>}b{/Control}');
+
+    expect(saved()).toBeUndefined();
+  });
+
   it('leaves whole table rows alone so the cells keep their pipes', async () => {
     const { view, saved } = open('| Step | Owner |\n| --- | --- |\n| Lint | Bot |');
     const user = userEvent.setup();

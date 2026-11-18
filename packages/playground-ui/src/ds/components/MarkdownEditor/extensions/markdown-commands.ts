@@ -28,19 +28,21 @@ function enclosingNode(state: EditorState, span: Span, name: string): SyntaxNode
   return null;
 }
 
-function isWithin(node: SyntaxNode, pattern: RegExp) {
+function closest(node: SyntaxNode, pattern: RegExp) {
   for (let current: SyntaxNode | null = node; current; current = current.parent) {
-    if (pattern.test(current.name)) return true;
+    if (pattern.test(current.name)) return current;
   }
-  return false;
+  return null;
 }
 
 export const insideCodeBlock = (state: EditorState, pos: number) =>
-  sides.some(side => isWithin(syntaxTree(state).resolveInner(pos, side), codeBlock));
+  sides.some(side => closest(syntaxTree(state).resolveInner(pos, side), codeBlock) !== null);
 
-const startsProse = (state: EditorState, pos: number) => {
-  const node = syntaxTree(state).resolveInner(pos, 1);
-  return node.name !== 'HeaderMark' && isWithin(node, proseBlock);
+const holdsProse = (state: EditorState, span: Span) => {
+  const node = syntaxTree(state).resolveInner(span.from, 1);
+  if (node.name === 'HeaderMark') return false;
+  const block = closest(node, proseBlock);
+  return block !== null && span.to <= block.to;
 };
 
 function textSegments(state: EditorState, range: SelectionRange): Span[] {
@@ -53,7 +55,8 @@ function textSegments(state: EditorState, range: SelectionRange): Span[] {
     const text = state.sliceDoc(from, to);
     const trimmedFrom = from + text.length - text.trimStart().length;
     const trimmedTo = to - (text.length - text.trimEnd().length);
-    if (trimmedFrom < trimmedTo && startsProse(state, trimmedFrom)) segments.push({ from: trimmedFrom, to: trimmedTo });
+    const segment = { from: trimmedFrom, to: trimmedTo };
+    if (trimmedFrom < trimmedTo && holdsProse(state, segment)) segments.push(segment);
     pos = line.to + 1;
   }
   return segments;
