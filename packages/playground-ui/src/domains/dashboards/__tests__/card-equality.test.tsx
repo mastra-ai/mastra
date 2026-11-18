@@ -43,7 +43,7 @@ import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
-import { metricsWidget, normalise, pickIn } from './equality-harness';
+import { expectSameMarkup, metricsWidget, normalise, pickIn } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
@@ -118,7 +118,7 @@ function recordRequests() {
  * MIGRATION SCAFFOLD. Comparing `innerHTML` with today's cards pins class names and markup: it proves
  * the widgets reproduce the cards while both exist, and loses its meaning once the cards are deleted.
  * Delete these comparisons with the cards; the behaviour assertions beside them are what stays.
- * `normalise` (the harness's) drops the ids and marks that differ between two trees.
+ * `normalise` (the harness's) drops the ids that differ between two trees.
  */
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
@@ -224,7 +224,7 @@ async function renderWidgets(widgets: DashboardWidget[], scope: MetricsScope | u
 function expectSame(card: Rendered, widget: Rendered) {
   expect(widget.root).not.toBeNull();
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 /** Opens a view in both, then compares the requests that view sent and the markup it shows. */
@@ -256,7 +256,7 @@ async function expectSameViewFromCache(card: Rendered, widget: Rendered, view: s
   }
   expect(card.sent.length).toBeGreaterThan(0);
   expect(widget.sent).toEqual([]);
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 const noop = () => {};
@@ -348,7 +348,7 @@ async function clickBoth(card: Rendered, widget: Rendered, role: 'button', name:
     recorder.stop();
     expect(recorder.sent).toEqual([]);
   }
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 const BREAKDOWN_VIEWS = {
@@ -646,7 +646,7 @@ async function tooltipsOf(root: HTMLElement) {
 /** Same markup at real size, and the same tooltip on hovering each chart. */
 async function expectSameDrawn(card: Rendered, widget: Rendered) {
   expect(card.root.querySelector('.recharts-surface')).not.toBeNull();
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
   const tips = await tooltipsOf(card.root);
   expect(tips.length).toBeGreaterThan(0);
   expect(tips.every(t => t.length > 0)).toBe(true);
@@ -751,7 +751,7 @@ describe('Latency switching views, drawn at real size', () => {
     await switchWhileLoading(card, widget, 'Workflow latency');
     release();
     await act(() => new Promise(resolve => setTimeout(resolve, 50)));
-    expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+    expectSameMarkup(card.root, widget.root);
   });
 
   it('refetches a view opened again, as the card does', async () => {

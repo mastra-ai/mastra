@@ -1,34 +1,36 @@
-import type { DashboardWidget } from '@mastra/client-js';
-import { CardViewTabs } from '../../../metrics/components/card-view-tabs';
-import { shortViewLabels } from '../../../metrics/lib/view-labels';
 import { viewLabel } from '../../lib/chrome';
-import type { ViewHeading } from '../../lib/chrome';
 import type { TableOptions } from '../../lib/table';
+import { shortViewLabels } from '../../lib/view-labels';
 import type { WidgetKindProps } from '../../widget-kind';
+import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+
+type TableViewTabsProps = {
+  views: WidgetKindProps<TableOptions>['views'];
+  /** The open view. */
+  index: number;
+  onChoose: (index: number) => void;
+};
 
 /**
- * A table's heading with several views: the widget's own title, and every view one click away as
- * pill tabs under it (`CardViewTabs`). A single view keeps `heading` as it is.
+ * A table's views as pill tabs under its title, each one click away; what doesn't fit folds into a
+ * "+N" menu. Picking one swaps at once: the pill doesn't slide, as the table under it doesn't fade.
  */
-export function withViewTabs(
-  heading: ViewHeading,
-  widget: DashboardWidget,
-  views: WidgetKindProps<TableOptions>['views'],
-  index: number,
-  onChoose: (index: number) => void,
-): ViewHeading {
-  if (views.length < 2) return heading;
+export function TableViewTabs({ views, index, onChoose }: TableViewTabsProps) {
   const labels = shortViewLabels(views.map((view, i) => viewLabel(view.label, i)));
-  return {
-    ...heading,
-    title: widget.title ?? '',
-    titleMenu: undefined,
-    toolbar: (
-      <CardViewTabs
-        value={String(index)}
-        onValueChange={value => onChoose(Number(value))}
-        options={labels.map((label, i) => ({ value: String(i), label }))}
-      />
-    ),
-  };
+  return (
+    <Tabs
+      value={String(index)}
+      defaultTab={String(index)}
+      onValueChange={value => onChoose(Number(value))}
+      className="overflow-visible"
+    >
+      <TabList variant="pill" size="sm" overflow="menu" className="[&_[data-slot=tabs-indicator]]:transition-none">
+        {labels.map((label, i) => (
+          <Tab key={i} value={String(i)}>
+            {label}
+          </Tab>
+        ))}
+      </TabList>
+    </Tabs>
+  );
 }

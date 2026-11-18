@@ -23,7 +23,7 @@ import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtur
 import { aggregateCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
 import { serveCapabilities } from '../../metrics/components/__tests__/metrics-msw';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
-import { shortViewLabels } from '../../metrics/lib/view-labels';
+import { shortViewLabels } from '../lib/view-labels';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -107,12 +107,26 @@ export function recordRequests() {
  * Delete these comparisons with the cards; the behaviour assertions beside them are what stays.
  */
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
-export const normalise = (html: string) =>
-  html
-    .replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID')
-    // Base UI's keyboard-highlight marks on a tab: set a tick apart when a list remounts (the widget
-    // re-renders its card on a new view, the card doesn't), so they aren't part of what's compared.
-    .replace(/ data-(?:active|composite-item-active)=""/g, '');
+export const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
+
+/** A card's markup without its top bar and view tabs: what a widget whose views are tabs shares with a card whose views are a title menu. */
+function bodyMarkup(root: HTMLElement) {
+  const clone = root.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) throw new Error('Expected an element');
+  clone.querySelector('[class*="group/metrics-card"]')?.firstElementChild?.remove();
+  clone.querySelector('[data-slot="tabs"]')?.remove();
+  return clone.innerHTML;
+}
+
+/**
+ * Same markup. A widget that lists its views as tabs (the Breakdown) titles itself apart from the card's
+ * title menu, so then only the bodies are compared.
+ */
+export function expectSameMarkup(card: HTMLElement, widget: HTMLElement) {
+  const tabs = widget.querySelector('[data-slot="tabs"]') !== null;
+  const markup = (root: HTMLElement) => normalise(tabs ? bodyMarkup(root) : root.innerHTML);
+  expect(markup(widget)).toBe(markup(card));
+}
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
 export async function settle(recorder: ReturnType<typeof recordRequests>) {
@@ -141,7 +155,7 @@ export function find(container: HTMLElement, selector: string): HTMLElement {
 export function expectSame(card: Rendered, widget: Rendered) {
   expect(widget.root).not.toBeNull();
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 /**
@@ -200,7 +214,7 @@ export async function expectSameViewFromCache(card: Rendered, widget: Rendered, 
   await pickInBoth(card, widget, view);
   expect(card.sent.length).toBeGreaterThan(0);
   expect(widget.sent).toEqual([]);
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 export const API = `${TEST_BASE_URL}/api/observability`;

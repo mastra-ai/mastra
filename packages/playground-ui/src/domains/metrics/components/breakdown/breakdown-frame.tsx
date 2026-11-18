@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DrilldownScope } from '../../drilldown';
 import type { BreakdownTab } from '../../lib/breakdown';
-import { shortViewLabels } from '../../lib/view-labels';
-import { CardViewTabs } from '../card-view-tabs';
 import { ChartCard } from '../chart-card';
 
 export const BREAKDOWN_TITLE = 'Breakdown';
@@ -25,7 +23,7 @@ export type BreakdownFrameProps = {
   byProject: boolean;
 };
 
-/** The card shell around every tab's state, so loading, errors and rows share one layout; several tabs are pills under its title. */
+/** The card shell around every tab's state, so loading, errors and rows share one layout. */
 export function BreakdownFrame({
   tab,
   tabs,
@@ -33,18 +31,17 @@ export function BreakdownFrame({
   isUpdating,
   children,
 }: BreakdownFrameProps & { tab: BreakdownTab; isUpdating?: boolean; children: ReactNode }) {
-  const labels = shortViewLabels(tabs.map(t => TAB_TITLE[t]));
   return (
     <ChartCard
-      title={tabs.length > 1 ? BREAKDOWN_TITLE : TAB_TITLE[tab]}
-      toolbar={
-        tabs.length > 1 ? (
-          <CardViewTabs
-            value={tab}
-            onValueChange={onTabChange}
-            options={tabs.map((t, i) => ({ value: t, label: labels[i] ?? TAB_TITLE[t] }))}
-          />
-        ) : undefined
+      title={TAB_TITLE[tab]}
+      titleMenu={
+        tabs.length > 1
+          ? {
+              value: tab,
+              onValueChange: onTabChange,
+              options: tabs.map(t => ({ value: t, label: TAB_TITLE[t] })),
+            }
+          : undefined
       }
       isUpdating={isUpdating}
       bodyHeight="fit"
