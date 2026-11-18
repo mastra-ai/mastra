@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function WidgetsScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-21.2,8.8Q-21.2,7.1 -19.2,6.1L-0.2,-3.4Q1.8,-4.4 3.7,-3.4L58.1,23.8Q60.1,24.8 60.1,26.5L60.1,26.8Q60.1,28.5 58.1,29.5L39.1,39Q37.1,40 35.2,39L-19.2,11.8Q-21.2,10.8 -21.2,9.1Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="19.4" cy="15.9" r="18.2">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M7.9,15.9C7.9,14.9 11.5,13.9 13.4,12.9C15.3,11.9 17.6,10.2 19.2,9.9C20.7,9.5 21.5,10.5 22.7,10.8C23.9,11.2 24.7,11.2 26.3,11.9C27.9,12.6 30.1,14.1 32,15.1C33.9,16.1 37.5,17 37.5,18C37.5,18.9 33.9,19.9 32,20.9C30.1,21.9 27.8,23.6 26.2,23.9C24.7,24.3 23.9,23.3 22.7,23C21.5,22.7 20.6,22.6 19.1,21.9C17.5,21.2 15.2,19.8 13.4,18.8C11.5,17.8 7.9,16.8 7.9,15.9Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M14.1,8.1Q14.1,5.9 16.1,4.9L17.5,4.2Q19.4,3.3 21.4,4.2L22.8,4.9Q24.8,5.9 24.8,8.1L24.8,13.7Q24.8,15.9 22.8,16.9L21.4,17.6Q19.4,18.6 17.5,17.6L16.1,16.9Q14.1,15.9 14.1,13.7Z"
         fill="var(--face)"
