@@ -25,7 +25,7 @@ export type BreakdownFrameProps = {
   byProject: boolean;
 };
 
-/** The card shell around every tab's state, so loading, errors and rows share one layout; several tabs are chips under its title. */
+/** The card shell around every tab's state, so loading, errors and rows share one layout; several tabs are pills under its title. */
 export function BreakdownFrame({
   tab,
   tabs,

@@ -110,7 +110,7 @@ export function recordRequests() {
 export const normalise = (html: string) =>
   html
     .replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID')
-    // Base UI's keyboard-highlight marks on a chip: set a tick apart when a list remounts (the widget
+    // Base UI's keyboard-highlight marks on a tab: set a tick apart when a list remounts (the widget
     // re-renders its card on a new view, the card doesn't), so they aren't part of what's compared.
     .replace(/ data-(?:active|composite-item-active)=""/g, '');
 
@@ -145,15 +145,15 @@ export function expectSame(card: Rendered, widget: Rendered) {
 }
 
 /**
- * Picks a view: a chip, for a card that lists its views under its title (named by its short name,
+ * Picks a view: a tab, for a card that lists its views under its title (named by its short name,
  * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
  * one is open at a time.
  */
 export function pickIn(root: HTMLElement, view: string) {
   if (within(root).queryAllByRole('tab', { hidden: true }).length) {
     const [name] = shortViewLabels([view, 'Breakdown by view']);
-    const chip = within(root).queryByRole('tab', { name });
-    if (chip) fireEvent.click(chip);
+    const tab = within(root).queryByRole('tab', { name });
+    if (tab) fireEvent.click(tab);
     else {
       // Folded into the "+N" menu.
       fireEvent.click(within(root).getByRole('button', { name: /more tabs$/ }));

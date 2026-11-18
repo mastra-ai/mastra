@@ -260,51 +260,50 @@ describe('Tab', () => {
     expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true');
   });
 
-  describe('chips', () => {
-    const chips = (props: { value?: string; onValueChange?: (value: string) => void } = {}) => (
-      <Tabs defaultTab="first" {...props}>
-        <TabList variant="chips" size="sm">
+  describe('pill tabs with overflow="menu"', () => {
+    const pills = (props: { overflow?: 'scroll' | 'menu'; onValueChange?: (value: string) => void } = {}) => (
+      <Tabs defaultTab="first" onValueChange={props.onValueChange}>
+        <TabList variant="pill" size="sm" overflow={props.overflow ?? 'menu'}>
           <Tab value="first">First</Tab>
           <Tab value="second">Second</Tab>
           <Tab value="third">Third</Tab>
         </TabList>
       </Tabs>
     );
-
-    it('switches on one click, with no sliding indicator', () => {
-      render(chips());
-      fireEvent.click(screen.getByRole('tab', { name: 'Third' }));
-      expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
-      expect(screen.getByRole('tab', { name: 'Third' }).hasAttribute('data-active')).toBe(true);
-      expect(document.querySelector('[data-slot="tabs-indicator"]')).toBeNull();
-    });
-
-    it('folds the chips that do not fit into a "+N" menu after the last that fits', () => {
-      // Room for two 100px chips and the menu.
+    // Room for two 100px tabs on the track and the menu, not three.
+    const narrow = () => {
       vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(260);
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
-      render(chips());
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+    };
+
+    it('folds the tabs that do not fit into a "+N" menu', () => {
+      narrow();
+      render(pills());
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Second']);
       expect(screen.getByRole('button', { name: '1 more tabs' })).toBeTruthy();
     });
 
-    it('opens a folded chip from the menu, which then shows as the selected chip', () => {
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(260);
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
+    it('opens a folded tab from the menu, which then shows as the selected tab', () => {
+      narrow();
       const onValueChange = vi.fn();
-      render(chips({ onValueChange }));
+      render(pills({ onValueChange }));
       fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
       fireEvent.click(screen.getByRole('menuitem', { name: 'Third' }));
       expect(onValueChange).toHaveBeenCalledWith('third');
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Third']);
-      const third = screen.getByRole('tab', { name: 'Third' });
-      expect(third.getAttribute('aria-selected')).toBe('true');
-      expect(third.hasAttribute('data-active')).toBe(true);
+      expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
     });
 
-    it('keeps every chip in the row when they all fit', () => {
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 24));
-      render(chips());
+    it('keeps every tab in the row when they all fit', () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 28));
+      render(pills());
+      expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+    });
+
+    it('scrolls instead by default', () => {
+      narrow();
+      render(pills({ overflow: 'scroll' }));
       expect(screen.getAllByRole('tab')).toHaveLength(3);
       expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
     });

@@ -281,18 +281,16 @@ export const PillGhostVariant: Story = {
 const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
 
 /**
- * `variant="chips"`: separate outlined pills, the open one filled, for a card's views (a metrics
- * card's Breakdown). No track and no sliding indicator: picking a chip swaps at once. Chips that
- * don't fit fold into a "+N" menu after the last one that does, and the open chip always stays in
- * the row. Narrow the frame to see them fold.
+ * `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, and
+ * the open tab always stays in the row (a metrics card's views). The default scrolls instead.
  */
-export const ChipsVariant: Story = {
+export const OverflowMenu: Story = {
   render: () => (
     <div className="flex w-150 flex-col gap-6">
       {[600, 320].map(width => (
-        <div key={width} style={{ width }} className="resize-x overflow-hidden">
+        <div key={width} style={{ width }}>
           <Tabs defaultTab="Agents">
-            <TabList variant="chips" size="sm">
+            <TabList variant="pill" size="sm" overflow="menu">
               {BREAKDOWN_VIEWS.map(view => (
                 <Tab key={view} value={view}>
                   {view}

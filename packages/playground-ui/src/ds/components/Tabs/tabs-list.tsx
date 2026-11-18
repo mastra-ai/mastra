@@ -17,9 +17,6 @@ const tabListVariants = cva('relative flex items-center text-body', {
     variant: {
       pill: 'w-fit gap-1 rounded-full bg-fill-subtle p-1',
       'pill-ghost': 'w-fit gap-0.5 rounded-full',
-      // Separate outlined pills, the open one filled: no track and no sliding indicator, so
-      // picking one swaps at once. Tabs that don't fit fold into the "+N" menu.
-      chips: 'w-fit gap-1.5',
     },
   },
   defaultVariants: {
@@ -41,6 +38,11 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   size?: TabListSize;
   variant?: TabListVariant | null;
   style?: React.CSSProperties;
+  /**
+   * What happens to tabs that don't fit: `scroll` (default) scrolls the list; `menu` folds them into a
+   * "+N" menu after the last tab that fits, keeping the open one in the row. Contained tabs always fold.
+   */
+  overflow?: 'scroll' | 'menu';
 };
 
 /** The active pill sits inside the track's inset: 2px on the rung-sized track, 4px when contained. */
@@ -49,7 +51,15 @@ function indicatorHeightClass(variant: TabListVariant, contained: boolean) {
   return contained ? 'h-[calc(100%-0.5rem)]' : 'h-[calc(100%-0.25rem)]';
 }
 
-export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
+export const TabList = ({
+  children,
+  className,
+  variant,
+  size = 'md',
+  sticky,
+  style,
+  overflow = 'scroll',
+}: TabListProps) => {
   const resolvedVariant = variant ?? 'pill';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -83,9 +93,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     [],
   );
   const contained = tabs?.appearance === 'contained';
-  const chips = resolvedVariant === 'chips';
-  // Contained tabs and chips fold what doesn't fit into the "+N" menu; the others scroll.
-  const folds = contained || chips;
+  const folds = contained || overflow === 'menu';
   const pillTrack = resolvedVariant === 'pill' && !contained;
   const indicatorHeight = indicatorHeightClass(resolvedVariant, contained);
   useLayoutEffect(() => {
@@ -98,9 +106,10 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
     observer.observe(viewport);
     return () => observer.disconnect();
   }, [folds]);
-  // The gap between tabs: the inset frame's, or chips' `gap-1.5`.
-  const gap = contained ? 4 : chips ? 6 : 0;
-  const frameReserve = contained ? 30 : 0;
+  // Space between tabs, and around them, that folding has to count: the inset frame's, or a pill
+  // track's `gap-1` and 2px inset on each side.
+  const gap = contained || pillTrack ? 4 : 0;
+  const frameReserve = contained ? 30 : pillTrack ? 4 : 0;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!folds || available === null) return hidden;
@@ -143,8 +152,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         close.style.height = `${tab.element.offsetHeight}px`;
       }
       const delta = previousLeft === undefined ? 0 : previousLeft - left;
-      // Chips swap at once, with nothing sliding into place.
-      const shouldAnimate = !chips && tab.value !== tabs?.value && Math.abs(delta) <= 32;
+      const shouldAnimate = tab.value !== tabs?.value && Math.abs(delta) <= 32;
       if (!reduceMotion && shouldAnimate && delta !== 0 && 'animate' in tab.element) {
         tab.element.animate([{ transform: `translateX(${delta}px)` }, { transform: 'translateX(0)' }], {
           duration: 180,
@@ -157,7 +165,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
       if (!measurements.some(tab => tab.value === value)) nextPositions.delete(value);
     }
     tabPositions.current = nextPositions;
-  }, [chips, hiddenValues, measurements, tabs?.value]);
+  }, [hiddenValues, measurements, tabs?.value]);
   useLayoutEffect(() => {
     const previousValue = selectedValue.current;
     selectedValue.current = tabs?.value;
@@ -185,8 +193,8 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
           data-slot="tabs-list-scroll"
           className={cn(
             'relative w-full',
-            // Chips keep the "+N" menu in the row after the last one that fits, so nothing scrolls.
-            chips ? 'flex items-center gap-1.5' : 'overflow-x-auto',
+            // Outside contained tabs, the "+N" menu follows the list in the row.
+            folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
             sticky && 'sticky top-0 z-10 bg-background',
           )}
         >
@@ -206,18 +214,16 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
             style={style}
           >
             {children}
-            {!chips && (
-              <BaseTabs.Indicator
-                className={cn(
-                  'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
-                  indicatorHeight,
-                  'w-[var(--active-tab-width)]',
-                  'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-                )}
-                data-slot="tabs-indicator"
-                style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
-              />
-            )}
+            <BaseTabs.Indicator
+              className={cn(
+                'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
+                indicatorHeight,
+                'w-[var(--active-tab-width)]',
+                'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
+              )}
+              data-slot="tabs-indicator"
+              style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
+            />
           </BaseTabs.List>
           <div data-slot="tabs-close-actions">
             {visibleClosableTabs.map(tab => (
@@ -256,9 +262,8 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
           {hiddenTabs.length > 0 && (
             <div
               data-slot="tabs-overflow"
-              // Contained tabs pin the menu after the last tab that fits; chips just follow it in the row.
-              style={chips ? undefined : { transform: `translateX(${overflowX}px)` }}
-              className={chips ? undefined : 'tabs-overflow'}
+              style={contained ? { transform: `translateX(${overflowX}px)` } : undefined}
+              className={contained ? 'tabs-overflow' : undefined}
             >
               <DropdownMenu>
                 <DropdownMenu.Trigger

@@ -8,13 +8,14 @@ export type CardViewTabsProps<V extends string> = {
 };
 
 /**
- * A card's views as chips under its title, each one click away; what doesn't fit folds into a
+ * A card's views as pill tabs under its title, each one click away; what doesn't fit folds into a
  * "+N" menu. Picking one swaps at once.
  */
 export function CardViewTabs<V extends string>({ value, onValueChange, options }: CardViewTabsProps<V>) {
   return (
     <Tabs<V> value={value} defaultTab={value} onValueChange={onValueChange} className="overflow-visible">
-      <TabList variant="chips" size="sm">
+      {/* No slide: the pill jumps to the picked view, as the table under it swaps at once. */}
+      <TabList variant="pill" size="sm" overflow="menu" className="[&_[data-slot=tabs-indicator]]:transition-none">
         {options.map(option => (
           <Tab key={option.value} value={option.value}>
             {option.label}

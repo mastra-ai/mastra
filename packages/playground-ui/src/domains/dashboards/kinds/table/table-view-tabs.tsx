@@ -8,7 +8,7 @@ import type { WidgetKindProps } from '../../widget-kind';
 
 /**
  * A table's heading with several views: the widget's own title, and every view one click away as
- * chips under it (`CardViewTabs`). A single view keeps `heading` as it is.
+ * pill tabs under it (`CardViewTabs`). A single view keeps `heading` as it is.
  */
 export function withViewTabs(
   heading: ViewHeading,
