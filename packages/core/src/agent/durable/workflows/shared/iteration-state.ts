@@ -14,11 +14,11 @@ interface SpanClocks {
  */
 export function carriedSpanClocks(
   registry:
-    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | Pick<RunRegistryEntry, 'resumeModelSpan' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
     | undefined,
   state: SpanClocks,
 ): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
-  const clocks: SpanClocks = registry?.resumeModelSpanData
+  const clocks: SpanClocks = registry?.resumeModelSpan
     ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
     : state;
   const attributes = {

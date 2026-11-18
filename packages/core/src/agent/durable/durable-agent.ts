@@ -125,6 +125,8 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
+import { carrySegmentSpans } from './segment-spans';
+import type { SegmentSpanData } from './segment-spans';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -1873,6 +1875,19 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
       }
     }
+    // Every worker's steps report under the recovered pair, and finish the MODEL_STEP the crashed
+    // segment left open under its generation.
+    carrySegmentSpans(
+      requestContext,
+      runId,
+      recoverAgentSpan
+        ? {
+            agentSpanData: recoverAgentSpan.snapshot?.() ?? recoverAgentSpan.exportSpan(),
+            modelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
+            ...(!originalSpansEnded && origModelSpanData?.id ? { adoptsStepsOf: origModelSpanData.id } : {}),
+          }
+        : null,
+    );
     executionFence.throwIfLost();
 
     const restoredCompletion = await restoreCompletionPolicy({
@@ -1905,13 +1920,10 @@ export class DurableAgent<
       saveQueueManager,
       requestContext,
       agentSpan: recoverAgentSpan,
-      // Same override resume() installs: steps nest under, and terminal
-      // end()/error() target, the recovered spans instead of the persisted
-      // originals ended above.
+      // Same live handles resume() installs: terminal end()/error() in this process target the
+      // recovered spans instead of the persisted originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -4049,6 +4061,8 @@ export class DurableAgent<
     const origSpanId = entry.agentSpan?.id;
     // Spans this resume opened, ended by it alone if it turns out to have lost the run.
     const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
+    // The pair every worker's steps report under for this segment; none when it opened no spans.
+    let resumeSegment: SegmentSpanData | null = null;
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
@@ -4087,12 +4101,16 @@ export class DurableAgent<
           requestContext: resolvedOptions.requestContext,
         });
         ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
+        if (resumeAgentSpan) {
+          resumeSegment = {
+            agentSpanData: resumeAgentSpan.snapshot?.() ?? resumeAgentSpan.exportSpan(),
+            modelSpanData: resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan(),
+          };
+        }
         for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
           reg.resumeTimeToFirstTokenMs = undefined;
@@ -4102,6 +4120,7 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
       }
     }
+    carrySegmentSpans(resumeRequestContext, runId, resumeSegment);
     const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
 
     // Same default-false semantics as the initial stream() path.

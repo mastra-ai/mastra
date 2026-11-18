@@ -20,7 +20,7 @@ import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry } from '../../run-registry';
-import { segmentOwnsStep } from '../../segment-spans';
+import { segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -228,10 +228,7 @@ export function createDurableLLMMappingStep() {
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
-          const modelSpanData = (registryEntry?.resumeModelSpanData ?? initData.modelSpanData) as
-            | ExportedSpan<SpanType.MODEL_GENERATION>
-            | undefined;
-          if (segmentOwnsStep({ modelSpanData }, llmOutput.stepSpanData)) {
+          if (segmentOwnsStep(segmentSpanData(requestContext, _runId, initData), llmOutput.stepSpanData)) {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
             stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
           }

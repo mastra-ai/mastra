@@ -35,6 +35,7 @@ import {
 } from '../execution-fence';
 import { withExecutionStreamProducer } from '../execution-stream-publisher';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
+import { liveSegmentSpan, segmentSpanData } from '../segment-spans';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -1229,14 +1230,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             await finishResult.titleGeneration;
 
             // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
-            // originals were ended as `suspended`, so end the *resume* spans (registry override).
+            // originals were ended as `suspended`, so end the pair the resume carried.
             try {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
-              const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-              const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              const { agentSpanData, modelSpanData } = segmentSpanData(requestContext, initData.runId, initData);
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
               const clocks = carriedSpanClocks(reg, state);
@@ -1263,11 +1263,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan =
-                    reg?.resumeModelSpan ??
-                    reg?.modelSpan ??
-                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                      | AIModelGenerationSpan
-                      | undefined);
+                    liveSegmentSpan(modelSpanData, reg?.resumeModelSpan, reg?.modelSpan) ??
+                    (observability.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = steps.flatMap(step =>
@@ -1293,9 +1290,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 }
                 if (agentSpanData) {
                   const agentSpan =
-                    reg?.resumeAgentSpan ??
-                    reg?.agentSpan ??
-                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ??
+                    observability.rebuildSpan(agentSpanData);
                   agentSpan?.end({
                     ...termination,
                     output: { text: finalText },
