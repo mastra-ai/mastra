@@ -105,6 +105,22 @@ describe('createGithubReviewStatusReporter', () => {
     expect(comments[0]!.body).not.toContain('Reviewed');
   });
 
+  it('shows the verdict that covered a queued re-review, which never started a run of its own', async () => {
+    const { report, comments } = setup(
+      card({ reviewVerdict: 'request changes', reviewedHeadSha: REVIEWED, reviewedAt: '2026-11-05T10:03:00Z' }),
+    );
+    await report(event('queued'));
+    expect(comments[0]!.body).toContain('Review queued');
+
+    const requestedAt = event('queued').requestedAt;
+    await report(event('completed', { startedAt: requestedAt, endedAt: new Date('2026-11-05T10:03:00Z') }));
+    expect(comments).toHaveLength(1);
+    expect(comments[0]!.body).toContain('Review complete: changes requested');
+    expect(comments[0]!.body).toContain(
+      `<sub>Reviewed [\`bbbbbbb\`](https://github.com/acme/app/commit/${REVIEWED}) · took 4m 0s</sub>`,
+    );
+  });
+
   it('reports on the pull request attached to an issue card', async () => {
     const issue = {
       id: 'item-1',

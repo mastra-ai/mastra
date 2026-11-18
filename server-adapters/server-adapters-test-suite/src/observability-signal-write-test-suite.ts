@@ -83,6 +83,138 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       return body[collection];
     };
 
+    if (collection === 'feedback') {
+      const original = {
+        feedbackId: 'edit',
+        traceId: 'trace-123',
+        timestamp: '2026-11-11T12:00:00.123Z',
+        feedbackType: 'thumbs',
+        value: 1,
+      };
+      const put = (feedback: Record<string, unknown>, contextMode?: string) =>
+        server.request(`${path}/edit`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ feedback, contextMode }),
+        });
+      const patchReview = (id: string, reviewStatus: unknown) =>
+        server.request(`${path}/${id}/review-status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ reviewStatus }),
+        });
+      it('keeps local review updates working with older observability lacking export notification', async () => {
+        await post(original);
+        const response = await patchReview('edit', 'reviewed');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ ...original, reviewStatus: 'reviewed' });
+      });
+      it('does not use organization metadata to scope review updates', async () => {
+        await post({ ...original, organizationId: 'record-org' });
+        trustedScope.organizationId = 'request-org';
+        const response = await patchReview('edit', 'reviewed');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ organizationId: 'record-org', reviewStatus: 'reviewed' });
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('reviewed');
+      });
+      it('does not update missing feedback or feedback outside the configured resource', async () => {
+        expect((await patchReview('missing', 'reviewed')).status).toBe(404);
+        await post({ ...original, resourceId: 'foreign' });
+        trustedScope.mastra__resourceId = 'trusted';
+        expect((await patchReview('edit', 'reviewed')).status).toBe(404);
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('needs-review');
+      });
+      it.each([null, 'invalid'])('rejects invalid review status %s without changing feedback', async status => {
+        await post(original);
+        expect((await patchReview('edit', status)).status).toBe(400);
+        expect((await store.getFeedbackById('edit'))?.reviewStatus).toBe('needs-review');
+      });
+      it.each([{ feedbackId: 'other' }, { timestamp: undefined }, { traceId: ' ' }])(
+        'rejects malformed replacements: %j',
+        async change => {
+          expect((await put({ ...original, ...change })).status).toBe(400);
+          expect(await list()).toHaveLength(0);
+        },
+      );
+      it.each([{ traceId: 'different' }, { timestamp: '2026-11-12T12:00:00.123Z' }])(
+        'rejects changing feedback identity: %j',
+        async change => {
+          await post(original);
+          expect((await put({ ...original, ...change })).status).toBe(409);
+          expect(await list()).toEqual([
+            expect.objectContaining({ value: 1, traceId: original.traceId, timestamp: original.timestamp }),
+          ]);
+        },
+      );
+      it('returns the stored timestamp on a duplicate POST so the next PUT succeeds', async () => {
+        expect((await post(original)).status).toBe(200);
+        const retry = await post({ ...original, timestamp: undefined, value: -1 });
+        expect(retry.status).toBe(200);
+        const { data } = (await retry.json()) as { data: Record<string, unknown> };
+        expect(data).toMatchObject({ feedbackId: original.feedbackId, timestamp: original.timestamp });
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+        expect((await put({ ...original, ...data, value: -1 })).status).toBe(200);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+      it("does not disclose another tenant's feedback identity on a duplicate POST", async () => {
+        await post({ ...original, organizationId: 'other' });
+        trustedScope.organizationId = 'trusted';
+        expect((await post({ ...original, organizationId: 'other' })).status).toBe(404);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+      it('returns 404 instead of overwriting feedback from another tenant', async () => {
+        await post({ ...original, organizationId: 'other' });
+        trustedScope.organizationId = 'trusted';
+        expect((await put({ ...original, organizationId: 'other', value: -1 })).status).toBe(404);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+      it('uses the authenticated feedback author and clears omitted replacement fields', async () => {
+        await post({ ...original, comment: 'old', feedbackUserId: 'old-author' });
+        trustedScope.mastra__user = { id: 'reviewer' };
+        expect((await put({ ...original, value: -1, feedbackUserId: 'spoofed' })).status).toBe(200);
+        const saved = await store.getFeedbackById(original.feedbackId);
+        expect(saved).toMatchObject({ value: -1, feedbackUserId: 'reviewer' });
+        expect(saved?.comment ?? null).toBeNull();
+      });
+      it('returns 501 with an older storage package and keeps existing feedback', async () => {
+        await post(original);
+        Object.defineProperty(store, 'replaceFeedback', { value: undefined });
+        expect((await put({ ...original, value: -1 })).status).toBe(501);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+      it('allows replacement before create and requires the local anchor in resolve mode', async () => {
+        expect((await put({ ...original, value: -1 }, 'resolve')).status).toBe(404);
+        expect((await put({ ...original, value: -1 }, 'provided')).status).toBe(200);
+        expect((await post(original)).status).toBe(200);
+        expect((await store.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+      it('replaces feedback without allowing a delayed create to undo the edit', async () => {
+        const original = {
+          feedbackId: 'replace-me',
+          traceId: 'trace-123',
+          timestamp: '2026-11-11T12:00:00.123Z',
+          feedbackType: 'comment',
+          value: 'original',
+          comment: 'old comment',
+        };
+        expect((await post(original)).status).toBe(200);
+        const response = await server.request('/api/observability/feedback/replace-me', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer test-token' },
+          body: JSON.stringify({ feedback: { ...original, value: 'edited', comment: null } }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(await response.json()).toMatchObject({
+          success: true,
+          data: { feedbackId: 'replace-me', timestamp: original.timestamp },
+        });
+        expect((await post(original)).status).toBe(200);
+        expect(await list()).toEqual([
+          expect.objectContaining({ feedbackId: 'replace-me', value: 'edited', comment: null }),
+        ]);
+      });
+    }
+
     describe('single-record reads', () => {
       it('returns the persisted record with its identity and timestamp', async () => {
         const id = 'single-record';
@@ -423,6 +555,98 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       expect(await list()).toEqual([expect.objectContaining({ [idField]: 'historical', traceId: null })]);
     });
   });
+  describe('feedback review-status export delivery', () => {
+    it.each(['flush', 'shutdown'] as const)(
+      'persists HTTP review changes before exporting and drains on %s',
+      async lifecycle => {
+        const writes: { method: string; path: string; body: unknown }[] = [];
+        const responses: import('node:http').ServerResponse[] = [];
+        const receiver = createServer(async (req, res) => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(Buffer.from(chunk));
+          writes.push({ method: req.method!, path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString()) });
+          responses.push(res);
+        });
+        receiver.listen(0, '127.0.0.1');
+        await once(receiver, 'listening');
+        const address = receiver.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+        const storage = new InMemoryStore();
+        const store = (await storage.getStore('observability'))!;
+        const original = {
+          feedbackId: 'review/id',
+          timestamp: new Date(),
+          traceId: 'trace',
+          feedbackType: 'comment',
+          value: 'actionable',
+          feedbackUserId: 'author',
+          comment: 'keep',
+          tags: ['original'],
+          metadata: { detail: true },
+          reviewStatus: 'needs-review' as const,
+        };
+        await store.createFeedback({ feedback: original });
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'review',
+              exporters: [
+                new MastraStorageExporter(),
+                new MastraPlatformExporter({
+                  accessToken: 'test',
+                  endpoint: `http://127.0.0.1:${address.port}`,
+                  resolveFromEnv: false,
+                }),
+              ],
+            },
+          },
+        });
+        const server = await startServer(new Mastra({ storage, observability, logger: false }));
+        try {
+          const response = await server.request('/api/observability/feedback/review%2Fid/review-status', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reviewStatus: 'reviewed' }),
+            signal: AbortSignal.timeout(2000),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          expect(await response.json()).toMatchObject({
+            ...original,
+            timestamp: original.timestamp.toISOString(),
+            reviewStatus: 'reviewed',
+          });
+          expect(await store.getFeedbackById(original.feedbackId)).toMatchObject({
+            ...original,
+            reviewStatus: 'reviewed',
+          });
+          await expect.poll(() => writes.length, { timeout: 1500 }).toBe(1);
+          expect(writes).toEqual([
+            {
+              method: 'PATCH',
+              path: '/api/observability/feedback/review%2Fid/review-status',
+              body: { reviewStatus: 'reviewed' },
+            },
+          ]);
+          let drained = false;
+          const pending = observability[lifecycle]().then(() => {
+            drained = true;
+          });
+          await new Promise(resolve => setTimeout(resolve, 25));
+          expect(drained).toBe(false);
+          for (const res of responses) res.writeHead(204).end();
+          await pending;
+          expect((await store.listFeedback({})).feedback).toHaveLength(1);
+        } finally {
+          for (const res of responses) if (!res.writableEnded) res.writeHead(204).end();
+          await observability.shutdown();
+          await server.close();
+          receiver.closeAllConnections();
+          await new Promise<void>(resolve => receiver.close(() => resolve()));
+        }
+      },
+    );
+  });
+
   describe.each(['feedback', 'scores'] as const)('%s HTTP export delivery', collection => {
     it.each(['flush', 'shutdown'] as const)(
       'returns HTTP success before a custom exporter completes and drains delivery on %s',
@@ -532,19 +756,23 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       },
     );
 
-    it.each([
-      { contextMode: 'provided', authenticated: true, emptyContext: false },
-      { contextMode: 'resolve', authenticated: true, emptyContext: false },
-      { contextMode: 'provided', authenticated: false, emptyContext: false },
-      { contextMode: 'provided', authenticated: false, emptyContext: true },
-    ] as const)(
-      'persists and exports the same $contextMode record (authenticated: $authenticated, empty context: $emptyContext) without a second storage write',
-      async ({ contextMode, authenticated, emptyContext }) => {
-        const received: { path: string; body: Record<string, Record<string, any>[]> }[] = [];
+    it.each(
+      [
+        { contextMode: 'provided', authenticated: true, emptyContext: false },
+        { contextMode: 'resolve', authenticated: true, emptyContext: false },
+        { contextMode: 'provided', authenticated: false, emptyContext: false },
+        { contextMode: 'provided', authenticated: false, emptyContext: true },
+      ].flatMap(testCase =>
+        (collection === 'feedback' ? ['POST', 'PUT'] : ['POST']).map(method => ({ ...testCase, method })),
+      ),
+    )(
+      'persists and exports the same $method $contextMode record (authenticated: $authenticated, empty context: $emptyContext) without a second storage write',
+      async ({ contextMode, authenticated, emptyContext, method }) => {
+        const received: { path: string; method: string; body: Record<string, any> }[] = [];
         const receiver = createServer(async (req, res) => {
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(Buffer.from(chunk));
-          received.push({ path: req.url!, body: JSON.parse(Buffer.concat(chunks).toString()) });
+          received.push({ path: req.url!, method: req.method!, body: JSON.parse(Buffer.concat(chunks).toString()) });
           res.writeHead(204).end();
         });
         receiver.listen(0, '127.0.0.1');
@@ -607,32 +835,52 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
               },
             });
           const timestamp = '2026-11-11T10:00:00.123Z';
-          const response = await server.request(`/api/observability/${collection}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
-            body: JSON.stringify({
-              contextMode,
-              [field]: {
-                [idField]: 'http-record',
-                timestamp,
-                traceId: 'http-trace',
-                ...(!emptyContext
-                  ? { organizationId: 'untrusted-org', userId: 'span-user', tags: ['provided-tag'] }
-                  : {}),
-                metadata: { explicit: true, userId: 'metadata-user' },
-                ...(isFeedback
-                  ? {
-                      feedbackType: 'comment',
-                      value: 'actionable',
-                      feedbackUserId: authenticated ? 'spoofed' : null,
-                      reviewStatus: 'reviewed',
-                    }
-                  : { scorerId: 'quality', score: 0.9 }),
-              },
-            }),
-          });
+          const response = await server.request(
+            `/api/observability/${collection}${method === 'PUT' ? '/http-record' : ''}`,
+            {
+              method,
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
+              body: JSON.stringify({
+                contextMode,
+                [field]: {
+                  [idField]: 'http-record',
+                  timestamp,
+                  traceId: 'http-trace',
+                  ...(!emptyContext
+                    ? { organizationId: 'untrusted-org', userId: 'span-user', tags: ['provided-tag'] }
+                    : {}),
+                  metadata: { explicit: true, userId: 'metadata-user' },
+                  ...(isFeedback
+                    ? {
+                        feedbackType: 'comment',
+                        value: 'actionable',
+                        feedbackUserId: authenticated ? 'spoofed' : null,
+                        reviewStatus: 'reviewed',
+                      }
+                    : { scorerId: 'quality', score: 0.9 }),
+                },
+              }),
+            },
+          );
           expect(response.status, await response.clone().text()).toBe(200);
           expect(await response.json()).toMatchObject({ success: true, data: { [idField]: 'http-record', timestamp } });
+          if (isFeedback && method === 'POST') {
+            const retry = await server.request('/api/observability/feedback', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer test' },
+              body: JSON.stringify({
+                contextMode: 'provided',
+                feedback: {
+                  feedbackId: 'http-record',
+                  traceId: 'http-trace',
+                  feedbackType: 'comment',
+                  value: 'discarded',
+                },
+              }),
+            });
+            expect(retry.status).toBe(200);
+            expect(await retry.json()).toMatchObject({ data: { feedbackId: 'http-record', timestamp } });
+          }
           await observability.shutdown();
           const rows = isFeedback ? (await store.listFeedback({})).feedback : (await store.listScores({})).scores;
           expect(rows).toHaveLength(1);
@@ -649,11 +897,18 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
             timestamp: new Date(timestamp),
             ...expectedContext,
           });
-          const writes = received.filter(item => item.path === `/ai/${collection}/publish`);
+          const expectedPath =
+            method === 'PUT' ? '/api/observability/feedback/http-record' : `/ai/${collection}/publish`;
+          const writes = received.filter(item => item.path === expectedPath);
           expect(writes).toHaveLength(1);
-          expect(writes[0]!.path).toBe(`/ai/${collection}/publish`);
-          expect(writes[0]!.body[collection]!).toHaveLength(1);
-          const exported = writes[0]!.body[collection]![0]!;
+          expect(writes[0]!.method).toBe(method);
+          if (method === 'POST') {
+            expect(writes[0]!.body[collection]).toHaveLength(isFeedback ? 2 : 1);
+            if (isFeedback) {
+              expect(writes[0]!.body.feedback[1]).toEqual(writes[0]!.body.feedback[0]);
+            }
+          }
+          const exported = method === 'PUT' ? writes[0]!.body.feedback : writes[0]!.body[collection][0];
           expect(exported).toMatchObject({
             [idField]: 'http-record',
             timestamp,

@@ -326,6 +326,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   readonly stateId = STATE_ID;
   /** Request contexts whose caller row is already resolved for this request. */
   private readonly loadedMemorySettings = new WeakSet<object>();
+  private readonly bindingReconciles = new Map<string, Promise<void>>();
   private readonly boards: ProjectBoardSource;
 
   constructor(
@@ -598,6 +599,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   }
 
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
+    const previous = this.bindingReconciles.get(binding.id);
+    const run = (async () => {
+      if (previous) await previous.catch(() => undefined);
+      await this.reconcileBindingNow(binding);
+    })();
+    this.bindingReconciles.set(binding.id, run);
+    try {
+      await run;
+    } finally {
+      if (this.bindingReconciles.get(binding.id) === run) this.bindingReconciles.delete(binding.id);
+    }
+  }
+
+  private async reconcileBindingNow(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
     // One keyed read up front: a binding whose item is gone or no longer in a
@@ -623,7 +638,6 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
           bindingId: binding.id,
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
-          lastMessageId: last.id,
           lastMessageCreatedAt: last.createdAt instanceof Date ? last.createdAt : new Date(last.createdAt),
           updatedAt: new Date(),
         });
@@ -785,8 +799,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
       workItemId: item.id,
-      ingress: { identity: ingressId, triggerType: 'tool.result' },
-      configVersion: this.options.configVersion,
+      ingress: { identity: ingressId },
       expectedRevision: item.revision,
       actor: { ...context.actor },
       outcome,

@@ -44,11 +44,6 @@ export interface GitLabIssueDetail extends GitLabIssue {
   }>;
 }
 
-export interface GitLabIssuePage {
-  issues: GitLabIssue[];
-  nextCursor: string | null;
-}
-
 export interface GitLabMergeRequest {
   number: number;
   externalId: string;
@@ -64,11 +59,6 @@ export interface GitLabMergeRequest {
   updatedAt: string;
 }
 
-export interface GitLabMergeRequestPage {
-  pullRequests: GitLabMergeRequest[];
-  nextPage: number | null;
-}
-
 export interface GitLabMergeRequestDetail extends GitLabMergeRequest {
   description: string | null;
 }
@@ -82,8 +72,6 @@ export interface GitLabProject {
   connectionId?: string | null;
   accountLabel?: string | null;
   defaultBranch?: string | null;
-  sandboxProvider?: string;
-  sandboxWorkdir?: string;
 }
 
 export interface GitLabRepository {
@@ -98,12 +86,10 @@ export interface GitLabRepository {
   defaultBranch: string;
   private: boolean;
   installationStorageId?: string;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
 }
 
 export function gitLabProjectRepository(project: GitLabProject): GitLabRepository | null {
-  if (!project.projectId || !project.sandboxProvider || !project.sandboxWorkdir) return null;
+  if (!project.projectId) return null;
   const fullName = project.projectPath ?? project.name;
   const parts = fullName.split('/').filter(Boolean);
   return {
@@ -116,8 +102,6 @@ export function gitLabProjectRepository(project: GitLabProject): GitLabRepositor
     defaultBranch: project.defaultBranch ?? 'main',
     private: true,
     installationStorageId: project.installationStorageId,
-    sandboxProvider: project.sandboxProvider,
-    sandboxWorkdir: project.sandboxWorkdir,
   };
 }
 
@@ -167,18 +151,6 @@ async function getGitLabResource<T>(baseUrl: string, path: string, init?: Reques
   return (await res.json()) as T;
 }
 
-export function listGitLabMergeRequests(
-  baseUrl: string,
-  factoryProjectId: string,
-  projectRepositoryId: string,
-  page: number,
-): Promise<GitLabMergeRequestPage> {
-  return getGitLabResource(
-    baseUrl,
-    `/web/gitlab/projects/${encodeURIComponent(projectRepositoryId)}/prs?factoryProjectId=${encodeURIComponent(factoryProjectId)}&page=${page}`,
-  );
-}
-
 export function getGitLabMergeRequest(
   baseUrl: string,
   factoryProjectId: string,
@@ -218,16 +190,6 @@ export async function registerGitLabRepository(
   const repository = gitLabProjectRepository(project);
   if (!repository?.installationStorageId) throw new Error('GitLab project registration returned no installation');
   return repository as GitLabRepository & { installationStorageId: string };
-}
-
-export async function listGitLabIssues(
-  baseUrl: string,
-  factoryProjectId: string,
-  after?: string,
-): Promise<GitLabIssuePage> {
-  const params = new URLSearchParams({ factoryProjectId });
-  if (after) params.set('after', after);
-  return getGitLabResource<GitLabIssuePage>(baseUrl, '/web/gitlab/issues?' + params.toString());
 }
 
 export function getGitLabIssue(baseUrl: string, factoryProjectId: string, issueId: string): Promise<GitLabIssueDetail> {

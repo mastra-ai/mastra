@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -7,6 +8,8 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
   ObservabilityDropEvent,
   ObservabilityDropReason,
   ObservabilityDropSignal,
@@ -25,8 +28,9 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
+import { KeyedQueue } from './keyed-queue';
 import { withSpanPreviews } from './span-previews';
-import { resolveStorageAnnotation } from './storage-annotation';
+import { resolveStorageAnnotation, updateStorageFeedbackReviewStatus } from './storage-annotation';
 import { StorageByteTracker, resolveStorageByteBatching } from './storage-byte-tracker';
 import type { StorageByteBatchingConfig, StorageByteBatchingStats } from './storage-byte-tracker';
 import { skipLocalStorageOnPlatform } from './storage-platform-policy';
@@ -70,6 +74,16 @@ function resolveTracingStorageStrategy(
   return observabilityStrategy.preferred;
 }
 
+// Not `isDurableAgentLike`: it shipped in @mastra/core 1.30.0, above this package's peer floor.
+const isDurableAgent = (agent: object) => 'agent' in agent && Boolean(agent.agent);
+
+function usesDurableExecution(mastra: Mastra): boolean {
+  return (
+    Object.values(mastra.listAgents()).some(isDurableAgent) ||
+    Object.values(mastra.listWorkflows()).some(workflow => workflow.engineType !== 'default')
+  );
+}
+
 type FlushResult = {
   failed: boolean;
   retryAttempt?: number;
@@ -95,13 +109,16 @@ export class MastraStorageExporter extends BaseExporter {
   #byteRetryAt = 0;
   #byteDrainers = 0;
 
+  #mastra?: Mastra;
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  #retryTimer?: NodeJS.Timeout;
   /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
   #inFlightFlushes = new Set<Promise<void>>();
   #pendingAnnotations = new Set<Promise<void>>();
+  #feedbackWrites = new KeyedQueue();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -135,6 +152,7 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async init(options: InitExporterOptions): Promise<void> {
     this.#emitDropEvent = options.emitDropEvent;
+    this.#mastra = options.mastra;
     this.#storage = options.mastra?.getStorage();
     if (!this.#storage) {
       this.logger.warn('MastraStorageExporter disabled: Storage not available. Traces will not be persisted.');
@@ -259,12 +277,31 @@ export class MastraStorageExporter extends BaseExporter {
     }
     this.#flushTimer = setTimeout(() => {
       this.#flushTimer = undefined;
-      this.trackFlushBuffer().catch(error => {
-        this.logger.error('Scheduled flush failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      this.flushOnTimer();
     }, delayMs);
+  }
+
+  /** Wakes a flush at the earliest held retry's time. A timer of its own, so a new batch can't push the retry back. */
+  private scheduleRetry(): void {
+    clearTimeout(this.#retryTimer);
+    const retryAt = this.#eventBuffer.nextRetryAt;
+    this.#retryTimer =
+      retryAt === undefined ? undefined : setTimeout(() => this.flushOnTimer(), Math.max(0, retryAt - Date.now()));
+  }
+
+  private flushOnTimer(): void {
+    this.trackFlushBuffer().catch(error => {
+      this.logger.error('Scheduled flush failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  private clearTimers(): void {
+    clearTimeout(this.#flushTimer);
+    clearTimeout(this.#retryTimer);
+    this.#flushTimer = undefined;
+    this.#retryTimer = undefined;
   }
 
   private retryDelay(retryAttempt: number): number {
@@ -396,10 +433,11 @@ export class MastraStorageExporter extends BaseExporter {
    *
    * When the store supports conditional updates, only spans this exporter started
    * and hasn't confirmed the create for are deferred. Everything else, including
-   * spans another exporter instance started (such as a durable agent ending spans
-   * it rebuilt after a crash), goes straight to storage, and updates that didn't
-   * apply are counted as drops. Without conditional updates, updates for spans this
-   * exporter hasn't created are deferred until their create is flushed.
+   * spans another exporter instance started (a durable agent ending spans it rebuilt
+   * after a crash, or a worker finishing a run the API process started), goes straight
+   * to storage, and updates that didn't apply go to `retryNotApplied`. Without conditional
+   * updates, updates for spans this exporter hasn't created are deferred until their
+   * create is flushed.
    *
    * When `isEnd` is true, successfully flushed spans are removed from tracking.
    */
@@ -421,6 +459,7 @@ export class MastraStorageExporter extends BaseExporter {
       typeof storage.batchUpdateUnendedSpans === 'function' ? storage.batchUpdateUnendedSpans.bind(storage) : undefined;
 
     const partials: UpdateSpanPartial[] = [];
+    const sent: (TracingEvent & RetryCount)[] = [];
     for (const event of events) {
       const span = event.exportedSpan;
       const canSend = batchUpdateUnendedSpans
@@ -432,6 +471,7 @@ export class MastraStorageExporter extends BaseExporter {
           spanId: span.id,
           updates: buildUpdateSpanRecord(span),
         });
+        sent.push(event);
       } else {
         deferredUpdates.push(event);
       }
@@ -442,7 +482,8 @@ export class MastraStorageExporter extends BaseExporter {
     try {
       if (batchUpdateUnendedSpans) {
         const { updated } = await batchUpdateUnendedSpans({ records: partials });
-        this.emitNotApplied(partials, updated);
+        if (isEnd) this.#eventBuffer.rememberEndedSpans(updated);
+        this.retryNotApplied(sent, updated);
       } else {
         await storage.batchUpdateSpans({ records: partials });
       }
@@ -480,30 +521,44 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Reports conditional span updates that storage didn't apply: the span wasn't
-   * stored, or it had already ended. Ended spans are immutable, so these are dropped.
+   * Handles conditional span updates that storage didn't apply. The store can't say whether
+   * the row is missing or already ended. A span this exporter created and still tracks, or
+   * whose end it stored, can't be missing, so its update is dropped. Any other span may belong
+   * to a process whose create hasn't landed yet, so its end is held for a retry. Only ends retry:
+   * an end carries the span's full state, and a retried update could overwrite a newer one.
+   * `realtime` assumes one process owns a span, so it drops the end right away.
    */
-  private emitNotApplied(partials: UpdateSpanPartial[], updated: { traceId: string; spanId: string }[]): void {
+  private retryNotApplied(events: (TracingEvent & RetryCount)[], updated: { traceId: string; spanId: string }[]): void {
     // Count per key: one batch can hold two ends for the same span, and only the first applies.
     const appliedCounts = new Map<string, number>();
     for (const span of updated) {
       const key = `${span.traceId}:${span.spanId}`;
       appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
     }
-    let notApplied = 0;
-    for (const partial of partials) {
-      const key = `${partial.traceId}:${partial.spanId}`;
+    const retryable: (TracingEvent & RetryCount)[] = [];
+    let notUpdatable = 0;
+    for (const event of events) {
+      const span = event.exportedSpan;
+      const key = `${span.traceId}:${span.id}`;
       const remaining = appliedCounts.get(key) ?? 0;
       if (remaining > 0) {
         appliedCounts.set(key, remaining - 1);
+      } else if (
+        event.type !== TracingEventType.SPAN_ENDED ||
+        this.#resolvedStrategy === 'realtime' ||
+        this.#eventBuffer.spanExists(span) ||
+        this.#eventBuffer.wasEnded(span)
+      ) {
+        notUpdatable++;
       } else {
-        notApplied++;
+        retryable.push(event);
       }
     }
-    if (notApplied === 0) return;
-
-    this.logger.debug('Span updates not applied: span not stored or already ended', { count: notApplied });
-    this.emitDrop('tracing', 'span-not-updatable', notApplied);
+    notUpdatable += this.#eventBuffer.holdForRetry(retryable, attempt => this.retryDelay(attempt)).length;
+    if (notUpdatable > 0) {
+      this.logger.debug('Span updates not applied: span not stored or already ended', { count: notUpdatable });
+      this.emitDrop('tracing', 'span-not-updatable', notUpdatable);
+    }
   }
 
   /**
@@ -537,6 +592,7 @@ export class MastraStorageExporter extends BaseExporter {
           const delay = Math.max(0, this.#byteRetryAt - Date.now());
           this.scheduleFlush(delay || (this.#byteDrainers || this.shouldFlush() ? 0 : this.#config.maxBatchWaitMs!));
         }
+        this.scheduleRetry();
       });
     this.#inFlightFlushes.add(promise);
     return promise;
@@ -565,6 +621,8 @@ export class MastraStorageExporter extends BaseExporter {
       clearTimeout(this.#flushTimer);
       this.#flushTimer = undefined;
     }
+
+    this.#eventBuffer.releaseHeldRetries();
 
     if (this.#eventBuffer.totalSize === 0) {
       return;
@@ -628,7 +686,10 @@ export class MastraStorageExporter extends BaseExporter {
       const createTasks = [
         () =>
           this.flushCreates('feedback', createFeedbackEvents, events =>
-            this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+            this.#observabilityStorage!.batchCreateFeedback({
+              feedbacks: events.map(f => buildFeedbackRecord(f)),
+              onConflict: 'ignore',
+            }),
           ),
         () =>
           this.flushCreates('log', createLogEvents, events =>
@@ -702,6 +763,14 @@ export class MastraStorageExporter extends BaseExporter {
     return this.#byteTracker?.stats(this.#inFlightFlushes.size);
   }
 
+  private fallBackFromRealtimeUnderDurableExecution(): void {
+    if (this.#resolvedStrategy !== 'realtime' || !this.#mastra || !usesDurableExecution(this.#mastra)) return;
+    this.logger.warn('Tracing strategy realtime is not supported with durable execution, using batch-with-updates', {
+      storageAdapter: this.#storage?.constructor.name,
+    });
+    this.#resolvedStrategy = 'batch-with-updates';
+  }
+
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) {
@@ -709,6 +778,7 @@ export class MastraStorageExporter extends BaseExporter {
       return;
     }
 
+    this.fallBackFromRealtimeUnderDurableExecution();
     this.#eventBuffer.addEvent({ ...event, exportedSpan: withSpanPreviews(event.exportedSpan) });
     await this.handleBatchedFlush();
   }
@@ -739,12 +809,25 @@ export class MastraStorageExporter extends BaseExporter {
     return this.enqueueAnnotation(event);
   }
 
+  onFeedbackReviewStatusEvent(event: FeedbackReviewStatusEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
   onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     return this.enqueueAnnotation(event);
   }
 
-  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
-    const pending = this.storeAnnotation(event);
+  private enqueueAnnotation(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void> {
+    const feedbackId = event.type === 'score' ? undefined : event.feedback.feedbackId;
+    const pending = feedbackId
+      ? this.#feedbackWrites.enqueue(feedbackId, () => this.storeAnnotation(event))
+      : this.storeAnnotation(event);
     this.#pendingAnnotations.add(pending);
     void pending.then(
       () => this.#pendingAnnotations.delete(pending),
@@ -753,9 +836,18 @@ export class MastraStorageExporter extends BaseExporter {
     return pending;
   }
 
-  private async storeAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private async storeAnnotation(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void> {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
+    if (event.type === 'feedback_review_status') {
+      // Earlier creates may be buffered or already writing. Do not call public
+      // flush(): it waits on this annotation and would deadlock.
+      await this.flushBufferedEvents();
+      await updateStorageFeedbackReviewStatus(this.#observabilityStorage, event.feedback, this.logger);
+      return;
+    }
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
       // Flush buffered spans before retrying; the bus waits for this handler before its buffer drain.
       await Promise.allSettled([...this.#inFlightFlushes]);
@@ -770,6 +862,17 @@ export class MastraStorageExporter extends BaseExporter {
       });
       return;
     }
+    if (resolved.type === 'feedback_replacement') {
+      if (
+        typeof this.#observabilityStorage.replaceFeedback !== 'function' ||
+        !this.#observabilityStorage.getFeatures?.()?.includes('feedback-replacement')
+      ) {
+        this.logger.warn('Storage exporter skipped feedback replacement: upgrade the storage adapter and @mastra/core');
+        return;
+      }
+      await this.#observabilityStorage.replaceFeedback({ feedback: buildFeedbackRecord(resolved) });
+      return;
+    }
     this.#eventBuffer.addEvent(resolved);
     await this.handleBatchedFlush();
   }
@@ -781,6 +884,10 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async flush(): Promise<void> {
     await Promise.allSettled([...this.#pendingAnnotations]);
+    await this.flushBufferedEvents();
+  }
+
+  private async flushBufferedEvents(): Promise<void> {
     if (this.#byteTracker) {
       if (!this.#observabilityStorage) return;
       this.#byteDrainers++;
@@ -802,8 +909,8 @@ export class MastraStorageExporter extends BaseExporter {
     // writes whatever the buffer holds. Writes that start while we work get a few more
     // rounds, then we stop taking on new work so flush() stays bounded under non-stop
     // traffic (same cap as ObservabilityBus), but we still join the writes already running
-    // so nothing is mid-write when we return. A batch that failed is left to its retry
-    // timer, as before.
+    // so nothing is mid-write when we return. A batch that failed, or an end held for a
+    // retry, is left to its timer.
     for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
       if (this.#inFlightFlushes.size > 0) {
         await Promise.allSettled([...this.#inFlightFlushes]);
@@ -825,11 +932,10 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    // Clear any pending timer
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
-      this.#flushTimer = undefined;
-    }
+    this.clearTimers();
+
+    // A held end gets one last try, because its row may have landed since its last one.
+    this.#eventBuffer.releaseHeldRetries(Infinity);
 
     try {
       await this.flush();
@@ -846,11 +952,10 @@ export class MastraStorageExporter extends BaseExporter {
       this.logger.trackException(mastraError);
       this.logger.error('Failed to flush remaining events during shutdown', mastraError);
     } finally {
-      if (this.#flushTimer) {
-        clearTimeout(this.#flushTimer);
-        this.#flushTimer = undefined;
-      }
+      this.clearTimers();
     }
+    this.emitDrop('tracing', 'span-not-updatable', this.#eventBuffer.takeHeldRetries().length);
+    this.emitDrop('tracing', 'retry-exhausted', this.#eventBuffer.updates.length);
 
     this.logger.info('MastraStorageExporter shutdown complete');
   }

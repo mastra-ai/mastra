@@ -33,6 +33,7 @@ export type TracesConfigContextValue = {
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
+  withTokenSearch: boolean;
   withFeedback: boolean;
   feedbackOptions?: FeedbackOptions;
   /** The span query API is on, so the host can offer a spans view next to the traces list. */
@@ -75,6 +76,7 @@ export type TracesFiltersActions = {
 export type TracesFiltersContextValue = TracesFiltersActions & {
   /** The host's filters with the entries this server can't query dropped. */
   filters: TracesFilters;
+  hasTokenSearch: boolean;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;

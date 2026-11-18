@@ -33,10 +33,7 @@ const omConfig = (observationThreshold: number): OMConfigInfo => ({
 });
 
 function stubProviders(providers: ProviderInfo[]) {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
-    http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
-  );
+  server.use(http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })));
 }
 
 function renderMemory(modelScope: FactoryModelScope = 'hybrid') {
@@ -132,6 +129,55 @@ describe('MemorySettings', () => {
     expect(await within(personal).findByText('Not used in this scope')).toBeInTheDocument();
     expect(within(factory).getByText('Chats')).toBeInTheDocument();
     expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
+  });
+
+  it("offers personal memory only the models the caller's own credentials reach", async () => {
+    stubProviders([{ provider: 'my-llm', source: 'stored-user', userCredential: 'api_key', custom: true }]);
+    const personalModel = { id: 'my-llm/m1', provider: 'my-llm', modelName: 'm1', hasApiKey: true };
+    const orgModel = { id: 'team-llm/t1', provider: 'team-llm', modelName: 't1', hasApiKey: true };
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })),
+      http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+        const scope = new URL(request.url).searchParams.get('scope');
+        return HttpResponse.json({ models: scope === 'user' ? [personalModel] : [personalModel, orgModel] });
+      }),
+    );
+    const user = userEvent.setup();
+    renderMemory();
+
+    const personal = screen.getByRole('region', { name: 'Personal memory' });
+    const search = await within(personal).findByRole('combobox', { name: 'Observer model' });
+    await user.clear(search);
+    await user.type(search, 'llm');
+
+    expect(await screen.findByRole('option', { name: /my-llm\/m1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /team-llm\/t1/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps memory settings open for a custom endpoint that shares a built-in provider name', async () => {
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })),
+      http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () =>
+        HttpResponse.json({
+          providers: [
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              url: 'https://llm.example.com/v1',
+              models: ['m1'],
+              hasApiKey: true,
+              scope: 'org',
+            },
+          ],
+        }),
+      ),
+    );
+    const { client } = renderMemory();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    expect(screen.getByRole('region', { name: 'Personal memory' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No models configured' })).not.toBeInTheDocument();
   });
 
   it('points to Models settings while no provider is connected', async () => {

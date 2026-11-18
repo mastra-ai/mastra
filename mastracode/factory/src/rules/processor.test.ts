@@ -7,7 +7,7 @@ import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/ind
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -589,6 +589,7 @@ describe('FactoryPhaseStateProcessor', () => {
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
       for (const stage of ['execute', 'planning']) {
+        await finishQueuedRunsForTests(storage);
         const current = (await storage.get({ orgId: 'org-1', id: prepared.item.id }))!;
         await expect(
           transitionService.transition({
@@ -1059,7 +1060,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ decision: expect.objectContaining({ board: 'release', stage: 'shipped' }) }),
     ]);
     expect(await storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).toMatchObject({
-      lastMessageId: message.id,
+      lastMessageCreatedAt: message.createdAt,
     });
     expect((await processor.computeStateSignal(stateArgs(requestContext())))?.contents).toContain(
       'Publishing release (shipping)',
@@ -1828,6 +1829,65 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
+  it('waits for a background pass before reading a binding’s trailing results and cursor', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const onResult = vi.fn(() => undefined);
+    const first = toolMessage({ id: 'assistant-first', toolCallId: 'first-call' });
+    const trailing = toolMessage({
+      id: 'assistant-trailing',
+      toolCallId: 'trailing-call',
+      createdAt: new Date('2026-07-18T10:01:00Z'),
+    });
+    let unblockFirst!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      unblockFirst = resolve;
+    });
+    let firstReadStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      firstReadStarted = resolve;
+    });
+    let readsInFlight = 0;
+    let maxReadsInFlight = 0;
+    const reader = {
+      listMessages: vi.fn(async () => {
+        readsInFlight += 1;
+        maxReadsInFlight = Math.max(readsInFlight, maxReadsInFlight);
+        const read = reader.listMessages.mock.calls.length;
+        if (read === 1) {
+          firstReadStarted();
+          await blocked;
+        }
+        readsInFlight -= 1;
+        return { messages: read === 1 ? [first] : [first, trailing], hasMore: false };
+      }),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: reader as never,
+    });
+
+    const background = processor.reconcileAllBoundThreads();
+    await started;
+    const final = processor.reconcileBinding(prepared.binding);
+    await Promise.resolve();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+    unblockFirst();
+    await Promise.all([background, final]);
+
+    expect(maxReadsInFlight).toBe(1);
+    expect(reader.listMessages).toHaveBeenCalledTimes(2);
+    expect(reader.listMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filter: { dateRange: { start: first.createdAt } } }),
+    );
+    expect(onResult).toHaveBeenCalledTimes(2);
+    await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
+      lastMessageCreatedAt: trailing.createdAt,
+    });
+  });
+
   it('reconciles paginated terminal results from a durable cursor across restart retries', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
@@ -1873,7 +1933,7 @@ describe('FactoryPhaseStateProcessor', () => {
       expect.objectContaining({ filter: { dateRange: { start: new Date('2026-07-18T10:01:00Z') } } }),
     );
     await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
-      lastMessageId: 'assistant-aborted',
+      lastMessageCreatedAt: new Date('2026-07-18T10:01:00Z'),
     });
   });
 

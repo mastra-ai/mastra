@@ -10,7 +10,7 @@ import { MCPServer } from '../server';
 import { authFor, makeApprove, makeCrashy, makeHang, makeNightly } from './background-tasks.mock';
 import { serveHTTP } from './harness.mock';
 
-const [url, counterFile, recover, slots, mode, traced] = process.argv.slice(2);
+const [url, counterFile, recover, slots, mode, traced, leaseMs] = process.argv.slice(2);
 
 const server = new MCPServer({
   name: 'Tasks',
@@ -27,7 +27,7 @@ const mastra = new Mastra({
   storage: new LibSQLStore({ id: 'tasks', url: url! }),
   backgroundTasks: {
     enabled: true,
-    leaseDurationMs: 3_000,
+    leaseDurationMs: Number(leaseMs),
     ...(slots === 'oneSlot' && { perOwnerConcurrency: { 'mcp-server:tasks': 1 } }),
   },
   mcpServers: { tasks: server },

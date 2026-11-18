@@ -2038,6 +2038,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/mcp-guide",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/using-tools",
       "destination": "/docs/agents/tools",
       "permanent": true
@@ -2230,6 +2235,76 @@
     {
       "source": "/docs/mastra-platform/connect/channels",
       "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/overview",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/providers",
+      "destination": "/models/providers",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/openrouter",
+      "destination": "/models/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/stream",
+      "destination": "/reference/streaming/agents/stream",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/streaming",
+      "destination": "/docs/guides/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/pausing-execution",
+      "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/traces",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloudflare",
+      "destination": "/integrations/deploy/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel",
+      "destination": "/integrations/deploy/vercel",
       "permanent": true
     },
     {
@@ -3923,6 +3998,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/mcp-guide/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/using-tools/llms.txt",
       "destination": "/docs/agents/tools/llms.txt",
       "permanent": true
@@ -4130,6 +4210,76 @@
     {
       "source": "/docs/mastra-platform/connect/channels/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/overview/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/providers/llms.txt",
+      "destination": "/models/providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/openrouter/llms.txt",
+      "destination": "/models/gateways/openrouter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/stream/llms.txt",
+      "destination": "/reference/streaming/agents/stream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/llms.txt",
+      "destination": "/docs/workflows/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/pausing-execution/llms.txt",
+      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/llms.txt",
+      "destination": "/docs/memory/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/memory/llms.txt",
+      "destination": "/docs/memory/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/llms.txt",
+      "destination": "/docs/observability/tracing/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/traces/llms.txt",
+      "destination": "/docs/observability/tracing/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloudflare/llms.txt",
+      "destination": "/integrations/deploy/cloudflare/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel/llms.txt",
+      "destination": "/integrations/deploy/vercel/llms.txt",
       "permanent": true
     },
     {

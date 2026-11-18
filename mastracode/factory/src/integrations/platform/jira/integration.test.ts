@@ -145,7 +145,7 @@ describe('PlatformJiraIntegration discovery', () => {
     ]);
     const jira = integration();
     const reconcile = attachJiraIssueReconciler(jira, {
-      storage: { projects: seeded.projects },
+      storage: { projects: seeded.projects, intake: seeded.intake },
       runtime: {
         configVersion: 'test-v1',
         workItems: seeded.workItems,
@@ -155,7 +155,24 @@ describe('PlatformJiraIntegration discovery', () => {
 
     await expect(reconcile?.()).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect((item)).toMatchObject({ metadata: {autoStartCandidate: true}, workItem: { metadata: {identifier: 'ENG-42', issueRef: reference, state: 'To Do', stateType: 'unstarted', priority: 'High', project: 'ENG', assignee: 'Ada', author: 'Grace', labels: ['bug'], createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-02T00:00:00Z'} } });
+    expect(item).toMatchObject({
+      metadata: { autoStartCandidate: true },
+      workItem: {
+        metadata: {
+          identifier: 'ENG-42',
+          issueRef: reference,
+          state: 'To Do',
+          stateType: 'unstarted',
+          priority: 'High',
+          project: 'ENG',
+          assignee: 'Ada',
+          author: 'Grace',
+          labels: ['bug'],
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      },
+    });
   });
 
   it('constructs without a connection ID and logs initialization without connection details', async () => {
@@ -221,6 +238,94 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       metadata: { key: 'ENG', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
     });
     expect(decodeSourceId(sources[1]!.id)).toEqual({ connectionId: 'a1b_beta', projectId: '2' });
+  });
+
+  it('files a new issue on a second connection when the first fills every page of the sweep', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    let acmePage = 0;
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => {
+          acmePage += 1;
+          return json({ issues: [issue(`ENG-${acmePage}`)], nextPageToken: `acme-${acmePage}` });
+        },
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({ observed: 6, failed: 0 });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)).toContain(
+      'OPS-7',
+    );
+  });
+
+  it('files a new issue on a second connection when the first fails', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { jira: { enabled: true, sourceIds } } });
+    for (const sourceId of sourceIds) {
+      await seeded.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId,
+        factoryProjectId: project.id,
+        labels: null,
+      });
+    }
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ errorMessages: ['boom'] }, 500),
+      ],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
+    ]);
+    const reconcile = attachJiraIssueReconciler(integration(), {
+      auth: fakeRouteAuth(),
+      factoryStorage: seeded.storage,
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as never);
+
+    await expect(reconcile?.()).resolves.toMatchObject({
+      observed: 1,
+      failed: 1,
+      errors: [{ projectId: project.id }],
+    });
+    const proposed = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(proposed.map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)).toContain(
+      'OPS-7',
+    );
   });
 
   it('pages selected projects across multiple Jira connections without mixing credentials', async () => {
@@ -319,6 +424,34 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       commentCount: 1,
     });
     expect(detail?.comments[0]?.body).toBe('Details');
+  });
+
+  it('does not return an issue from a different project than the reference names', async () => {
+    stubRoutes([
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9?`, () => json(issue('SEC-9', '3'))],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9/comment`,
+        () => json({ comments: [], total: 0 }),
+      ],
+    ]);
+    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'SEC-9', projectId: '2' });
+
+    await expect(integration().intake.getIssue({ connection, issueId: reference })).resolves.toBeNull();
+    await expect(
+      integration().intake.getIssue({ connection, issueId: 'SEC-9', sourceId: encodeSourceId('a1b_beta', '2') }),
+    ).resolves.toBeNull();
+  });
+
+  it('does not return an issue whose reference conflicts with the source scope', async () => {
+    const fetchMock = stubRoutes([]);
+    const sourceId = encodeSourceId('a1b_acme', '1');
+    const otherConnection = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'SEC-9', projectId: '1' });
+    const otherProject = encodeIssueReference({ connectionId: 'a1b_acme', issueId: 'SEC-9', projectId: '3' });
+
+    await expect(integration().intake.getIssue({ connection, issueId: otherConnection, sourceId })).resolves.toBeNull();
+    await expect(integration().intake.getIssue({ connection, issueId: otherProject, sourceId })).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects a connection that was not discovered as active jira', async () => {

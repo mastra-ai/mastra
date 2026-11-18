@@ -1,4 +1,3 @@
-import { CheckIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { MessageMetadata } from '../messages/message-metadata';
 import { toolInteraction } from './tool-card-kind';
@@ -9,6 +8,7 @@ import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { Icon } from '@/ds/icons/Icon';
 
 export { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
@@ -171,7 +171,7 @@ const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPro
                         className="flex min-w-24 items-center justify-center gap-1"
                       >
                         <Icon size="sm">
-                          <CheckIcon aria-hidden />
+                          <IconCheckmark2Medium aria-hidden />
                         </Icon>
                         Connected
                       </Txt>

@@ -10,6 +10,7 @@
  */
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { getRunRegistryEntry } from '../../../../agent/durable/run-registry';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../../../../agent/streams/constants';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
@@ -68,7 +69,10 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
     const run: any = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
     const onSuspended = vi.fn();
     // Attached before the suspension.
-    const initial = drain((await agent.observe(run.runId, { onSuspended })) as Observation, 20_000);
+    const initialObservation = await agent.observe(run.runId, { onSuspended });
+    const initial = drain(initialObservation as Observation, 20_000);
+    const initialEntry = getRunRegistryEntry(run.runId, mastra);
+    const initialFence = initialEntry?.executionFence;
 
     let toolCallId: string | undefined;
     for await (const chunk of run.fullStream) {
@@ -110,6 +114,15 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
       expect(execute).toHaveBeenCalledTimes(1);
       expect(onSuspended).toHaveBeenCalledTimes(1);
 
+      if (engine === 'durable' || engine === 'evented') {
+        // Warm resume reuses the entry, not its fence. An old observer must not release the resumed run.
+        const resumedEntry = getRunRegistryEntry(run.runId, mastra);
+        expect(resumedEntry).toBe(initialEntry);
+        expect(resumedEntry?.executionFence).not.toBe(initialFence);
+        initialObservation.cleanup();
+        expect(getRunRegistryEntry(run.runId, mastra)).toBe(resumedEntry);
+      }
+
       // A fresh replay of the finished run holds the suspended segment and the resumed one.
       const replay = await drain((await agent.observe(run.runId)) as Observation, 5_000);
       expect(replay.timedOut).toBe(false);
@@ -127,6 +140,12 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
       expect(tail.types).not.toContain('tool-call-approval');
       expect(textOf(tail.chunks)).toBe('Approved and done.');
       expect(tail.types.filter(type => type === 'finish')).toHaveLength(1);
+      if (engine === 'durable' || engine === 'evented') {
+        const currentObservation = await agent.observe(run.runId);
+        await drain(currentObservation as Observation, 5_000);
+        currentObservation.cleanup();
+        expect(getRunRegistryEntry(run.runId, mastra)).toBeUndefined();
+      }
     } finally {
       resumed?.cleanup?.();
       run.cleanup?.();

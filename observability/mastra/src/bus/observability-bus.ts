@@ -48,6 +48,10 @@ function cleanEvent(event: ObservabilityEvent, options: DeepCleanOptions): Obser
       return { type: 'metric', metric: deepClean(event.metric, options) };
     case 'score':
       return { type: 'score', score: deepClean(event.score, options) };
+    case 'feedback_review_status':
+      return { type: event.type, feedback: deepClean(event.feedback, options) };
+    case 'feedback_replacement':
+      return { type: event.type, feedback: deepClean(event.feedback, options) };
     case 'feedback':
       return { type: 'feedback', feedback: deepClean(event.feedback, options) };
     default:
@@ -210,7 +214,7 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
   }
 
   /** Await in-flight routed handler promises, draining until empty. */
-  private async drainPendingHandlers(): Promise<void> {
+  async drainPendingHandlers(): Promise<void> {
     let iterations = 0;
     while (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);

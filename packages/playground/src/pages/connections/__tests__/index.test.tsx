@@ -14,6 +14,7 @@ import {
   launchTokenUnavailable,
   mixedConnectionsResponse,
   providersResponse,
+  regionalProvidersResponse,
   sessionResponse,
   statusActive,
   statusPending,
@@ -448,6 +449,52 @@ describe('ConnectionsPage', () => {
 
       fireEvent.change(within(dialog).getByLabelText(/API key/), { target: { value: 'pat-test-123' } });
       expect(submit.disabled).toBe(false);
+    });
+  });
+
+  describe('when a credential field is only shown for one value of another field', () => {
+    /** Opens the Regional provider form, optionally picking a region first. */
+    async function openRegionalForm(region?: string) {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(regionalProvidersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+      );
+      renderPage();
+      const dialog = await pickProvider('Regional');
+      const submit = (await within(dialog).findByRole('button', { name: 'Connect' })) as HTMLButtonElement;
+      if (region) fireEvent.change(within(dialog).getByLabelText('Region'), { target: { value: region } });
+      return { dialog, submit };
+    }
+
+    describe('when no region is entered yet', () => {
+      it('hides the API key field', async () => {
+        const { dialog } = await openRegionalForm();
+        expect(within(dialog).queryByLabelText('API key')).toBeNull();
+      });
+    });
+
+    describe('when the region does not match the condition', () => {
+      it('keeps the API key field hidden', async () => {
+        const { dialog } = await openRegionalForm('us');
+        expect(within(dialog).queryByLabelText('API key')).toBeNull();
+      });
+
+      it('does not require the hidden API key to connect', async () => {
+        const { submit } = await openRegionalForm('us');
+        expect(submit.disabled).toBe(false);
+      });
+    });
+
+    describe('when the region matches the condition', () => {
+      it('shows the API key field', async () => {
+        const { dialog } = await openRegionalForm('eu');
+        expect(within(dialog).getByLabelText('API key')).not.toBeNull();
+      });
+
+      it('requires the API key to connect', async () => {
+        const { submit } = await openRegionalForm('eu');
+        expect(submit.disabled).toBe(true);
+      });
     });
   });
 });

@@ -15,11 +15,11 @@ pnpm check --no-vale                        # skip Vale (CI runs Vale separately
 
 The command exits `1` when any error is reported and `0` otherwise. Warnings and info findings never fail it. New rules start as warnings and become errors once existing content is clean.
 
-With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale is skipped with a note when its binary isn't installed; run `pnpm vale:download` first.
+With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale needs its binary, which is gitignored, so run `pnpm vale:download` once per checkout. When the binary is missing or Vale fails to start, `pnpm check` reports a `mastra/vale-unavailable` error and exits `1`. Pass `--no-vale` only when you mean to skip Vale.
 
 ## JSON output
 
-`--format json` (or `--json`) prints one object. `status` is `partial` when no errors were found but a check, usually Vale, was skipped:
+`--format json` (or `--json`) prints one object. `status` is `partial` when no errors were found but a check was skipped, for example a file argument that is not a content page:
 
 ```json
 {
@@ -100,6 +100,7 @@ Vale also honors its own `{/* vale off */}` and `{/* vale on */}` comments.
 | `mastra/redirected-link`          | links       | warn     | Yes     | An internal link points to a redirect source. The fix rewrites it to the destination.                                                                 |
 | `mastra/no-self-host-url`         | links       | warn     | Yes     | A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.                                                    |
 | `mastra/bare-url`                 | prose       | warn     | No      | A URL appears as plain text instead of a Markdown link.                                                                                               |
+| `mastra/vale-unavailable`         | prose       | error    | No      | Vale is not installed or failed to start, so prose was not checked. Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose.            |
 | `mastra/format`                   | format      | error    | Yes     | The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).                                                                         |
 | `mastra/redirect-duplicate`       | redirects   | error    | No      | `vercel.redirects.json` has two redirects with the same source.                                                                                       |
 | `mastra/redirect-chain`           | redirects   | error    | No      | A redirect points to the source of another redirect.                                                                                                  |

@@ -1,5 +1,5 @@
 import type { InstalledBoardInfo } from '../../../api/types';
-import { itemStageLabel } from './boardStages';
+import { phaseLabel, phaseName } from './boardStages';
 import type { CardMove } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
@@ -40,20 +40,14 @@ export function proposedCardRun(
     const phase = definition?.phases.find(phase => phase.role === proposal.role);
     // A proposal for a role this board never declares is a leftover from another board.
     if (!phase) return undefined;
-    return { decisionId: proposal.id, label: phase.title };
+    return { decisionId: proposal.id, label: phaseName(phase) };
   }
   const proposedMove = moves.find(move => move.role === proposal.role);
   const label = proposedMove?.label ?? primaryMove?.label ?? 'Start run';
   return { decisionId: proposal.id, label };
 }
 
-export function movingCardStatus(
-  stage: string | undefined,
-  definition: InstalledBoardInfo | undefined,
-  item: WorkItem,
-) {
+export function movingCardStatus(stage: string | undefined, definition: InstalledBoardInfo | undefined) {
   if (stage === undefined) return undefined;
-  const phase = definition?.phases.find(phase => phase.id === stage);
-  const label = phase?.title ?? itemStageLabel(item, stage, definition);
-  return { stage, label, completes: definition?.flow?.completed === stage };
+  return { stage, label: phaseLabel(definition, stage), completes: definition?.flow?.completed === stage };
 }

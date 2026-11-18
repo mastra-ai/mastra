@@ -1,5 +1,10 @@
+import type { Mastra } from '@mastra/core/mastra';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { normalizeQueryParams } from '@mastra/server/server-adapter';
+import {
+  createMCPOAuthMetadataRoutes,
+  isMCPOAuthDiscoveryEnabled,
+  normalizeQueryParams,
+} from '@mastra/server/server-adapter';
 import {
   All,
   Controller,
@@ -14,7 +19,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { MASTRA_OPTIONS } from '../constants';
+import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import { MastraExceptionFilter } from '../filters/mastra-exception.filter';
 import { MastraRouteGuard } from '../guards/mastra-route.guard';
 import { RequestTrackingInterceptor } from '../interceptors/request-tracking.interceptor';
@@ -43,6 +48,7 @@ import { toWebRequest } from '../utils/to-web-request';
 @UseGuards(MastraRouteGuard)
 export class MastraController {
   constructor(
+    @Inject(MASTRA) private readonly mastra: Mastra,
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
     @Inject(RouteHandlerService) private readonly routeHandler: RouteHandlerService,
     @Inject(RequestContextService) private readonly requestContext: RequestContextService,
@@ -101,6 +107,22 @@ export class MastraController {
       }
     }
 
+    // OAuth discovery for the built-in MCP endpoint lives at the server root, outside the prefix.
+    // Checked after custom routes so a user's own route at the same path wins, as on the other adapters.
+    if (method === 'GET' && !(routePath && this.routeHandler.matchRoute(method, routePath))) {
+      const metadataRoute = this.findMCPOAuthMetadataRoute(path);
+      if (metadataRoute) {
+        return this.routeHandler.executeHandler(metadataRoute, {
+          pathParams: {},
+          queryParams: {},
+          body: undefined,
+          requestContext: this.requestContext.requestContext,
+          abortSignal: this.requestContext.abortSignal,
+          request: toWebRequest(req),
+        });
+      }
+    }
+
     if (!routePath) {
       throw new NotFoundException(`Route not found: ${method} ${path}`);
     }
@@ -129,6 +151,11 @@ export class MastraController {
       abortSignal: this.requestContext.abortSignal,
       request: toWebRequest(req),
     });
+  }
+
+  private findMCPOAuthMetadataRoute(path: string): ServerRoute | undefined {
+    if (!isMCPOAuthDiscoveryEnabled(this.mastra)) return undefined;
+    return createMCPOAuthMetadataRoutes(this.mastra, this.options.prefix ?? '/api').find(route => route.path === path);
   }
 
   /**

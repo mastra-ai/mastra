@@ -7,6 +7,8 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
   ObservabilityDropEvent,
   ObservabilityDropReason,
   ObservabilityDropSignal,
@@ -25,7 +27,8 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
-import { resolveStorageAnnotation } from './storage-annotation';
+import { KeyedQueue } from './keyed-queue';
+import { resolveStorageAnnotation, updateStorageFeedbackReviewStatus } from './storage-annotation';
 
 /**
  * Configuration for the DefaultExporter's batching, retry, and strategy behavior.
@@ -105,6 +108,7 @@ export class DefaultExporter extends BaseExporter {
   /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
   #inFlightFlushes = new Set<Promise<void>>();
   #pendingAnnotations = new Set<Promise<void>>();
+  #feedbackWrites = new KeyedQueue();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -502,7 +506,10 @@ export class DefaultExporter extends BaseExporter {
     // Flush all creates in parallel — signals are independent
     const flushResults = await Promise.all([
       this.flushCreates('feedback', createFeedbackEvents, events =>
-        this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+        this.#observabilityStorage!.batchCreateFeedback({
+          feedbacks: events.map(f => buildFeedbackRecord(f)),
+          onConflict: 'ignore',
+        }),
       ),
       this.flushCreates('log', createLogEvents, events =>
         this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
@@ -607,12 +614,25 @@ export class DefaultExporter extends BaseExporter {
     return this.enqueueAnnotation(event);
   }
 
+  onFeedbackReviewStatusEvent(event: FeedbackReviewStatusEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): Promise<void> {
+    return this.enqueueAnnotation(event);
+  }
+
   onFeedbackEvent(event: FeedbackEvent): Promise<void> {
     return this.enqueueAnnotation(event);
   }
 
-  private enqueueAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
-    const pending = this.storeAnnotation(event);
+  private enqueueAnnotation(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void> {
+    const feedbackId = event.type === 'score' ? undefined : event.feedback.feedbackId;
+    const pending = feedbackId
+      ? this.#feedbackWrites.enqueue(feedbackId, () => this.storeAnnotation(event))
+      : this.storeAnnotation(event);
     this.#pendingAnnotations.add(pending);
     void pending.then(
       () => this.#pendingAnnotations.delete(pending),
@@ -621,9 +641,18 @@ export class DefaultExporter extends BaseExporter {
     return pending;
   }
 
-  private async storeAnnotation(event: ScoreEvent | FeedbackEvent): Promise<void> {
+  private async storeAnnotation(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void> {
     await this.waitForInit();
     if (!this.#observabilityStorage) return;
+    if (event.type === 'feedback_review_status') {
+      // Earlier creates may be buffered or already writing. Do not call public
+      // flush(): it waits on this annotation and would deadlock.
+      await this.flushBufferedEvents();
+      await updateStorageFeedbackReviewStatus(this.#observabilityStorage, event.feedback, this.logger);
+      return;
+    }
     const resolved = await resolveStorageAnnotation(event, this.#observabilityStorage, async () => {
       // Flush buffered spans before retrying; the bus waits for this handler before its buffer drain.
       await Promise.allSettled([...this.#inFlightFlushes]);
@@ -638,6 +667,17 @@ export class DefaultExporter extends BaseExporter {
       });
       return;
     }
+    if (resolved.type === 'feedback_replacement') {
+      if (
+        typeof this.#observabilityStorage.replaceFeedback !== 'function' ||
+        !this.#observabilityStorage.getFeatures?.()?.includes('feedback-replacement')
+      ) {
+        this.logger.warn('Storage exporter skipped feedback replacement: upgrade the storage adapter and @mastra/core');
+        return;
+      }
+      await this.#observabilityStorage.replaceFeedback({ feedback: buildFeedbackRecord(resolved) });
+      return;
+    }
     this.#eventBuffer.addEvent(resolved);
     await this.handleBatchedFlush();
   }
@@ -649,6 +689,10 @@ export class DefaultExporter extends BaseExporter {
    */
   async flush(): Promise<void> {
     await Promise.allSettled([...this.#pendingAnnotations]);
+    await this.flushBufferedEvents();
+  }
+
+  private async flushBufferedEvents(): Promise<void> {
     // A timer or size trigger may have taken a batch out of the buffer and still be
     // writing it, so an empty buffer doesn't mean the data reached storage. Each round
     // joins those writes first (they can defer span updates back into the buffer), then

@@ -13,6 +13,8 @@ type ListArgs<T extends object> = Simplify<
   }
 >;
 
+export type { TracePageRequest, GetTracePageArgs, TracePageResponse, TracePageNode } from './trace-page-types';
+
 export type TraceRecord = Response<'GET /observability/traces/:traceId'>;
 export type GetTraceLightResponse = Response<'GET /observability/traces/:traceId/light'>;
 export type GetSpanResponse = Response<'GET /observability/traces/:traceId/spans/:spanId'>;
@@ -116,10 +118,5 @@ export type GetEnvironmentsResponse = Response<'GET /observability/discovery/env
 export type GetTagsArgs = Query<'GET /observability/discovery/tags'>;
 export type GetTagsResponse = Response<'GET /observability/discovery/tags'>;
 
-/** Full replacement supported by Platform; OSS server does not implement this PUT. */
-export type ReplaceFeedbackBody = {
-  feedback: Omit<CreateFeedbackBody['feedback'], 'feedbackId' | 'timestamp'> & {
-    feedbackId: string;
-    timestamp: string;
-  };
-};
+/** Full replacement retaining the original feedback identity. */
+export type ReplaceFeedbackBody = Body<'PUT /observability/feedback/:feedbackId'>;

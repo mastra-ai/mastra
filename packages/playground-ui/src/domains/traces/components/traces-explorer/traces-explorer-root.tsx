@@ -46,6 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { hasTokenSearchFilter } from '@/domains/observability/lib/token-search-predicate';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
@@ -122,17 +123,20 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
-  // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(
-    () =>
-      sanitizeTracesFilters(rawFilters, {
-        withRootDuration,
-        withTimeToFirstChunk,
-        withTimeToFirstToken,
-        withOutcomeFields,
-      }),
-    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
-  );
+  const withTokenSearch =
+    withQueryTrace &&
+    !!(capabilities?.capabilities.traceQueryTokenSearch && capabilities.capabilities.traceAggregateTokenSearch);
+
+  // Sanitize for display/query without rewriting host state. A later filter edit replaces the displayed token list.
+  const filters = useMemo(() => {
+    return sanitizeTracesFilters(rawFilters, {
+      withTokenSearch,
+      withRootDuration,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+    });
+  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTokenSearch]);
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -214,7 +218,11 @@ export function TracesExplorerRoot({
         const base = latest.current.filters;
         const before = rangeBeforeZoom(zoomMemory.current, base);
         zoomMemory.current = undefined;
-        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+        updateFilters({
+          tokens: base.tokens,
+          groups: base.groups,
+          ...(before ?? { datePreset: defaultPreset }),
+        });
       },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
@@ -240,6 +248,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTokenSearch,
       withFeedback,
       feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
@@ -262,6 +271,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTokenSearch,
       withFeedback,
       hasFeedbackOptions,
       contextMode,
@@ -284,6 +294,7 @@ export function TracesExplorerRoot({
     ],
   );
 
+  const tokenSearchApplied = withTokenSearch && [...filters.tokens, ...filters.groups].some(hasTokenSearchFilter);
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
@@ -291,13 +302,23 @@ export function TracesExplorerRoot({
     () => ({
       ...filtersActions,
       filters,
+      hasTokenSearch: tokenSearchApplied,
       dateFrom,
       dateTo,
       filtersApplied,
       contentFiltersApplied,
       runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
+    [
+      filtersActions,
+      filters,
+      tokenSearchApplied,
+      dateFrom,
+      dateTo,
+      filtersApplied,
+      contentFiltersApplied,
+      runningSelected,
+    ],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

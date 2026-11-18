@@ -1,18 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useJiraProjectsQuery } from '../../../../hooks/useJiraData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
 import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
-import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
+import {
+  AddPlatformAccountButton,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function JiraIntakeSection({
   config,
@@ -53,30 +56,29 @@ export function JiraIntakeSection({
       connection={
         platformManaged &&
         (listed ? (
-          <PlatformConnectionActions provider="jira" connections={status?.connections ?? []} />
+          <>
+            {(status?.connections?.length ?? 0) > 0 && <AddPlatformAccountButton provider="jira" />}
+            <PlatformConnectionActions provider="jira" connections={status?.connections ?? []} />
+          </>
         ) : (
           <PlatformConnectButton provider="jira" />
         ))
       }
       description={description}
-      syncControl={
-        <IntakeSyncControl
-          accessibleLabel="Sync Jira issues"
-          description="Active issues from selected projects feed your board."
-          checked={config.jira.enabled}
-          disabled={!configured}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
-      }
       action={
         statusQuery.isError && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )
       }
     >
-      {configured && config.jira.enabled && !authError && (
+      {configured && !authError && (
         <JiraRoutedSourcePicker
           factories={factories}
           label="Jira projects"
@@ -88,9 +90,7 @@ export function JiraIntakeSection({
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
           onRetry={() => void projectsQuery.refetch()}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
     </IntakeProviderCard>

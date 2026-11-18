@@ -114,3 +114,21 @@ export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ c
   <div ref={ref} className={cn('flex items-center p-3 pt-0', className)} {...props} />
 ));
 CardFooter.displayName = 'CardFooter';
+
+export type CardInsetProps = React.HTMLAttributes<HTMLElement> & {
+  as?: React.ElementType;
+};
+
+export const CardInset = React.forwardRef<HTMLElement, CardInsetProps>(
+  ({ className, as: Component = 'div', ...props }, ref) => (
+    <Component
+      ref={ref}
+      className={cn(
+        'divide-y divide-border overflow-hidden rounded-lg border border-border bg-sidebar *:p-3',
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+CardInset.displayName = 'CardInset';

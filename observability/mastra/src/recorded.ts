@@ -2,6 +2,7 @@ import type {
   AnyRecordedSpan,
   CorrelationContext,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   FeedbackInput,
   RecordedSpan,
   RecordedTrace,
@@ -13,7 +14,7 @@ import type {
 import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
 import { generateSignalId } from './ids';
 
-type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent;
+type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent | FeedbackReplacementEvent;
 type EmitRecordedEvent = (event: RecordedAnnotationEvent) => void | Promise<void>;
 type CanEmitRecordedEvent = () => boolean;
 type DebugRecordedAnnotationUnavailable = (args: {
@@ -159,8 +160,8 @@ function findSpanById(spans: SpanRecord[], spanId: string | undefined): SpanReco
 /** Resolve a storage exporter's copy without changing the event identity or other destinations' payloads. */
 export function resolveRecordedEventFromTrace(
   trace: GetTraceResponse,
-  event: ScoreEvent | FeedbackEvent,
-): ScoreEvent | FeedbackEvent | null {
+  event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent,
+): ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | null {
   const record = event.type === 'score' ? event.score : event.feedback;
   const spans = trace.spans.filter(span => span.traceId === record.traceId);
   const span = record.spanId ? findSpanById(spans, record.spanId) : spans.find(span => !span.parentSpanId);
@@ -186,7 +187,9 @@ export function resolveRecordedEventFromTrace(
   };
   return event.type === 'score'
     ? { type: 'score', score: { ...event.score, ...context } }
-    : { type: 'feedback', feedback: { ...event.feedback, ...context } };
+    : event.type === 'feedback_replacement'
+      ? { type: 'feedback_replacement', feedback: { ...event.feedback, ...context } }
+      : { type: 'feedback', feedback: { ...event.feedback, ...context } };
 }
 
 class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpan<TType> {

@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe('createGatewayApiKey', () => {
-  it('provisions a Gateway project key instead of an organization v2 key', async () => {
+  it('returns a Gateway project key without a key id', async () => {
     const signal = new AbortController().signal;
     vi.mocked(platformFetch).mockResolvedValueOnce(
       respond(201, { project: { id: 'p1', name: 'my-app' }, apiKey: 'msk_project' }),
@@ -40,6 +40,22 @@ describe('createGatewayApiKey', () => {
       expect.objectContaining({ method: 'POST', signal }),
     );
     expect(requestBody(0)).toEqual({ name: 'my-app', keyLabel: 'my-app' });
+  });
+
+  it('keeps the key id of an organization v2 key so it can be revoked', async () => {
+    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId: 'gk_1', apiKey: 'msk_v2' }));
+
+    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({
+      apiKey: 'msk_v2',
+      keyId: 'gk_1',
+    });
+    expect(requestBody(0)).toEqual({ name: 'my-app', keyLabel: 'my-app' });
+  });
+
+  it.each([null, ''])('ignores a key id of %j', async keyId => {
+    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId, apiKey: 'msk_v2' }));
+
+    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({ apiKey: 'msk_v2' });
   });
 
   it('surfaces failures', async () => {

@@ -78,6 +78,8 @@ jobs:
         project:
           # Core packages
           - packages/*
+          # Client SDKs
+          - client-sdks/*
           # Stores (external API required)
           - stores/*
           # Voice packages

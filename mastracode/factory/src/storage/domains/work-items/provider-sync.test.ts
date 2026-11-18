@@ -6,7 +6,11 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { MastraFactory } from '../../../factory.js';
 import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import { migrateWorkItemSplit } from '../../../work-items/split-migration.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  createLegacyCardTablesForTests,
+} from '../../test-utils.js';
 import { externalSourceKey } from './base.js';
 import { Cards } from './cards.js';
 import { FACTORY_BOARD_ITEMS_SCHEMA } from './work-item-schema.js';
@@ -20,6 +24,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: 'sync-test', url: ':memory:' });
+    // Some cases leave a card where an older Factory wrote it, so start from a database it upgraded.
+    await createLegacyCardTablesForTests(storage);
     const { workItems } = await createFactoryStorageForTests(storage);
     const orgId = randomUUID();
     const scope = { orgId, factoryProjectId: 'project', userId: 'user' };
@@ -339,8 +345,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         ...scope,
         workItemId: item.id,
         expectedRevision: item.revision,
-        ingress: { identity: 'after-pr-reconciliation', triggerType: 'test' },
-        configVersion: '1',
+        ingress: { identity: 'after-pr-reconciliation' },
         actor: null,
         outcome: { status: 'accepted' },
         decisions: [],
@@ -382,8 +387,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       ...scope,
       workItemId: item.id,
       expectedRevision: item.revision,
-      ingress: { identity: 'after-trust-change', triggerType: 'test' },
-      configVersion: '1',
+      ingress: { identity: 'after-trust-change' },
       actor: null,
       outcome: { status: 'accepted' },
       decisions: [],
@@ -413,8 +417,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         ...scope,
         workItemId: item.id,
         expectedRevision: item.revision,
-        ingress: { identity: 'after-sync', triggerType: 'test' },
-        configVersion: '1',
+        ingress: { identity: 'after-sync' },
         actor: null,
         outcome: { status: 'accepted' },
         decisions: [],
@@ -486,8 +489,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         expectedRevision,
         destinationStage: 'planning',
         actorId: scope.userId,
-        ingress: { identity: 'process-consent', triggerType: 'human', transitionId: 'process-consent' },
-        configVersion: '1',
+        ingress: { identity: 'process-consent', transitionId: 'process-consent' },
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType: 'feature request',
@@ -584,6 +586,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         const legacy = await new Cards(storage.ops).findOne({ id: item.id });
         delete legacy!.work_item;
         delete legacy!.work_item_sources;
+        delete legacy!.changed_at;
         await storage.ops.insertOne('work_items', legacy!);
         await storage.ops.deleteMany('factory_board_items', { id: item.id });
         await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: item.workItem.id });
@@ -633,6 +636,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     await storage.ops.deleteMany('factory_board_items', { id: item.id });
     await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: item.workItem.id });
@@ -714,6 +718,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     const board = await storage.ops.findOne<{ work_item_id: string }>('factory_board_items', { id: item.id });
     await storage.ops.deleteMany('factory_board_items', { id: item.id });
@@ -733,6 +738,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const legacy = await new Cards(storage.ops).findOne({ id: item.id });
     delete legacy!.work_item;
     delete legacy!.work_item_sources;
+    delete legacy!.changed_at;
     await storage.ops.insertOne('work_items', legacy!);
     await workItems.delete({ orgId: scope.orgId, id: item.id });
     const before = await storage.ops.findOne('work_items', { id: item.id });

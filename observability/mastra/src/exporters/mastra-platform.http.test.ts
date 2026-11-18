@@ -5,7 +5,7 @@ import { Mastra } from '@mastra/core';
 import { noopLogger } from '@mastra/core/logger';
 import { SpanType } from '@mastra/core/observability';
 import type { FeedbackEvent, ScoreEvent, LogEvent, TracingEvent } from '@mastra/core/observability';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, ObservabilityStorage } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
 import { DefaultExporter } from './default';
@@ -21,6 +21,7 @@ afterEach(async () => {
 async function collector(hold = false, reply?: (res: ServerResponse, path: string) => void) {
   const bodies: {
     path: string;
+    method: string;
     bytes: number;
     data: Record<string, any>;
     headers: IncomingHttpHeaders;
@@ -38,6 +39,7 @@ async function collector(hold = false, reply?: (res: ServerResponse, path: strin
     const body = Buffer.concat(chunks);
     bodies.push({
       path: req.url!,
+      method: req.method!,
       bytes: body.length,
       data: JSON.parse(body.toString()),
       headers: req.headers,
@@ -90,6 +92,495 @@ function exporter(endpoint: string, overrides: Partial<MastraPlatformExporterCon
 }
 
 describe('Platform uploads over HTTP', () => {
+  describe.each([
+    {
+      name: 'storage',
+      create: (maxBatchSize: number) => new MastraStorageExporter({ maxBatchWaitMs: 60_000, maxBatchSize }),
+    },
+    {
+      name: 'storage bytes',
+      create: (maxBatchSize: number) =>
+        new MastraStorageExporter({ maxBatchWaitMs: 60_000, maxBatchSize, byteBatching: {} }),
+    },
+    {
+      name: 'legacy storage',
+      create: (maxBatchSize: number) => new DefaultExporter({ maxBatchWaitMs: 60_000, maxBatchSize }),
+    },
+  ])('$name review ordering', ({ create }) => {
+    it.each(['buffered', 'resolving', 'inflight'] as const)(
+      'applies review updates after a %s create without delaying remote updates',
+      async scenario => {
+        const receiver = await collector();
+        const storage = new InMemoryStore();
+        const store = (await storage.getStore('observability'))!;
+        await store.createSpan({
+          span: {
+            traceId: 'trace',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root',
+            spanType: SpanType.GENERIC,
+            isEvent: false,
+            startedAt: new Date(),
+            endedAt: new Date(),
+          },
+        });
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        if (scenario === 'resolving') {
+          const getTrace = store.getTrace.bind(store);
+          store.getTrace = async args => {
+            await gate;
+            return getTrace(args);
+          };
+        }
+        if (scenario === 'inflight') {
+          const batchCreate = store.batchCreateFeedback.bind(store);
+          store.batchCreateFeedback = async args => {
+            await gate;
+            return batchCreate(args);
+          };
+        }
+        let feedbackId = '';
+        const observability = new Observability({
+          configs: {
+            default: {
+              serviceName: 'ordered-local-review',
+              exporters: [
+                create(scenario === 'inflight' ? 1 : 1000),
+                exporter(receiver.endpoint),
+                {
+                  name: 'feedback-id',
+                  exportTracingEvent() {},
+                  onFeedbackEvent(event) {
+                    feedbackId = event.feedback.feedbackId;
+                  },
+                  async flush() {},
+                  async shutdown() {},
+                },
+              ],
+            },
+          },
+        });
+        new Mastra({ storage, observability, logger: false });
+        cleanup.push(() => observability.shutdown());
+        try {
+          await observability.addFeedback({
+            traceId: 'trace',
+            ...(scenario === 'resolving' ? {} : { correlationContext: {} }),
+            feedback: { feedbackType: 'comment', value: 'keep' },
+          });
+          await observability.updateFeedbackReviewStatus({ feedbackId, reviewStatus: 'reviewed' });
+          await expect.poll(() => receiver.bodies.some(body => body.method === 'PATCH')).toBe(true);
+        } finally {
+          release();
+        }
+        await observability.flush();
+        expect((await store.listFeedback({})).feedback).toEqual([
+          expect.objectContaining({ feedbackId, value: 'keep', reviewStatus: 'reviewed' }),
+        ]);
+      },
+    );
+  });
+
+  describe.each([
+    { first: 'PATCH', second: 'PATCH' },
+    { first: 'PUT', second: 'PATCH' },
+    { first: 'PATCH', second: 'PUT' },
+  ] as const)('$first then $second feedback ordering', ({ first, second }) => {
+    const update = (
+      instance: MastraPlatformExporter,
+      method: 'PUT' | 'PATCH',
+      feedbackId: string,
+      reviewStatus: 'reviewed' | 'needs-review',
+    ) => {
+      if (method === 'PATCH') {
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId, reviewStatus },
+        });
+      } else {
+        instance.onFeedbackReplacementEvent({
+          type: 'feedback_replacement',
+          feedback: {
+            feedbackId,
+            traceId: 'trace',
+            timestamp: new Date('2026-11-11T12:00:00Z'),
+            feedbackType: 'comment',
+            value: 'keep',
+            reviewStatus,
+          },
+        });
+      }
+    };
+    const status = (body: { data: Record<string, any> }) => body.data.feedback?.reviewStatus ?? body.data.reviewStatus;
+
+    it.each(['flush', 'shutdown'] as const)(
+      'preserves update order across retries on %s without blocking other feedback IDs',
+      async lifecycle => {
+        let firstArrived!: () => void;
+        const firstRequest = new Promise<void>(resolve => {
+          firstArrived = resolve;
+        });
+        let attempts = 0;
+        const receiver = await collector(false, (res, path) => {
+          if (path.includes('/ordered%2Fid') && ++attempts === 1) {
+            res.writeHead(503).end(
+              JSON.stringify({
+                code: first === 'PUT' ? 'ANCHOR_LOOKUP_UNAVAILABLE' : 'FEEDBACK_LOOKUP_UNAVAILABLE',
+              }),
+            );
+            firstArrived();
+          } else res.writeHead(204).end();
+        });
+        const instance = exporter(receiver.endpoint);
+        update(instance, first, 'ordered/id', 'reviewed');
+        await firstRequest;
+        update(instance, second, 'ordered/id', 'needs-review');
+        update(instance, 'PATCH', 'independent', 'reviewed');
+        await instance[lifecycle]();
+        const writes = receiver.bodies.filter(body => body.path.includes('/ordered%2Fid'));
+        expect(writes.map(body => [body.method, status(body)])).toEqual([
+          [first, 'reviewed'],
+          [first, 'reviewed'],
+          [second, 'needs-review'],
+        ]);
+        expect(writes[0]?.raw).toBe(writes[1]?.raw);
+        expect(receiver.bodies[1]?.path).toContain('/independent/');
+      },
+    );
+
+    it('delivers the next update after a terminal failure', async () => {
+      let attempts = 0;
+      const receiver = await collector(false, res => res.writeHead(++attempts === 1 ? 403 : 204).end());
+      const instance = exporter(receiver.endpoint);
+      update(instance, first, 'ordered/id', 'reviewed');
+      update(instance, second, 'ordered/id', 'needs-review');
+      await instance.flush();
+      expect(receiver.bodies.map(body => [body.method, status(body)])).toEqual([
+        [first, 'reviewed'],
+        [second, 'needs-review'],
+      ]);
+    });
+  });
+
+  it.each([MastraStorageExporter, DefaultExporter])(
+    'skips inherited unsupported review updates in %s',
+    async StorageExporter => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      const update = store.updateFeedbackReviewStatus.bind(store);
+      store.updateFeedbackReviewStatus = ObservabilityStorage.prototype.updateFeedbackReviewStatus;
+      const instance = new StorageExporter();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'unsupported-review', exporters: [instance] } },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      await expect(
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId: 'review', reviewStatus: 'reviewed' },
+        }),
+      ).resolves.toBeUndefined();
+      expect((await store.listFeedback({})).feedback).toEqual([]);
+      store.updateFeedbackReviewStatus = update;
+      await expect(
+        instance.onFeedbackReviewStatusEvent({
+          type: 'feedback_review_status',
+          feedback: { feedbackId: 'missing', reviewStatus: 'reviewed' },
+        }),
+      ).rejects.toThrow('Feedback record not found');
+    },
+  );
+
+  it.each([MastraStorageExporter, DefaultExporter])(
+    'sends review updates while %s is waiting on local storage',
+    async StorageExporter => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      await store.createFeedback({
+        feedback: {
+          feedbackId: 'review',
+          timestamp: new Date(),
+          traceId: 'trace',
+          feedbackType: 'comment',
+          value: 'keep',
+          feedbackUserId: 'author',
+        },
+      });
+      const original = await store.getFeedbackById('review');
+      const update = store.updateFeedbackReviewStatus.bind(store);
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      store.updateFeedbackReviewStatus = async args => {
+        await gate;
+        return update(args);
+      };
+      const otherEvents: unknown[] = [];
+      const legacyEvents: unknown[] = [];
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'independent-review',
+            exporters: [
+              new StorageExporter(),
+              exporter(receiver.endpoint),
+              {
+                name: 'third-party',
+                exportTracingEvent() {},
+                onFeedbackReviewStatusEvent(event) {
+                  otherEvents.push(event);
+                },
+                async flush() {},
+                async shutdown() {},
+              },
+              {
+                name: 'older-exporter',
+                exportTracingEvent() {},
+                onFeedbackEvent(event) {
+                  legacyEvents.push(event);
+                },
+                onFeedbackReplacementEvent(event) {
+                  legacyEvents.push(event);
+                },
+                async flush() {},
+                async shutdown() {},
+              },
+            ],
+          },
+        },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      try {
+        await observability.updateFeedbackReviewStatus({ feedbackId: 'review', reviewStatus: 'reviewed' });
+        await expect.poll(() => receiver.bodies.length, { timeout: 1500 }).toBe(1);
+        expect(receiver.bodies[0]).toMatchObject({
+          method: 'PATCH',
+          path: '/api/observability/feedback/review/review-status',
+          data: { reviewStatus: 'reviewed' },
+        });
+        expect((await store.getFeedbackById('review'))?.reviewStatus).toBe('needs-review');
+      } finally {
+        release();
+      }
+      await observability.flush();
+      expect(await store.getFeedbackById('review')).toEqual({ ...original, reviewStatus: 'reviewed' });
+      expect(otherEvents).toEqual([
+        { type: 'feedback_review_status', feedback: { feedbackId: 'review', reviewStatus: 'reviewed' } },
+      ]);
+      expect(legacyEvents).toEqual([]);
+    },
+  );
+
+  it.each(['missing', 'unsupported'] as const)(
+    'delivers review updates remotely when local feedback is %s',
+    async scenario => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      if (scenario === 'unsupported') Object.defineProperty(store, 'updateFeedbackReviewStatus', { value: undefined });
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'remote-review',
+            exporters: [new MastraStorageExporter(), exporter(receiver.endpoint)],
+          },
+        },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      await observability.updateFeedbackReviewStatus({ feedbackId: 'remote', reviewStatus: 'reviewed' });
+      await observability.flush();
+      expect(receiver.bodies.map(body => [body.method, body.data])).toEqual([['PATCH', { reviewStatus: 'reviewed' }]]);
+      expect((await store.listFeedback({})).feedback).toEqual([]);
+    },
+  );
+
+  it.each(['flush', 'shutdown'] as const)('drains review PATCH retries with a stable body on %s', async lifecycle => {
+    let attempts = 0;
+    const receiver = await collector(false, res => {
+      if (++attempts === 1) res.writeHead(404).end(JSON.stringify({ code: 'FEEDBACK_NOT_FOUND' }));
+      else if (attempts === 2) res.writeHead(503).end(JSON.stringify({ code: 'FEEDBACK_LOOKUP_UNAVAILABLE' }));
+      else res.writeHead(204).end();
+    });
+    const instance = exporter(receiver.endpoint, { projectId: 'project' });
+    const event = {
+      type: 'feedback_review_status' as const,
+      feedback: { feedbackId: 'review/id', reviewStatus: 'reviewed' as const },
+    };
+    instance.onFeedbackReviewStatusEvent(event);
+    event.feedback.feedbackId = 'changed';
+    await instance[lifecycle]();
+    expect(receiver.bodies).toHaveLength(3);
+    for (const body of receiver.bodies) {
+      expect(body).toMatchObject({
+        method: 'PATCH',
+        path: '/api/observability/feedback/review%2Fid/review-status',
+        data: { reviewStatus: 'reviewed' },
+      });
+      expect(body.headers.authorization).toBe('Bearer local-test-token');
+      expect(body.headers['x-mastra-project-id']).toBe('project');
+      expect(body.raw).toBe(receiver.bodies[0]!.raw);
+    }
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(3);
+  });
+
+  it.each([400, 401, 403, 404, 500, 503])('does not retry unrelated PATCH HTTP %s failures', async status => {
+    const receiver = await collector(false, res => res.writeHead(status).end(JSON.stringify({ code: 'UNRELATED' })));
+    const instance = exporter(receiver.endpoint);
+    instance.onFeedbackReviewStatusEvent({
+      type: 'feedback_review_status',
+      feedback: { feedbackId: 'review', reviewStatus: 'reviewed' },
+    });
+    await instance.flush();
+    expect(receiver.bodies).toHaveLength(1);
+  });
+
+  it('sends remote replacements while local storage is still resolving the trace', async () => {
+    const receiver = await collector();
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('observability'))!;
+    await store.createSpan({
+      span: {
+        traceId: 'slow-local',
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'root',
+        spanType: SpanType.GENERIC,
+        isEvent: false,
+        startedAt: new Date(),
+        endedAt: new Date(),
+        tags: ['local'],
+      },
+    });
+    const read = store.getTrace.bind(store);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    store.getTrace = async args => {
+      await gate;
+      return read(args);
+    };
+    const legacyCreates: FeedbackEvent[] = [];
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'independent-replace',
+          exporters: [
+            new MastraStorageExporter(),
+            exporter(receiver.endpoint),
+            {
+              name: 'older-exporter',
+              exportTracingEvent() {},
+              onFeedbackEvent(event) {
+                legacyCreates.push(event);
+              },
+              async flush() {},
+              async shutdown() {},
+            },
+          ],
+        },
+      },
+    });
+    new Mastra({ storage, observability, logger: false });
+    cleanup.push(() => observability.shutdown());
+    try {
+      await observability.replaceFeedback({
+        traceId: 'slow-local',
+        feedback: { feedbackId: 'independent-edit', timestamp: new Date(), feedbackType: 'thumbs', value: -1 },
+      });
+      await expect.poll(() => receiver.bodies.length, { timeout: 1000 }).toBe(1);
+      expect(receiver.bodies[0]!.method).toBe('PUT');
+      expect((await store.listFeedback({})).feedback).toHaveLength(0);
+    } finally {
+      release();
+    }
+    await observability.flush();
+    expect((await store.listFeedback({})).feedback).toEqual([expect.objectContaining({ value: -1, tags: ['local'] })]);
+    expect(legacyCreates).toEqual([]);
+  });
+
+  it.each(['flush', 'shutdown'] as const)(
+    'drains feedback PUT retries with stable identity during %s',
+    async lifecycle => {
+      let attempts = 0;
+      const receiver = await collector(false, res => {
+        if (++attempts === 1)
+          res.writeHead(404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ code: 'TRACE_NOT_FOUND' }));
+        else res.writeHead(204).end();
+      });
+      const instance = exporter(receiver.endpoint);
+      instance.onFeedbackReplacementEvent({
+        type: 'feedback_replacement',
+        feedback: {
+          feedbackId: 'edited/id',
+          traceId: 'remote',
+          timestamp: new Date('2026-11-11T12:00:00.123Z'),
+          feedbackType: 'thumbs',
+          value: -1,
+          correlationContext: {},
+          feedbackUserId: null,
+          reviewStatus: 'reviewed',
+        },
+      });
+      await instance[lifecycle]();
+      expect(receiver.bodies).toHaveLength(2);
+      expect(receiver.bodies.map(body => [body.method, body.path])).toEqual([
+        ['PUT', '/api/observability/feedback/edited%2Fid'],
+        ['PUT', '/api/observability/feedback/edited%2Fid'],
+      ]);
+      expect(receiver.bodies[1]!.raw).toBe(receiver.bodies[0]!.raw);
+      expect(receiver.bodies[0]!.data.feedback).toMatchObject({
+        feedbackId: 'edited/id',
+        value: -1,
+        feedbackUserId: null,
+        reviewStatus: 'reviewed',
+        timestamp: '2026-11-11T12:00:00.123Z',
+      });
+    },
+  );
+
+  it.each([MastraStorageExporter, DefaultExporter])(
+    'delivers replacements independently and protects local edits from delayed creates (%s)',
+    async StorageExporter => {
+      const receiver = await collector();
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('observability'))!;
+      const local = new StorageExporter();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'replace-test', exporters: [local, exporter(receiver.endpoint)] } },
+      });
+      new Mastra({ storage, observability, logger: false });
+      cleanup.push(() => observability.shutdown());
+      const feedback = { feedbackId: 'sdk-edit', timestamp: new Date(), feedbackType: 'thumbs', value: -1 };
+      // Explicit context avoids a local trace dependency; replacement can precede a batched create.
+      await observability.replaceFeedback({
+        traceId: 'remote',
+        correlationContext: {},
+        feedback: { ...feedback, metadata: { userId: 'trace-subject' } },
+      });
+      await observability.flush();
+      await local.onFeedbackEvent({
+        type: 'feedback',
+        feedback: { ...feedback, traceId: 'remote', correlationContext: {}, value: 1 },
+      });
+      await local.flush();
+      expect((await store.listFeedback({})).feedback).toEqual([
+        expect.objectContaining({ feedbackId: 'sdk-edit', value: -1, feedbackUserId: null }),
+      ]);
+      expect(receiver.bodies.map(body => body.method)).toEqual(['PUT']);
+    },
+  );
+
   it('flushes UTF-8 payloads at the byte threshold without losing or duplicating records', async () => {
     const receiver = await collector();
     const instance = exporter(receiver.endpoint);

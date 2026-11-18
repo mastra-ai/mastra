@@ -7,7 +7,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { OnboardingPreview } from '../onboarding/preview/OnboardingPreview';
 
 describe('contextual onboarding previews', () => {
-  it('shows the personal Factory model in review when shared access is absent', async () => {
+  it('shows the personal Factory model when shared access is absent', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -17,10 +17,13 @@ describe('contextual onboarding previews', () => {
           providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
     );
     renderWithProviders(
       <OnboardingPreview
-        step="review"
+        step="model"
         modelScope="user"
         personalProviderId="anthropic"
         personalModel="anthropic/claude-fable-5"
@@ -32,7 +35,6 @@ describe('contextual onboarding previews', () => {
     const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
     expect(await personal.findByText('Your account is connected')).toBeVisible();
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
   it('shows the selected tracker’s issue becoming a backlog card and uses its connection state', async () => {
@@ -80,14 +82,15 @@ describe('contextual onboarding previews', () => {
           ],
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
     );
     const { client, rerender } = renderWithProviders(
-      <OnboardingPreview
-        step="personal-provider"
-        modelScope="hybrid"
-        model="openai/gpt-5.6-sol"
-        personalProviderId="anthropic"
-      />,
+      <OnboardingPreview step="model" modelScope="hybrid" model="openai/gpt-5.6-sol" personalProviderId="anthropic" />,
     );
     const shared = within(screen.getByLabelText('Factory work model'));
     const personal = within(screen.getByLabelText('Session model'));
@@ -99,7 +102,7 @@ describe('contextual onboarding previews', () => {
     expect(await personal.findByText('Your account is connected')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
 
-    rerender(<OnboardingPreview step="personal-provider" modelScope="hybrid" model="openai/gpt-5.6-sol" />);
+    rerender(<OnboardingPreview step="model" modelScope="hybrid" model="openai/gpt-5.6-sol" />);
     expect(personal.getByText('Connect your account')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
   });

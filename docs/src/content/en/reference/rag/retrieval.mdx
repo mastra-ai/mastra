@@ -15,6 +15,8 @@ After storing embeddings, you need to retrieve relevant chunks to answer user qu
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
+For an agent that answers from your docs or policies, with each customer or team limited to its own content, use [Knowledge](/docs/knowledge/overview) and its [scopes](/docs/knowledge/scopes-and-access) instead. The [RAG overview](/reference/rag/overview) explains when to use each.
+
 ## How retrieval works
 
 1. The user's query is converted to an embedding using the same model used for document embeddings
@@ -78,7 +80,7 @@ Results can also include `vector` when you set `includeVector: true`, and `docum
 
 ## Advanced retrieval options
 
-### Metadata Filtering
+### Metadata filtering
 
 Filter results based on metadata fields to narrow down the search space. This approach - combining vector similarity search with metadata filters - is sometimes called hybrid vector search, as it merges semantic search with structured filtering criteria.
 
@@ -266,7 +268,7 @@ With IVFFlat, or HNSW on older pgvector versions, pgVector compares the query ve
 
 Indexing the metadata fields you filter on speeds up both cases and gives PostgreSQL the row counts it needs to choose between them.
 
-### Vector Query Tool
+### Vector query tool
 
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
@@ -281,7 +283,7 @@ const vectorQueryTool = createVectorQueryTool({
 })
 ```
 
-When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
+When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search the documentation to find relevant information about X topic."
 
 This is particularly useful when:
 
@@ -289,7 +291,7 @@ This is particularly useful when:
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
-#### Database-Specific Configurations
+#### Database-specific configurations
 
 The Vector Query Tool supports database-specific configurations that enable you to use unique features and optimizations of different vector stores.
 
@@ -389,7 +391,7 @@ await pineconeQueryTool.execute({ queryText: 'search query' }, { mastra, request
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
-### Vector Store Prompts
+### Vector store prompts
 
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
@@ -660,7 +662,7 @@ The weights control how different factors influence the final ranking:
 - `position`: Higher values help maintain the original ordering of results
 
 :::note
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+For semantic scoring to work during re-ranking, each result must include the text content in its `metadata.text` field.
 :::
 
 You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:

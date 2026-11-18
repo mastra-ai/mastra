@@ -1,6 +1,4 @@
-import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import type { BoardDefinition } from './define-board.js';
-import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 
 export type InstalledBoard = BoardDefinition<string, string>;
@@ -39,11 +37,6 @@ export function boardRegistryOf(boards: readonly InstalledBoard[]): BoardRegistr
   const registry = new Map<string, InstalledBoard>();
 
   for (const board of boards) {
-    // The retired Review board is served only as itself, to projects still using it; a new board
-    // under its id would take over the cards stored there.
-    if (board.id === LEGACY_REVIEW_BOARD && board !== reviewBoard) {
-      throw new Error(`MastraFactory: board id '${LEGACY_REVIEW_BOARD}' is reserved for the retired Review board.`);
-    }
     if (registry.has(board.id)) {
       throw new Error(`MastraFactory: duplicate board id '${board.id}' in 'boards'.`);
     }
