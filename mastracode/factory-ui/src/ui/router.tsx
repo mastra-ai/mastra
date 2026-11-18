@@ -27,6 +27,8 @@ import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { AppPageLoader } from './layouts/AppPageLoader';
+import { MemberSetupPage } from './domains/join/MemberSetupPage';
+import { NotAMemberPage } from './domains/join/NotAMemberPage';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
@@ -271,11 +273,14 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
           children: [
             { index: true, element: <RootLanding /> },
             { path: 'onboarding', ...lazyRoute(OnboardingPage) },
+            { path: 'join', element: <NotAMemberPage /> },
             {
               path: 'factories/:factoryId',
               element: <FactoryLayout />,
               ...loadOnEntry(prefetchFactoryLayout),
               children: [
+                // Full-page like onboarding: no sidebar until the member can work here.
+                { path: 'setup', element: <MemberSetupPage /> },
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.

@@ -26,6 +26,7 @@ export function OnboardingAccountLane({
   offersGateway = true,
   creating,
   onPreviewProvider,
+  personalNote = 'Creating this Factory also updates your personal default model.',
 }: {
   scope: 'org' | 'user';
   /** Group name while the account has no visible heading. */
@@ -39,6 +40,8 @@ export function OnboardingAccountLane({
   /** The factory is being created: every control locks. */
   creating: boolean;
   onPreviewProvider: PreviewProvider;
+  /** Under the personal lane's model; null hides it (member setup saves the model as it is picked). */
+  personalNote?: string | null;
 }) {
   const labelId = useId();
   const headed = Boolean(heading?.shown);
@@ -73,9 +76,9 @@ export function OnboardingAccountLane({
           <Collapsible open={Boolean(lane.connectedProvider)} className="onboarding-collapse">
             <CollapsibleContent className="flex min-w-0 flex-col gap-3 pt-3">
               {lane.connectedProvider && <FactoryDefaultModelForm scope={scope} lane={lane} />}
-              {scope === 'user' && (
+              {scope === 'user' && personalNote && (
                 <Txt variant="meta" tone="muted">
-                  Creating this Factory also updates your personal default model.
+                  {personalNote}
                 </Txt>
               )}
             </CollapsibleContent>

@@ -1,6 +1,6 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
@@ -9,6 +9,8 @@ import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 
 import { traySurface } from '../../../ui/tray';
+import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
+import { PersonalModelLane } from '../../join/components/PersonalModelLane';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
 import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
@@ -148,21 +150,41 @@ function MissingCredentialState({
 }
 
 function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
+  const project = useFactoryProjectQuery(factoryId);
+  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
+    return (
+      <EmptyState
+        as="h2"
+        iconSlot={<EmptyStateIllustration name="locked" />}
+        titleSlot="Waiting on an admin"
+        descriptionSlot={`Chats in this Factory run on the organization's keys, and none is connected yet. Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory}.`}
+      />
+    );
+  }
+  const modelScope = project.data?.modelScope ?? 'hybrid';
+  // The same personal lane as member setup, inline: connecting here unblocks the composer in place.
   return (
-    <EmptyState
-      as="h2"
-      iconSlot={<IconRobot />}
-      titleSlot="No model available"
-      descriptionSlot={
-        anchor === MODEL_DEFAULTS_ANCHORS.factory
-          ? `Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`
-          : `Chats in this Factory run on your own keys. Connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
-      }
-      actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
-          Open Models settings
-        </Link>
-      }
-    />
+    <div className="flex flex-col items-center gap-5">
+      <EmptyState
+        as="h2"
+        className="py-0"
+        iconSlot={<EmptyStateIllustration name="api-keys" />}
+        titleSlot="Connect your model to start chatting"
+        descriptionSlot={
+          modelScope === 'hybrid'
+            ? 'Board work here runs on the company account. Your own chats run on yours: connect it once and every session, here or in Slack, is ready.'
+            : 'Chats in this Factory run on your own account. Connect it once and every session, here or in Slack, is ready.'
+        }
+      />
+      <div className={cn(traySurface, 'w-full max-w-lg p-1.5 text-start')}>
+        <PersonalModelLane modelScope={modelScope} />
+      </div>
+      <Link
+        to={settingsSectionPath(factoryId, 'models', anchor)}
+        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+      >
+        More options in Models settings
+      </Link>
+    </div>
   );
 }
