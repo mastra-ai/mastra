@@ -323,7 +323,7 @@ import {
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
-import { markOMModelCallsUrgent, runOMModelCall } from './model-call-limiter';
+import { markOMModelCallsUrgent, withOMModelCallContext } from './model-call-limiter';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
@@ -4485,7 +4485,7 @@ ${formattedMessages}
         record.activeObservations,
         hookContext,
       );
-      const reflectResult = await runOMModelCall(
+      const reflectResult = await withOMModelCallContext(
         {
           key: this.buffering.getLockKey(threadId, resourceId),
           priority: 'blocking',

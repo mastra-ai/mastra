@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { getOMModelCallStats, markOMModelCallsUrgent, runOMModelCall } from '../model-call-limiter';
+import {
+  getOMModelCallStats,
+  limitOMModelCallAttempt,
+  markOMModelCallsUrgent,
+  runOMModelCall,
+  withOMModelCallContext,
+} from '../model-call-limiter';
 import type { OMModelCallPriority } from '../model-call-limiter';
 
 function deferred() {
@@ -31,6 +37,23 @@ afterEach(() => {
 });
 
 describe('OM model-call limiter', () => {
+  it('gives each model call of one run its own slot, as resource-scoped batches make several at once', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const call = async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await flush();
+      inFlight--;
+    };
+
+    await withOMModelCallContext({ key: 'resource:a', priority: 'blocking', limit: 1 }, () =>
+      Promise.all([1, 2, 3].map(() => limitOMModelCallAttempt()(call))),
+    );
+
+    expect(peak).toBe(1);
+  });
+
   it('starts a waiting run an agent step blocks on before earlier background buffering', async () => {
     const started: string[] = [];
     const holder = startRun(started, 'holder', 'thread:a', 'background');

@@ -1165,7 +1165,8 @@ export interface ObservationalMemoryConfig {
 
   /**
    * Maximum number of Observer and Reflector runs active at once in the process, across all
-   * threads, resources, and Memory instances. Runs beyond the limit wait for a free slot.
+   * threads, resources, and Memory instances. Calls beyond the limit wait for a free slot,
+   * and a run waiting to retry a failed call holds none.
    *
    * Runs an agent step is waiting for (synchronous observation and reflection, or a background
    * buffer the step needs before it can continue) start ahead of background buffering. Agent

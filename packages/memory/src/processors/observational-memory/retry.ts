@@ -272,6 +272,8 @@ export interface WithRetryOptions {
    * land, so retrying it is unsafe.
    */
   idleTimeoutMs?: number;
+  /** Wraps each attempt. Time spent in the wrapper before it starts the attempt is not idle time. */
+  runAttempt?: <T>(attempt: () => Promise<T>) => Promise<T>;
 }
 
 /** Called by an attempt whenever it makes progress, resetting the idle timer. */
@@ -344,8 +346,11 @@ export async function withRetry<T>(
       throw new Error('The operation was aborted.');
     }
     try {
-      if (idleTimeoutMs === undefined) return await fn(abortSignal ?? new AbortController().signal, () => {});
-      return await attemptWithIdleTimeout(fn, label, idleTimeoutMs, abortSignal);
+      const tryOnce = () =>
+        idleTimeoutMs === undefined
+          ? fn(abortSignal ?? new AbortController().signal, () => {})
+          : attemptWithIdleTimeout(fn, label, idleTimeoutMs, abortSignal);
+      return await (opts.runAttempt ? opts.runAttempt(tryOnce) : tryOnce());
     } catch (error) {
       if (abortSignal?.aborted) throw error;
       if (!(error instanceof OmModelCallTimeoutError) && hasAbortInChain(error)) throw error;

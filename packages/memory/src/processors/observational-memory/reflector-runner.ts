@@ -40,7 +40,7 @@ import {
 } from './markers';
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
-import { runOMModelCall } from './model-call-limiter';
+import { limitOMModelCallAttempt, withOMModelCallContext } from './model-call-limiter';
 import { didProviderChange } from './model-context';
 import { alignLineCutToObservationGroups } from './observation-groups';
 import { describeDegenerateOutput } from './observer-agent';
@@ -570,6 +570,7 @@ export class ReflectorRunner {
         {
           label: 'reflector',
           abortSignal,
+          runAttempt: limitOMModelCallAttempt(abortSignal),
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.reflectionConfig.maxRetries,
         },
@@ -909,7 +910,7 @@ export class ReflectorRunner {
     }
 
     const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
-    const reflectResult = await runOMModelCall(
+    const reflectResult = await withOMModelCallContext(
       {
         key: this.buffering.getLockKey(currentRecord.threadId, currentRecord.resourceId),
         priority: 'background',
@@ -1468,12 +1469,11 @@ export class ReflectorRunner {
         record.activeObservations,
         hookContext,
       );
-      const reflectResult = await runOMModelCall(
+      const reflectResult = await withOMModelCallContext(
         {
           key: this.buffering.getLockKey(record.threadId, record.resourceId),
           priority: 'blocking',
           limit: this.maxConcurrentModelCalls,
-          abortSignal,
         },
         () =>
           this.call(

@@ -147,6 +147,52 @@ describe('Observer concurrency limit', { timeout: 30_000 }, () => {
     expect(observerCalls).toHaveLength(THREADS);
   });
 
+  it('lets another thread observe while a failed Observer call waits to retry', async () => {
+    const requests: Array<{ marker: string; at: number }> = [];
+    mock.on({ endpoint: 'chat', model: OBSERVER }, async request => {
+      const marker = threadMarkerIn(request);
+      requests.push({ marker, at: Date.now() });
+      if (requests.length === 1) {
+        return { error: { message: 'overloaded', type: 'server_error' }, status: 503 };
+      }
+      return { content: `<observations>\n* 🔴 User is working on project ${marker}\n</observations>` };
+    });
+    mock.on({ endpoint: 'chat', model: ACTOR }, { content: 'Noted.' });
+    const openai = createOpenAI({ apiKey: 'test-key', baseURL: `${mock.url}/v1` });
+    const agent = new Agent({
+      id: 'retry-agent',
+      name: 'Retry Agent',
+      instructions: 'You are a helpful assistant.',
+      model: openai.chat(ACTOR),
+      memory: new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            enabled: true,
+            maxConcurrentModelCalls: 1,
+            observation: { model: openai.chat(OBSERVER), messageTokens: 20, bufferTokens: false },
+            reflection: { model: openai.chat(OBSERVER), observationTokens: 100_000 },
+          },
+        },
+      }),
+    });
+
+    await Promise.all(
+      [0, 1].map(i =>
+        agent.generate(`I am starting project ${markerFor(i)}. ${'Please keep track of it. '.repeat(10)}`, {
+          memory: { thread: `retry-thread-${i}`, resource: RESOURCE },
+        }),
+      ),
+    );
+
+    // The failed thread retries after a backoff of about a second; the other thread's call runs meanwhile.
+    const [failed, next, retry] = requests;
+    expect(requests).toHaveLength(3);
+    expect(next!.marker).not.toBe(failed!.marker);
+    expect(retry!.marker).toBe(failed!.marker);
+    expect(getOMModelCallStats()).toEqual({ active: 0, waiting: 0 });
+  });
+
   it('rejects a limit that is not a positive integer', () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     for (const maxConcurrentModelCalls of [0, -1, 1.5, Number.NaN]) {

@@ -18,6 +18,7 @@ import type { Extractor } from './extractor';
 import { resolveExtractors, withoutRequiredSections } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import { limitOMModelCallAttempt } from './model-call-limiter';
 import type { ObserverAttachmentFilter } from './observer-agent';
 import {
   buildObserverSystemPrompt,
@@ -421,6 +422,7 @@ export class ObserverRunner {
         {
           label: 'observer',
           abortSignal,
+          runAttempt: limitOMModelCallAttempt(abortSignal),
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
@@ -778,6 +780,7 @@ export class ObserverRunner {
         {
           label: 'observer-multi-thread',
           abortSignal,
+          runAttempt: limitOMModelCallAttempt(abortSignal),
           idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },

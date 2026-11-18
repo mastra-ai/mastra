@@ -113,7 +113,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'maxConcurrentModelCalls',
     type: 'number',
     description:
-      'Maximum number of Observer and Reflector runs active at once in the process, across all threads, resources, and `Memory` instances. Runs beyond the limit wait for a free slot. Runs an agent step is waiting for, such as synchronous observation or a buffer the step needs before it can continue, start before background buffering. Many threads crossing their thresholds together can otherwise start that many runs at once and slow every agent in the process. Must be a positive integer, or `Infinity` to remove the limit.',
+      'Maximum number of Observer and Reflector model calls in flight at once in the process, across all threads, resources, and `Memory` instances. Calls beyond the limit wait for a free slot, and a run waiting to retry a failed call holds none. Runs an agent step is waiting for, such as synchronous observation or a buffer the step needs before it can continue, start before background buffering. Many threads crossing their thresholds together can otherwise start that many runs at once and slow every agent in the process. Must be a positive integer, or `Infinity` to remove the limit.',
     isOptional: true,
     defaultValue: '3',
   },

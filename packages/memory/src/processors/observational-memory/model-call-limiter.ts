@@ -1,5 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import { OBSERVATIONAL_MEMORY_DEFAULTS } from './constants';
+import { omDebug } from './debug';
+
 /**
- * Process-wide limit on how many Observer and Reflector runs execute at once.
+ * Process-wide limit on how many Observer and Reflector model calls are in flight at once.
  *
  * Each run builds a large prompt, streams a long reply, and parses it on the shared event loop.
  * Without a limit, many threads crossing their thresholds together start that many runs at the
@@ -15,8 +20,11 @@
  * Each caller passes its own `limit`: a run starts only while fewer than `limit` runs are active
  * in the process. With one configured value this is a plain semaphore.
  *
- * A run holds its slot only while its model calls run. It never acquires another slot, so slots
- * always free up and the queue cannot deadlock.
+ * A slot is held for one model call attempt (`limitOMModelCallAttempt`, passed to `withRetry`), not
+ * for the run around it: a run waiting out a retry backoff holds no slot, and each request of a
+ * run that makes several (resource-scoped batches, reflection retries, structured extraction)
+ * takes its own. The run only sets who its attempts belong to (`withOMModelCallContext`). An
+ * attempt never acquires a second slot, so slots always free up and the queue cannot deadlock.
  */
 
 export type OMModelCallPriority = 'blocking' | 'background';
@@ -77,6 +85,31 @@ function drain(): void {
   }
 }
 
+/** Who a model call belongs to: set once per run, read by every model call attempt inside it. */
+export type OMModelCallContext = Pick<OMModelCallSlotOptions, 'key' | 'priority' | 'limit'>;
+
+const callContext = new AsyncLocalStorage<OMModelCallContext>();
+
+/** Runs `run` with `context` applied to every Observer/Reflector model call attempt it makes. */
+export function withOMModelCallContext<T>(context: OMModelCallContext, run: () => Promise<T>): Promise<T> {
+  return callContext.run(context, run);
+}
+
+/**
+ * Runs one model call attempt in a slot. Pass as `withRetry`'s `runAttempt`, so the slot is held
+ * for one request and not for the backoff between retries or the time spent waiting here.
+ */
+export function limitOMModelCallAttempt(abortSignal?: AbortSignal) {
+  return <T>(attempt: () => Promise<T>): Promise<T> => {
+    const context = callContext.getStore() ?? {
+      key: 'unknown',
+      priority: 'blocking' as const,
+      limit: OBSERVATIONAL_MEMORY_DEFAULTS.maxConcurrentModelCalls,
+    };
+    return runOMModelCall({ ...context, abortSignal }, attempt);
+  };
+}
+
 /**
  * Runs `run` once a slot is free and resolves or rejects with its result. The slot is released
  * when `run` settles.
@@ -92,6 +125,7 @@ export async function runOMModelCall<T>(options: OMModelCallSlotOptions, run: ()
 
 function acquire({ key, priority, limit, abortSignal }: OMModelCallSlotOptions): Promise<() => void> {
   abortSignal?.throwIfAborted();
+  const queuedAt = Date.now();
   return new Promise<() => void>((resolve, reject) => {
     let released = false;
     const release = () => {
@@ -113,6 +147,10 @@ function acquire({ key, priority, limit, abortSignal }: OMModelCallSlotOptions):
       start: () => {
         abortSignal?.removeEventListener('abort', onAbort);
         registry.active++;
+        const waitedMs = Date.now() - queuedAt;
+        if (waitedMs > 0) {
+          omDebug(`[OM:modelCallLimiter] ${priority} call for ${key} waited ${waitedMs}ms for a slot (limit ${limit})`);
+        }
         resolve(release);
       },
     };

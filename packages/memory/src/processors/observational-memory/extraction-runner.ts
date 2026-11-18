@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
+import { limitOMModelCallAttempt } from './model-call-limiter';
 import { hasAbortInChain, isTransientLLMError, RETRY_CONFIG, withRetry } from './retry';
 import type { OnAttemptActivity } from './retry';
 
@@ -83,6 +84,7 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
       label: `om-${opts.source}-structured-extraction`,
       abortSignal: opts.abortSignal,
       maxRetries: 1,
+      runAttempt: limitOMModelCallAttempt(opts.abortSignal),
       idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
     });
 

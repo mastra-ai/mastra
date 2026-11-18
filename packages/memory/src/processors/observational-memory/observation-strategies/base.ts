@@ -13,7 +13,7 @@ import {
   getUnobservedParts,
   stripThreadTags,
 } from '../message-utils';
-import { runOMModelCall } from '../model-call-limiter';
+import { withOMModelCallContext } from '../model-call-limiter';
 import type { OMModelCallPriority } from '../model-call-limiter';
 import { generateAnchorId, parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObservationGroup } from '../observation-groups';
@@ -178,12 +178,11 @@ export abstract class ObservationStrategy {
       await this.emitStartMarkers(cycleId);
       // The Observer sees the budgeted context; composition below still builds on the full text.
       const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
-      const output = await runOMModelCall(
+      const output = await withOMModelCallContext(
         {
           key: getOMLockKey(this.scope, threadId, this.opts.resourceId),
           priority: this.modelCallPriority,
           limit: this.deps.maxConcurrentModelCalls,
-          abortSignal,
         },
         () => this.observe(observerContext.context ?? '', messages, observerContext.wasTruncated),
       );
