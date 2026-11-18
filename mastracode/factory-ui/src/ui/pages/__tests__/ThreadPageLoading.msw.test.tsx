@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
-import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../api/keys';
+import { queryKeys } from '../../../api/keys';
 import { server } from '../../../../e2e/ui/msw-server';
 import {
   findPageHeader,
@@ -258,7 +258,7 @@ describe('ThreadPage loading shell', () => {
   });
 });
 
-/** The app's own router: route loaders run, and in-app navigations wait for their reads. */
+/** The app's own router: route loaders start the page's reads, and navigations never wait for them. */
 function renderThreadRouteWithLoaders(path: string) {
   const queryClient = createQueryClient();
   const router = createAppRouter({ queryClient, api: TEST_API }, routes =>
@@ -322,13 +322,18 @@ describe('ThreadPage opened through the app router', () => {
     expect(screen.getByRole('button', { name: 'Decline write_file' })).toBeEnabled();
   });
 
-  it('opens another session from the app onto its transcript, its history read beside the session', async () => {
+  // Clicking a card or a session on a slow server used to do nothing until the next session's
+  // details, card and PR subscriptions had all answered: the route's loader held the navigation.
+  it('opens another session on the click, before any of its reads answer, then fills it in', async () => {
     const NEXT_SESSION_ID = 'sess-3';
     const nextPath = `/factories/${FACTORY_ID}/workspaces/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}`;
+    // Wide enough for the session panel to open beside the chat.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
     const { sessionGate, messagesGate } = stubThreadRoute();
     sessionGate.resolve();
     messagesGate.resolve();
     const nextSession = deferred();
+    const nextMessages = deferred();
     server.use(
       http.get(`${TEST_BASE_URL}/web/user-sessions/${NEXT_SESSION_ID}`, async () => {
         await nextSession.promise;
@@ -344,34 +349,36 @@ describe('ThreadPage opened through the app router', () => {
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
-      http.get(`${AC}/sessions/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}/messages`, () =>
-        HttpResponse.json({ messages: threadRailMessagesWithEcho }),
-      ),
+      http.get(`${AC}/sessions/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}/messages`, async () => {
+        await nextMessages.promise;
+        return HttpResponse.json({ messages: threadRailMessagesWithEcho });
+      }),
     );
-    const { router, client } = renderThreadRouteWithLoaders(WORKSPACE_PATH);
+    const user = userEvent.setup();
+    const { router } = renderThreadRouteWithLoaders(WORKSPACE_PATH);
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
 
     const navigation = router.navigate(nextPath);
-    // The history answers while the next session's own read is still out.
-    await waitFor(() =>
-      expect(
-        client.getQueryData(
-          queryKeys.agentControllerThreadMessages(
-            'code',
-            NEXT_SESSION_ID,
-            NEXT_SESSION_ID,
-            INITIAL_THREAD_MESSAGE_LIMIT,
-          ),
-        ),
-      ).toHaveLength(threadRailMessagesWithEcho.length),
-    );
-    expect(router.state.location.pathname).not.toBe(nextPath);
-    nextSession.resolve();
-    await act(() => navigation);
 
-    expect(router.state.location.pathname).toBe(nextPath);
-    expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
-    expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
+    // The page moves while every read of the next session is still out, and its composer takes a draft.
+    await waitFor(() => expect(router.state.location.pathname).toBe(nextPath));
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading overview' })).toBeInTheDocument();
+    await act(() => navigation);
+    const composer = screen.getByRole('region', { name: 'Thread composer' });
+    const message = within(composer).getByRole('textbox', { name: 'Message' });
+    const send = within(composer).getByRole('button', { name: 'Send message' });
+    await user.type(message, 'Typed right after the click');
+    expect(send).toBeDisabled();
+
+    // The transcript fills in before the session's details; sending waits for them.
+    nextMessages.resolve();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+    expect(send).toBeDisabled();
+
+    nextSession.resolve();
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Typed right after the click');
   });
 });
 

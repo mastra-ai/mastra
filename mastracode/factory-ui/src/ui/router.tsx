@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
+import { continuesTranscript } from './domains/chat/context/transcriptKey';
 import { opensWithPrompt } from './domains/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, boardSkillsPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
@@ -32,7 +33,6 @@ import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
-  loadSessionFrame,
   prefetchBoard,
   prefetchCardDraft,
   prefetchComposer,
@@ -41,6 +41,7 @@ import {
   prefetchFactoryLayout,
   prefetchRuleDecisions,
   prefetchRetiredReviewBoard,
+  prefetchSessionFrame,
   prefetchSidebar,
   reloadOnAnotherThread,
   retiredReviewBoardSearch,
@@ -77,6 +78,9 @@ const NewPage = lazyPage(
     }),
   <AppPageLoader />,
 );
+// The sidebar opens a session or a new one from any page, so their code loads with the shell
+// and a click from the board only waits on data.
+const chatPages = { preload: () => Promise.all([SessionLayout.preload(), NewPage.preload()]) };
 const KnowledgePage = lazyPage(
   () => import('./pages/KnowledgePage').then(module => module.KnowledgePage),
   <AppPageLoader />,
@@ -283,7 +287,7 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.
-                  ...loadOnEntry(prefetchSidebar, SessionLayout),
+                  ...loadOnEntry(prefetchSidebar, chatPages),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
@@ -302,11 +306,11 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                           children: [
                             {
                               path: 'workspaces/:sessionId/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'user/threads/:threadId',
-                              ...lazyRoute(SessionPage, loadSessionFrame, reloadOnAnotherThread),
+                              ...lazyRoute(SessionPage, prefetchSessionFrame, reloadOnAnotherThread),
                             },
                             {
                               path: 'cards/:workItemId/new/:draftSessionId',
@@ -392,7 +396,12 @@ export function createAppRouter(
   return router;
 }
 
-/** A prompt handoff continues the page on screen, so only other in-app navigations wait for their reads. */
+/**
+ * Clicks never wait for a page's reads. A draft continuing into its thread keeps the page on
+ * screen, so it waits for the thread's header and panel rather than blanking them; one that
+ * hands its prompt over shows that prompt at once instead.
+ */
 function holdsNavigation(router: DataRouter | undefined): boolean {
-  return router?.state.initialized === true && !opensWithPrompt(router.state.navigation.location?.state);
+  const state: unknown = router?.state.navigation.location?.state;
+  return router?.state.initialized === true && continuesTranscript(state) && !opensWithPrompt(state);
 }
