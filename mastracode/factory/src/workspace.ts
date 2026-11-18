@@ -1124,8 +1124,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         // A failed mint keeps the reconnect usable with the current token.
-        // A registration made while the sandbox withheld tokens (vault or
-        // unknown mode) holds no credential; when the new sandbox accepts
+        // A registration made while the sandbox withheld tokens (vault mode)
+        // holds no credential; when the new sandbox accepts
         // one, install the org PAT if configured, before falling back to a mint.
         const { generation: patGeneration } = existingRegistration;
         const lookedUpPat =

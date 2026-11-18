@@ -201,8 +201,8 @@ interface CreateSandboxResponse {
   instanceUrl?: string | null;
   /**
    * `true` when the platform provisioned the sandbox in credential-vault mode.
-   * A fresh provision reports it only when `true`; reattach responses report
-   * it once the platform echoes it there (mastra-ai/platform#5142).
+   * Provision, reattach and `GET /sandbox/:id` responses report it when it is
+   * on; a response without it means the sandbox is not vault.
    */
   vault?: boolean;
   /** `true` when `POST /sandbox` reattached a live sandbox instead of provisioning one. */
@@ -618,11 +618,11 @@ export class PlatformSandbox extends MastraSandbox {
    * A vault sandbox holds only placeholder GitHub tokens, and its git and `gh`
    * traffic to GitHub goes through the vault, which adds the real credential.
    *
-   * Set only from the platform's provision, reattach and get responses.
-   * `undefined` before the first start and after a reattach whose response did
-   * not report the mode. Callers that hand out credentials must treat
-   * `undefined` as unknown and fail closed, and must never read the mode from
-   * the sandbox's own env, which code inside the sandbox controls.
+   * Set only from the platform's provision, reattach and get responses; a
+   * successful response without `vault` means the sandbox is not vault.
+   * `undefined` while no sandbox is attached (before the first start, after
+   * it is destroyed). Callers must never read the mode from the sandbox's own
+   * env, which code inside the sandbox controls.
    */
   vault: boolean | undefined = undefined;
 
@@ -933,8 +933,7 @@ export class PlatformSandbox extends MastraSandbox {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           // Reattach responses never carry templatePending — the field is
           // set only by the create route. Leave the instance's value alone.
-          // The same goes for `vault`, unless the platform reports it.
-          if (typeof json.vault === 'boolean') this.vault = json.vault;
+          this.vault = json.vault === true;
           this._populateAddressFromResponse(json);
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
@@ -1005,11 +1004,11 @@ export class PlatformSandbox extends MastraSandbox {
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this.templatePending = json.templatePending;
-    // A fresh provision reports `vault` only when it is on. A reattach by
-    // recovery id that does not report it leaves the mode unknown until the
-    // sandbox record says.
-    this.vault = typeof json.vault === 'boolean' ? json.vault : json.reattached ? undefined : false;
-    if (this.vault === undefined) await this.refreshVault();
+    // A reattach by recovery id confirms the mode from the sandbox record
+    // before anyone hands the sandbox credentials. Until then a reattached
+    // sandbox is not known to be non-vault, and a failed read fails the start.
+    this.vault = json.vault === true ? true : json.reattached ? undefined : false;
+    if (json.reattached) await this.refreshVault();
     this._populateAddressFromResponse(json);
     this._logStartComplete(json.id, startedAt, requestMs, 'provision');
     return { outcome: 'created' };
@@ -1017,21 +1016,17 @@ export class PlatformSandbox extends MastraSandbox {
 
   /**
    * Ask the platform for this sandbox's credential-vault mode
-   * (`GET /sandbox/:id`) and record it when the response reports one. Callers
-   * use it to learn a mode the start left unknown. Failures leave
-   * `vault` unchanged, so an unknown mode stays unknown.
+   * (`GET /sandbox/:id`). A response without `vault` means the sandbox is not
+   * vault. Errors propagate and leave `vault` unchanged, so callers never fall
+   * back to handing out credentials when the platform could not be read.
    */
   async refreshVault(): Promise<boolean | undefined> {
     const sandboxId = this._sandboxId;
     if (!sandboxId) return this.vault;
-    try {
-      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
-      const json = (await response.json()) as CreateSandboxResponse;
-      // A replacement sandbox provisioned while this read was in flight has its own mode.
-      if (typeof json.vault === 'boolean' && this._sandboxId === sandboxId) this.vault = json.vault;
-    } catch (error) {
-      this.logger.warn(`Could not read the credential-vault mode of sandbox ${sandboxId}`, { error });
-    }
+    const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}`);
+    const json = (await response.json()) as CreateSandboxResponse;
+    // A replacement sandbox provisioned while this read was in flight has its own mode.
+    if (this._sandboxId === sandboxId) this.vault = json.vault === true;
     return this.vault;
   }
 
@@ -2012,8 +2007,8 @@ export class PlatformSandbox extends MastraSandbox {
       }
     };
     return fn({
-      // Settled at dispatch, after the lease is in hand: a vault VM, or one whose
-      // mode is unknown, never gets a real GitHub credential.
+      // Settled at dispatch, after the lease is in hand: a vault VM, or one that was
+      // replaced meanwhile, never gets a real GitHub credential.
       run: (command, opts) =>
         call(commands =>
           commands.run(
@@ -2032,8 +2027,8 @@ export class PlatformSandbox extends MastraSandbox {
 
   /**
    * Whether a command started for `sandboxId` may carry GitHub credentials:
-   * only when that VM is still the current one and is known not to be vault.
-   * Unknown mode fails closed.
+   * only when that VM is still the current one and the platform reported it
+   * is not vault.
    */
   private _acceptsGithubCredentials(sandboxId: string, lease?: CachedExecLease): boolean {
     return this.vault === false && this._sandboxId === sandboxId && (!lease || lease.boundTo === sandboxId);
