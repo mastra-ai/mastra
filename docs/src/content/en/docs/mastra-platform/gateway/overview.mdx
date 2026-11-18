@@ -220,4 +220,64 @@ Conversation memory is a separate product. To give agents memory, see [Memory](/
   />
 </CardGrid>
 
-To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-platform/gateway/api/models). For answers to common questions about credits, keys, and errors, see the [FAQ](/docs/mastra-platform/gateway/faq).
+To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-platform/gateway/api/models). For answers to common questions about credits, keys, and errors, see the [FAQ](#faq).
+
+## FAQ
+
+{/* lint disable mastra/vale-mastra-avoid-first-person */}
+
+<details>
+  <summary>How do I get started?</summary>
+
+  Add credits in **Billing** at [projects.mastra.ai](https://projects.mastra.ai), create a key, and follow the [Quickstart](/docs/mastra-platform/gateway/quickstart).
+</details>
+
+<details>
+  <summary>Why do I get `402`?</summary>
+
+  Your organization is out of credit (`insufficient_credit`) or reached its Gateway spend cap (`spend_limit_reached`). Add credits, turn on auto top-up, or raise the cap. See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#pricing).
+</details>
+
+<details>
+  <summary>Why do I get `401` with a key that starts with `msk_`?</summary>
+
+  `msk_` keys belong to the previous Memory Gateway. Create a new `msk-gateway-` key. See [Migrate](/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway).
+</details>
+
+<details>
+  <summary>Does Gateway store my prompts or conversations?</summary>
+
+  No. Usage logs record model, provider, tokens, and cost, not content. For agent memory, see [Memory](/docs/memory/overview).
+</details>
+
+<details>
+  <summary>Which provider served my request?</summary>
+
+  Check the `x-gateway-provider` response header, or find the request by `x-request-id` in **Gateway** > **Query**.
+</details>
+
+<details>
+  <summary>Am I charged for failed attempts?</summary>
+
+  No. You pay for the attempt that served the request. See [Failover](/docs/mastra-platform/gateway/models-and-routing#failover).
+</details>
+
+<details>
+  <summary>Can I use my own provider account?</summary>
+
+  Yes, with a [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key). The provider bills you directly, and those requests don't fail over.
+</details>
+
+<details>
+  <summary>Why isn't a model in `/v1/models`?</summary>
+
+  The model has no published price yet, or your key restricts allowed models. Calling it returns `model_not_found` or `model_not_allowed`.
+</details>
+
+<details>
+  <summary>My Anthropic SDK requests return `404`.</summary>
+
+  The Anthropic SDK appends `/v1/messages`. Set the base URL to `https://gateway-api.mastra.ai`, without `/v1`.
+</details>
+
+{/* lint enable mastra/vale-mastra-avoid-first-person */}

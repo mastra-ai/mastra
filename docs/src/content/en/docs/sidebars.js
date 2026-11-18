@@ -840,7 +840,6 @@ const sidebars = {
         { type: 'doc', id: 'mastra-platform/gateway/web-search', label: 'Web search' },
         { type: 'doc', id: 'mastra-platform/gateway/usage-and-limits', label: 'Usage, pricing, and limits' },
         { type: 'doc', id: 'mastra-platform/gateway/integrations', label: 'Integrations' },
-        { type: 'doc', id: 'mastra-platform/gateway/faq', label: 'FAQ' },
       ],
     },
     {
