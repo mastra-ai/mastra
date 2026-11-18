@@ -210,7 +210,9 @@ export const loadSessionFrame: Prefetch = async (services, { params, request }) 
   const { factoryId, threadId } = params;
   const sessionId = params.sessionId ?? threadId;
   if (!factoryId || !sessionId || !threadId) return;
-  const history = loadThreadHistory(services, request, params.sessionId, sessionId, threadId);
+  // Not awaited: the frame holds an in-app navigation, the transcript does not. A card's next step
+  // continues its conversation in place and loads the history there.
+  prefetchThreadHistory(services, request, params.sessionId, sessionId, threadId);
   const cardReads = params.sessionId
     ? [
         queryClient
@@ -224,17 +226,18 @@ export const loadSessionFrame: Prefetch = async (services, { params, request }) 
           .catch(noop),
       ]
     : [];
-  await Promise.all([...cardReads, history, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
+  await Promise.all([...cardReads, loadSessionSubscriptions(services, factoryId, sessionId, threadId)]);
 };
 
 /**
  * The thread's first message window, read beside the session's own metadata
  * rather than after it: the server resolves the session's memory resource from
- * its id, so an in-app navigation opens on the transcript. A window already
- * cached is kept (a draft seeds its new thread's), and the page re-reads it on
- * mount for whatever the live stream missed.
+ * its id. It usually answers before the frame's reads, so an in-app navigation
+ * opens on the transcript. A window already cached is kept (a draft seeds its
+ * new thread's), and the page re-reads it on mount for whatever the live
+ * stream missed.
  */
-function loadThreadHistory(
+function prefetchThreadHistory(
   { queryClient, api }: RouteLoaderServices,
   request: Request,
   routeSessionId: string | undefined,
@@ -244,7 +247,7 @@ function loadThreadHistory(
   // Mirrors the chat's address: a workspace link may name another session to bind to.
   const search = new URL(request.url).searchParams;
   const address = routeSessionId ? (search.get('sessionId') ?? search.get('resourceId') ?? sessionId) : sessionId;
-  return queryClient
+  void queryClient
     .query({
       ...threadMessagesQueryOptions({
         agentControllerId: AGENT_CONTROLLER_ID,

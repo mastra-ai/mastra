@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
-import { queryKeys } from '../../../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../api/keys';
 import { server } from '../../../../e2e/ui/msw-server';
 import {
   findPageHeader,
@@ -291,18 +291,18 @@ describe('ThreadPage opened through the app router', () => {
     expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
   });
 
-  it('opens another session from the app straight onto its transcript, with no loading state', async () => {
+  it('opens another session from the app onto its transcript, its history read beside the session', async () => {
     const NEXT_SESSION_ID = 'sess-3';
     const nextPath = `/factories/${FACTORY_ID}/workspaces/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}`;
     const { sessionGate, messagesGate } = stubThreadRoute();
     sessionGate.resolve();
     messagesGate.resolve();
-    const nextMessages = deferred();
-    let nextMessagesRequested = false;
+    const nextSession = deferred();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/user-sessions/${NEXT_SESSION_ID}`, () =>
-        HttpResponse.json({ session: { ...userSession, id: 'row-3', sessionId: NEXT_SESSION_ID } }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${NEXT_SESSION_ID}`, async () => {
+        await nextSession.promise;
+        return HttpResponse.json({ session: { ...userSession, id: 'row-3', sessionId: NEXT_SESSION_ID } });
+      }),
       http.get(`${AC}/sessions/${NEXT_SESSION_ID}`, () =>
         HttpResponse.json({
           controllerId: 'code',
@@ -313,19 +313,29 @@ describe('ThreadPage opened through the app router', () => {
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
-      http.get(`${AC}/sessions/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}/messages`, async () => {
-        nextMessagesRequested = true;
-        await nextMessages.promise;
-        return HttpResponse.json({ messages: threadRailMessagesWithEcho });
-      }),
+      http.get(`${AC}/sessions/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}/messages`, () =>
+        HttpResponse.json({ messages: threadRailMessagesWithEcho }),
+      ),
     );
-    const { router } = renderThreadRouteWithLoaders(WORKSPACE_PATH);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument());
+    const { router, client } = renderThreadRouteWithLoaders(WORKSPACE_PATH);
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
 
     const navigation = router.navigate(nextPath);
-    await waitFor(() => expect(nextMessagesRequested).toBe(true));
-    nextMessages.resolve();
+    // The history answers while the next session's own read is still out.
+    await waitFor(() =>
+      expect(
+        client.getQueryData(
+          queryKeys.agentControllerThreadMessages(
+            'code',
+            NEXT_SESSION_ID,
+            NEXT_SESSION_ID,
+            INITIAL_THREAD_MESSAGE_LIMIT,
+          ),
+        ),
+      ).toHaveLength(threadRailMessagesWithEcho.length),
+    );
+    expect(router.state.location.pathname).not.toBe(nextPath);
+    nextSession.resolve();
     await act(() => navigation);
 
     expect(router.state.location.pathname).toBe(nextPath);
