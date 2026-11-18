@@ -3,7 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { GitLabWebhookDispatchIntegration } from '../../gitlab/webhook-dispatch.js';
 import { parseGitLabWebhookBody, processGitLabWebhook } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
-import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
 import { logPlatformInfo, logPlatformWarn } from '../logging.js';
 
 const DELIVERY_ID_PREFIX = 'platform';
@@ -20,7 +20,7 @@ export interface GitLabConnectEventDependencies {
 /**
  * Feeds one Connect-forwarded GitLab webhook through the same ingress the
  * direct `/web/gitlab/webhook` route uses: rules first, then session
- * dispatch. Ingress failures propagate so the event poller retries the
+ * dispatch. Ingress failures propagate so the events worker retries the
  * event. Unverified events are dropped: GitLab dispatches from the payload,
  * so a body whose signature the platform could not check is never acted on.
  */

@@ -114,10 +114,10 @@ import {
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
 import {
-  PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID,
-  PlatformConnectEventPoller,
-} from './integrations/platform/foundation/connect-event-poller.js';
-import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
+  PLATFORM_EVENTS_STORAGE_ID,
+  PlatformEventsWorker,
+  isPlatformConnectEventSource,
+} from './integrations/platform/foundation/events-worker.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { observeSessionMemoryFailurePosts } from './integrations/slack/memory-failure-post.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
@@ -2815,7 +2815,7 @@ export class MastraFactory {
             ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
             factoryReady,
             domains,
-            // The Platform GitHub lane only receives pushes through its polling worker.
+            // The Platform GitHub lane receives pushes through its github-app topic subscription.
             ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
             ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
           },
@@ -2825,19 +2825,39 @@ export class MastraFactory {
     const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
       integration.workers ? integration.workers(context) : [],
     );
-    // One event poller per deployment reads the platform event log of every
-    // Platform integration's connections and routes each event to its
-    // integration. Integrations without an event route add nothing.
-    const eventRoutes = readyContexts.flatMap(({ integration, context }) => {
-      if (!isPlatformConnectEventSource(integration)) return [];
-      const route = integration.connectEventRoute(context);
-      return route ? [route] : [];
-    });
-    if (eventRoutes.length > 0) {
+    // One events subscription per deployment: the project's `connect` topic
+    // carries every connection, so each event is routed to the integration
+    // that owns its provider key. Integrations without an event source (Vanta)
+    // add no route, and a deployment with no routes opens no stream.
+    const eventRoutes = hasPlatformCredentials()
+      ? readyContexts.flatMap(({ integration, context }) => {
+          if (!isPlatformConnectEventSource(integration)) return [];
+          const route = integration.connectEventRoute(context);
+          return route ? [route] : [];
+        })
+      : [];
+    const eventTopics = hasPlatformCredentials()
+      ? readyContexts.flatMap(({ integration, context }) =>
+          isPlatformConnectEventSource(integration) ? (integration.platformTopicSubscriptions?.(context) ?? []) : [],
+        )
+      : [];
+    const hasEventSources = eventRoutes.length > 0 || eventTopics.length > 0;
+    const eventsProjectId = process.env.MASTRA_PROJECT_ID?.trim();
+    if (hasEventSources && !eventsProjectId) {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
+      );
+    } else if (hasEventSources && eventsProjectId) {
       integrationWorkers.push(
-        new PlatformConnectEventPoller({
-          storage: integrationStorage.forIntegration(PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID),
+        new PlatformEventsWorker({
+          // Built from env like every auto-installed Platform integration's client, so it reads
+          // the same project they list. An explicit integration given its own `connect` config
+          // for another project would get no events here.
+          events: createPlatformConnectClient().events,
+          projectId: eventsProjectId,
+          storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
           routes: eventRoutes,
+          topics: eventTopics,
         }),
       );
     }
