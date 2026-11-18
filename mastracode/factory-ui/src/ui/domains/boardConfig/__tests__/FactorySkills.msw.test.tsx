@@ -320,6 +320,29 @@ describe("a skill's page", () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 
+  it('keeps an edit typed back to the old text while the save is on its way', async () => {
+    const { writes, client } = openAt(`${SKILLS_PAGE}/changelog-lint`);
+    let answer = () => {};
+    const answered = new Promise<void>(resolve => {
+      answer = resolve;
+    });
+    server.use(http.put(SKILL_URL, () => answered));
+    const user = userEvent.setup();
+
+    const description = await screen.findByRole('textbox', { name: 'Description' });
+    await user.type(description, '!');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    await user.type(description, '{Backspace}');
+    answer();
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(writes[0].content).toContain('description: "Lint changelogs!"');
+    expect(description).toHaveValue('Lint changelogs');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
   it("follows newer saves from elsewhere without dropping this admin's edits", async () => {
     const { client } = openAt(`${SKILLS_PAGE}/changelog-lint`);
     const serveChangelogLint = (changes: Partial<FactorySkillInfo>) =>
@@ -543,8 +566,8 @@ describe('the new skill page', () => {
         content: '---\nname: "release-notes"\ndescription: "Write notes: what # changed"\n---\n\n\n',
       },
     ]);
-    expect(await screen.findByRole('heading', { name: 'release-notes' })).toBeInTheDocument();
-    expect(screen.getByText('Custom')).toBeInTheDocument();
+    expect(await screen.findByText('Custom')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'release-notes' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument();
     await waitForMutationsIdle(client);
   });
