@@ -47,8 +47,8 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
           setText(value);
           return;
         }
-        // Cut on whole characters (code points), so an emoji or other astral character is never split in half.
-        const chars = Array.from(value);
+        // Cut on whole characters as people see them (graphemes), so no emoji is split in half.
+        const chars = splitGraphemes(value);
         const startOf = (count: number) => chars.slice(0, count).join('');
         const endOf = (count: number) => (count > 0 ? chars.slice(-count).join('') : '');
         // In a box too narrow for `…` and the whole tail, keep less of the tail (down to just `…`).
@@ -89,4 +89,9 @@ export function useMiddleTruncation<TElement extends HTMLElement = HTMLElement>(
   }, [value, tail]);
 
   return { ref, text, truncated: text !== value };
+}
+
+function splitGraphemes(value: string): string[] {
+  if (typeof Intl === 'undefined' || !('Segmenter' in Intl)) return Array.from(value);
+  return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(value), part => part.segment);
 }

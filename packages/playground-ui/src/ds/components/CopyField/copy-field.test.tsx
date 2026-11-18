@@ -114,6 +114,17 @@ describe('CopyField', () => {
 
       expect(screen.getByText('http…😀abcde')).toBeTruthy();
     });
+
+    it('never splits an emoji made of several characters', () => {
+      layoutWith(14 * CHAR_WIDTH);
+      render(
+        <TooltipProvider>
+          <CopyField value="https://mastra.dev/a/👩‍💻abcde" label="link" />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByText(/…👩‍💻abcde$/)).toBeTruthy();
+    });
   });
 
   describe('when someone presses the copy button', () => {
