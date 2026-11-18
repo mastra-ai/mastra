@@ -1,7 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import type { FeedbackListResponse } from './optimistic-feedback';
 
@@ -85,10 +84,12 @@ export function applyPendingFeedbackDeletions(
 }
 
 /**
+ * Runs on every fetch of a feedback page, including the 3s poll while a deletion is pending.
  * Records which page each deleting row was returned on, and stops tracking a deletion once a
  * fetch of the page it was last seen on no longer returns it, i.e. the row is gone. Comparing
  * against the page rather than the previous fetch also settles a row that went away while the
- * list was unmounted (the list cache is dropped on unmount).
+ * list was unmounted (the list cache is dropped on unmount). A deletion still pending after
+ * `PENDING_FEEDBACK_DELETION_TTL_MS` is marked `failed`.
  */
 export function settlePendingFeedbackDeletions(
   queryClient: QueryClient,
@@ -96,10 +97,14 @@ export function settlePendingFeedbackDeletions(
   data: ListFeedbackResponse,
 ) {
   const currentIds = new Set(data.feedback.map(item => item.feedbackId));
+  const now = Date.now();
   updatePendingDeletions(queryClient, traceId, spanId, entries =>
     entries.flatMap(entry => {
-      if (currentIds.has(entry.feedbackId)) return entry.page === page ? [entry] : [{ ...entry, page }];
-      return entry.page === page ? [] : [entry];
+      const returned = currentIds.has(entry.feedbackId);
+      if (!returned && entry.page === page) return [];
+      const nextPage = returned ? page : entry.page;
+      const failed = entry.failed || entry.expiresAt <= now;
+      return nextPage === entry.page && failed === entry.failed ? [entry] : [{ ...entry, page: nextPage, failed }];
     }),
   );
 }
@@ -118,20 +123,6 @@ export function usePendingFeedbackDeletions({ traceId, spanId }: { traceId: stri
     staleTime: Infinity,
     gcTime: PENDING_FEEDBACK_DELETION_TTL_MS,
   });
-  useEffect(() => {
-    const deleting = data.filter(entry => !entry.failed);
-    if (deleting.length === 0) return;
-    const nextExpiry = Math.min(...deleting.map(entry => entry.expiresAt));
-    const timer = setTimeout(
-      () =>
-        updatePendingDeletions(queryClient, traceId, spanId, entries =>
-          entries.map(entry => (!entry.failed && entry.expiresAt <= Date.now() ? { ...entry, failed: true } : entry)),
-        ),
-      Math.max(0, nextExpiry - Date.now()),
-    );
-    return () => clearTimeout(timer);
-  }, [data, queryClient, traceId, spanId]);
-
   return data;
 }
 
