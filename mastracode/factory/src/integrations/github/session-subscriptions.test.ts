@@ -272,6 +272,26 @@ describe('GitHub subscription entry points', () => {
     expect(inject).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['vault', /credential vault/],
+    ['unknown', /withholds GitHub tokens/],
+  ] as const)('refreshes no token for a %s sandbox and says why', async (auth, message) => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
+    const inject = vi.fn();
+    const requestContext = authenticatedRequestContext();
+    registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1', sandboxAuth: () => auth });
+    registerGithubTokenInjector(requestContext, inject);
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+
+    const result = (await tool.execute!({}, {} as never)) as { refreshed: boolean; message: string };
+
+    expect(result.refreshed).toBe(false);
+    expect(result.message).toMatch(message);
+    expect(inject).not.toHaveBeenCalled();
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
   it('mints repository access and injects the fresh token into the active sandbox', async () => {
     const inject = vi.fn();
     await expect(refreshGithubToken(refreshableRequestContext(inject), githubStub)).resolves.toBeUndefined();

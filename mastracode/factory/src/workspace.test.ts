@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  vault: 'absent' as boolean | undefined | 'absent',
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
@@ -79,6 +80,8 @@ const mocks = vi.hoisted(() => ({
       }),
       executeCommand: (...args: [string, ...unknown[]]) => sandbox.exec(...args),
       setEnv: mocks.setEnv,
+      // Credential-vault mode as the platform reported it; absent for providers without vault support.
+      ...(mocks.vault === 'absent' ? {} : { vault: mocks.vault }),
     };
     return sandbox;
   }),
@@ -196,6 +199,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.vault = 'absent';
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
@@ -2618,6 +2622,67 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_org_pat');
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  describe('credential-vault sandboxes', () => {
+    const placeholder = 'ghp_placeholder' + '0'.repeat(25);
+    /** The provider env a vault sandbox boots with (SANDBOX_VAULT left unset on purpose). */
+    const vaultProviderEnv = { GH_TOKEN: placeholder, GH_ENTERPRISE_TOKEN: placeholder };
+
+    /** Every env value Factory wrote into the sandbox, across all setEnv calls. */
+    function writtenEnvValues(): string[] {
+      return mocks.setEnv.mock.calls.flatMap(([update]) =>
+        Object.values((update as (env: Record<string, string>) => Record<string, string>)({ ...vaultProviderEnv })),
+      ) as string[];
+    }
+
+    it('leaves only the placeholder GitHub token when the platform reports vault mode, even without SANDBOX_VAULT', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      await workspace({ requestContext });
+
+      const env = lastSandboxEnv() as Record<string, string | undefined>;
+      const merged = {
+        ...vaultProviderEnv,
+        ...(mocks.setEnv.mock.calls.at(-1)?.[0] as any)?.({ ...vaultProviderEnv }),
+      };
+      expect(env.GH_TOKEN).toBeUndefined();
+      expect(merged.GH_TOKEN).toBe(placeholder);
+      expect(merged.SANDBOX_VAULT).toBeUndefined();
+      expect(Object.keys(merged).filter(key => /^GH_TOKEN_\d+$/.test(key))).toEqual([]);
+      expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+      expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
+    });
+
+    it('withholds tokens when the platform does not report the vault mode', async () => {
+      mocks.vault = undefined;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBeUndefined();
+      expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+    });
+
+    it('installs tokens as before when the platform reports a non-vault sandbox', async () => {
+      mocks.vault = false;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
   });
 
   it('installs the reviewer PAT for review-board sessions', async () => {

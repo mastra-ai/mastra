@@ -463,6 +463,61 @@ describe('materializeRepo', () => {
   });
 });
 
+describe('credential-vault sandboxes', () => {
+  const vaultSandbox = (vault: boolean | undefined, handler?: ConstructorParameters<typeof FakeSandbox>[0]) =>
+    Object.assign(new FakeSandbox(handler), { vault });
+
+  it.each([true, undefined])('clones GitHub with no credentials in the command env (vault: %s)', async vault => {
+    const sandbox = vaultSandbox(vault);
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
+    expect(clone.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+    expect(JSON.stringify(sandbox.executions)).not.toContain(Buffer.from('x-access-token:tok-123').toString('base64'));
+  });
+
+  it('unsets the gh credential helper instead of installing it', async () => {
+    const sandbox = vaultSandbox(true, script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-123', repoFullName: 'octocat/hello' });
+
+    expect(sandbox.calls.join('\n')).not.toContain('config credential.helper !');
+    expect(sandbox.calls.some(call => call.includes('--unset-all credential.helper'))).toBe(true);
+  });
+
+  it('pushes GitHub with no credentials in the command env', async () => {
+    const sandbox = vaultSandbox(true);
+    await pushBranch(sandbox, '/workspace/repo', 'feature-a', 'tok-123', 'octocat/hello');
+
+    const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
+    expect(push.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it('opens a PR without a GH_TOKEN so the placeholder and vault authenticate gh', async () => {
+    const sandbox = vaultSandbox(true, script =>
+      script.startsWith('gh pr create')
+        ? { exitCode: 0, stdout: 'https://github.com/octocat/hello/pull/7\n', stderr: '' }
+        : OK,
+    );
+    await createPullRequest(sandbox, '/workspace/repo', { token: 'tok-123', base: 'main', head: 'feat/x', title: 't', body: 'b' });
+
+    const gh = sandbox.executions.find(entry => entry.command === 'gh' && entry.args[0] === 'pr')!;
+    expect(gh.options?.env?.GH_TOKEN).toBeUndefined();
+  });
+
+  it('keeps process-scoped credentials when the platform reports a non-vault sandbox', async () => {
+    const sandbox = vaultSandbox(false);
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
+    expect(clone.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+  });
+});
+
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
 
