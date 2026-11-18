@@ -16,9 +16,9 @@ Mastra Gateway lets you call models from many providers through one managed API.
 - **Routing and failover**: Gateway retries eligible failures on another route before any output reaches your client.
 - **Bring your own key (BYOK)**: Send traffic through your own provider accounts.
 - **Usage and spend controls**: Every request records its attempts and cost, and keys can be limited by model.
-- **Gateway tools**: Add web search to any chat model with one tool entry.
+- **Gateway tools**: Add web search to tool-capable chat models with one tool entry.
 
-Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing SDK or framework, change the base URL and the API key. The model ID picks the provider:
+Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing SDK or framework, change the base URL and the API key. The model ID names the model, and Gateway routing picks the provider that serves it:
 
 <Tabs>
   <TabItem value="mastra" label="Mastra">
@@ -90,7 +90,7 @@ Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing S
 | - | - |
 | Mastra framework | A `mastra/provider/model` model ID and the `MASTRA_GATEWAY_API_KEY` environment variable. See [Integrations](/docs/mastra-platform/gateway/integrations#mastra-framework). |
 | AI SDK | The OpenAI-compatible or Anthropic provider with the Gateway base URL. See [Integrations](/docs/mastra-platform/gateway/integrations#ai-sdk). |
-| OpenAI SDK (TypeScript or Python) | `baseURL` set to `https://gateway-api.mastra.ai/v1`. See [Chat Completions](/docs/mastra-platform/gateway/api/chat-completions) and [Responses](/docs/mastra-platform/gateway/api/responses). |
+| OpenAI SDK (TypeScript or Python) | `baseURL` (TypeScript) or `base_url` (Python) set to `https://gateway-api.mastra.ai/v1`. See [Chat Completions](/docs/mastra-platform/gateway/api/chat-completions) and [Responses](/docs/mastra-platform/gateway/api/responses). |
 | Anthropic SDK | `baseURL` set to `https://gateway-api.mastra.ai`, without `/v1`. See [Anthropic Messages](/docs/mastra-platform/gateway/api/messages). |
 | LangGraph, Deep Agents, or Pydantic AI | The framework's OpenAI-compatible model client. See [Integrations](/docs/mastra-platform/gateway/integrations). |
 | Any other language | Any HTTP client that can call the [OpenAI](/docs/mastra-platform/gateway/api/chat-completions) or [Anthropic](/docs/mastra-platform/gateway/api/messages) API. |
@@ -137,11 +137,11 @@ Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing S
     title="Web search"
     logo={<Globe size={28} strokeWidth={1.5} />}
     href="/docs/mastra-platform/gateway/web-search"
-    description="Add mastra:web_search to any chat model. Results are reused if the request fails over."
+    description="Add mastra:web_search to tool-capable chat models. Results are reused if the request fails over."
   />
 </CardGrid>
 
-You pay only for the attempt that served your request. Failed attempts aren't charged. BYOK requests are billed by your provider, not from Mastra credit. Your provider's own limits and behavior apply to BYOK requests, and they don't fail over. Gateway doesn't store prompts or completions.
+You pay for the attempt that served your request. If a failed attempt on a token endpoint has a known provider cost, that cost is charged without markup, even when every attempt fails. BYOK requests are billed by your provider, not from Mastra credit. Your provider's own limits and behavior apply to BYOK requests, and they don't fail over. Gateway doesn't store prompts or completions.
 
 :::note
 
@@ -209,7 +209,7 @@ Conversation memory is a separate product. To give agents memory, see [Memory](/
     title="Web search"
     logo={<Globe size={28} strokeWidth={1.5} />}
     href="/docs/mastra-platform/gateway/web-search"
-    description="Ground any chat model with the mastra:web_search tool."
+    description="Ground tool-capable chat models with the mastra:web_search tool."
   />
 </CardGrid>
 
@@ -227,13 +227,13 @@ To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-p
   <details>
     <summary>Why do I get <code>402</code>?</summary>
 
-    Your organization is out of credit (<code>insufficient_credit</code>) or reached its Gateway spend cap (<code>spend_limit_reached</code>). Add credits, turn on auto top-up, or raise the cap. See <a href="/docs/mastra-platform/gateway/usage-and-limits#pricing">Usage, pricing, and limits</a>.
+    <code>insufficient_credit</code> means your balance can't cover the request's credit reservation. This includes bursts of concurrent requests that together exceed the balance. <code>spend_limit_reached</code> means a key or organization budget was reached. A <code>402</code> can also mean the organization's billing configuration doesn't support Gateway usage. Add credits, turn on auto top-up, raise the cap, or contact support about billing setup. See <a href="/docs/mastra-platform/gateway/usage-and-limits#pricing">Usage, pricing, and limits</a>.
   </details>
 
   <details>
     <summary>Why do I get <code>401</code> with a key that starts with <code>msk\_</code>?</summary>
 
-    <code>msk\_</code> keys belong to the previous Memory Gateway. Gateway treats them like any unknown key and returns <code>401</code> with <code>Invalid API key</code>, without mentioning the old format. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
+    <code>msk\_</code> keys belong to the previous Memory Gateway. Requests with these keys are routed to Memory Gateway, not the current Gateway API, so they fail against current endpoints and features. Memory Gateway will be turned off. Create a new <code>msk-gateway-</code> key. See <a href="/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway">Migrate</a>.
   </details>
 
   <details>
@@ -251,7 +251,7 @@ To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-p
   <details>
     <summary>Am I charged for failed attempts?</summary>
 
-    No. You pay for the attempt that served the request. See <a href="/docs/mastra-platform/gateway/models-and-routing#failover">Failover</a>.
+    You pay for the attempt that served the request. Failed token-endpoint attempts with a known provider cost are charged at that cost, without markup, even if every attempt fails. See <a href="/docs/mastra-platform/gateway/models-and-routing#failover">Failover</a>.
   </details>
 
   <details>
@@ -263,7 +263,7 @@ To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-p
   <details>
     <summary>Why isn't a model in <code>/v1/models</code>?</summary>
 
-    The model has no published price yet, or your key restricts allowed models. Calling it returns <code>model_not_found</code> or <code>model_not_allowed</code>.
+    The model may have no published price yet, may not be available in your region, may be blocked by your organization or provider policy, may have no active route, or may require qualification before use. Your key's allowed-models list also hides models. Calling a hidden model returns <code>model_not_found</code>, or <code>403</code> with <code>no_eligible_route</code> when a restriction blocks it.
   </details>
 
   <details>
