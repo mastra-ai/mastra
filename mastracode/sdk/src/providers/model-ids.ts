@@ -82,6 +82,17 @@ export function parseCodexModelSelection(modelId: string): { modelId: string; co
   return { modelId: modelId.slice(0, -':fast'.length), codexServiceTier: 'fast' };
 }
 
+/** Prefer the exact selection if both standard and Fast entries for a model exist. */
+export function findRouteModelIndex(entries: Array<{ modelId?: unknown }>, selectionId: unknown): number {
+  if (typeof selectionId !== 'string') return -1;
+  const exact = entries.findIndex(entry => entry.modelId === selectionId);
+  if (exact !== -1) return exact;
+  const { modelId } = parseCodexModelSelection(selectionId);
+  return entries.findIndex(
+    entry => typeof entry.modelId === 'string' && parseCodexModelSelection(entry.modelId).modelId === modelId,
+  );
+}
+
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
 
