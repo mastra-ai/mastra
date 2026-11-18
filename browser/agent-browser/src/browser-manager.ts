@@ -305,11 +305,14 @@ export class BrowserManager {
   private pages: Page[] = [];
   private activePageIndex = 0;
   private cdpSession: CDPSession | null = null;
+  /** Page {@link cdpSession} is attached to. */
+  private cdpSessionPage: Page | null = null;
   private refMap: Record<string, SnapshotRef> = {};
   /** Page the current {@link refMap} was captured on. */
   private snapshotPage: Page | null = null;
   private ownsBrowser = false;
   private pendingLaunch: Promise<void> | null = null;
+  private pendingClose: Promise<void> | null = null;
 
   isLaunched(): boolean {
     return this.browser !== null || this.contexts.length > 0;
@@ -326,6 +329,9 @@ export class BrowserManager {
     if (options.storageState && options.profile) {
       throw new Error('Storage state cannot be used with profile (profile is already persistent storage)');
     }
+    // A launch requested while close() is tearing down starts after it, so the
+    // teardown can't discard the new browser's state or leave it running.
+    if (this.pendingClose) await this.pendingClose.catch(() => {});
     if (this.pendingLaunch) return this.pendingLaunch;
     if (this.isLaunched()) return;
 
@@ -601,15 +607,26 @@ export class BrowserManager {
   }
 
   async getCDPSession(): Promise<CDPSession> {
-    if (this.cdpSession) return this.cdpSession;
-    const page = this.getPage();
-    this.cdpSession = await page.context().newCDPSession(page);
-    return this.cdpSession;
+    for (;;) {
+      const page = this.getPage();
+      if (this.cdpSession && this.cdpSessionPage === page) return this.cdpSession;
+      if (this.cdpSession) await this.invalidateCDPSession();
+      const session = await page.context().newCDPSession(page);
+      if (this.getPage() === page && !this.cdpSession) {
+        this.cdpSession = session;
+        this.cdpSessionPage = page;
+        return session;
+      }
+      // The active tab changed (or another caller cached a session) while this
+      // one was opening. Don't cache a session for the wrong page; try again.
+      await session.detach().catch(() => {});
+    }
   }
 
   async invalidateCDPSession(): Promise<void> {
     const session = this.cdpSession;
     this.cdpSession = null;
+    this.cdpSessionPage = null;
     if (session) await session.detach().catch(() => {});
   }
 
@@ -634,8 +651,17 @@ export class BrowserManager {
    * Waits for an in-flight {@link launch} so it can't leave a browser behind.
    */
   async close(): Promise<void> {
-    if (this.pendingLaunch) await this.pendingLaunch.catch(() => {});
-    await this.teardown();
+    if (this.pendingClose) return this.pendingClose;
+    const closing = (async () => {
+      if (this.pendingLaunch) await this.pendingLaunch.catch(() => {});
+      await this.teardown();
+    })();
+    this.pendingClose = closing;
+    try {
+      await closing;
+    } finally {
+      if (this.pendingClose === closing) this.pendingClose = null;
+    }
   }
 
   private async teardown(): Promise<void> {

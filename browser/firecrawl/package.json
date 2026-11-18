@@ -46,7 +46,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/agent-browser": ">=0.6.0-0 <1.0.0",
+    "@mastra/agent-browser": ">=0.7.0-0 <1.0.0",
     "@mastra/core": ">=1.22.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",

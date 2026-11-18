@@ -419,6 +419,45 @@ describe('BrowserManager.close', () => {
     expect(manager.isLaunched()).toBe(false);
   });
 
+  it('starts a launch requested during teardown only after the teardown finishes', async () => {
+    const manager = new BrowserManager();
+    await manager.launch();
+    const first = browser;
+    const firstContext = first.contextList[0]!;
+    let finishContextClose!: () => void;
+    firstContext.close.mockImplementationOnce(() => new Promise<void>(resolve => (finishContextClose = resolve)));
+
+    const closing = manager.close();
+    // Let teardown reach the context close.
+    await vi.waitFor(() => expect(firstContext.close).toHaveBeenCalled());
+    browser = new FakeBrowser();
+    const second = browser;
+    const relaunching = manager.launch();
+    await Promise.resolve();
+    expect(chromium.launch).toHaveBeenCalledTimes(1);
+
+    finishContextClose();
+    await closing;
+    await relaunching;
+
+    expect(first.close).toHaveBeenCalledTimes(1);
+    expect(chromium.launch).toHaveBeenCalledTimes(2);
+    expect(manager.getBrowser()).toBe(second);
+    expect(second.close).not.toHaveBeenCalled();
+    expect(manager.isLaunched()).toBe(true);
+
+    await manager.close();
+    expect(second.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one teardown between concurrent close() calls', async () => {
+    const manager = new BrowserManager();
+    await manager.launch();
+    await Promise.all([manager.close(), manager.close()]);
+    expect(browser.close).toHaveBeenCalledTimes(1);
+    expect(manager.isLaunched()).toBe(false);
+  });
+
   it('forgets a browser that disconnects on its own', async () => {
     const manager = new BrowserManager();
     await manager.launch();
@@ -487,6 +526,33 @@ describe('BrowserManager tabs', () => {
     // Closing the active (last) tab moves to the previous one
     await third.close();
     expect(manager.getPage()).toBe(popup);
+  });
+
+  it('does not cache a CDP session for a tab that stopped being active while it opened', async () => {
+    const { manager, context } = await launched();
+    const first = manager.getPage();
+    const second = context.openPage('https://second.test');
+    await manager.switchTo(0);
+
+    const staleSession = { send: vi.fn(async () => ({})), detach: vi.fn(async () => {}) };
+    let finishStale!: () => void;
+    context.newCDPSession.mockImplementationOnce(
+      () => new Promise(resolve => (finishStale = () => resolve(staleSession))),
+    );
+
+    const pending = manager.getCDPSession();
+    await vi.waitFor(() => expect(context.newCDPSession).toHaveBeenCalledWith(first));
+    await manager.switchTo(1);
+    finishStale();
+    const session = await pending;
+
+    expect(session).not.toBe(staleSession);
+    expect(staleSession.detach).toHaveBeenCalledTimes(1);
+    expect(context.newCDPSession).toHaveBeenLastCalledWith(second);
+    expect(await manager.getCDPSession()).toBe(session);
+
+    await manager.injectMouseEvent({ type: 'mouseMoved', x: 1, y: 2 });
+    expect(staleSession.send).not.toHaveBeenCalled();
   });
 
   it('lists tabs with titles and the active marker', async () => {
