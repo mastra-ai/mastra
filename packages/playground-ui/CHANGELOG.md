@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 70.1.0-alpha.2
+
+### Patch Changes
+
+- Marker labels on `MetricsLineChart` stay inside the chart. A marker in the right half of the range now prints its label to the left of its line, so a label near the end is no longer cut off. ([#30781](https://github.com/mastra-ai/mastra/pull/30781))
+
+- Fixed `FormLayout` pages having two left edges. The back link, the page title and the section titles now line up with the field labels, instead of sitting 10px to the right of them. ([#30782](https://github.com/mastra-ai/mastra/pull/30782))
+
+- Added `createHoverCardHandle`, so several triggers can open one shared `HoverCard`. Moving from one trigger to the next swaps what the card shows instead of opening a second card. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+  - @mastra/client-js@1.61.1-alpha.2
+  - @mastra/react@1.15.2-alpha.2
+
 ## 70.1.0-alpha.1
 
 ### Minor Changes

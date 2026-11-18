@@ -1,5 +1,17 @@
 # mastra
 
+## 1.40.1-alpha.3
+
+### Patch Changes
+
+- Factory board settings now show how cards move through a board. **Overview** draws the board as a map: each phase as a column with the rules that bring cards in, the agent that works them, how the work ends and where cards go next, with hover cards for the rules and the skill's instructions. Board columns show the same walkthrough from their header, where a phase can be switched to start on its own. The **Rules** page splits into new issues and pull requests, which boards take in intake order, and cards already on the board, and also lists rules on other boards that move cards here. Lanes GitLab never fires are marked GitHub only, and items no board takes now sit at the end of the intake order on **Routing**. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Improved opening a Factory session: its conversation now loads alongside the session's details instead of after them, and the **Preparing session** / **Starting session** steps are gone. Switching to another session from the sidebar usually opens straight onto its conversation. Opening a session's address directly shows the conversation as soon as it loads, with a placeholder until then, while sending stays disabled until the session is ready. ([#30779](https://github.com/mastra-ai/mastra/pull/30779))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+  - @mastra/deployer@1.85.0-alpha.2
+
 ## 1.40.1-alpha.2
 
 ### Patch Changes
