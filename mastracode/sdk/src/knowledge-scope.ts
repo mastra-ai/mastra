@@ -24,10 +24,12 @@ function isIdentityTag(tag: string): boolean {
  *   encoded into one canonical segment, so projects stay isolated. A host `project:` tag with another
  *   value is refused. A Factory session with no org resolves to nothing (fail closed): a
  *   session owner is a user id, never an org.
+ * - A Factory session refuses a host `resource:` or `thread:` tag: those are each run's own identity,
+ *   and a host one would let every run read that user's or thread's pages.
  * - When the host's scopes name an `org:`, a Factory session acts with the host's scopes alone, without
  *   its own `org:` and `project:` tags, for a Knowledge instance that declares only that org; every org
- *   and project on the host shares it. A host `project:`, `resource:` or `thread:` tag is refused then,
- *   so the host can't stand in for a project or a run's identity.
+ *   and project on the host shares it. A host `project:` tag is refused then, so the host can't stand
+ *   in for a project.
  * - Local sessions act with the host's scopes as given; they are canonical addresses already.
  */
 export function resolveKnowledgeSessionScopes(
@@ -40,9 +42,13 @@ export function resolveKnowledgeSessionScopes(
 
   if (factoryOwned) {
     if (!orgId) return { resolved: false, reason: 'This Factory session has no resolved organization.' };
+    // A run's identity tags are its own; a host tag would make another user's pages readable.
+    const identity = hostScopes.find(isIdentityTag);
+    if (identity)
+      return { resolved: false, reason: `Scope ${identity} is a run's identity and can't be a host scope.` };
     const hostOrg = hostScopes.find(tag => tag.startsWith('org:'));
     if (hostOrg) {
-      const refused = hostScopes.find(tag => tag.startsWith('project:') || isIdentityTag(tag));
+      const refused = hostScopes.find(tag => tag.startsWith('project:'));
       if (refused) return { resolved: false, reason: `Scope ${refused} can't be held with the host's ${hostOrg}.` };
       return { resolved: true, scopes: [...hostScopes] };
     }
@@ -64,8 +70,8 @@ export function resolveKnowledgeSessionScopes(
 }
 
 /**
- * The scopes a run acts with when its session is unresolved: only the host's `resource:`/`thread:`
- * tags, so its writes stay private to the run and no host tag stands in for the missing org.
+ * The host's `resource:`/`thread:` tags.
+ * @deprecated Unused: an unresolved Factory session now adds no host tags to a run's scopes.
  */
 export function knowledgeUnresolvedScopes(hostScopes: readonly string[]): string[] {
   return hostScopes.filter(isIdentityTag);

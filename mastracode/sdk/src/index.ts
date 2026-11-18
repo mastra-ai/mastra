@@ -105,7 +105,7 @@ import {
 } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
-import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -1398,15 +1398,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           knowledge,
           // Factory sessions add their org + project tags to the host's scopes (or act with the host's
           // scopes alone when they name an org:), on top of the run's incoming scopes (identity and
-          // per-message scopes). An unresolved Factory session keeps
-          // only identity tags, so its writes stay private to the run, matching the inspector,
-          // which refuses to read for it.
+          // per-message scopes). An unresolved Factory session adds no host tags, so its writes stay
+          // private to the run, matching the inspector, which refuses to read for it.
           scopes: ({ scopes, requestContext }) => {
             const controller = requestContext.get('controller') as
               | AgentControllerRequestContext<MastraCodeState>
               | undefined;
             const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
-            return [...scopes, ...(session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes))];
+            return session.resolved ? [...scopes, ...session.scopes] : scopes;
           },
         }
       : {}),

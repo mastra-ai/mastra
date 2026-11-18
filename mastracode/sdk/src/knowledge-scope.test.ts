@@ -80,13 +80,20 @@ describe('resolveKnowledgeSessionScopes', () => {
     await expect(knowledge.readScopeFor(own.resolved ? own.scopes : [])).rejects.toThrow(/project:p1/);
   });
 
-  it("refuses a host project:, resource: or thread: tag beside the host's org scope", () => {
+  it("refuses a host resource: or thread: tag, and a host project: beside the host's org scope", () => {
     const state = { factoryOrgId: 'fac', factoryProjectId: 'p1' } as never;
-    for (const tag of ['project:p1', 'resource:u1', 'thread:t1']) {
-      expect(resolveKnowledgeSessionScopes(state, ['org:plat', tag])).toEqual({
-        resolved: false,
-        reason: `Scope ${tag} can't be held with the host's org:plat.`,
-      });
+    expect(resolveKnowledgeSessionScopes(state, ['org:plat', 'project:p1'])).toEqual({
+      resolved: false,
+      reason: "Scope project:p1 can't be held with the host's org:plat.",
+    });
+    // A host resource: or thread: tag is refused with or without a host org, so it never reaches a read.
+    for (const host of [['org:plat'], []]) {
+      for (const tag of ['resource:u1', 'thread:t1']) {
+        expect(resolveKnowledgeSessionScopes(state, [...host, tag])).toEqual({
+          resolved: false,
+          reason: `Scope ${tag} is a run's identity and can't be a host scope.`,
+        });
+      }
     }
     // Local sessions keep taking the host's scopes as given.
     expect(resolveKnowledgeSessionScopes(undefined, ['org:plat', 'project:p1'])).toEqual({

@@ -140,15 +140,21 @@ it("acts with the host's org scope alone in sessions and on the Knowledge page, 
   expect(((await tree.json()) as { pages: { name: string }[] }).pages.map(page => page.name)).toEqual(['Handbook']);
 });
 
-it.each(['project:p1', 'resource:u1', 'thread:t1'])('refuses %s beside an org: in scopes', scope => {
+it.each([
+  [['org:plat', 'project:p1'], "Scope project:p1 can't be held with the host's org:plat."],
+  [['org:plat', 'resource:u1'], "Scope resource:u1 is a run's identity and can't be a host scope."],
+  [['org:plat', 'thread:t1'], "Scope thread:t1 is a run's identity and can't be a host scope."],
+  [['resource:u1'], "Scope resource:u1 is a run's identity and can't be a host scope."],
+  [['thread:t1'], "Scope thread:t1 is a run's identity and can't be a host scope."],
+])('refuses scopes %j', (scopes, reason) => {
   expect(
     () =>
       new MastraFactory({
         storage: new LibSQLFactoryStorage({ id: 'knowledge-org-scope-bad', url: ':memory:' }),
         auth: null,
         mcp: false,
-        scopes: ['org:plat', scope],
+        scopes,
         secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
       }),
-  ).toThrow(`MastraFactory: 'scopes': Scope ${scope} can't be held with the host's org:plat.`);
+  ).toThrow(`MastraFactory: 'scopes': ${reason}`);
 });

@@ -310,8 +310,8 @@ export interface MastraFactoryConfig {
    * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `['org:acme']`. With an
    * `org:` here, every project's sessions and Knowledge page act with these alone instead of their own
    * `org:` and `project:` scopes, for a Knowledge instance that declares only that org; every org and
-   * project on this Factory then shares it. A `project:`, `resource:` or `thread:` scope beside an
-   * `org:` throws.
+   * project on this Factory then shares it. A `resource:` or `thread:` scope throws, since those are
+   * each run's own identity, and so does a `project:` beside an `org:`.
    */
   scopes?: string[];
   /**
@@ -693,7 +693,7 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
-    // An `org:` with a `project:`, `resource:` or `thread:` beside it is refused by every session; fail here.
+    // A `resource:` or `thread:` scope, or a `project:` beside an `org:`, is refused by every session; fail here.
     const hostScopes = resolveKnowledgeSessionScopes({ factoryOrgId: 'factory' }, config.scopes);
     if (!hostScopes.resolved) throw new Error(`MastraFactory: 'scopes': ${hostScopes.reason}`);
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
