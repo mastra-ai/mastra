@@ -1195,6 +1195,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
+                ...(session.userId ? { userId: session.userId } : {}),
                 ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
                 ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first

@@ -51,11 +51,12 @@ export async function releaseSessionSandbox(options: {
  */
 export async function destroyDetachedSessionSandbox(options: {
   sandbox: FactorySandbox;
-  session: Pick<SourceControlSession, 'id' | 'sandboxId'>;
+  session: Pick<SourceControlSession, 'id' | 'sandboxId'> & { userId?: string };
 }): Promise<void> {
   const sandbox = options.sandbox.create(
     {
       sessionId: options.session.id,
+      ...(options.session.userId ? { userId: options.session.userId } : {}),
       sandboxId: options.session.sandboxId ?? undefined,
       getRepositoryAccess: undefined,
     },
@@ -74,11 +75,12 @@ export async function destroyDetachedSessionSandbox(options: {
  */
 export async function stopDetachedSessionSandbox(options: {
   sandbox: FactorySandbox;
-  session: Pick<SourceControlSession, 'id' | 'sandboxId'>;
+  session: Pick<SourceControlSession, 'id' | 'sandboxId'> & { userId?: string };
 }): Promise<void> {
   const sandbox = options.sandbox.create(
     {
       sessionId: options.session.id,
+      ...(options.session.userId ? { userId: options.session.userId } : {}),
       sandboxId: options.session.sandboxId ?? undefined,
       getRepositoryAccess: undefined,
     },
