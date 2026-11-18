@@ -1,5 +1,52 @@
 # @mastra/factory
 
+## 0.30.0-alpha.4
+
+### Minor Changes
+
+- Added moving a Factory card to another board by hand. Naming another installed board in the work-item transition endpoint now moves the card there, keeping its id, history, and sessions; the board UI offers it under a card's "Move to board" menu. A busy card stays put until its run ends, and a finished card stays on its own board. ([#30694](https://github.com/mastra-ai/mastra/pull/30694))
+
+  ```http
+  POST /web/factory/projects/:projectId/work-items/:workItemId/transition
+  ```
+
+  ```json
+  {
+    "board": "oss-features",
+    "stage": "backlog",
+    "expectedRevision": 4,
+    "requestId": "7f0a2c7e-9b1d-4a53-8c43-2f5d6e8a9b01",
+    "cause": "move_to_board"
+  }
+  ```
+
+### Patch Changes
+
+- Board search and the search palette now find cards by a pasted link. Paste a GitHub, GitLab, Linear or Jira link and you get the card that carries that issue or pull request, including an issue's card when the pull request is attached to it. The rest of the link, such as `/files`, `?tab=checks` or a comment anchor, does not matter, and neither does its case. A link without `https://` works too. ([#30784](https://github.com/mastra-ai/mastra/pull/30784))
+
+  - A repository or project link lists the cards it holds.
+  - A Factory card link finds that card.
+  - A branch name or card id, pasted whole, finds its card.
+  - The number or key of an attached pull request (`acme/app#307`) finds the issue's card.
+  - `#12` and `acme/app#12` now find number 12 only, not `#123`. Bare digits (`12`) still find every number that contains them.
+
+  ```
+  GET /web/factory/projects/:id/boards/:boardKey/phases?q=https%3A%2F%2Fgithub.com%2Facme%2Fapp%2Fpull%2F307%2Ffiles
+  ```
+
+  The board, the palette, the `factory_list_work_items` agent tool and the MCP `search` tool now use the same search, so a card one of them finds, the others find too. Search still runs on the server against per-card data that is computed once. Searches that differ only in case or spacing now share one request and one cached answer.
+
+- Fixed Factory sessions reading private Slack image attachments directly without copying files to a sandbox. JPEG, PNG, and WebP images are supported up to a 5 MB encoded model input. Use `fetchChannelMessages` to locate top-level messages (including DMs), or `fetchMessages` for threaded replies. Then call `downloadSlackAttachment` with the message's thread ID, message ID, and zero-based attachment index: ([#30801](https://github.com/mastra-ai/mastra/pull/30801))
+
+  ```json
+  { "threadId": "slack:C123:1700000000.000100", "messageId": "1700000000.000100", "attachmentIndex": 0 }
+  ```
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+  - @mastra/code-sdk@1.20.0-alpha.3
+  - @mastra/mcp@2.10.0
+
 ## 0.30.0-alpha.3
 
 ### Minor Changes

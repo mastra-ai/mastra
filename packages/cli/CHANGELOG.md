@@ -1,5 +1,31 @@
 # mastra
 
+## 1.40.1-alpha.4
+
+### Patch Changes
+
+- Improved how fast Factory responds when you open a session or a card from the board or the sidebar. The page now switches on the click instead of waiting for the session's details, card and pull requests to load first, which made clicks look like they did nothing on a slow server. The header, session panel and conversation fill in as their data arrives, and you can start typing in the composer right away. The **New session** composer now also loads with the app, so it opens without a loading screen. ([#30794](https://github.com/mastra-ai/mastra/pull/30794))
+
+- Added moving a Factory card to another board by hand. Naming another installed board in the work-item transition endpoint now moves the card there, keeping its id, history, and sessions; the board UI offers it under a card's "Move to board" menu. A busy card stays put until its run ends, and a finished card stays on its own board. ([#30694](https://github.com/mastra-ai/mastra/pull/30694))
+
+  ```http
+  POST /web/factory/projects/:projectId/work-items/:workItemId/transition
+  ```
+
+  ```json
+  {
+    "board": "oss-features",
+    "stage": "backlog",
+    "expectedRevision": 4,
+    "requestId": "7f0a2c7e-9b1d-4a53-8c43-2f5d6e8a9b01",
+    "cause": "move_to_board"
+  }
+  ```
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+  - @mastra/deployer@1.85.0-alpha.3
+
 ## 1.40.1-alpha.3
 
 ### Patch Changes
