@@ -21,6 +21,13 @@ describe('SettingsValue', () => {
     expect(screen.getByText('42').getAttribute('title')).toBe('42');
   });
 
+  it('shows a value with interpolated parts in full on hover', () => {
+    const version = '1.32.0';
+    render(<SettingsValue>Build {version}</SettingsValue>);
+
+    expect(screen.getByText('Build 1.32.0').getAttribute('title')).toBe('Build 1.32.0');
+  });
+
   it('keeps a hover text it was given', () => {
     render(<SettingsValue title="Signed in with WorkOS">WorkOS</SettingsValue>);
 
