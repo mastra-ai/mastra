@@ -50,11 +50,18 @@ describe('createRunStopMarker', () => {
     expect(await stopRequested()).toBe(false);
   });
 
-  it('leaves the run unmarked for other requests and other sessions', async () => {
+  it('leaves the run unmarked for other requests, other sessions, and paths the guard reads as another session', async () => {
     const { app, stopRequested } = await setup();
 
     await app.request('/api/agent-controller/code/sessions/session-1/abort');
     await app.request('/api/agent-controller/code/sessions/session-2/abort', { method: 'POST' });
+    await app.request('/api/agent-controller/code/sessions/session-1/abort/', { method: 'POST' });
+    await app.request(
+      '/api/agent-controller/code/sessions/session-2/x/agent-controller/code/sessions/session-1/abort',
+      {
+        method: 'POST',
+      },
+    );
 
     expect(await stopRequested()).toBe(false);
   });

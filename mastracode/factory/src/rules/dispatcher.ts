@@ -1770,6 +1770,8 @@ export class FactoryDecisionDispatcher {
               ? []
               : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
           );
+          const stopRequested = () =>
+            this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id });
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool(record),
@@ -1778,7 +1780,7 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
-            stopRequested: () => this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id }),
+            stopRequested,
           });
 
           const sendKickoff = async () => {
@@ -1836,6 +1838,8 @@ export class FactoryDecisionDispatcher {
               // a stale kickoff would restart a phase that already finished.
               if (await kickoffLanded()) break;
               if (await kickoffStale()) throw new FactoryDecisionSuperseded();
+              // Stopped while the kickoff was queued: resending would restart what was just stopped.
+              if (await stopRequested()) throw new FactoryRunStopped();
               run.arm();
               settled = await sendKickoff();
             }
@@ -3375,6 +3379,8 @@ export class FactoryDecisionDispatcher {
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
           const since = new Date();
+          const stopRequested = () =>
+            this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id });
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
@@ -3383,7 +3389,7 @@ export class FactoryDecisionDispatcher {
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
-            stopRequested: () => this.#storage.runBindingStopRequested({ orgId: record.orgId, bindingId: binding.id }),
+            stopRequested,
           });
           const sendKickoff = async (dedupeKey: string) => {
             await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
@@ -3418,6 +3424,7 @@ export class FactoryDecisionDispatcher {
               if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
+              if (await stopRequested()) throw new FactoryRunStopped();
               run.arm();
               deliveryGeneration += 1;
               settled = await sendKickoff(

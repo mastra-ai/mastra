@@ -4407,6 +4407,58 @@ describe('FactoryDecisionDispatcher', () => {
     },
   );
 
+  it('does not resend a kickoff queued onto a run that was stopped', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-queued-then-stopped',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      droppedSignalCount: 1,
+      endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
+      beforeRunEnd: async () => {
+        await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('superseded');
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('redelivers across consecutive ending runs until the kickoff wakes the session', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -7582,6 +7634,32 @@ describe('FactoryDecisionDispatcher', () => {
     ]);
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('does not resend a kickoff notification queued onto a run that was stopped', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, delivered, sendNotificationSignal } = createSession(undefined, {
+      notificationResponses: [{ action: 'deliver', endRun: true }, { action: 'wake' }],
+    });
+    const send = sendNotificationSignal.getMockImplementation()!;
+    sendNotificationSignal.mockImplementation(async (input, options) => {
+      const result = await send(input, options);
+      await storage.requestRunBindingStop({ sessionId: 'session-1', at: new Date() });
+      return result;
+    });
+    const { transitionService } = await preparePromptKickoff(storage);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(delivered).toEqual(['factory-kickoff:kickoff-1']);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
   it('fails a kickoff for retry when the delivered run never ends', async () => {
