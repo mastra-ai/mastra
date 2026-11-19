@@ -167,6 +167,13 @@ type MemoryObservationalMemoryOptions = Omit<
   experimental_subconscious?: unknown;
 };
 
+/** A per-call memory config, as passed to `listTools`. Its `retrieval` also takes `searchTimeoutMs`. */
+type MemoryCallConfig = Omit<MemoryConfigInternal, 'observationalMemory'> & {
+  observationalMemory?:
+    | boolean
+    | (Omit<ObservationalMemoryOptions, 'retrieval'> & { retrieval?: boolean | RetrievalOptions });
+};
+
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
 };
@@ -2951,7 +2958,7 @@ Notes:
     return !!retrieval.vector && !!this.vector && (!!this.embedder || this.isSelfEmbedding);
   }
 
-  public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryCallConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};

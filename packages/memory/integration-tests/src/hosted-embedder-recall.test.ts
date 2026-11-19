@@ -215,11 +215,9 @@ describe('recall search with a hosted embedder (#30736)', () => {
 
   it('refuses an invalid retrieval.searchTimeoutMs passed with a single call', () => {
     const memory = openMemory();
-    const perCall = { observationalMemory: { retrieval: { vector: true, searchTimeoutMs: 0 } } };
-
-    expect(() => memory.listTools(perCall as Parameters<Memory['listTools']>[0])).toThrow(
-      'retrieval.searchTimeoutMs` must be a positive number of milliseconds',
-    );
+    expect(() =>
+      memory.listTools({ observationalMemory: { retrieval: { vector: true, searchTimeoutMs: 0 } } }),
+    ).toThrow('retrieval.searchTimeoutMs` must be a positive number of milliseconds');
   });
 });
 
