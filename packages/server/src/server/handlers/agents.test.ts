@@ -4757,7 +4757,9 @@ describe('Agent Routes Authorization', () => {
         run = (await liveAgent.stream('owner prompt', {
           memory: { thread: ownerThreadId, resource: ownerResourceId },
         })) as any;
-        await vi.waitFor(() => expect(liveAgent.getThreadRunTarget(run.runId)).toBeDefined());
+        await vi.waitFor(() =>
+          expect(liveAgent.listActiveThreadRuns().some(active => active.runId === run.runId)).toBe(true),
+        );
       });
 
       afterEach(async () => {
