@@ -207,17 +207,20 @@ describe('recall search with a hosted embedder (#30736)', () => {
     expect(result.results).toContain('observation group: indent@');
   }, 30_000);
 
-  it.each([0, -1, Number.NaN])('refuses retrieval.searchTimeoutMs of %s when Memory is created', searchTimeoutMs => {
-    expect(() => openMemory(searchTimeoutMs)).toThrow(
-      'retrieval.searchTimeoutMs` must be a positive number of milliseconds',
-    );
-  });
+  it.each([0, -1, Number.NaN, 1500.5, 2 ** 31])(
+    'refuses retrieval.searchTimeoutMs of %s when Memory is created',
+    searchTimeoutMs => {
+      expect(() => openMemory(searchTimeoutMs)).toThrow(
+        'retrieval.searchTimeoutMs` must be a whole number of milliseconds',
+      );
+    },
+  );
 
   it('refuses an invalid retrieval.searchTimeoutMs passed with a single call', () => {
     const memory = openMemory();
     expect(() =>
       memory.listTools({ observationalMemory: { retrieval: { vector: true, searchTimeoutMs: 0 } } }),
-    ).toThrow('retrieval.searchTimeoutMs` must be a positive number of milliseconds');
+    ).toThrow('retrieval.searchTimeoutMs` must be a whole number of milliseconds');
   });
 });
 

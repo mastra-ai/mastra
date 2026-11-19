@@ -137,11 +137,17 @@ type RetrievalOptions = {
   searchTimeoutMs?: number;
 };
 
+// The largest delay Node timers accept; above it a timeout fires after 1 ms.
+const MAX_SEARCH_TIMEOUT_MS = 2_147_483_647;
+
 function resolveSearchTimeoutMs(retrieval: boolean | RetrievalOptions | undefined) {
   const searchTimeoutMs = typeof retrieval === 'object' ? retrieval.searchTimeoutMs : undefined;
-  if (searchTimeoutMs !== undefined && !(Number.isFinite(searchTimeoutMs) && searchTimeoutMs > 0)) {
+  if (
+    searchTimeoutMs !== undefined &&
+    !(Number.isInteger(searchTimeoutMs) && searchTimeoutMs > 0 && searchTimeoutMs <= MAX_SEARCH_TIMEOUT_MS)
+  ) {
     throw new Error(
-      `\`retrieval.searchTimeoutMs\` must be a positive number of milliseconds, received ${searchTimeoutMs}.`,
+      `\`retrieval.searchTimeoutMs\` must be a whole number of milliseconds from 1 to ${MAX_SEARCH_TIMEOUT_MS}, received ${searchTimeoutMs}.`,
     );
   }
   return searchTimeoutMs;
